@@ -1,0 +1,42 @@
+# ═══════════════════════════════════════════════
+# RETRACK — .gitignore
+# ═══════════════════════════════════════════════
+
+# ── Agent Skills (local reference only, không push) ──
+.agent-skills/
+
+# ── Backend (.NET) ──
+backend/**/bin/
+backend/**/obj/
+backend/**/*.user
+backend/**/*.suo
+backend/**/.vs/
+backend/**/appsettings.Development.json
+
+# ── Frontend (React/Vite) ──
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.local
+frontend/.env.*.local
+
+# ── IDE ──
+.vs/
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── OS ──
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Logs ──
+*.log
+npm-debug.log*
+
+# ── Misc ──
+*.tmp
+*.bak
