@@ -93,24 +93,55 @@ Capstone/
 | TV4 | `Controllers/Factory/` + `Services/Factory/` | `features/factory/` |
 | TV5 | `Controllers/Admin/` + `Services/Admin/` + Infrastructure setup | `features/admin/` |
 
-## 🚀 Getting Started
+## 🚀 Hướng Dẫn Cài Đặt và Chạy Dự Án (Getting Started)
 
-### Backend
+### 1. Yêu cầu hệ thống
+- **PostgreSQL** (cài đặt và tạo sẵn database tên `ReNATS_DB`)
+- **.NET 8 SDK**
+- **Node.js** (v18 trở lên)
+
+### 2. Cấu hình Database
+Có 2 cách để khởi tạo database:
+- **Cách 1**: Chạy file `doc/init_postgres.sql` trong pgAdmin hoặc psql command line.
+- **Cách 2**: Để Entity Framework Core tự động migrate khi chạy Backend lần đầu.
+
+Tiếp theo, mở file `src/BE/ReTrack/ReTrack/appsettings.json` và cập nhật mật khẩu PostgreSQL của bạn:
+```json
+"ConnectionStrings": {
+  "DefaultConnection": "Host=localhost;Port=5432;Database=ReNATS_DB;Username=postgres;Password=MAT_KHAU_CUA_BAN"
+}
+```
+
+### 3. Cấu hình Frontend
+Mở thư mục `src/FE/`, đổi tên file `.env.example` thành `.env`. 
+(Nếu có Client ID của Google để đăng nhập, bạn có thể điền vào `VITE_GOOGLE_CLIENT_ID`).
+
+### 4. Chạy Backend (.NET 8)
 ```bash
-cd backend/Retrack.API
+cd "src/BE/ReTrack/ReTrack"
 dotnet restore
 dotnet run
-# API: https://localhost:5001
-# Swagger: https://localhost:5001/swagger
+# API Endpoint: http://localhost:5000
+# Swagger UI: http://localhost:5000/swagger
 ```
+> Khi BE chạy lần đầu, nó sẽ tự động chạy DB Migrations và tạo (seed) dữ liệu mẫu.
 
-### Frontend
+### 5. Chạy Frontend (React + Vite)
 ```bash
-cd frontend
+cd "src/FE"
 npm install
 npm run dev
-# App: http://localhost:5173
+# Mở trình duyệt tại: http://localhost:5173
 ```
+
+### 6. Tài Khoản Mẫu (Seed Data)
+Hệ thống đã tạo sẵn 6 tài khoản để test cho 6 role. **Mật khẩu chung cho tất cả là**: `<TênRole>@123`
+- **Admin**: `admin@retrack.vn` / `Admin@123`
+- **Seller**: `seller@retrack.vn` / `Seller@123`
+- **Depot Owner**: `depot@retrack.vn` / `Depot@123`
+- **Depot Employee**: `employee@retrack.vn` / `Employee@123`
+- **Driver**: `driver@retrack.vn` / `Driver@123`
+- **Factory**: `factory@retrack.vn` / `Factory@123`
 
 ## 📝 Git Workflow
 ```bash
