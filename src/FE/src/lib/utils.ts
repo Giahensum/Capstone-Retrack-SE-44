@@ -1,0 +1,81 @@
+// Các hằng số và utility functions dùng chung
+
+export const ROLES = {
+  SELLER: 'SELLER',
+  DEPOT_OWNER: 'DEPOT_OWNER',
+  DEPOT_EMPLOYEE: 'DEPOT_EMPLOYEE',
+  DRIVER: 'DRIVER',
+  FACTORY: 'FACTORY',
+  ADMIN: 'ADMIN',
+} as const
+
+export type Role = (typeof ROLES)[keyof typeof ROLES]
+
+export const PICKUP_STATUS = {
+  PENDING: 'PENDING',
+  SCHEDULED: 'SCHEDULED',
+  WEIGHED: 'WEIGHED',
+  SELLER_CONFIRMED: 'SELLER_CONFIRMED',
+  AWAITING_PAYMENT: 'AWAITING_PAYMENT',
+  PAYMENT_SENT: 'PAYMENT_SENT',
+  DONE: 'DONE',
+} as const
+
+export const PICKUP_STATUS_LABEL: Record<string, string> = {
+  PENDING: 'Chờ xử lý',
+  SCHEDULED: 'Đã nhận đơn',
+  WEIGHED: 'Đã cân',
+  SELLER_CONFIRMED: 'Seller xác nhận',
+  AWAITING_PAYMENT: 'Chờ thanh toán',
+  PAYMENT_SENT: 'Đã thanh toán',
+  DONE: 'Hoàn thành',
+}
+
+export const BATCH_STATUS_LABEL: Record<string, string> = {
+  MARKETPLACE: 'Thị trường',
+  PENDING_APPROVAL: 'Chờ duyệt',
+  TRANSPORT_READY: 'Sẵn sàng vận chuyển',
+  COMPLETED: 'Hoàn thành',
+}
+
+// Format tiền VND
+export function formatCurrency(amount: number): string {
+  return new Intl.NumberFormat('vi-VN', {
+    style: 'currency',
+    currency: 'VND',
+  }).format(amount)
+}
+
+// Format ngày giờ
+export function formatDate(date: string | Date): string {
+  return new Intl.DateTimeFormat('vi-VN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(date))
+}
+
+// Format số kg
+export function formatWeight(kg: number): string {
+  return `${kg.toLocaleString('vi-VN')} kg`
+}
+
+// Lấy màu badge theo status
+export function getStatusColor(status: string): string {
+  const colors: Record<string, string> = {
+    PENDING: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+    SCHEDULED: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+    WEIGHED: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+    SELLER_CONFIRMED: 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30',
+    AWAITING_PAYMENT: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
+    PAYMENT_SENT: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
+    DONE: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+    APPROVED: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+    BLOCKED: 'bg-red-500/20 text-red-400 border-red-500/30',
+    IN_TRANSIT: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+    DELIVERED: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+  }
+  return colors[status] ?? 'bg-slate-500/20 text-slate-400 border-slate-500/30'
+}
