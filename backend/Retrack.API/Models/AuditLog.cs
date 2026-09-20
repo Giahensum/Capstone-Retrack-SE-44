@@ -1,4 +1,4 @@
-﻿namespace Retrack.API.Models;
+namespace Retrack.API.Models;
 
 public class AuditLog
 {
@@ -11,3 +11,5 @@ public class AuditLog
     public string? NewData { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
+
+

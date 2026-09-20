@@ -1,4 +1,4 @@
-﻿using Retrack.API.Services.Interfaces;
+using Retrack.API.Services.Interfaces;
 namespace Retrack.API.Services.Shared;
 
 public class NotificationService : INotificationService
@@ -8,3 +8,5 @@ public class NotificationService : INotificationService
     public async Task<IEnumerable<object>> GetByUserIdAsync(Guid userId) => throw new NotImplementedException();
     public async Task MarkAsReadAsync(Guid notificationId) => throw new NotImplementedException();
 }
+
+

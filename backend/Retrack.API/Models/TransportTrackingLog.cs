@@ -1,4 +1,4 @@
-﻿namespace Retrack.API.Models;
+namespace Retrack.API.Models;
 
 public class TransportTrackingLog
 {
@@ -10,3 +10,5 @@ public class TransportTrackingLog
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public TransportJob TransportJob { get; set; } = null!;
 }
+
+
