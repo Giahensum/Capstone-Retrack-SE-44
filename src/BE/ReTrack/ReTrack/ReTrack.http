@@ -1,6 +1,0 @@
-@ReTrack_HostAddress = http://localhost:5105
-
-GET {{ReTrack_HostAddress}}/weatherforecast/
-Accept: application/json
-
-###
