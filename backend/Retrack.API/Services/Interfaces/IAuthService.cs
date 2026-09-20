@@ -1,4 +1,4 @@
-﻿namespace Retrack.API.Services.Interfaces;
+namespace Retrack.API.Services.Interfaces;
 
 public interface IAuthService
 {
@@ -6,3 +6,5 @@ public interface IAuthService
     Task<object> LoginAsync(string email, string password);
     Task<object> GoogleLoginAsync(string googleToken);
 }
+
+

@@ -1,4 +1,4 @@
-﻿using Retrack.API.Models.Enums;
+using Retrack.API.Models.Enums;
 namespace Retrack.API.Models;
 
 public class EprCertificate
@@ -12,3 +12,5 @@ public class EprCertificate
     public DateTime IssuedAt { get; set; } = DateTime.UtcNow;
     public BatchOrder BatchOrder { get; set; } = null!;
 }
+
+

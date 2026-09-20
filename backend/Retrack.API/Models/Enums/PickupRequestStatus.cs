@@ -1,4 +1,4 @@
-﻿namespace Retrack.API.Models.Enums;
+namespace Retrack.API.Models.Enums;
 
 public enum PickupRequestStatus
 {
@@ -12,3 +12,5 @@ public enum PickupRequestStatus
     DONE,
     CANCELLED
 }
+
+
