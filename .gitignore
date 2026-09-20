@@ -5,6 +5,9 @@
 # ── Agent Skills (local reference only, không push) ──
 .agent-skills/
 
+# ── AI Context (local docs cho AI agent, không push) ──
+.ai-context/
+
 # ── Backend (.NET) ──
 backend/**/bin/
 backend/**/obj/
