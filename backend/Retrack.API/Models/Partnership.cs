@@ -1,4 +1,4 @@
-﻿using Retrack.API.Models.Enums;
+using Retrack.API.Models.Enums;
 namespace Retrack.API.Models;
 
 public class Partnership
@@ -12,3 +12,5 @@ public class Partnership
     public Depot Depot { get; set; } = null!;
     public Factory Factory { get; set; } = null!;
 }
+
+

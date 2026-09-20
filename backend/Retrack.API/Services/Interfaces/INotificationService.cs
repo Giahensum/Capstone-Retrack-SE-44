@@ -1,4 +1,4 @@
-﻿namespace Retrack.API.Services.Interfaces;
+namespace Retrack.API.Services.Interfaces;
 
 public interface INotificationService
 {
@@ -6,3 +6,5 @@ public interface INotificationService
     Task<IEnumerable<object>> GetByUserIdAsync(Guid userId);
     Task MarkAsReadAsync(Guid notificationId);
 }
+
+

@@ -1,4 +1,4 @@
-﻿namespace Retrack.API.Models;
+namespace Retrack.API.Models;
 
 public class Driver
 {
@@ -14,3 +14,5 @@ public class Driver
     public User User { get; set; } = null!;
     public Depot Depot { get; set; } = null!;
 }
+
+

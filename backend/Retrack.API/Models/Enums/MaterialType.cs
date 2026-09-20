@@ -1,4 +1,4 @@
-﻿namespace Retrack.API.Models.Enums;
+namespace Retrack.API.Models.Enums;
 
 public enum MaterialType
 {
@@ -6,3 +6,5 @@ public enum MaterialType
     ALUMINUM, IRON, STEEL, COPPER,
     ELECTRONIC_WASTE, OTHER
 }
+
+

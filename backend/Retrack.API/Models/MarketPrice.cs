@@ -1,4 +1,4 @@
-﻿using Retrack.API.Models.Enums;
+using Retrack.API.Models.Enums;
 namespace Retrack.API.Models;
 
 public class MarketPrice
@@ -10,3 +10,5 @@ public class MarketPrice
     public string? Source { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
+
+

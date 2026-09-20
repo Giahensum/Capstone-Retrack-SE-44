@@ -1,4 +1,4 @@
-﻿namespace Retrack.API.Models;
+namespace Retrack.API.Models;
 
 public class WeightVerification
 {
@@ -12,3 +12,5 @@ public class WeightVerification
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public BatchOrder BatchOrder { get; set; } = null!;
 }
+
+
