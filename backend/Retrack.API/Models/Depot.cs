@@ -1,18 +1,47 @@
-﻿namespace Retrack.API.Models;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
-public class Depot
+namespace Retrack.API.Models
 {
-    public Guid Id { get; set; }
-    public Guid UserId { get; set; }
-    public string CompanyName { get; set; } = string.Empty;
-    public string? TaxCode { get; set; }
-    public string? Address { get; set; }
-    public string? City { get; set; }
-    public decimal? Latitude { get; set; }
-    public decimal? Longitude { get; set; }
-    public string? ContactPhone { get; set; }
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-    public User User { get; set; } = null!;
-    public ICollection<DepotEmployee> Employees { get; set; } = new List<DepotEmployee>();
-    public ICollection<Driver> Drivers { get; set; } = new List<Driver>();
+    [Table("depots")]
+    public class Depot
+    {
+        [Key]
+        [Column("id")]
+        public Guid Id { get; set; } = Guid.NewGuid();
+
+        [Required]
+        [Column("owner_id")]
+        public Guid OwnerId { get; set; }
+
+        [Required]
+        [Column("name")]
+        [MaxLength(255)]
+        public string Name { get; set; } = string.Empty;
+
+        [Required]
+        [Column("address")]
+        public string Address { get; set; } = string.Empty;
+
+        [Column("latitude")]
+        public decimal? Latitude { get; set; }
+
+        [Column("longitude")]
+        public decimal? Longitude { get; set; }
+
+        [Column("rating")]
+        public decimal Rating { get; set; } = 0.0m;
+
+        [Column("created_at")]
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+        // Navigation
+        [ForeignKey("OwnerId")]
+        public User Owner { get; set; } = null!;
+        public ICollection<DepotStaff> Staffs { get; set; } = new List<DepotStaff>();
+        public ICollection<PickupRequest> PickupRequests { get; set; } = new List<PickupRequest>();
+        public ICollection<InventoryBatch> InventoryBatches { get; set; } = new List<InventoryBatch>();
+        public ICollection<FactoryDepotPartnership> Partnerships { get; set; } = new List<FactoryDepotPartnership>();
+    }
 }
+

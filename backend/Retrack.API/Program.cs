@@ -1,103 +1,122 @@
+using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
 using Retrack.API.Data;
 using Retrack.API.Middleware;
 using Retrack.API.Repositories;
-using Retrack.API.Repositories.Interfaces;
-using Retrack.API.Services.Interfaces;
-using Retrack.API.Services.Shared;
-using System.Text;
+using Retrack.API.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// ══════════════════════════════════════════════════════════
-// 1. DATABASE
-// ══════════════════════════════════════════════════════════
+// ===== DATABASE =====
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// ══════════════════════════════════════════════════════════
-// 2. REPOSITORIES (Data Access Layer)
-// ══════════════════════════════════════════════════════════
-builder.Services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
-builder.Services.AddScoped<IUserRepository, UserRepository>();
-// TODO: Register other repositories
-// builder.Services.AddScoped<IPickupRequestRepository, PickupRequestRepository>();
-// builder.Services.AddScoped<IDepotRepository, DepotRepository>();
-// builder.Services.AddScoped<IInventoryRepository, InventoryRepository>();
-// builder.Services.AddScoped<IBatchOrderRepository, BatchOrderRepository>();
-// builder.Services.AddScoped<ITransportJobRepository, TransportJobRepository>();
-// builder.Services.AddScoped<INotificationRepository, NotificationRepository>();
-
-// ══════════════════════════════════════════════════════════
-// 3. SERVICES (Business Logic Layer)
-// ══════════════════════════════════════════════════════════
-// builder.Services.AddScoped<IAuthService, AuthService>();
-// builder.Services.AddScoped<ISellerService, SellerService>();
-// builder.Services.AddScoped<IDepotService, DepotService>();
-// builder.Services.AddScoped<IEmployeePickupService, EmployeePickupService>();
-// builder.Services.AddScoped<IDriverTransportService, DriverTransportService>();
-// builder.Services.AddScoped<IFactoryMarketService, FactoryMarketService>();
-// builder.Services.AddScoped<IAdminService, AdminService>();
-builder.Services.AddScoped<ICloudinaryService, CloudinaryService>();
-builder.Services.AddScoped<INotificationService, NotificationService>();
-
-// ══════════════════════════════════════════════════════════
-// 4. JWT AUTHENTICATION
-// ══════════════════════════════════════════════════════════
-var jwtKey = builder.Configuration["Jwt:Key"]
-    ?? throw new InvalidOperationException("Jwt:Key is not configured");
-
-builder.Services.AddAuthentication(options =>
-{
-    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-})
-.AddJwtBearer(options =>
-{
-    options.TokenValidationParameters = new TokenValidationParameters
+// ===== AUTHENTICATION (JWT) =====
+var jwtKey = builder.Configuration["Jwt:Key"]!;
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
     {
-        ValidateIssuerSigningKey = true,
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
-        ValidateIssuer = true,
-        ValidIssuer = builder.Configuration["Jwt:Issuer"],
-        ValidateAudience = true,
-        ValidAudience = builder.Configuration["Jwt:Audience"],
-        ValidateLifetime = true,
-    };
-});
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = builder.Configuration["Jwt:Issuer"],
+            ValidAudience = builder.Configuration["Jwt:Audience"],
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
+        };
+    });
 
-// ══════════════════════════════════════════════════════════
-// 5. OTHER SERVICES
-// ══════════════════════════════════════════════════════════
-builder.Services.AddHttpClient();
-builder.Services.AddControllers();
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddAuthorization();
+
+// ===== CORS =====
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
-        policy.WithOrigins("http://localhost:5173")
-              .AllowAnyHeader()
-              .AllowAnyMethod());
+        policy.WithOrigins(
+                builder.Configuration["Frontend:Url"] ?? "http://localhost:5173")
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .AllowCredentials());
 });
 
+// ===== DEPENDENCY INJECTION =====
+// Repositories
+builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddScoped<IPickupRequestRepository, PickupRequestRepository>();
+
+// Services
+builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IPickupService, PickupService>();
+
+// ===== CONTROLLERS & SWAGGER =====
+builder.Services.AddControllers();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title = "ReTrack API",
+        Version = "v1",
+        Description = "ReTrack — Recycling Tracking Platform API"
+    });
+
+    // JWT Auth in Swagger
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Type = SecuritySchemeType.Http,
+        Scheme = "Bearer",
+        BearerFormat = "JWT",
+        In = ParameterLocation.Header,
+        Description = "Nhập JWT token: Bearer {token}"
+    });
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" }
+            },
+            Array.Empty<string>()
+        }
+    });
+});
+
+// ===== BUILD =====
 var app = builder.Build();
 
-// ══════════════════════════════════════════════════════════
-// MIDDLEWARE PIPELINE
-// ══════════════════════════════════════════════════════════
+// ===== MIDDLEWARE PIPELINE =====
+app.UseExceptionHandling(); // Global exception handler
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
-    app.UseSwaggerUI();
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "ReTrack API v1");
+        c.RoutePrefix = "swagger";
+    });
 }
 
-app.UseMiddleware<ExceptionHandlingMiddleware>();
+app.UseHttpsRedirection();
 app.UseCors("AllowFrontend");
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
+// ===== AUTO MIGRATE & SEED (dev only) =====
+if (app.Environment.IsDevelopment())
+{
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    db.Database.Migrate();
+    await DataSeeder.SeedAsync(db);
+}
+
 app.Run();
+

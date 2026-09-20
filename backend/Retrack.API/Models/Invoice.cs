@@ -1,4 +1,4 @@
-﻿using Retrack.API.Models.Enums;
+using Retrack.API.Models.Enums;
 namespace Retrack.API.Models;
 
 public class Invoice
@@ -14,3 +14,5 @@ public class Invoice
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public BatchOrder BatchOrder { get; set; } = null!;
 }
+
+

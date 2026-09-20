@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 
 namespace Retrack.API.Controllers.Seller;
 
@@ -12,3 +12,5 @@ public class SellerProfileController : ControllerBase
     // TODO: Inject services via constructor
     // TODO: Implement endpoints
 }
+
+

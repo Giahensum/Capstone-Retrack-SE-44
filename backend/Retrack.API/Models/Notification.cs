@@ -1,4 +1,4 @@
-﻿namespace Retrack.API.Models;
+namespace Retrack.API.Models;
 
 public class Notification
 {
@@ -10,3 +10,5 @@ public class Notification
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public User User { get; set; } = null!;
 }
+
+

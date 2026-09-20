@@ -1,82 +1,87 @@
-using Retrack.API.Models;
-using Retrack.API.Models.Enums;
 using Microsoft.EntityFrameworkCore;
+using Retrack.API.Models;
 
-namespace Retrack.API.Data;
-
-public class AppDbContext : DbContext
+namespace Retrack.API.Data
 {
-    public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
-
-    // ── Users & Roles ──
-    public DbSet<User> Users => Set<User>();
-    public DbSet<Seller> Sellers => Set<Seller>();
-    public DbSet<Depot> Depots => Set<Depot>();
-    public DbSet<DepotEmployee> DepotEmployees => Set<DepotEmployee>();
-    public DbSet<Driver> Drivers => Set<Driver>();
-    public DbSet<Factory> Factories => Set<Factory>();
-
-    // ── Pickup (Seller → Depot) ──
-    public DbSet<PickupRequest> PickupRequests => Set<PickupRequest>();
-    public DbSet<PickupRequestItem> PickupRequestItems => Set<PickupRequestItem>();
-    public DbSet<PickupRequestImage> PickupRequestImages => Set<PickupRequestImage>();
-
-    // ── Inventory & Export (Depot → Factory) ──
-    public DbSet<InventoryBatch> InventoryBatches => Set<InventoryBatch>();
-    public DbSet<BatchImage> BatchImages => Set<BatchImage>();
-    public DbSet<BatchOrder> BatchOrders => Set<BatchOrder>();
-
-    // ── Transport (Driver) ──
-    public DbSet<TransportJob> TransportJobs => Set<TransportJob>();
-    public DbSet<TransportTrackingLog> TransportTrackingLogs => Set<TransportTrackingLog>();
-
-    // ── QC & Settlement (Factory) ──
-    public DbSet<WeightVerification> WeightVerifications => Set<WeightVerification>();
-    public DbSet<WeightTicket> WeightTickets => Set<WeightTicket>();
-
-    // ── Business ──
-    public DbSet<Partnership> Partnerships => Set<Partnership>();
-    public DbSet<FactoryDemand> FactoryDemands => Set<FactoryDemand>();
-    public DbSet<Invoice> Invoices => Set<Invoice>();
-    public DbSet<PlatformFeeLog> PlatformFeeLogs => Set<PlatformFeeLog>();
-    public DbSet<MarketPrice> MarketPrices => Set<MarketPrice>();
-    public DbSet<EprCertificate> EprCertificates => Set<EprCertificate>();
-
-    // ── System ──
-    public DbSet<Notification> Notifications => Set<Notification>();
-    public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
-
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    public class AppDbContext : DbContext
     {
-        // ── Enum → string conversion ──
-        modelBuilder.Entity<User>()
-            .Property(u => u.Role).HasConversion<string>();
+        public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
-        modelBuilder.Entity<PickupRequest>()
-            .Property(p => p.Status).HasConversion<string>();
+        // DbSets
+        public DbSet<SystemConfig> SystemConfigs { get; set; }
+        public DbSet<User> Users { get; set; }
+        public DbSet<Depot> Depots { get; set; }
+        public DbSet<Factory> Factories { get; set; }
+        public DbSet<DepotStaff> DepotStaffs { get; set; }
+        public DbSet<PickupRequest> PickupRequests { get; set; }
+        public DbSet<PickupRequestItem> PickupRequestItems { get; set; }
+        public DbSet<SellerDepotReview> SellerDepotReviews { get; set; }
+        public DbSet<FactoryDemand> FactoryDemands { get; set; }
+        public DbSet<FactoryDepotPartnership> FactoryDepotPartnerships { get; set; }
+        public DbSet<InventoryBatch> InventoryBatches { get; set; }
+        public DbSet<TransportJob> TransportJobs { get; set; }
+        public DbSet<BatchQualityCheck> BatchQualityChecks { get; set; }
+        public DbSet<FactoryDepotReview> FactoryDepotReviews { get; set; }
+        public DbSet<PlatformTransaction> PlatformTransactions { get; set; }
 
-        modelBuilder.Entity<PickupRequestItem>()
-            .Property(p => p.MaterialType).HasConversion<string>();
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            base.OnModelCreating(modelBuilder);
 
-        modelBuilder.Entity<InventoryBatch>()
-            .Property(b => b.MaterialType).HasConversion<string>();
+            // SystemConfig - composite key already via [Key] on config_key
 
-        modelBuilder.Entity<InventoryBatch>()
-            .Property(b => b.Status).HasConversion<string>();
+            // User - unique email
+            modelBuilder.Entity<User>()
+                .HasIndex(u => u.Email).IsUnique();
 
-        modelBuilder.Entity<TransportJob>()
-            .Property(t => t.Status).HasConversion<string>();
+            // PickupRequest - multiple FK to User
+            modelBuilder.Entity<PickupRequest>()
+                .HasOne(p => p.Seller)
+                .WithMany(u => u.PickupRequests)
+                .HasForeignKey(p => p.SellerId)
+                .OnDelete(DeleteBehavior.Restrict);
 
-        modelBuilder.Entity<Partnership>()
-            .Property(p => p.Status).HasConversion<string>();
+            modelBuilder.Entity<PickupRequest>()
+                .HasOne(p => p.AcceptedCollector)
+                .WithMany()
+                .HasForeignKey(p => p.AcceptedCollectorId)
+                .OnDelete(DeleteBehavior.SetNull);
 
-        // ── Unique indexes ──
-        modelBuilder.Entity<User>()
-            .HasIndex(u => u.Email).IsUnique();
+            // FactoryDepotPartnership - unique constraint
+            modelBuilder.Entity<FactoryDepotPartnership>()
+                .HasIndex(p => new { p.DepotId, p.FactoryId }).IsUnique();
 
-        modelBuilder.Entity<InventoryBatch>()
-            .HasIndex(b => b.BatchCode).IsUnique();
+            // TransportJob - unique batch_id
+            modelBuilder.Entity<TransportJob>()
+                .HasIndex(t => t.BatchId).IsUnique();
 
-        base.OnModelCreating(modelBuilder);
+            // BatchQualityCheck - unique batch_id
+            modelBuilder.Entity<BatchQualityCheck>()
+                .HasIndex(b => b.BatchId).IsUnique();
+
+            // Depot -> User (owner) - restrict delete
+            modelBuilder.Entity<Depot>()
+                .HasOne(d => d.Owner)
+                .WithMany(u => u.OwnedDepots)
+                .HasForeignKey(d => d.OwnerId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Factory -> User (owner) - restrict delete
+            modelBuilder.Entity<Factory>()
+                .HasOne(f => f.Owner)
+                .WithMany(u => u.OwnedFactories)
+                .HasForeignKey(f => f.OwnerId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Seed data
+            modelBuilder.Entity<SystemConfig>().HasData(new SystemConfig
+            {
+                ConfigKey = "PLATFORM_FEE_PERCENTAGE",
+                ConfigValue = "1.00",
+                Description = "Phí nền tảng 1%",
+                UpdatedAt = DateTime.UtcNow
+            });
+        }
     }
 }
+
