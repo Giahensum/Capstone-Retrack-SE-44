@@ -1,0 +1,142 @@
+@import "tailwindcss";
+
+@theme {
+  --color-d-primary: #446900;
+  --color-d-on-primary: #ffffff;
+  --color-d-primary-container: #a3e635;
+  --color-d-on-primary-container: #416400;
+  --color-d-secondary: #006c49;
+  --color-d-on-secondary: #ffffff;
+  --color-d-secondary-container: #6cf8bb;
+  --color-d-on-secondary-container: #00714d;
+  --color-d-error: #ba1a1a;
+  --color-d-on-error: #ffffff;
+  --color-d-error-container: #ffdad6;
+  --color-d-on-error-container: #93000a;
+  --color-d-background: #f1fcf2;
+  --color-d-on-background: #141e18;
+  --color-d-surface: #f1fcf2;
+  --color-d-on-surface: #141e18;
+  --color-d-surface-variant: #dae5dc;
+  --color-d-on-surface-variant: #424936;
+  --color-d-outline: #727a64;
+  --color-d-outline-variant: #c2cab0;
+  --color-d-surface-container-lowest: #ffffff;
+  --color-d-surface-container-low: #ebf7ed;
+  --color-d-surface-container: #e5f1e7;
+  --color-d-surface-container-high: #e0ebe1;
+  --color-d-surface-container-highest: #dae5dc;
+  --color-d-surface-accent: #ECFDF5;
+  --color-d-border-subtle: rgba(23, 33, 27, 0.08);
+  --color-d-glass-bg: rgba(248, 250, 247, 0.7);
+  --color-d-primary-fixed: #b2f746;
+  --color-d-on-primary-fixed: #121f00;
+
+  --font-d-label-sm: "JetBrains Mono", monospace;
+  --font-d-label-md: "JetBrains Mono", monospace;
+  --font-d-headline-md: "Geist", sans-serif;
+  --font-d-headline-lg: "Geist", sans-serif;
+  --font-d-headline-xl: "Geist", sans-serif;
+  --font-d-body-sm: "Inter", sans-serif;
+  --font-d-body-md: "Inter", sans-serif;
+  --font-d-body-lg: "Inter", sans-serif;
+}
+
+@layer utilities {
+  .d-glass-panel {
+    background: var(--color-d-glass-bg);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--color-d-border-subtle);
+  }
+  .d-bento-card {
+    background: var(--color-d-surface-container-lowest);
+    border: 1px solid var(--color-d-border-subtle);
+    border-radius: var(--radius-xl);
+    padding: 24px;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+  .d-bento-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 24px rgba(23, 33, 27, 0.04);
+  }
+
+  .text-d-label-sm {
+    font-size: 12px;
+    line-height: 14px;
+    letter-spacing: 0.05em;
+    font-weight: 500;
+  }
+  .text-d-label-md {
+    font-size: 14px;
+    line-height: 16px;
+    letter-spacing: 0.02em;
+    font-weight: 500;
+  }
+  .text-d-body-sm {
+    font-size: 14px;
+    line-height: 20px;
+    font-weight: 400;
+  }
+  .text-d-body-md {
+    font-size: 16px;
+    line-height: 24px;
+    font-weight: 400;
+  }
+  .text-d-body-lg {
+    font-size: 18px;
+    line-height: 28px;
+    font-weight: 400;
+  }
+  .text-d-headline-md {
+    font-size: 24px;
+    line-height: 32px;
+    font-weight: 600;
+  }
+  .text-d-headline-lg {
+    font-size: 32px;
+    line-height: 40px;
+    letter-spacing: -0.02em;
+    font-weight: 600;
+  }
+  .text-d-headline-xl {
+    font-size: 48px;
+    line-height: 56px;
+    letter-spacing: -0.04em;
+    font-weight: 700;
+  }
+  .text-d-headline-xl-mobile {
+    font-size: 32px;
+    line-height: 40px;
+    letter-spacing: -0.02em;
+    font-weight: 700;
+  }
+}
+
+.d-glass-panel {
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border-subtle);
+}
+
+.d-donut-segment {
+  transition: stroke-width 0.3s ease;
+}
+
+.d-donut-segment:hover {
+  stroke-width: 32;
+}
+
+
+.d-profile-glass {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.d-pattern-overlay {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
