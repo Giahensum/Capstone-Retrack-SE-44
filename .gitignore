@@ -19,6 +19,11 @@ frontend/dist/
 frontend/.env
 frontend/.env.local
 frontend/.env.*.local
+fe/node_modules/
+fe/dist/
+fe/.env
+fe/.env.local
+fe/.env.*.local
 
 # ── IDE ──
 .vs/
