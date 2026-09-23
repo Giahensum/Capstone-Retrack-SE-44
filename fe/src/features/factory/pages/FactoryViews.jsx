@@ -70,7 +70,7 @@ export function Dashboard({ navigate }) {
     <>
       <PageHead
         eyebrow="TỔNG QUAN VẬN HÀNH"
-        title="Chào ngày mới, GreenCycle."
+        title={`Chào ngày mới, ${state.profile.companyName || "nhà máy"}.`}
         text="Theo dõi nguồn hàng, chất lượng và chi phí thu mua tại một nơi."
       >
         <Button onClick={() => navigate("marketplace")}>
@@ -240,7 +240,6 @@ export function Marketplace({ navigate }) {
     material: "",
     min: "",
     max: "",
-    distance: "",
     direct: false,
   });
   const [selected, setSelected] = useState(null);
@@ -258,8 +257,7 @@ export function Marketplace({ navigate }) {
         .toLowerCase()
         .includes(filters.search.toLowerCase()) &&
       (!filters.min || b.kg >= Number(filters.min)) &&
-      (!filters.max || b.kg <= Number(filters.max)) &&
-      (!filters.distance || d.distance <= Number(filters.distance))
+      (!filters.max || b.kg <= Number(filters.max))
     );
   });
   const depot = selected && state.depots.find((d) => d.id === selected.depotId);
@@ -317,17 +315,10 @@ export function Marketplace({ navigate }) {
           value={filters.max}
           onChange={(e) => set("max", e.target.value)}
         />
-        <Field
-          label="Khoảng cách tối đa (km)"
-          type="number"
-          min="0"
-          value={filters.distance}
-          onChange={(e) => set("distance", e.target.value)}
-        />
       </div>
       <div className="section-toolbar">
         <span className="muted">
-          {batches.length} lô khả dụng · Khoảng cách minh họa
+          {batches.length} lô khả dụng · Chưa có dữ liệu khoảng cách vận chuyển
         </span>
         <Button
           secondary
@@ -337,7 +328,6 @@ export function Marketplace({ navigate }) {
               material: "",
               min: "",
               max: "",
-              distance: "",
               direct: filters.direct,
             })
           }
@@ -363,8 +353,8 @@ export function Marketplace({ navigate }) {
               </div>
               <div className="batch-body">
                 <div className="batch-meta">
-                  <span>{b.id}</span>
-                  <span>{d.distance} km</span>
+                  <span>{b.batchCode || b.id}</span>
+                  <span>{d.distance == null ? "— km" : `${d.distance} km`}</span>
                 </div>
                 <h2>{materials[b.material]}</h2>
                 <p>{d.name}</p>
@@ -408,13 +398,13 @@ export function Marketplace({ navigate }) {
             {materials[selected.material]} · {number(selected.kg)} kg
           </h3>
           <p>
-            <strong>{depot.name}</strong>
+            <strong>{depot?.name || selected.depotName}</strong>
             <br />
-            {depot.address}
+            {depot?.address || selected.depotAddress}
             <br />
-            {depot.phone}
+            {depot?.phone || selected.depotPhone}
           </p>
-          <Status value={depot.status} />
+          {depot?.status && <Status value={depot.status} />}
           <p>{selected.note}</p>
           <div className="info-box">
             Nhận lô sẽ tạo đơn chờ vận chuyển. Chưa chốt giá và chưa phát sinh
@@ -436,10 +426,10 @@ export function Marketplace({ navigate }) {
             {selected.direct && (
               <Button
                 danger
-                onClick={() => {
+                onClick={async () => {
                   if (!rejecting) setRejecting(true);
                   else if (
-                    act(
+                    await act(
                       "REJECT_OFFER",
                       { id: selected.id, reason },
                       "Đã từ chối yêu cầu chỉ định.",
@@ -452,9 +442,9 @@ export function Marketplace({ navigate }) {
               </Button>
             )}
             <Button
-              onClick={() => {
+              onClick={async () => {
                 if (
-                  act(
+                  await act(
                     "ACCEPT_BATCH",
                     { id: selected.id },
                     "Đã nhận lô. Đơn hàng đang chờ tài xế.",
@@ -553,7 +543,7 @@ export function Demands() {
                         </Button>
                         <Button
                           secondary
-                          onClick={() => act("TOGGLE_DEMAND", { id: d.id })}
+                          onClick={() => void act("TOGGLE_DEMAND", { id: d.id })}
                         >
                           {d.active ? "Tạm dừng" : "Mở lại"}
                         </Button>
@@ -577,9 +567,9 @@ export function Demands() {
           onClose={() => setEditing(null)}
         >
           <form
-            onSubmit={(e) => {
+            onSubmit={async (e) => {
               e.preventDefault();
-              if (act("SAVE_DEMAND", editing)) setEditing(null);
+              if (await act("SAVE_DEMAND", editing)) setEditing(null);
             }}
           >
             <div className="form-grid">
@@ -634,8 +624,8 @@ export function Demands() {
           text={`Tin ${remove.id} sẽ được gỡ khỏi bảng nhu cầu.`}
           danger
           onClose={() => setRemove(null)}
-          onConfirm={() => {
-            if (act("DELETE_DEMAND", { id: remove.id })) setRemove(null);
+          onConfirm={async () => {
+            if (await act("DELETE_DEMAND", { id: remove.id })) setRemove(null);
           }}
         />
       )}
@@ -743,9 +733,9 @@ export function Partners({ navigate }) {
           text={`${change.name}: ${change.status === "BLOCKED" ? "cho phép hợp tác và chỉ định lô trở lại." : "ngừng nhận lô mới từ vựa. Các đơn hiện có vẫn cần được xử lý."}`}
           danger={change.status !== "BLOCKED"}
           onClose={() => setChange(null)}
-          onConfirm={() => {
+          onConfirm={async () => {
             if (
-              act("PARTNER_STATUS", {
+              await act("PARTNER_STATUS", {
                 id: change.id,
                 status: change.status === "BLOCKED" ? "APPROVED" : "BLOCKED",
               })
@@ -768,9 +758,9 @@ export function Profile() {
         text="Thông tin tiếp nhận nguyên liệu và giấy tờ phục vụ hợp tác với kho vựa."
       />
       <form
-        onSubmit={(e) => {
+        onSubmit={async (e) => {
           e.preventDefault();
-          act("PROFILE", form, "Đã lưu hồ sơ nhà máy.");
+          await act("PROFILE", form, "Đã lưu hồ sơ nhà máy.");
         }}
       >
         <Card title="Thông tin doanh nghiệp">
@@ -845,7 +835,7 @@ export function Profile() {
             />
           </div>
           <p className="muted">
-            Tệp được lưu cùng hồ sơ trong trình duyệt ở phiên bản demo.
+            Tệp nhỏ được gửi cùng hồ sơ tới máy chủ.
           </p>
         </Card>
         <div className="form-actions">

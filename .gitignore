@@ -12,6 +12,9 @@ backend/**/*.user
 backend/**/*.suo
 backend/**/.vs/
 backend/**/appsettings.Development.json
+be/**/appsettings.Development.json
+be/**/bin/
+be/**/obj/
 
 # ── Frontend (React/Vite) ──
 frontend/node_modules/

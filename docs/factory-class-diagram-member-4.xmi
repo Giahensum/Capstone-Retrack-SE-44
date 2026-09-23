@@ -1,0 +1,354 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xmi:XMI xmi:version="2.1"
+  xmlns:xmi="http://schema.omg.org/spec/XMI/2.1"
+  xmlns:uml="http://www.eclipse.org/uml2/3.0.0/UML">
+  <uml:Model xmi:id="model_retrack_factory" name="RETRACK Factory Operation Class Diagram">
+
+    <packagedElement xmi:type="uml:Package" xmi:id="pkg_identity" name="Identity">
+      <packagedElement xmi:type="uml:Class" xmi:id="class_User" name="User">
+        <ownedAttribute xmi:id="attr_User_Id" name="Id" type="type_Guid"/>
+        <ownedAttribute xmi:id="attr_User_Email" name="Email" type="type_string"/>
+        <ownedAttribute xmi:id="attr_User_PasswordHash" name="PasswordHash" type="type_string"/>
+        <ownedAttribute xmi:id="attr_User_FullName" name="FullName" type="type_string"/>
+        <ownedAttribute xmi:id="attr_User_Phone" name="Phone" type="type_string"/>
+        <ownedAttribute xmi:id="attr_User_Role" name="Role" type="enum_UserRole"/>
+        <ownedAttribute xmi:id="attr_User_IsActive" name="IsActive" type="type_bool"/>
+        <ownedAttribute xmi:id="attr_User_CreatedAt" name="CreatedAt" type="type_DateTime"/>
+        <ownedAttribute xmi:id="attr_User_UpdatedAt" name="UpdatedAt" type="type_DateTime"/>
+      </packagedElement>
+      <packagedElement xmi:type="uml:Enumeration" xmi:id="enum_UserRole" name="UserRole">
+        <ownedLiteral xmi:id="lit_UserRole_ADMIN" name="ADMIN"/>
+        <ownedLiteral xmi:id="lit_UserRole_DEPOT_OWNER" name="DEPOT_OWNER"/>
+        <ownedLiteral xmi:id="lit_UserRole_DEPOT_EMPLOYEE" name="DEPOT_EMPLOYEE"/>
+        <ownedLiteral xmi:id="lit_UserRole_FACTORY" name="FACTORY"/>
+        <ownedLiteral xmi:id="lit_UserRole_DRIVER" name="DRIVER"/>
+        <ownedLiteral xmi:id="lit_UserRole_SELLER" name="SELLER"/>
+      </packagedElement>
+    </packagedElement>
+
+    <packagedElement xmi:type="uml:Package" xmi:id="pkg_factory_profile" name="Factory Profile and Demand Board">
+      <packagedElement xmi:type="uml:Class" xmi:id="class_Factory" name="Factory">
+        <ownedAttribute xmi:id="attr_Factory_Id" name="Id" type="type_Guid"/>
+        <ownedAttribute xmi:id="attr_Factory_UserId" name="UserId" type="type_Guid"/>
+        <ownedAttribute xmi:id="attr_Factory_CompanyName" name="CompanyName" type="type_string"/>
+        <ownedAttribute xmi:id="attr_Factory_TaxCode" name="TaxCode" type="type_string"/>
+        <ownedAttribute xmi:id="attr_Factory_Address" name="Address" type="type_string"/>
+        <ownedAttribute xmi:id="attr_Factory_Latitude" name="Latitude" type="type_decimal"/>
+        <ownedAttribute xmi:id="attr_Factory_Longitude" name="Longitude" type="type_decimal"/>
+        <ownedAttribute xmi:id="attr_Factory_CreatedAt" name="CreatedAt" type="type_DateTime"/>
+      </packagedElement>
+      <packagedElement xmi:type="uml:Class" xmi:id="class_FactoryDemand" name="FactoryDemand">
+        <ownedAttribute xmi:id="attr_FactoryDemand_Id" name="Id" type="type_Guid"/>
+        <ownedAttribute xmi:id="attr_FactoryDemand_FactoryId" name="FactoryId" type="type_Guid"/>
+        <ownedAttribute xmi:id="attr_FactoryDemand_MaterialType" name="MaterialType" type="enum_MaterialType"/>
+        <ownedAttribute xmi:id="attr_FactoryDemand_QuantityKg" name="QuantityKg" type="type_decimal"/>
+        <ownedAttribute xmi:id="attr_FactoryDemand_PricePerKg" name="PricePerKg" type="type_decimal"/>
+        <ownedAttribute xmi:id="attr_FactoryDemand_Deadline" name="Deadline" type="type_DateTime"/>
+        <ownedAttribute xmi:id="attr_FactoryDemand_IsActive" name="IsActive" type="type_bool"/>
+        <ownedAttribute xmi:id="attr_FactoryDemand_CreatedAt" name="CreatedAt" type="type_DateTime"/>
+      </packagedElement>
+    </packagedElement>
+
+    <packagedElement xmi:type="uml:Package" xmi:id="pkg_marketplace" name="Marketplace and Batch Order">
+      <packagedElement xmi:type="uml:Class" xmi:id="class_Depot" name="Depot">
+        <ownedAttribute xmi:id="attr_Depot_Id" name="Id" type="type_Guid"/>
+        <ownedAttribute xmi:id="attr_Depot_UserId" name="UserId" type="type_Guid"/>
+        <ownedAttribute xmi:id="attr_Depot_CompanyName" name="CompanyName" type="type_string"/>
+        <ownedAttribute xmi:id="attr_Depot_TaxCode" name="TaxCode" type="type_string"/>
+        <ownedAttribute xmi:id="attr_Depot_Address" name="Address" type="type_string"/>
+        <ownedAttribute xmi:id="attr_Depot_City" name="City" type="type_string"/>
+        <ownedAttribute xmi:id="attr_Depot_Latitude" name="Latitude" type="type_decimal"/>
+        <ownedAttribute xmi:id="attr_Depot_Longitude" name="Longitude" type="type_decimal"/>
+        <ownedAttribute xmi:id="attr_Depot_ContactPhone" name="ContactPhone" type="type_string"/>
+        <ownedAttribute xmi:id="attr_Depot_CreatedAt" name="CreatedAt" type="type_DateTime"/>
+      </packagedElement>
+      <packagedElement xmi:type="uml:Class" xmi:id="class_InventoryBatch" name="InventoryBatch">
+        <ownedAttribute xmi:id="attr_InventoryBatch_Id" name="Id" type="type_Guid"/>
+        <ownedAttribute xmi:id="attr_InventoryBatch_DepotId" name="DepotId" type="type_Guid"/>
+        <ownedAttribute xmi:id="attr_InventoryBatch_BatchCode" name="BatchCode" type="type_string"/>
+        <ownedAttribute xmi:id="attr_InventoryBatch_MaterialType" name="MaterialType" type="enum_MaterialType"/>
+        <ownedAttribute xmi:id="attr_InventoryBatch_EstimatedWeightKg" name="EstimatedWeightKg" type="type_decimal"/>
+        <ownedAttribute xmi:id="attr_InventoryBatch_ActualWeightKg" name="ActualWeightKg" type="type_decimal"/>
+        <ownedAttribute xmi:id="attr_InventoryBatch_UnitPrice" name="UnitPrice" type="type_decimal"/>
+        <ownedAttribute xmi:id="attr_InventoryBatch_Description" name="Description" type="type_string"/>
+        <ownedAttribute xmi:id="attr_InventoryBatch_ThumbnailImageUrl" name="ThumbnailImageUrl" type="type_string"/>
+        <ownedAttribute xmi:id="attr_InventoryBatch_Status" name="Status" type="enum_BatchStatus"/>
+        <ownedAttribute xmi:id="attr_InventoryBatch_TransportType" name="TransportType" type="enum_TransportType"/>
+        <ownedAttribute xmi:id="attr_InventoryBatch_CreatedAt" name="CreatedAt" type="type_DateTime"/>
+      </packagedElement>
+      <packagedElement xmi:type="uml:Class" xmi:id="class_BatchImage" name="BatchImage">
+        <ownedAttribute xmi:id="attr_BatchImage_Id" name="Id" type="type_Guid"/>
+        <ownedAttribute xmi:id="attr_BatchImage_BatchId" name="BatchId" type="type_Guid"/>
+        <ownedAttribute xmi:id="attr_BatchImage_ImageUrl" name="ImageUrl" type="type_string"/>
+        <ownedAttribute xmi:id="attr_BatchImage_CreatedAt" name="CreatedAt" type="type_DateTime"/>
+      </packagedElement>
+      <packagedElement xmi:type="uml:Class" xmi:id="class_BatchOrder" name="BatchOrder">
+        <ownedAttribute xmi:id="attr_BatchOrder_Id" name="Id" type="type_Guid"/>
+        <ownedAttribute xmi:id="attr_BatchOrder_BatchId" name="BatchId" type="type_Guid"/>
+        <ownedAttribute xmi:id="attr_BatchOrder_FactoryId" name="FactoryId" type="type_Guid"/>
+        <ownedAttribute xmi:id="attr_BatchOrder_AgreedPrice" name="AgreedPrice" type="type_decimal"/>
+        <ownedAttribute xmi:id="attr_BatchOrder_TotalAmount" name="TotalAmount" type="type_decimal"/>
+        <ownedAttribute xmi:id="attr_BatchOrder_Status" name="Status" type="enum_BatchStatus"/>
+        <ownedAttribute xmi:id="attr_BatchOrder_CreatedAt" name="CreatedAt" type="type_DateTime"/>
+      </packagedElement>
+      <packagedElement xmi:type="uml:Class" xmi:id="class_Partnership" name="Partnership">
+        <ownedAttribute xmi:id="attr_Partnership_Id" name="Id" type="type_Guid"/>
+        <ownedAttribute xmi:id="attr_Partnership_DepotId" name="DepotId" type="type_Guid"/>
+        <ownedAttribute xmi:id="attr_Partnership_FactoryId" name="FactoryId" type="type_Guid"/>
+        <ownedAttribute xmi:id="attr_Partnership_Status" name="Status" type="enum_PartnershipStatus"/>
+        <ownedAttribute xmi:id="attr_Partnership_Rating" name="Rating" type="type_decimal"/>
+        <ownedAttribute xmi:id="attr_Partnership_CreatedAt" name="CreatedAt" type="type_DateTime"/>
+      </packagedElement>
+    </packagedElement>
+
+    <packagedElement xmi:type="uml:Package" xmi:id="pkg_transport" name="Transport Tracking">
+      <packagedElement xmi:type="uml:Class" xmi:id="class_Driver" name="Driver">
+        <ownedAttribute xmi:id="attr_Driver_Id" name="Id" type="type_Guid"/>
+        <ownedAttribute xmi:id="attr_Driver_UserId" name="UserId" type="type_Guid"/>
+        <ownedAttribute xmi:id="attr_Driver_DepotId" name="DepotId" type="type_Guid"/>
+        <ownedAttribute xmi:id="attr_Driver_LicenseNumber" name="LicenseNumber" type="type_string"/>
+        <ownedAttribute xmi:id="attr_Driver_VehiclePlate" name="VehiclePlate" type="type_string"/>
+        <ownedAttribute xmi:id="attr_Driver_VehicleType" name="VehicleType" type="type_string"/>
+        <ownedAttribute xmi:id="attr_Driver_MaxCapacityKg" name="MaxCapacityKg" type="type_decimal"/>
+        <ownedAttribute xmi:id="attr_Driver_IsAvailable" name="IsAvailable" type="type_bool"/>
+        <ownedAttribute xmi:id="attr_Driver_CreatedAt" name="CreatedAt" type="type_DateTime"/>
+      </packagedElement>
+      <packagedElement xmi:type="uml:Class" xmi:id="class_TransportJob" name="TransportJob">
+        <ownedAttribute xmi:id="attr_TransportJob_Id" name="Id" type="type_Guid"/>
+        <ownedAttribute xmi:id="attr_TransportJob_BatchOrderId" name="BatchOrderId" type="type_Guid"/>
+        <ownedAttribute xmi:id="attr_TransportJob_DriverId" name="DriverId" type="type_Guid"/>
+        <ownedAttribute xmi:id="attr_TransportJob_PickupAddress" name="PickupAddress" type="type_string"/>
+        <ownedAttribute xmi:id="attr_TransportJob_DeliveryAddress" name="DeliveryAddress" type="type_string"/>
+        <ownedAttribute xmi:id="attr_TransportJob_TransportFee" name="TransportFee" type="type_decimal"/>
+        <ownedAttribute xmi:id="attr_TransportJob_Status" name="Status" type="enum_TransportStatus"/>
+        <ownedAttribute xmi:id="attr_TransportJob_PickupTime" name="PickupTime" type="type_DateTime"/>
+        <ownedAttribute xmi:id="attr_TransportJob_DeliveredTime" name="DeliveredTime" type="type_DateTime"/>
+        <ownedAttribute xmi:id="attr_TransportJob_CreatedAt" name="CreatedAt" type="type_DateTime"/>
+      </packagedElement>
+      <packagedElement xmi:type="uml:Class" xmi:id="class_TransportTrackingLog" name="TransportTrackingLog">
+        <ownedAttribute xmi:id="attr_TransportTrackingLog_Id" name="Id" type="type_Guid"/>
+        <ownedAttribute xmi:id="attr_TransportTrackingLog_TransportJobId" name="TransportJobId" type="type_Guid"/>
+        <ownedAttribute xmi:id="attr_TransportTrackingLog_Latitude" name="Latitude" type="type_decimal"/>
+        <ownedAttribute xmi:id="attr_TransportTrackingLog_Longitude" name="Longitude" type="type_decimal"/>
+        <ownedAttribute xmi:id="attr_TransportTrackingLog_Note" name="Note" type="type_string"/>
+        <ownedAttribute xmi:id="attr_TransportTrackingLog_CreatedAt" name="CreatedAt" type="type_DateTime"/>
+      </packagedElement>
+    </packagedElement>
+
+    <packagedElement xmi:type="uml:Package" xmi:id="pkg_qc_settlement" name="Receiving, QC and Settlement">
+      <packagedElement xmi:type="uml:Class" xmi:id="class_WeightTicket" name="WeightTicket">
+        <ownedAttribute xmi:id="attr_WeightTicket_Id" name="Id" type="type_Guid"/>
+        <ownedAttribute xmi:id="attr_WeightTicket_BatchOrderId" name="BatchOrderId" type="type_Guid"/>
+        <ownedAttribute xmi:id="attr_WeightTicket_TicketNumber" name="TicketNumber" type="type_string"/>
+        <ownedAttribute xmi:id="attr_WeightTicket_GrossWeightKg" name="GrossWeightKg" type="type_decimal"/>
+        <ownedAttribute xmi:id="attr_WeightTicket_TareWeightKg" name="TareWeightKg" type="type_decimal"/>
+        <ownedAttribute xmi:id="attr_WeightTicket_NetWeightKg" name="NetWeightKg" type="type_decimal"/>
+        <ownedAttribute xmi:id="attr_WeightTicket_TicketImageUrl" name="TicketImageUrl" type="type_string"/>
+        <ownedAttribute xmi:id="attr_WeightTicket_CreatedAt" name="CreatedAt" type="type_DateTime"/>
+      </packagedElement>
+      <packagedElement xmi:type="uml:Class" xmi:id="class_WeightVerification" name="WeightVerification">
+        <ownedAttribute xmi:id="attr_WeightVerification_Id" name="Id" type="type_Guid"/>
+        <ownedAttribute xmi:id="attr_WeightVerification_BatchOrderId" name="BatchOrderId" type="type_Guid"/>
+        <ownedAttribute xmi:id="attr_WeightVerification_DepotWeightKg" name="DepotWeightKg" type="type_decimal"/>
+        <ownedAttribute xmi:id="attr_WeightVerification_FactoryWeightKg" name="FactoryWeightKg" type="type_decimal"/>
+        <ownedAttribute xmi:id="attr_WeightVerification_DifferencePercentage" name="DifferencePercentage" type="type_decimal"/>
+        <ownedAttribute xmi:id="attr_WeightVerification_IsVerified" name="IsVerified" type="type_bool"/>
+        <ownedAttribute xmi:id="attr_WeightVerification_Note" name="Note" type="type_string"/>
+        <ownedAttribute xmi:id="attr_WeightVerification_CreatedAt" name="CreatedAt" type="type_DateTime"/>
+      </packagedElement>
+      <packagedElement xmi:type="uml:Class" xmi:id="class_Invoice" name="Invoice">
+        <ownedAttribute xmi:id="attr_Invoice_Id" name="Id" type="type_Guid"/>
+        <ownedAttribute xmi:id="attr_Invoice_BatchOrderId" name="BatchOrderId" type="type_Guid"/>
+        <ownedAttribute xmi:id="attr_Invoice_InvoiceNumber" name="InvoiceNumber" type="type_string"/>
+        <ownedAttribute xmi:id="attr_Invoice_InvoiceFileUrl" name="InvoiceFileUrl" type="type_string"/>
+        <ownedAttribute xmi:id="attr_Invoice_Subtotal" name="Subtotal" type="type_decimal"/>
+        <ownedAttribute xmi:id="attr_Invoice_VatAmount" name="VatAmount" type="type_decimal"/>
+        <ownedAttribute xmi:id="attr_Invoice_TotalAmount" name="TotalAmount" type="type_decimal"/>
+        <ownedAttribute xmi:id="attr_Invoice_Status" name="Status" type="enum_InvoiceStatus"/>
+        <ownedAttribute xmi:id="attr_Invoice_CreatedAt" name="CreatedAt" type="type_DateTime"/>
+      </packagedElement>
+      <packagedElement xmi:type="uml:Class" xmi:id="class_EprCertificate" name="EprCertificate">
+        <ownedAttribute xmi:id="attr_EprCertificate_Id" name="Id" type="type_Guid"/>
+        <ownedAttribute xmi:id="attr_EprCertificate_BatchOrderId" name="BatchOrderId" type="type_Guid"/>
+        <ownedAttribute xmi:id="attr_EprCertificate_CertificateCode" name="CertificateCode" type="type_string"/>
+        <ownedAttribute xmi:id="attr_EprCertificate_HashValue" name="HashValue" type="type_string"/>
+        <ownedAttribute xmi:id="attr_EprCertificate_MaterialType" name="MaterialType" type="enum_MaterialType"/>
+        <ownedAttribute xmi:id="attr_EprCertificate_CertifiedWeightKg" name="CertifiedWeightKg" type="type_decimal"/>
+        <ownedAttribute xmi:id="attr_EprCertificate_IssuedAt" name="IssuedAt" type="type_DateTime"/>
+      </packagedElement>
+    </packagedElement>
+
+    <packagedElement xmi:type="uml:Package" xmi:id="pkg_services" name="Factory Services and Controllers">
+      <packagedElement xmi:type="uml:Class" xmi:id="class_FactoryDemandController" name="FactoryDemandController">
+        <ownedOperation xmi:id="op_FactoryDemandController_CreateDemand" name="CreateDemand"/>
+        <ownedOperation xmi:id="op_FactoryDemandController_UpdateDemand" name="UpdateDemand"/>
+        <ownedOperation xmi:id="op_FactoryDemandController_DeleteDemand" name="DeleteDemand"/>
+        <ownedOperation xmi:id="op_FactoryDemandController_GetMyDemands" name="GetMyDemands"/>
+      </packagedElement>
+      <packagedElement xmi:type="uml:Class" xmi:id="class_FactoryMarketController" name="FactoryMarketController">
+        <ownedOperation xmi:id="op_FactoryMarketController_BrowseMarketplace" name="BrowseMarketplace"/>
+        <ownedOperation xmi:id="op_FactoryMarketController_AcceptListedBatch" name="AcceptListedBatch"/>
+        <ownedOperation xmi:id="op_FactoryMarketController_ApproveDirectRequest" name="ApproveDirectRequest"/>
+        <ownedOperation xmi:id="op_FactoryMarketController_RejectDirectRequest" name="RejectDirectRequest"/>
+      </packagedElement>
+      <packagedElement xmi:type="uml:Class" xmi:id="class_FactoryQCController" name="FactoryQCController">
+        <ownedOperation xmi:id="op_FactoryQCController_ConfirmReceiving" name="ConfirmReceiving"/>
+        <ownedOperation xmi:id="op_FactoryQCController_CreateWeightTicket" name="CreateWeightTicket"/>
+        <ownedOperation xmi:id="op_FactoryQCController_VerifyWeight" name="VerifyWeight"/>
+        <ownedOperation xmi:id="op_FactoryQCController_SubmitQualityDecision" name="SubmitQualityDecision"/>
+      </packagedElement>
+      <packagedElement xmi:type="uml:Class" xmi:id="class_FactoryOrderController" name="FactoryOrderController">
+        <ownedOperation xmi:id="op_FactoryOrderController_GetAcceptedOrders" name="GetAcceptedOrders"/>
+        <ownedOperation xmi:id="op_FactoryOrderController_TrackTransport" name="TrackTransport"/>
+        <ownedOperation xmi:id="op_FactoryOrderController_SettleOrder" name="SettleOrder"/>
+        <ownedOperation xmi:id="op_FactoryOrderController_UploadInvoice" name="UploadInvoice"/>
+      </packagedElement>
+      <packagedElement xmi:type="uml:Class" xmi:id="class_FactoryPartnerController" name="FactoryPartnerController">
+        <ownedOperation xmi:id="op_FactoryPartnerController_GetPartners" name="GetPartners"/>
+        <ownedOperation xmi:id="op_FactoryPartnerController_RateDepot" name="RateDepot"/>
+        <ownedOperation xmi:id="op_FactoryPartnerController_BlockDepot" name="BlockDepot"/>
+        <ownedOperation xmi:id="op_FactoryPartnerController_UnblockDepot" name="UnblockDepot"/>
+      </packagedElement>
+      <packagedElement xmi:type="uml:Interface" xmi:id="interface_IFactoryMarketService" name="IFactoryMarketService">
+        <ownedOperation xmi:id="op_IFactoryMarketService_BrowseListedBatches" name="BrowseListedBatches"/>
+        <ownedOperation xmi:id="op_IFactoryMarketService_AcceptBatch" name="AcceptBatch"/>
+        <ownedOperation xmi:id="op_IFactoryMarketService_ReviewDirectRequest" name="ReviewDirectRequest"/>
+      </packagedElement>
+      <packagedElement xmi:type="uml:Interface" xmi:id="interface_IQCService" name="IQCService">
+        <ownedOperation xmi:id="op_IQCService_ConfirmReceiving" name="ConfirmReceiving"/>
+        <ownedOperation xmi:id="op_IQCService_CreateWeightTicket" name="CreateWeightTicket"/>
+        <ownedOperation xmi:id="op_IQCService_VerifyWeight" name="VerifyWeight"/>
+        <ownedOperation xmi:id="op_IQCService_AcceptOrRejectBatch" name="AcceptOrRejectBatch"/>
+      </packagedElement>
+      <packagedElement xmi:type="uml:Interface" xmi:id="interface_IPaymentService" name="IPaymentService">
+        <ownedOperation xmi:id="op_IPaymentService_CalculateSettlement" name="CalculateSettlement"/>
+        <ownedOperation xmi:id="op_IPaymentService_SettleFactoryPayment" name="SettleFactoryPayment"/>
+        <ownedOperation xmi:id="op_IPaymentService_UploadInvoice" name="UploadInvoice"/>
+      </packagedElement>
+    </packagedElement>
+
+    <packagedElement xmi:type="uml:Enumeration" xmi:id="enum_MaterialType" name="MaterialType">
+      <ownedLiteral xmi:id="lit_MaterialType_PET" name="PET"/>
+      <ownedLiteral xmi:id="lit_MaterialType_HDPE" name="HDPE"/>
+      <ownedLiteral xmi:id="lit_MaterialType_PVC" name="PVC"/>
+      <ownedLiteral xmi:id="lit_MaterialType_PAPER" name="PAPER"/>
+      <ownedLiteral xmi:id="lit_MaterialType_CARDBOARD" name="CARDBOARD"/>
+      <ownedLiteral xmi:id="lit_MaterialType_ALUMINUM" name="ALUMINUM"/>
+      <ownedLiteral xmi:id="lit_MaterialType_IRON" name="IRON"/>
+      <ownedLiteral xmi:id="lit_MaterialType_STEEL" name="STEEL"/>
+      <ownedLiteral xmi:id="lit_MaterialType_COPPER" name="COPPER"/>
+      <ownedLiteral xmi:id="lit_MaterialType_ELECTRONIC_WASTE" name="ELECTRONIC_WASTE"/>
+      <ownedLiteral xmi:id="lit_MaterialType_OTHER" name="OTHER"/>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Enumeration" xmi:id="enum_BatchStatus" name="BatchStatus">
+      <ownedLiteral xmi:id="lit_BatchStatus_DRAFT" name="DRAFT"/>
+      <ownedLiteral xmi:id="lit_BatchStatus_LISTED" name="LISTED"/>
+      <ownedLiteral xmi:id="lit_BatchStatus_ACCEPTED" name="ACCEPTED"/>
+      <ownedLiteral xmi:id="lit_BatchStatus_READY_FOR_PICKUP" name="READY_FOR_PICKUP"/>
+      <ownedLiteral xmi:id="lit_BatchStatus_IN_PROGRESS" name="IN_PROGRESS"/>
+      <ownedLiteral xmi:id="lit_BatchStatus_DELIVERED" name="DELIVERED"/>
+      <ownedLiteral xmi:id="lit_BatchStatus_VERIFIED" name="VERIFIED"/>
+      <ownedLiteral xmi:id="lit_BatchStatus_REJECTED" name="REJECTED"/>
+      <ownedLiteral xmi:id="lit_BatchStatus_CANCELLED" name="CANCELLED"/>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Enumeration" xmi:id="enum_TransportStatus" name="TransportStatus">
+      <ownedLiteral xmi:id="lit_TransportStatus_PENDING" name="PENDING"/>
+      <ownedLiteral xmi:id="lit_TransportStatus_ASSIGNED" name="ASSIGNED"/>
+      <ownedLiteral xmi:id="lit_TransportStatus_PICKED_UP" name="PICKED_UP"/>
+      <ownedLiteral xmi:id="lit_TransportStatus_ON_THE_WAY" name="ON_THE_WAY"/>
+      <ownedLiteral xmi:id="lit_TransportStatus_DELIVERED" name="DELIVERED"/>
+      <ownedLiteral xmi:id="lit_TransportStatus_CANCELLED" name="CANCELLED"/>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Enumeration" xmi:id="enum_PartnershipStatus" name="PartnershipStatus">
+      <ownedLiteral xmi:id="lit_PartnershipStatus_PENDING" name="PENDING"/>
+      <ownedLiteral xmi:id="lit_PartnershipStatus_APPROVED" name="APPROVED"/>
+      <ownedLiteral xmi:id="lit_PartnershipStatus_BLOCKED" name="BLOCKED"/>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Enumeration" xmi:id="enum_InvoiceStatus" name="InvoiceStatus">
+      <ownedLiteral xmi:id="lit_InvoiceStatus_PENDING" name="PENDING"/>
+      <ownedLiteral xmi:id="lit_InvoiceStatus_UPLOADED" name="UPLOADED"/>
+      <ownedLiteral xmi:id="lit_InvoiceStatus_VERIFIED" name="VERIFIED"/>
+      <ownedLiteral xmi:id="lit_InvoiceStatus_REJECTED" name="REJECTED"/>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Enumeration" xmi:id="enum_TransportType" name="TransportType"/>
+
+    <packagedElement xmi:type="uml:PrimitiveType" xmi:id="type_Guid" name="Guid"/>
+    <packagedElement xmi:type="uml:PrimitiveType" xmi:id="type_string" name="string"/>
+    <packagedElement xmi:type="uml:PrimitiveType" xmi:id="type_decimal" name="decimal"/>
+    <packagedElement xmi:type="uml:PrimitiveType" xmi:id="type_bool" name="bool"/>
+    <packagedElement xmi:type="uml:PrimitiveType" xmi:id="type_DateTime" name="DateTime"/>
+
+    <packagedElement xmi:type="uml:Association" xmi:id="assoc_User_Factory" name="User_Factory">
+      <ownedEnd xmi:id="assoc_User_Factory_user" name="user" type="class_User" association="assoc_User_Factory"/>
+      <ownedEnd xmi:id="assoc_User_Factory_factory" name="factory" type="class_Factory" association="assoc_User_Factory"/>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Association" xmi:id="assoc_User_Depot" name="User_Depot">
+      <ownedEnd xmi:id="assoc_User_Depot_user" name="user" type="class_User" association="assoc_User_Depot"/>
+      <ownedEnd xmi:id="assoc_User_Depot_depot" name="depot" type="class_Depot" association="assoc_User_Depot"/>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Association" xmi:id="assoc_User_Driver" name="User_Driver">
+      <ownedEnd xmi:id="assoc_User_Driver_user" name="user" type="class_User" association="assoc_User_Driver"/>
+      <ownedEnd xmi:id="assoc_User_Driver_driver" name="driver" type="class_Driver" association="assoc_User_Driver"/>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Association" xmi:id="assoc_Factory_Demand" name="Factory_FactoryDemand">
+      <ownedEnd xmi:id="assoc_Factory_Demand_factory" name="factory" type="class_Factory" association="assoc_Factory_Demand"/>
+      <ownedEnd xmi:id="assoc_Factory_Demand_demands" name="demands" type="class_FactoryDemand" association="assoc_Factory_Demand"/>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Association" xmi:id="assoc_Depot_Batch" name="Depot_InventoryBatch">
+      <ownedEnd xmi:id="assoc_Depot_Batch_depot" name="depot" type="class_Depot" association="assoc_Depot_Batch"/>
+      <ownedEnd xmi:id="assoc_Depot_Batch_batches" name="batches" type="class_InventoryBatch" association="assoc_Depot_Batch"/>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Association" xmi:id="assoc_Batch_Image" name="InventoryBatch_BatchImage">
+      <ownedEnd xmi:id="assoc_Batch_Image_batch" name="batch" type="class_InventoryBatch" association="assoc_Batch_Image"/>
+      <ownedEnd xmi:id="assoc_Batch_Image_images" name="images" type="class_BatchImage" association="assoc_Batch_Image"/>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Association" xmi:id="assoc_Batch_Order" name="InventoryBatch_BatchOrder">
+      <ownedEnd xmi:id="assoc_Batch_Order_batch" name="batch" type="class_InventoryBatch" association="assoc_Batch_Order"/>
+      <ownedEnd xmi:id="assoc_Batch_Order_order" name="order" type="class_BatchOrder" association="assoc_Batch_Order"/>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Association" xmi:id="assoc_Factory_Order" name="Factory_BatchOrder">
+      <ownedEnd xmi:id="assoc_Factory_Order_factory" name="factory" type="class_Factory" association="assoc_Factory_Order"/>
+      <ownedEnd xmi:id="assoc_Factory_Order_orders" name="orders" type="class_BatchOrder" association="assoc_Factory_Order"/>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Association" xmi:id="assoc_Order_Transport" name="BatchOrder_TransportJob">
+      <ownedEnd xmi:id="assoc_Order_Transport_order" name="order" type="class_BatchOrder" association="assoc_Order_Transport"/>
+      <ownedEnd xmi:id="assoc_Order_Transport_job" name="job" type="class_TransportJob" association="assoc_Order_Transport"/>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Association" xmi:id="assoc_Order_Ticket" name="BatchOrder_WeightTicket">
+      <ownedEnd xmi:id="assoc_Order_Ticket_order" name="order" type="class_BatchOrder" association="assoc_Order_Ticket"/>
+      <ownedEnd xmi:id="assoc_Order_Ticket_ticket" name="ticket" type="class_WeightTicket" association="assoc_Order_Ticket"/>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Association" xmi:id="assoc_Order_Verification" name="BatchOrder_WeightVerification">
+      <ownedEnd xmi:id="assoc_Order_Verification_order" name="order" type="class_BatchOrder" association="assoc_Order_Verification"/>
+      <ownedEnd xmi:id="assoc_Order_Verification_verification" name="verification" type="class_WeightVerification" association="assoc_Order_Verification"/>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Association" xmi:id="assoc_Order_Invoice" name="BatchOrder_Invoice">
+      <ownedEnd xmi:id="assoc_Order_Invoice_order" name="order" type="class_BatchOrder" association="assoc_Order_Invoice"/>
+      <ownedEnd xmi:id="assoc_Order_Invoice_invoice" name="invoice" type="class_Invoice" association="assoc_Order_Invoice"/>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Association" xmi:id="assoc_Order_Epr" name="BatchOrder_EprCertificate">
+      <ownedEnd xmi:id="assoc_Order_Epr_order" name="order" type="class_BatchOrder" association="assoc_Order_Epr"/>
+      <ownedEnd xmi:id="assoc_Order_Epr_certificate" name="certificate" type="class_EprCertificate" association="assoc_Order_Epr"/>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Association" xmi:id="assoc_Depot_Partnership" name="Depot_Partnership">
+      <ownedEnd xmi:id="assoc_Depot_Partnership_depot" name="depot" type="class_Depot" association="assoc_Depot_Partnership"/>
+      <ownedEnd xmi:id="assoc_Depot_Partnership_partnerships" name="partnerships" type="class_Partnership" association="assoc_Depot_Partnership"/>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Association" xmi:id="assoc_Factory_Partnership" name="Factory_Partnership">
+      <ownedEnd xmi:id="assoc_Factory_Partnership_factory" name="factory" type="class_Factory" association="assoc_Factory_Partnership"/>
+      <ownedEnd xmi:id="assoc_Factory_Partnership_partnerships" name="partnerships" type="class_Partnership" association="assoc_Factory_Partnership"/>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Association" xmi:id="assoc_Depot_Driver" name="Depot_Driver">
+      <ownedEnd xmi:id="assoc_Depot_Driver_depot" name="depot" type="class_Depot" association="assoc_Depot_Driver"/>
+      <ownedEnd xmi:id="assoc_Depot_Driver_drivers" name="drivers" type="class_Driver" association="assoc_Depot_Driver"/>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Association" xmi:id="assoc_Driver_Transport" name="Driver_TransportJob">
+      <ownedEnd xmi:id="assoc_Driver_Transport_driver" name="driver" type="class_Driver" association="assoc_Driver_Transport"/>
+      <ownedEnd xmi:id="assoc_Driver_Transport_jobs" name="jobs" type="class_TransportJob" association="assoc_Driver_Transport"/>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Association" xmi:id="assoc_Transport_Log" name="TransportJob_TransportTrackingLog">
+      <ownedEnd xmi:id="assoc_Transport_Log_job" name="job" type="class_TransportJob" association="assoc_Transport_Log"/>
+      <ownedEnd xmi:id="assoc_Transport_Log_logs" name="logs" type="class_TransportTrackingLog" association="assoc_Transport_Log"/>
+    </packagedElement>
+  </uml:Model>
+</xmi:XMI>

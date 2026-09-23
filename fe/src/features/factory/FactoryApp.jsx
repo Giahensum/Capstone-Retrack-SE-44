@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { FactoryProvider, useFactory } from "./components/FactoryUI";
+import FactoryAuth from "./components/FactoryAuth";
 import {
   Dashboard,
   Marketplace,
@@ -23,7 +24,7 @@ const tabs = [
   ["profile", "Hồ sơ nhà máy", "⚙"],
 ];
 function Workspace() {
-  const { state } = useFactory();
+  const { state, user, logout, loading } = useFactory();
   const [tab, setTab] = useState("dashboard");
   const [focusId, setFocusId] = useState(null);
   function navigate(next, orderId = null) {
@@ -31,6 +32,7 @@ function Workspace() {
     setTab(next);
     window.scrollTo({ top: 0 });
   }
+  if (loading || !state) return <FactoryAuth />;
   const pending = state.orders.filter((o) =>
     ["DELIVERED", "RECEIVED", "WEIGHED"].includes(o.status),
   ).length;
@@ -77,8 +79,8 @@ function Workspace() {
           ))}
         </nav>
         <div className="sidebar-bottom">
-          <span className="live-dot" /> Phiên bản trình diễn
-          <small>Dữ liệu được lưu trên trình duyệt này.</small>
+          <span className="live-dot" /> Đã kết nối API
+          <small>Dữ liệu đồng bộ từ PostgreSQL.</small>
         </div>
       </aside>
       <div className="factory-workspace">
@@ -87,18 +89,13 @@ function Workspace() {
             Nhà máy <span>/</span>{" "}
             <strong>{tabs.find((t) => t[0] === tab)?.[1]}</strong>
           </div>
-          <span className="user-chip">
-            <span>GC</span> Quản lý nhà máy
-          </span>
+          <span className="user-chip"><span>{(user?.fullName || "F").slice(0, 2).toUpperCase()}</span>{user?.fullName || user?.email}<button className="logout-button" onClick={logout}>Đăng xuất</button></span>
         </header>
         <main className="factory-main">
           <div className="demo-banner">
             <span className="live-dot" />
-            <strong>Không gian demo</strong>
-            <span>
-              Chưa kết nối máy chủ hoặc ngân hàng. Số liệu và trạng thái vận
-              chuyển được mô phỏng.
-            </span>
+            <strong>Đã kết nối máy chủ</strong>
+            <span>Dữ liệu hồ sơ, nhu cầu, lô hàng và quyết toán được tải từ API. Trạng thái vận chuyển do luồng tài xế cập nhật.</span>
           </div>
           {tab === "dashboard" && <Dashboard navigate={navigate} />}
           {tab === "marketplace" && <Marketplace navigate={navigate} />}

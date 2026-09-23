@@ -1,0 +1,156 @@
+Create a UML Class Diagram named "RETRACK - Factory Operations (Member 4)".
+
+Create these classes with attributes:
+
+User
+- Id: Guid
+- Email: string
+- FullName: string
+- Role: UserRole
+- IsActive: bool
+
+Factory
+- Id: Guid
+- UserId: Guid
+- CompanyName: string
+- TaxCode: string
+- Address: string
+- Latitude: decimal
+- Longitude: decimal
+
+FactoryDemand
+- Id: Guid
+- FactoryId: Guid
+- MaterialType: MaterialType
+- QuantityKg: decimal
+- PricePerKg: decimal
+- Deadline: DateTime
+- IsActive: bool
+
+Depot
+- Id: Guid
+- UserId: Guid
+- CompanyName: string
+- Address: string
+- ContactPhone: string
+
+InventoryBatch
+- Id: Guid
+- DepotId: Guid
+- BatchCode: string
+- MaterialType: MaterialType
+- EstimatedWeightKg: decimal
+- ActualWeightKg: decimal
+- UnitPrice: decimal
+- Status: BatchStatus
+- TransportType: TransportType
+
+BatchOrder
+- Id: Guid
+- BatchId: Guid
+- FactoryId: Guid
+- AgreedPrice: decimal
+- TotalAmount: decimal
+- Status: BatchStatus
+- CreatedAt: DateTime
+
+Partnership
+- Id: Guid
+- DepotId: Guid
+- FactoryId: Guid
+- Status: PartnershipStatus
+- Rating: decimal
+
+Driver
+- Id: Guid
+- UserId: Guid
+- DepotId: Guid
+- LicenseNumber: string
+- VehiclePlate: string
+- IsAvailable: bool
+
+TransportJob
+- Id: Guid
+- BatchOrderId: Guid
+- DriverId: Guid
+- PickupAddress: string
+- DeliveryAddress: string
+- TransportFee: decimal
+- Status: TransportStatus
+- PickupTime: DateTime
+- DeliveredTime: DateTime
+
+TransportTrackingLog
+- Id: Guid
+- TransportJobId: Guid
+- Latitude: decimal
+- Longitude: decimal
+- Note: string
+- CreatedAt: DateTime
+
+WeightTicket
+- Id: Guid
+- BatchOrderId: Guid
+- TicketNumber: string
+- GrossWeightKg: decimal
+- TareWeightKg: decimal
+- NetWeightKg: decimal
+- TicketImageUrl: string
+
+WeightVerification
+- Id: Guid
+- BatchOrderId: Guid
+- DepotWeightKg: decimal
+- FactoryWeightKg: decimal
+- DifferencePercentage: decimal
+- IsVerified: bool
+- Note: string
+
+Invoice
+- Id: Guid
+- BatchOrderId: Guid
+- InvoiceNumber: string
+- InvoiceFileUrl: string
+- Subtotal: decimal
+- VatAmount: decimal
+- TotalAmount: decimal
+- Status: InvoiceStatus
+
+EprCertificate
+- Id: Guid
+- BatchOrderId: Guid
+- CertificateCode: string
+- HashValue: string
+- MaterialType: MaterialType
+- CertifiedWeightKg: decimal
+- IssuedAt: DateTime
+
+Create these enumerations:
+- UserRole: ADMIN, DEPOT_OWNER, DEPOT_EMPLOYEE, FACTORY, DRIVER, SELLER
+- MaterialType: PET, HDPE, PVC, PAPER, CARDBOARD, ALUMINUM, IRON, STEEL, COPPER, ELECTRONIC_WASTE, OTHER
+- BatchStatus: DRAFT, LISTED, ACCEPTED, READY_FOR_PICKUP, IN_PROGRESS, DELIVERED, VERIFIED, REJECTED, CANCELLED
+- TransportStatus: PENDING, ASSIGNED, PICKED_UP, ON_THE_WAY, DELIVERED, CANCELLED
+- PartnershipStatus: PENDING, APPROVED, BLOCKED
+- InvoiceStatus: PENDING, UPLOADED, VERIFIED, REJECTED
+- TransportType: DEPOT_DELIVERY, FACTORY_PICKUP
+
+Create these associations and multiplicities:
+- User 1 -- 0..1 Factory
+- User 1 -- 0..1 Depot
+- User 1 -- 0..1 Driver
+- Factory 1 -- 0..* FactoryDemand
+- Depot 1 -- 0..* InventoryBatch
+- InventoryBatch 1 -- 0..1 BatchOrder
+- Factory 1 -- 0..* BatchOrder
+- Depot 1 -- 0..* Partnership
+- Factory 1 -- 0..* Partnership
+- Depot 1 -- 0..* Driver
+- BatchOrder 1 -- 0..1 TransportJob
+- Driver 1 -- 0..* TransportJob
+- TransportJob 1 -- 0..* TransportTrackingLog
+- BatchOrder 1 -- 0..1 WeightTicket
+- BatchOrder 1 -- 0..1 WeightVerification
+- BatchOrder 1 -- 0..1 Invoice
+- BatchOrder 1 -- 0..1 EprCertificate
+
+Use enum dependencies for attributes that reference an enumeration. Arrange the diagram from left to right in this business flow: User and Factory Profile, Demand and Marketplace, Batch Order and Transport, Receiving and QC, Invoice and EPR Certificate. Show attributes and multiplicities, and hide empty operation compartments.

@@ -171,9 +171,7 @@ export function Operations({ mode, focusId, navigate }) {
                 <div>
                   <dt>Tài xế</dt>
                   <dd>
-                    {order.status === "ACCEPTED"
-                      ? "Chưa nhận chuyến"
-                      : "Tài xế demo • 51C-123.45"}
+                    {order.transport?.status || (order.status === "ACCEPTED" ? "Chưa nhận chuyến" : "Đang chờ cập nhật")}
                   </dd>
                 </div>
                 <div>
@@ -237,7 +235,7 @@ export function Operations({ mode, focusId, navigate }) {
                 {order.status === "DELIVERED" && (
                   <Button
                     onClick={() =>
-                      act(
+                      void act(
                         "RECEIVE",
                         { id: order.id },
                         "Đã xác nhận xe giao hàng. Có thể lập phiếu cân.",
@@ -270,25 +268,8 @@ export function Operations({ mode, focusId, navigate }) {
               </div>
               {["ACCEPTED", "IN_TRANSIT"].includes(order.status) && (
                 <div className="simulation-box">
-                  <strong>Mô phỏng cập nhật từ tài xế</strong>
-                  <p>
-                    Chỉ dùng thử luồng trong bản demo; không phải thao tác vận
-                    chuyển của nhà máy.
-                  </p>
-                  <Button
-                    secondary
-                    onClick={() =>
-                      act(
-                        "SIMULATE_TRANSPORT",
-                        { id: order.id },
-                        "Đã cập nhật trạng thái vận chuyển mô phỏng.",
-                      )
-                    }
-                  >
-                    {order.status === "ACCEPTED"
-                      ? "Demo: Tài xế nhận & lấy hàng"
-                      : "Demo: Tài xế đã giao hàng"}
-                  </Button>
+                  <strong>Đang chờ cập nhật vận chuyển</strong>
+                  <p>Trạng thái này sẽ thay đổi khi tài xế nhận chuyến và cập nhật giao hàng.</p>
                 </div>
               )}
             </Card>
@@ -325,10 +306,10 @@ export function Operations({ mode, focusId, navigate }) {
                 label="Đính kèm hóa đơn"
                 value={order.invoice}
                 onChange={(file) =>
-                  act(
+                  void act(
                     "INVOICE",
                     { id: order.id, file },
-                    "Đã lưu tệp hóa đơn trong bản demo.",
+            "Đã lưu tệp hóa đơn trên hệ thống.",
                   )
                 }
               />
@@ -435,10 +416,10 @@ function WeighForm({ order, close }) {
   }
   return (
     <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        if (
-          act(
+        onSubmit={async (e) => {
+          e.preventDefault();
+          if (
+          await act(
             "WEIGH",
             { id: order.id, ...form },
             "Đã lưu phiếu cân. Lô hàng sẵn sàng kiểm tra KCS.",
@@ -520,10 +501,10 @@ function QualityForm({ order, close }) {
   const set = (key, value) => setForm((f) => ({ ...f, [key]: value }));
   return (
     <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        if (
-          act(
+        onSubmit={async (e) => {
+          e.preventDefault();
+          if (
+          await act(
             "QC",
             { id: order.id, ...form },
             form.decision === "accept"
@@ -633,14 +614,14 @@ function SettlementForm({ order, close }) {
   }
   return (
     <form
-      onSubmit={(e) => {
+        onSubmit={async (e) => {
         e.preventDefault();
         if (
           confirmed &&
-          act(
+          await act(
             "SETTLE",
             { id: order.id, price, reference },
-            "Đã ghi nhận quyết toán demo. Có thể đánh giá lô hàng.",
+            "Đã ghi nhận quyết toán. Có thể đánh giá lô hàng.",
           )
         )
           close();
@@ -697,10 +678,10 @@ function RatingForm({ order, close }) {
   });
   return (
     <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        if (
-          act(
+        onSubmit={async (e) => {
+          e.preventDefault();
+          if (
+          await act(
             "RATE",
             { id: order.id, ...form },
             "Đã lưu đánh giá lô và quyết định hợp tác.",

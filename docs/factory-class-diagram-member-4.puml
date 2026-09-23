@@ -1,0 +1,363 @@
+@startuml
+title RETRACK - Factory Operation Class Diagram (Member 4)
+
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+hide empty members
+
+package "Identity" {
+  class User {
+    +Id: Guid
+    +Email: string
+    +PasswordHash: string
+    +FullName: string
+    +Phone: string?
+    +Role: UserRole
+    +IsActive: bool
+    +CreatedAt: DateTime
+    +UpdatedAt: DateTime
+  }
+
+  enum UserRole {
+    ADMIN
+    DEPOT_OWNER
+    DEPOT_EMPLOYEE
+    FACTORY
+    DRIVER
+    SELLER
+  }
+}
+
+package "Factory Profile & Demand Board" {
+  class Factory {
+    +Id: Guid
+    +UserId: Guid
+    +CompanyName: string
+    +TaxCode: string?
+    +Address: string?
+    +Latitude: decimal?
+    +Longitude: decimal?
+    +CreatedAt: DateTime
+  }
+
+  class FactoryDemand {
+    +Id: Guid
+    +FactoryId: Guid
+    +MaterialType: MaterialType
+    +QuantityKg: decimal
+    +PricePerKg: decimal?
+    +Deadline: DateTime?
+    +IsActive: bool
+    +CreatedAt: DateTime
+  }
+}
+
+package "Marketplace & Batch Order" {
+  class Depot {
+    +Id: Guid
+    +UserId: Guid
+    +CompanyName: string
+    +TaxCode: string?
+    +Address: string?
+    +City: string?
+    +Latitude: decimal?
+    +Longitude: decimal?
+    +ContactPhone: string?
+    +CreatedAt: DateTime
+  }
+
+  class InventoryBatch {
+    +Id: Guid
+    +DepotId: Guid
+    +BatchCode: string
+    +MaterialType: MaterialType
+    +EstimatedWeightKg: decimal
+    +ActualWeightKg: decimal?
+    +UnitPrice: decimal?
+    +Description: string?
+    +ThumbnailImageUrl: string?
+    +Status: BatchStatus
+    +TransportType: TransportType?
+    +CreatedAt: DateTime
+  }
+
+  class BatchImage {
+    +Id: Guid
+    +BatchId: Guid
+    +ImageUrl: string
+    +CreatedAt: DateTime
+  }
+
+  class BatchOrder {
+    +Id: Guid
+    +BatchId: Guid
+    +FactoryId: Guid
+    +AgreedPrice: decimal
+    +TotalAmount: decimal?
+    +Status: BatchStatus
+    +CreatedAt: DateTime
+  }
+
+  class Partnership {
+    +Id: Guid
+    +DepotId: Guid
+    +FactoryId: Guid
+    +Status: PartnershipStatus
+    +Rating: decimal?
+    +CreatedAt: DateTime
+  }
+}
+
+package "Transport Tracking" {
+  class Driver {
+    +Id: Guid
+    +UserId: Guid
+    +DepotId: Guid
+    +LicenseNumber: string?
+    +VehiclePlate: string?
+    +VehicleType: string?
+    +MaxCapacityKg: decimal?
+    +IsAvailable: bool
+    +CreatedAt: DateTime
+  }
+
+  class TransportJob {
+    +Id: Guid
+    +BatchOrderId: Guid
+    +DriverId: Guid?
+    +PickupAddress: string
+    +DeliveryAddress: string
+    +TransportFee: decimal?
+    +Status: TransportStatus
+    +PickupTime: DateTime?
+    +DeliveredTime: DateTime?
+    +CreatedAt: DateTime
+  }
+
+  class TransportTrackingLog {
+    +Id: Guid
+    +TransportJobId: Guid
+    +Latitude: decimal?
+    +Longitude: decimal?
+    +Note: string?
+    +CreatedAt: DateTime
+  }
+}
+
+package "Receiving, QC & Settlement" {
+  class WeightTicket {
+    +Id: Guid
+    +BatchOrderId: Guid
+    +TicketNumber: string?
+    +GrossWeightKg: decimal?
+    +TareWeightKg: decimal?
+    +NetWeightKg: decimal?
+    +TicketImageUrl: string?
+    +CreatedAt: DateTime
+  }
+
+  class WeightVerification {
+    +Id: Guid
+    +BatchOrderId: Guid
+    +DepotWeightKg: decimal
+    +FactoryWeightKg: decimal
+    +DifferencePercentage: decimal
+    +IsVerified: bool
+    +Note: string?
+    +CreatedAt: DateTime
+  }
+
+  class Invoice {
+    +Id: Guid
+    +BatchOrderId: Guid
+    +InvoiceNumber: string?
+    +InvoiceFileUrl: string?
+    +Subtotal: decimal?
+    +VatAmount: decimal?
+    +TotalAmount: decimal?
+    +Status: InvoiceStatus
+    +CreatedAt: DateTime
+  }
+
+  class EprCertificate {
+    +Id: Guid
+    +BatchOrderId: Guid
+    +CertificateCode: string
+    +HashValue: string
+    +MaterialType: MaterialType
+    +CertifiedWeightKg: decimal?
+    +IssuedAt: DateTime
+  }
+}
+
+package "Factory Services / Controllers" {
+  class FactoryDemandController <<controller>> {
+    +CreateDemand()
+    +UpdateDemand()
+    +DeleteDemand()
+    +GetMyDemands()
+  }
+
+  class FactoryMarketController <<controller>> {
+    +BrowseMarketplace()
+    +AcceptListedBatch()
+    +ApproveDirectRequest()
+    +RejectDirectRequest()
+  }
+
+  class FactoryQCController <<controller>> {
+    +ConfirmReceiving()
+    +CreateWeightTicket()
+    +VerifyWeight()
+    +SubmitQualityDecision()
+  }
+
+  class FactoryOrderController <<controller>> {
+    +GetAcceptedOrders()
+    +TrackTransport()
+    +SettleOrder()
+    +UploadInvoice()
+  }
+
+  class FactoryPartnerController <<controller>> {
+    +GetPartners()
+    +RateDepot()
+    +BlockDepot()
+    +UnblockDepot()
+  }
+
+  interface IFactoryMarketService <<service>> {
+    +BrowseListedBatches()
+    +AcceptBatch(batchId: Guid)
+    +ReviewDirectRequest(orderId: Guid, approve: bool)
+  }
+
+  interface IQCService <<service>> {
+    +ConfirmReceiving(batchOrderId: Guid)
+    +CreateWeightTicket(batchOrderId: Guid)
+    +VerifyWeight(batchOrderId: Guid)
+    +AcceptOrRejectBatch(batchOrderId: Guid)
+  }
+
+  interface IPaymentService <<service>> {
+    +CalculateSettlement(batchOrderId: Guid)
+    +SettleFactoryPayment(batchOrderId: Guid)
+    +UploadInvoice(batchOrderId: Guid)
+  }
+}
+
+enum MaterialType {
+  PET
+  HDPE
+  PVC
+  PAPER
+  CARDBOARD
+  ALUMINUM
+  IRON
+  STEEL
+  COPPER
+  ELECTRONIC_WASTE
+  OTHER
+}
+
+enum BatchStatus {
+  DRAFT
+  LISTED
+  ACCEPTED
+  READY_FOR_PICKUP
+  IN_PROGRESS
+  DELIVERED
+  VERIFIED
+  REJECTED
+  CANCELLED
+}
+
+enum TransportStatus {
+  PENDING
+  ASSIGNED
+  PICKED_UP
+  ON_THE_WAY
+  DELIVERED
+  CANCELLED
+}
+
+enum PartnershipStatus {
+  PENDING
+  APPROVED
+  BLOCKED
+}
+
+enum InvoiceStatus {
+  PENDING
+  UPLOADED
+  VERIFIED
+  REJECTED
+}
+
+enum TransportType
+
+User "1" -- "0..1" Factory
+User "1" -- "0..1" Depot
+User "1" -- "0..1" Driver
+User --> UserRole
+
+Factory "1" -- "0..*" FactoryDemand
+FactoryDemand --> MaterialType
+
+Depot "1" -- "0..*" InventoryBatch
+InventoryBatch "1" -- "0..*" BatchImage
+InventoryBatch "1" -- "0..1" BatchOrder
+InventoryBatch --> MaterialType
+InventoryBatch --> BatchStatus
+InventoryBatch --> TransportType
+
+Factory "1" -- "0..*" BatchOrder
+BatchOrder --> BatchStatus
+BatchOrder "1" -- "0..1" TransportJob
+BatchOrder "1" -- "0..1" WeightTicket
+BatchOrder "1" -- "0..1" WeightVerification
+BatchOrder "1" -- "0..1" Invoice
+BatchOrder "1" -- "0..1" EprCertificate
+
+Depot "1" -- "0..*" Partnership
+Factory "1" -- "0..*" Partnership
+Partnership --> PartnershipStatus
+
+Depot "1" -- "0..*" Driver
+Driver "1" -- "0..*" TransportJob
+TransportJob "1" -- "0..*" TransportTrackingLog
+TransportJob --> TransportStatus
+
+Invoice --> InvoiceStatus
+EprCertificate --> MaterialType
+
+FactoryDemandController ..> FactoryDemand
+FactoryMarketController ..> IFactoryMarketService
+FactoryMarketController ..> BatchOrder
+FactoryMarketController ..> InventoryBatch
+FactoryQCController ..> IQCService
+FactoryQCController ..> WeightTicket
+FactoryQCController ..> WeightVerification
+FactoryOrderController ..> IPaymentService
+FactoryOrderController ..> Invoice
+FactoryOrderController ..> TransportJob
+FactoryPartnerController ..> Partnership
+
+IFactoryMarketService ..> InventoryBatch
+IFactoryMarketService ..> BatchOrder
+IQCService ..> WeightTicket
+IQCService ..> WeightVerification
+IPaymentService ..> Invoice
+
+note right of FactoryQCController
+  Main Factory flow:
+  receive shipment -> weighbridge -> QC
+  -> VERIFIED / REJECTED
+end note
+
+note bottom of Partnership
+  Factory rates Depot after settlement.
+  Status controls future direct batch requests.
+end note
+
+@enduml

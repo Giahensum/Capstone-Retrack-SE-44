@@ -1,0 +1,93 @@
+@startuml
+title RETRACK - Factory Purchase, QC and Settlement Sequence
+
+actor FactoryUser as Factory
+boundary "Factory Web App" as UI
+control "FactoryMarketController" as MarketController
+control "FactoryOrderController" as OrderController
+control "FactoryQCController" as QCController
+control "FactoryPartnerController" as PartnerController
+control "Factory Market Service" as MarketService
+control "Transport Service" as TransportService
+control "QC Service" as QCService
+control "Payment Service" as PaymentService
+database "RETRACK Database" as DB
+
+Factory -> UI: Open marketplace
+UI -> MarketController: GET listed batches(filters)
+MarketController -> MarketService: BrowseListedBatches(filters)
+MarketService -> DB: Query LISTED inventory batches
+DB --> MarketService: Available batches
+MarketService --> MarketController: Batch list
+MarketController --> UI: Display marketplace
+
+Factory -> UI: Select and accept a batch
+UI -> MarketController: POST acceptBatch(batchId)
+MarketController -> MarketService: AcceptBatch(batchId, factoryId)
+MarketService -> DB: Validate batch is LISTED
+
+alt Batch is available
+    MarketService -> DB: Create BatchOrder
+    MarketService -> DB: Update batch status to ACCEPTED
+    MarketService -> TransportService: Create transport job(orderId)
+    TransportService -> DB: Save transport job
+    MarketService --> MarketController: Order accepted
+    MarketController --> UI: Show order confirmation
+else Batch is unavailable
+    MarketService --> MarketController: Acceptance failed
+    MarketController --> UI: Show error message
+end
+
+loop Until shipment is delivered
+    TransportService -> DB: Save tracking status/location
+    Factory -> UI: View delivery tracking
+    UI -> OrderController: GET tracking(orderId)
+    OrderController -> TransportService: GetTracking(orderId)
+    TransportService -> DB: Read latest tracking log
+    DB --> TransportService: Tracking information
+    TransportService --> OrderController: Current shipment status
+    OrderController --> UI: Display tracking information
+end
+
+TransportService -> DB: Set transport status DELIVERED
+
+Factory -> UI: Confirm shipment received
+UI -> QCController: POST confirmReceiving(orderId)
+QCController -> QCService: ConfirmReceiving(orderId)
+QCService -> DB: Update order status to DELIVERED
+
+Factory -> UI: Enter weighbridge results
+UI -> QCController: POST weight ticket and factory weight
+QCController -> QCService: CreateWeightTicket(orderId, weights)
+QCService -> DB: Save WeightTicket
+QCService -> DB: Read depot weight
+QCService -> QCService: Calculate weight difference
+QCService -> DB: Save WeightVerification
+
+Factory -> UI: Submit quality decision
+UI -> QCController: POST quality decision(orderId, decision)
+QCController -> QCService: VerifyBatch(orderId, decision)
+
+alt Batch passes quality control
+    QCService -> DB: Update order status to VERIFIED
+    QCService -> PaymentService: CalculateSettlement(orderId)
+    PaymentService -> DB: Read agreed price and verified weight
+    DB --> PaymentService: Settlement data
+    PaymentService -> DB: Create invoice and settlement
+    PaymentService -> DB: Create EPR certificate
+    PaymentService --> QCService: Settlement completed
+    QCService --> QCController: QC accepted
+    QCController --> UI: Show invoice and EPR certificate
+
+    Factory -> UI: Rate depot
+    UI -> PartnerController: POST rating(depotId, rating)
+    PartnerController -> DB: Update partnership rating
+    DB --> PartnerController: Rating saved
+    PartnerController --> UI: Show success
+else Batch fails quality control
+    QCService -> DB: Update order status to REJECTED
+    QCService --> QCController: QC rejected with reason
+    QCController --> UI: Show rejection result
+end
+
+@enduml
