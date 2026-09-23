@@ -95,6 +95,36 @@ Capstone/
 
 ## 🚀 Getting Started
 
+### Yêu cầu cài đặt
+
+- Git
+- Node.js LTS (kèm npm)
+- .NET SDK 8
+- Docker Desktop (dùng để chạy PostgreSQL development)
+
+### Khởi tạo database sau khi clone
+
+Mở Docker Desktop, sau đó chạy tại thư mục gốc của dự án:
+
+```powershell
+pwsh -ExecutionPolicy Bypass -File scripts/init-db.ps1
+```
+
+Lệnh trên sẽ:
+
+1. Khởi động PostgreSQL bằng Docker Compose.
+2. Tạo database `retrack` nếu chưa tồn tại.
+3. Tự động nạp schema trong `database/init/001_schema.sql` ở lần khởi động đầu tiên.
+4. Kiểm tra database đã có bảng trước khi báo hoàn tất.
+
+Muốn xóa database development và tạo lại hoàn toàn:
+
+```powershell
+pwsh -ExecutionPolicy Bypass -File scripts/init-db.ps1 -Reset
+```
+
+> `-Reset` sẽ xóa Docker volume và toàn bộ dữ liệu development hiện tại.
+
 ### Backend
 ```bash
 cd backend/Retrack.API
@@ -106,8 +136,8 @@ dotnet run
 
 ### Frontend
 ```bash
-cd frontend
-npm install
+cd fe
+npm ci
 npm run dev
 # App: http://localhost:5173
 ```

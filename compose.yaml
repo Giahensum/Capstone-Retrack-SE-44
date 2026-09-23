@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: retrack-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: retrack
+      POSTGRES_USER: retrack
+      POSTGRES_PASSWORD: retrack_dev
+    ports:
+      - "${RETRACK_DB_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U retrack -d retrack"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - retrack-postgres-data:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d:ro
+
+volumes:
+  retrack-postgres-data:
