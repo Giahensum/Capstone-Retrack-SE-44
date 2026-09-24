@@ -32,12 +32,21 @@ namespace Retrack.API.Models
         [Column("rating")]
         public decimal Rating { get; set; } = 0.0m;
 
+        [Column("tax_code"), MaxLength(50)] public string? TaxCode { get; set; }
+        [Column("industrial_zone"), MaxLength(200)] public string? IndustrialZone { get; set; }
+        [Column("contact_phone"), MaxLength(30)] public string? ContactPhone { get; set; }
+        [Column("business_license_url")] public string? BusinessLicenseUrl { get; set; }
+        [Column("environmental_license_url")] public string? EnvironmentalLicenseUrl { get; set; }
+        [Column("capacity_kg_per_month")] public decimal CapacityKgPerMonth { get; set; }
+        [Column("minimum_purity_percent")] public decimal MinimumPurityPercent { get; set; }
+        [Column("accepted_materials")] public string AcceptedMaterialsCsv { get; set; } = "PET";
+
         [Column("created_at")]
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
         // Navigation
         [ForeignKey("OwnerId")]
-        public User Owner { get; set; } = null!;
+        public User? Owner { get; set; }
         public ICollection<FactoryDemand> Demands { get; set; } = new List<FactoryDemand>();
         public ICollection<FactoryDepotPartnership> Partnerships { get; set; } = new List<FactoryDepotPartnership>();
         public ICollection<BatchQualityCheck> QualityChecks { get; set; } = new List<BatchQualityCheck>();
