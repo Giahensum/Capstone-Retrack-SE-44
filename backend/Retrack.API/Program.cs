@@ -48,10 +48,15 @@ builder.Services.AddCors(options =>
 // Repositories
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IPickupRequestRepository, PickupRequestRepository>();
+builder.Services.AddScoped<IMarketPriceRepository, MarketPriceRepository>();
+builder.Services.AddScoped<IAuditLogRepository, AuditLogRepository>();
+builder.Services.AddScoped<IPlatformInvoiceRepository, PlatformInvoiceRepository>();
 
 // Services
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IPickupService, PickupService>();
+builder.Services.AddScoped<IAdminService, AdminService>();
+builder.Services.AddScoped<Retrack.API.Services.Interfaces.INotificationService, Retrack.API.Services.Shared.NotificationService>();
 
 // ===== CONTROLLERS & SWAGGER =====
 builder.Services.AddControllers();
