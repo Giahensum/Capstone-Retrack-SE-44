@@ -54,6 +54,13 @@ builder.Services.AddScoped<IPickupRequestRepository, PickupRequestRepository>();
 // Services
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IPickupService, PickupService>();
+builder.Services.AddScoped<Retrack.API.Services.Interfaces.IFactoryDashboardService, Retrack.API.Services.Factory.FactoryDashboardService>();
+builder.Services.AddScoped<Retrack.API.Services.Interfaces.IFactoryDemandService, Retrack.API.Services.Factory.FactoryDemandService>();
+builder.Services.AddScoped<Retrack.API.Services.Interfaces.IFactoryMarketService, Retrack.API.Services.Factory.FactoryMarketService>();
+builder.Services.AddScoped<Retrack.API.Services.Interfaces.IFactoryOrderService, Retrack.API.Services.Factory.FactoryOrderService>();
+builder.Services.AddScoped<Retrack.API.Services.Interfaces.IFactoryPartnerService, Retrack.API.Services.Factory.FactoryPartnerService>();
+builder.Services.AddScoped<Retrack.API.Services.Interfaces.IFactoryProfileService, Retrack.API.Services.Factory.FactoryProfileService>();
+builder.Services.AddScoped<Retrack.API.Services.Interfaces.IQCService, Retrack.API.Services.Factory.FactoryQCService>();
 
 // ===== CONTROLLERS & SWAGGER =====
 builder.Services.AddControllers().AddJsonOptions(options =>
@@ -122,4 +129,3 @@ if (app.Environment.IsDevelopment())
 }
 
 app.Run();
-
