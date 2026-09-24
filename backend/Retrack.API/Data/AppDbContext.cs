@@ -23,6 +23,7 @@ namespace Retrack.API.Data
         public DbSet<BatchQualityCheck> BatchQualityChecks { get; set; }
         public DbSet<FactoryDepotReview> FactoryDepotReviews { get; set; }
         public DbSet<PlatformTransaction> PlatformTransactions { get; set; }
+        public DbSet<MarketPrice> MarketPrices { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -50,6 +51,13 @@ namespace Retrack.API.Data
             // FactoryDepotPartnership - unique constraint
             modelBuilder.Entity<FactoryDepotPartnership>()
                 .HasIndex(p => new { p.DepotId, p.FactoryId }).IsUnique();
+
+            modelBuilder.Entity<FactoryDemand>().Property(x => x.UpdatedAt).HasDefaultValueSql("NOW()");
+
+            modelBuilder.Entity<FactoryDemand>().Property(x => x.UpdatedAt).HasDefaultValueSql("NOW()");
+
+            modelBuilder.Entity<MarketPrice>()
+                .Property(p => p.MaterialType).HasConversion<string>().HasMaxLength(100);
 
             // TransportJob - unique batch_id
             modelBuilder.Entity<TransportJob>()

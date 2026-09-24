@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Retrack.API.Data;
@@ -11,9 +12,11 @@ using Retrack.API.Data;
 namespace Retrack.API.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260924014347_FactoryWorkflowExtension")]
+    partial class FactoryWorkflowExtension
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -471,10 +474,6 @@ namespace Retrack.API.Data.Migrations
                         .HasColumnType("text")
                         .HasColumnName("description");
 
-                    b.Property<Guid?>("DirectOfferFactoryId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("direct_offer_factory_id");
-
                     b.Property<DateTime?>("FactoryDecidedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("factory_decided_at");
@@ -530,8 +529,6 @@ namespace Retrack.API.Data.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("DepotId");
-
-                    b.HasIndex("DirectOfferFactoryId");
 
                     b.HasIndex("TargetFactoryId");
 
@@ -801,7 +798,7 @@ namespace Retrack.API.Data.Migrations
                             ConfigKey = "PLATFORM_FEE_PERCENTAGE",
                             ConfigValue = "1.00",
                             Description = "Phí nền tảng 1%",
-                            UpdatedAt = new DateTime(2026, 9, 24, 1, 49, 18, 364, DateTimeKind.Utc).AddTicks(3745)
+                            UpdatedAt = new DateTime(2026, 9, 24, 1, 43, 46, 834, DateTimeKind.Utc).AddTicks(9189)
                         });
                 });
 
@@ -1037,16 +1034,9 @@ namespace Retrack.API.Data.Migrations
                         .WithMany()
                         .HasForeignKey("TargetFactoryId");
 
-                    b.HasOne("Retrack.API.Models.Factory", "DirectOfferFactory")
-                        .WithMany()
-                        .HasForeignKey("DirectOfferFactoryId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.Navigation("Depot");
 
                     b.Navigation("TargetFactory");
-
-                    b.Navigation("DirectOfferFactory");
                 });
 
             modelBuilder.Entity("Retrack.API.Models.PickupRequest", b =>

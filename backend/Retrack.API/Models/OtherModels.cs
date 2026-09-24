@@ -73,6 +73,9 @@ namespace Retrack.API.Models
         [Column("created_at")]
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
+        [Column("note")] public string? Note { get; set; }
+        [Column("updated_at")] public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+
         // Navigation
         [ForeignKey("FactoryId")]
         public Factory Factory { get; set; } = null!;
@@ -128,6 +131,9 @@ namespace Retrack.API.Models
         [Column("target_factory_id")]
         public Guid? TargetFactoryId { get; set; }
 
+        [Column("direct_offer_factory_id")]
+        public Guid? DirectOfferFactoryId { get; set; }
+
         [Required]
         [Column("material_type")]
         [MaxLength(100)]
@@ -152,12 +158,26 @@ namespace Retrack.API.Models
         [Column("updated_at")]
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
+        [Column("actual_weight_kg")] public decimal? ActualWeightKg { get; set; }
+        [Column("factory_received_at")] public DateTime? FactoryReceivedAt { get; set; }
+        [Column("factory_decided_at")] public DateTime? FactoryDecidedAt { get; set; }
+        [Column("rejection_reason")] public string? RejectionReason { get; set; }
+        [Column("agreed_price_per_kg")] public decimal? AgreedPricePerKg { get; set; }
+        [Column("gross_amount")] public decimal? GrossAmount { get; set; }
+        [Column("platform_fee_amount")] public decimal? PlatformFeeAmount { get; set; }
+        [Column("net_amount")] public decimal? NetAmount { get; set; }
+        [Column("payment_reference")] public string? PaymentReference { get; set; }
+        [Column("settled_at")] public DateTime? SettledAt { get; set; }
+
         // Navigation
         [ForeignKey("DepotId")]
         public Depot Depot { get; set; } = null!;
 
         [ForeignKey("TargetFactoryId")]
         public Factory? TargetFactory { get; set; }
+
+        [ForeignKey("DirectOfferFactoryId")]
+        public Factory? DirectOfferFactory { get; set; }
 
         public TransportJob? TransportJob { get; set; }
         public BatchQualityCheck? QualityCheck { get; set; }
@@ -252,6 +272,20 @@ namespace Retrack.API.Models
         [Required]
         [Column("is_accepted")]
         public bool IsAccepted { get; set; }
+
+        [Column("gross_weight_kg")] public decimal? GrossWeightKg { get; set; }
+        [Column("tare_weight_kg")] public decimal? TareWeightKg { get; set; }
+        [Column("difference_percentage")] public decimal? DifferencePercentage { get; set; }
+        [Column("ticket_number")] public string? TicketNumber { get; set; }
+        [Column("ticket_image_url")] public string? TicketImageUrl { get; set; }
+        [Column("purity_percent")] public decimal? PurityPercent { get; set; }
+        [Column("moisture_percent")] public decimal? MoisturePercent { get; set; }
+        [Column("contamination_percent")] public decimal? ContaminationPercent { get; set; }
+        [Column("quality_note")] public string? QualityNote { get; set; }
+        [Column("resolution")] public string? Resolution { get; set; }
+        [Column("invoice_number")] public string? InvoiceNumber { get; set; }
+        [Column("invoice_file_url")] public string? InvoiceFileUrl { get; set; }
+        [Column("invoice_status")] public string? InvoiceStatus { get; set; }
 
         [Column("created_at")]
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
