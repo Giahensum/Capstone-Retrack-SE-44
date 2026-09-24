@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { MaterialIcon } from '../../components/ui/MaterialIcon';
 
 const Payments = () => {

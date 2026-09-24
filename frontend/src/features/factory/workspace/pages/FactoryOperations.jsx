@@ -674,7 +674,7 @@ function RatingForm({ order, close }) {
   const [form, setForm] = useState({
     stars: "5",
     comment: "",
-    partnership: "APPROVED",
+    partnership: "UNCHANGED",
   });
   return (
     <form
@@ -710,17 +710,6 @@ function RatingForm({ order, close }) {
           value={form.comment}
           onChange={(e) => setForm({ ...form, comment: e.target.value })}
         />
-      </Field>
-      <Field label="Hợp tác những lần tiếp theo">
-        <select
-          value={form.partnership}
-          onChange={(e) => setForm({ ...form, partnership: e.target.value })}
-        >
-          <option value="APPROVED">
-            Tiếp tục hợp tác • Cho phép chỉ định trực tiếp
-          </option>
-          <option value="BLOCKED">Ngừng hợp tác • Chặn lô mới từ vựa</option>
-        </select>
       </Field>
       <div className="form-actions">
         <Button secondary onClick={close}>

@@ -640,7 +640,7 @@ export function Partners({ navigate }) {
     <>
       <PageHead
         title="Vựa đối tác"
-        text="Quản lý quan hệ hợp tác. Điểm đánh giá được ghi nhận theo từng đơn đã quyết toán."
+        text="Theo dõi yêu cầu hợp tác do vựa duyệt. Factory có thể chặn đối tác; đánh giá được ghi nhận sau quyết toán."
       />
       <div className="filter-bar">
         <Field label="Trạng thái">
@@ -706,11 +706,11 @@ export function Partners({ navigate }) {
                     Xem đơn & đánh giá
                   </Button>
                   <Button
-                    secondary={d.status === "BLOCKED"}
+                    secondary={false}
                     danger={d.status !== "BLOCKED"}
                     onClick={() => setChange(d)}
                   >
-                    {d.status === "BLOCKED" ? "Bỏ chặn" : "Chặn vựa"}
+                    {d.status === "BLOCKED" ? "Đã chặn" : "Chặn vựa"}
                   </Button>
                 </div>
                 {ratings.map((o) => (
@@ -729,15 +729,15 @@ export function Partners({ navigate }) {
       {!state.depots.some((d) => !filter || d.status === filter) && <Empty />}
       {change && (
         <Confirm
-          title={change.status === "BLOCKED" ? "Bỏ chặn vựa?" : "Chặn vựa?"}
-          text={`${change.name}: ${change.status === "BLOCKED" ? "cho phép hợp tác và chỉ định lô trở lại." : "ngừng nhận lô mới từ vựa. Các đơn hiện có vẫn cần được xử lý."}`}
-          danger={change.status !== "BLOCKED"}
+          title="Chặn vựa?"
+          text={`${change.name}: ngừng nhận lô mới từ vựa. Vựa cần gửi yêu cầu hợp tác mới để được xem xét lại.`}
+          danger
           onClose={() => setChange(null)}
           onConfirm={async () => {
             if (
               await act("PARTNER_STATUS", {
                 id: change.id,
-                status: change.status === "BLOCKED" ? "APPROVED" : "BLOCKED",
+                status: "BLOCKED",
               })
             )
               setChange(null);
@@ -856,7 +856,7 @@ export function Prices() {
         title="Giá nguyên liệu tham khảo"
         text="Dùng để lập kế hoạch thu mua. Giá giao dịch cuối cùng được thỏa thuận sau KCS."
       />
-      <Card title="Bảng giá minh họa">
+      <Card title="Bảng giá cập nhật bởi Admin">
         <div className="table-wrap">
           <table>
             <thead>

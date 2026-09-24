@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:5211";
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 export const TOKEN_KEY = "retrack.accessToken";
 
 export async function request(path, { method = "GET", body, token = localStorage.getItem(TOKEN_KEY) } = {}) {
@@ -8,7 +8,7 @@ export async function request(path, { method = "GET", body, token = localStorage
       ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
-    body: body === undefined ? undefined : JSON.stringify(body),
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   });
   const payload = await response.json().catch(() => null);
   if (!response.ok || payload?.success === false) {
@@ -80,12 +80,10 @@ function mapDemand(demand) {
   };
 }
 
-function mapOrder(order, partners) {
-  const partner = partners.find((x) => x.depotId === order.depotId);
+function mapOrder(order) {
   const ticket = order.weightTicket;
   const verification = order.weightVerification;
   const net = verification?.factoryWeightKg || ticket?.netWeightKg || 0;
-  const depotWeight = verification?.depotWeightKg || order.actualWeightKg || order.estimatedWeightKg || 0;
   const invoice = order.invoice;
   const transportStatus = order.transport?.status;
   const apiStatus = order.status === "COMPLETED" ? "PAID" : order.status;
@@ -155,23 +153,24 @@ function mapOrder(order, partners) {
 }
 
 export async function loadFactoryState(token) {
-  const [profileResult, demandsResult, ordersResult, marketplaceResult, pricesResult, partnersResult] = await Promise.all([
+  const [profileResult, demandsResult, ordersResult, marketplaceResult, directOffersResult, pricesResult, partnersResult] = await Promise.all([
     request("/api/factory/profile", { token }),
     request("/api/factory/demands?page=1&pageSize=100", { token }),
     request("/api/factory/orders?page=1&pageSize=100", { token }),
     request("/api/factory/marketplace/batches?page=1&pageSize=100", { token }),
+    request("/api/factory/marketplace/batches?page=1&pageSize=100&directOnly=true", { token }),
     request("/api/factory/marketplace/prices", { token }),
     request("/api/factory/partners?page=1&pageSize=100", { token }),
   ]);
   const partners = partnersResult.items || [];
-  const batches = (marketplaceResult.items || []).map((batch) => ({
+  const batches = [...(marketplaceResult.items || []), ...(directOffersResult.items || [])].map((batch) => ({
     id: batch.id,
     batchCode: batch.batchCode,
     depotId: batch.depot.id,
     material: batch.materialType,
     kg: batch.estimatedWeightKg,
     direct: batch.isDirectOffer,
-    status: "LISTED",
+    status: batch.status || "LISTED",
     createdAt: batch.createdAt,
     note: batch.description || "",
     imageUrl: batch.thumbnailImageUrl,
@@ -188,7 +187,7 @@ export async function loadFactoryState(token) {
     comment: partner.latestComment || "",
     orderCount: partner.orderCount,
   });
-  for (const batch of marketplaceResult.items || []) {
+  for (const batch of [...(marketplaceResult.items || []), ...(directOffersResult.items || [])]) {
     if (!depotsById.has(batch.depot.id)) depotsById.set(batch.depot.id, {
       id: batch.depot.id,
       name: batch.depot.companyName,
@@ -198,7 +197,7 @@ export async function loadFactoryState(token) {
       distance: null,
     });
   }
-  const orders = (ordersResult.items || []).map((x) => mapOrder(x, partners));
+  const orders = (ordersResult.items || []).map(mapOrder);
   const prices = pricesResult.map((price) => ({
     material: price.materialType,
     price: price.pricePerKg,
@@ -290,7 +289,7 @@ export async function performFactoryAction(type, payload) {
       return request(`/api/factory/partners/orders/${id}/rating`, { method: "POST", body: {
         rating: Number(payload.stars),
         comment: payload.comment,
-        blockPartner: payload.partnership === "BLOCKED",
+        blockPartner: false,
       } });
     case "PARTNER_STATUS":
       return request(`/api/factory/partners/${encodeURIComponent(payload.id)}/status`, { method: "PUT", body: { status: payload.status } });
