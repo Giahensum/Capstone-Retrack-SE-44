@@ -39,32 +39,19 @@ public class FactoryPartnerController(Retrack.API.Data.AppDbContext db) : Factor
     public async Task<IActionResult> UpdateStatus(Guid depotId, [FromBody] PartnerStatusRequest request, CancellationToken ct)
     {
         var status = request.Status.ToString();
-        if (status is not ("APPROVED" or "BLOCKED")) return BadRequest(new { success = false, message = "Trạng thái phải là APPROVED hoặc BLOCKED." });
+        if (status != "BLOCKED") return BadRequest(new { success = false, message = "Vựa duyệt quan hệ đối tác. Nhà máy chỉ có thể chặn đối tác." });
         var factory = await CurrentFactory(ct);
         var partner = await Db.FactoryDepotPartnerships.SingleOrDefaultAsync(x => x.FactoryId == factory.Id && x.DepotId == depotId, ct);
         if (partner is null) return NotFound(new { success = false, message = "Không tìm thấy đối tác." });
         if (partner.Status == status) return Ok(new { success = true, data = new { partner.Id, partner.DepotId, partner.Status } });
         partner.Status = status;
         partner.UpdatedAt = DateTime.UtcNow;
-        if (status == "APPROVED")
+        var waitingBatches = await Db.InventoryBatches.Where(x => x.DepotId == depotId && x.DirectOfferFactoryId == factory.Id && x.Status == "PENDING_FACTORY").ToListAsync(ct);
+        foreach (var batch in waitingBatches)
         {
-            var waitingBatches = await Db.InventoryBatches.Include(x => x.TransportJob)
-                .Where(x => x.DepotId == depotId && x.DirectOfferFactoryId == factory.Id && x.Status == "PENDING_FACTORY").ToListAsync(ct);
-            foreach (var batch in waitingBatches)
-            {
-                batch.Status = "READY_FOR_PICKUP";
-                if (batch.TransportJob is null) Db.TransportJobs.Add(new TransportJob { BatchId = batch.Id, Status = "PENDING" });
-            }
-        }
-        else
-        {
-            var waitingBatches = await Db.InventoryBatches.Where(x => x.DepotId == depotId && x.DirectOfferFactoryId == factory.Id && x.Status == "PENDING_FACTORY").ToListAsync(ct);
-            foreach (var batch in waitingBatches)
-            {
-                batch.Status = "REJECTED";
-                batch.RejectionReason = "Nhà máy đã chặn vựa đối tác.";
-                batch.DirectOfferFactoryId = null;
-            }
+            batch.Status = "REJECTED";
+            batch.RejectionReason = "Nhà máy đã chặn vựa đối tác.";
+            batch.DirectOfferFactoryId = null;
         }
         await Db.SaveChangesAsync(ct);
         return Ok(new { success = true, data = new { partner.Id, partner.DepotId, partner.Status } });
@@ -89,7 +76,7 @@ public class FactoryPartnerController(Retrack.API.Data.AppDbContext db) : Factor
         if (partner is not null)
         {
             if (request.BlockPartner) partner.Status = "BLOCKED";
-            else if (partner.Status == "PENDING") partner.Status = "APPROVED";
+            // Đánh giá không được tự phê duyệt quan hệ; vựa phải duyệt ở vai trò của họ.
             partner.UpdatedAt = DateTime.UtcNow;
         }
         await Db.SaveChangesAsync(ct);

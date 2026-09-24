@@ -52,6 +52,12 @@ namespace Retrack.API.Data
             modelBuilder.Entity<FactoryDepotPartnership>()
                 .HasIndex(p => new { p.DepotId, p.FactoryId }).IsUnique();
 
+            modelBuilder.Entity<InventoryBatch>()
+                .HasOne(batch => batch.DirectOfferFactory)
+                .WithMany()
+                .HasForeignKey(batch => batch.DirectOfferFactoryId)
+                .OnDelete(DeleteBehavior.SetNull);
+
             modelBuilder.Entity<FactoryDemand>().Property(x => x.UpdatedAt).HasDefaultValueSql("NOW()");
 
             modelBuilder.Entity<FactoryDemand>().Property(x => x.UpdatedAt).HasDefaultValueSql("NOW()");
@@ -87,7 +93,7 @@ namespace Retrack.API.Data
                 ConfigKey = "PLATFORM_FEE_PERCENTAGE",
                 ConfigValue = "1.00",
                 Description = "Phí nền tảng 1%",
-                UpdatedAt = DateTime.UtcNow
+                UpdatedAt = new DateTime(2026, 9, 24, 1, 49, 18, 364, DateTimeKind.Utc).AddTicks(3745)
             });
         }
     }

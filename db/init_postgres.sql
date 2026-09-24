@@ -202,6 +202,16 @@ CREATE TABLE IF NOT EXISTS transport_jobs (
     updated_at                  TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Bảng giá tham khảo. Giá trong ứng dụng phải được Admin cập nhật kèm nguồn.
+CREATE TABLE IF NOT EXISTS market_prices (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    material_type   VARCHAR(100) NOT NULL,
+    price_per_kg    DECIMAL(18, 2) NOT NULL CHECK (price_per_kg > 0),
+    effective_date  TIMESTAMPTZ NOT NULL,
+    source          TEXT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- Kiểm tra chất lượng tại nhà máy
 CREATE TABLE IF NOT EXISTS batch_quality_checks (
     id                      UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),

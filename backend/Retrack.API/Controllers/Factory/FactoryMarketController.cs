@@ -64,7 +64,12 @@ public class FactoryMarketController(Retrack.API.Data.AppDbContext db) : Factory
             return BadRequest(new { success = false, message = "Vật liệu hoặc khối lượng lô không phù hợp năng lực nhà máy." });
         var partnership = await Db.FactoryDepotPartnerships.SingleOrDefaultAsync(x => x.FactoryId == factory.Id && x.DepotId == batch.DepotId, ct);
         if (partnership?.Status == "BLOCKED") return Conflict(new { success = false, message = "Đối tác này đang bị chặn." });
-        if (partnership is null) Db.FactoryDepotPartnerships.Add(new FactoryDepotPartnership { FactoryId = factory.Id, DepotId = batch.DepotId, Status = "PENDING" });
+        if (partnership is null)
+        {
+            partnership = new FactoryDepotPartnership { FactoryId = factory.Id, DepotId = batch.DepotId, Status = "PENDING" };
+            Db.FactoryDepotPartnerships.Add(partnership);
+        }
+        await Db.SaveChangesAsync(ct);
         if (!directOfferForFactory && partnership?.Status != "APPROVED")
             return Conflict(new { success = false, message = "Vựa cần duyệt quan hệ đối tác trước khi nhà máy nhận lô." });
         if (directOfferForFactory && partnership?.Status != "APPROVED")

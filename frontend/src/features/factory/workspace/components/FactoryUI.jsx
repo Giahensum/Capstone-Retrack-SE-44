@@ -127,6 +127,7 @@ export function FactoryProvider({ children }) {
       setNotice({ text: successMessage });
       return true;
     } catch (error) {
+      if (type === "ACCEPT_BATCH") await refresh();
       setNotice({ text: error.message, error: true });
       return false;
     } finally { setBusy(false); }

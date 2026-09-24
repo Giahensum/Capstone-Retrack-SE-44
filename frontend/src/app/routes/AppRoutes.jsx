@@ -11,7 +11,6 @@ const LandingPage = lazy(() => import('@/features/landing/pages/LandingPage'));
 // Seller
 const SellerDashboard = lazy(() => import('@/features/seller/pages/SellerDashboard'));
 // Depot
-const DepotDashboard = lazy(() => import('@/features/depot/pages/DepotDashboard'));
 
 // My Depot Owner New UIs (TV2)
 import DepotLayout from '@/components/layout/DepotLayout';

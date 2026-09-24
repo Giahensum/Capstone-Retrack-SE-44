@@ -43,7 +43,7 @@ public class FactoryOrderController(Retrack.API.Data.AppDbContext db) : FactoryC
             .SingleOrDefaultAsync(x => x.Id == id && x.TargetFactoryId == factory.Id, ct);
         if (batch is null) return NotFound(new { success = false, message = "Không tìm thấy đơn hàng." });
         if (batch.Status == "RECEIVED") return Conflict(new { success = false, message = "Đơn hàng đã được xác nhận nhận hàng." });
-        if (batch.TransportJob?.Status != "DELIVERED" && batch.Status is not ("DELIVERED" or "IN_PROGRESS"))
+        if (batch.TransportJob?.Status != "DELIVERED")
             return Conflict(new { success = false, message = "Chỉ xác nhận nhận hàng sau khi vận chuyển báo đã giao." });
         batch.Status = "RECEIVED";
         batch.FactoryReceivedAt = DateTime.UtcNow;
