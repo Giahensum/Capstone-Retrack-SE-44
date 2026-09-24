@@ -1,12 +1,12 @@
 -- ============================================================
--- ReNATS_DB - PostgreSQL Init Script
+-- ReTrack_DB - PostgreSQL Init Script
 -- Converted from MSSQL (renat_db.docx)
 -- Run: psql -U postgres -f init_postgres.sql
 -- ============================================================
 
 -- Tạo database (chạy riêng nếu cần)
--- CREATE DATABASE "ReNATS_DB";
--- \c "ReNATS_DB";
+-- CREATE DATABASE "ReTrack_DB";
+-- \c "ReTrack_DB";
 
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
