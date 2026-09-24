@@ -96,7 +96,7 @@ Capstone/
 ## 🚀 Hướng Dẫn Cài Đặt và Chạy Dự Án (Getting Started)
 
 ### 1. Yêu cầu hệ thống
-- **PostgreSQL** (cài đặt và tạo sẵn database tên `ReNATS_DB`)
+- **PostgreSQL** (cài đặt và tạo sẵn database tên `ReTrack_DB`)
 - **.NET 8 SDK**
 - **Node.js** (v18 trở lên)
 
@@ -108,7 +108,7 @@ Có 2 cách để khởi tạo database:
 Tiếp theo, mở file `src/BE/ReTrack/ReTrack/appsettings.json` và cập nhật mật khẩu PostgreSQL của bạn:
 ```json
 "ConnectionStrings": {
-  "DefaultConnection": "Host=localhost;Port=5432;Database=ReNATS_DB;Username=postgres;Password=MAT_KHAU_CUA_BAN"
+  "DefaultConnection": "Host=localhost;Port=5432;Database=ReTrack_DB;Username=postgres;Password=MAT_KHAU_CUA_BAN"
 }
 ```
 
