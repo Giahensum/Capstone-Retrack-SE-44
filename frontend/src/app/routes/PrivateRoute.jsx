@@ -5,7 +5,7 @@ export function PrivateRoute({ children, allowedRoles }) {
     if (!isAuthenticated) {
         return <Navigate to="/login" replace/>;
     }
-    if (allowedRoles && role && !allowedRoles.includes(role)) {
+    if (allowedRoles && !allowedRoles.includes(role)) {
         return <Navigate to="/unauthorized" replace/>;
     }
     return <>{children}</>;

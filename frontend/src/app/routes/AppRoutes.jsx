@@ -11,9 +11,8 @@ const LandingPage = lazy(() => import('@/features/landing/pages/LandingPage'));
 // Seller
 const SellerDashboard = lazy(() => import('@/features/seller/pages/SellerDashboard'));
 // Depot
-const DepotDashboard = lazy(() => import('@/features/depot/pages/DepotDashboard'));
 
-// My Depot Owner New UIs (TV2)
+// Giao diện Chủ kho vựa — Ngô Sỹ Giá (TV2)
 import DepotLayout from '@/components/layout/DepotLayout';
 import MyDepotDashboard from '@/features/depot/Dashboard';
 import DepotInventory from '@/features/depot/Inventory';
@@ -25,6 +24,7 @@ import DepotRevenueReport from '@/features/depot/RevenueReport';
 import DepotStaff from '@/features/depot/Staff';
 import DepotStaffPerformance from '@/features/depot/StaffPerformance';
 import DepotProfile from '@/features/depot/Profile';
+import { DepotProvider } from '@/features/depot/DepotContext';
 // Employee
 const EmployeeDashboard = lazy(() => import('@/features/employee/pages/EmployeeDashboard'));
 // Driver
@@ -51,8 +51,9 @@ export function AppRoutes() {
                 <SellerDashboard />
               </PrivateRoute>}/>
 
-          {/* Depot Owner (Auth Bypassed for UI Preview) */}
-          <Route path="/depot" element={<DepotLayout />}>
+          {/* Depot Owner */}
+          <Route path="/depot" element={<PrivateRoute allowedRoles={[ROLES.DEPOT_OWNER]}><DepotProvider><DepotLayout /></DepotProvider></PrivateRoute>}>
+              <Route index element={<Navigate to="dashboard" replace />} />
               <Route path="dashboard" element={<MyDepotDashboard />} />
               <Route path="inventory" element={<DepotInventory />} />
               <Route path="batches" element={<DepotBatches />} />

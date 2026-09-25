@@ -1,160 +1,36 @@
-import React, { useState } from 'react';
-import { MaterialIcon } from '../../../components/ui/MaterialIcon';
+import { useState } from 'react';
+import { useDepotQuery, useDepotMutation, number } from '../depotApi';
+import { Dialog, QueryState, MutationError, inputClass, buttonClass, Pager } from './DepotUI';
 
-const CreateBatchModal = ({ isOpen, onClose }) => {
-  const [salesStrategy, setSalesStrategy] = useState('public');
-
-  if (!isOpen) return null;
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-d-inverse-surface/40 backdrop-blur-sm">
-      <div className="w-full max-w-[640px] rounded-2xl flex flex-col max-h-[90vh] bg-d-surface-container-lowest shadow-[0_20px_40px_rgba(23,33,27,0.04)] border border-d-border-subtle overflow-hidden">
-        
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-5 border-b border-d-border-subtle bg-d-surface-container-lowest/90 backdrop-blur-md shrink-0">
-          <div>
-            <h2 className="font-d-headline-md text-d-headline-md text-d-on-surface font-bold">Tạo Lô Xuất Hàng</h2>
-            <p className="font-d-body-sm text-d-body-sm text-d-on-surface-variant mt-1">Vui lòng điền thông tin chi tiết để tạo lô hàng xuất khẩu mới.</p>
-          </div>
-          <button 
-            onClick={onClose}
-            className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-d-surface-variant text-d-on-surface-variant transition-colors"
-          >
-            <MaterialIcon name="close" className="hover:text-d-error transition-colors" />
-          </button>
-        </div>
-
-        {/* Body */}
-        <div className="px-6 py-6 overflow-y-auto flex-1 bg-d-surface min-h-0">
-          <form className="space-y-6" onSubmit={(e) => e.preventDefault()}>
-            
-            {/* Material Type Select */}
-            <div className="space-y-2">
-              <label className="block font-d-label-md text-d-label-md text-d-on-surface">Loại phế liệu</label>
-              <div className="relative">
-                <select className="w-full bg-white border border-d-outline-variant text-d-on-surface font-d-body-md rounded-lg focus:ring-2 focus:ring-d-primary focus:border-d-primary block p-3 appearance-none transition-colors outline-none shadow-sm" defaultValue="">
-                  <option disabled value="">Chọn loại phế liệu</option>
-                  <option value="pet">Nhựa PET</option>
-                  <option value="hdpe">Nhựa HDPE</option>
-                  <option value="aluminum">Nhôm</option>
-                  <option value="paper">Giấy Carton</option>
-                </select>
-                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-d-on-surface-variant">
-                  <MaterialIcon name="expand_more" />
-                </div>
-              </div>
-              <p className="font-d-label-sm text-d-label-sm text-d-primary flex items-center gap-1 mt-1">
-                <MaterialIcon name="info" className="text-[16px]" /> Tồn kho khả dụng: 2,450 kg
-              </p>
-            </div>
-
-            {/* Quantity Input */}
-            <div className="space-y-2">
-              <label className="block font-d-label-md text-d-label-md text-d-on-surface">Số lượng (kg)</label>
-              <div className="relative">
-                <input 
-                  type="number" 
-                  className="w-full bg-white border border-d-outline-variant text-d-on-surface font-d-body-md rounded-lg focus:ring-2 focus:ring-d-primary focus:border-d-primary block p-3 transition-colors outline-none shadow-sm" 
-                  placeholder="Nhập số lượng" 
-                  min="1" max="2450" required 
-                />
-                <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                  <span className="text-d-on-surface-variant font-d-body-sm opacity-70">kg</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Description Textarea */}
-            <div className="space-y-2">
-              <label className="block font-d-label-md text-d-label-md text-d-on-surface">Mô tả / Ghi chú</label>
-              <textarea 
-                className="w-full bg-white border border-d-outline-variant text-d-on-surface font-d-body-md rounded-lg focus:ring-2 focus:ring-d-primary focus:border-d-primary block p-3 transition-colors resize-y outline-none shadow-sm" 
-                rows="3" 
-                placeholder="Nhập ghi chú thêm cho lô hàng này..."
-                maxLength="500"
-              ></textarea>
-            </div>
-
-            {/* Image Upload */}
-            <div className="space-y-2">
-              <label className="block font-d-label-md text-d-label-md text-d-on-surface">Hình ảnh lô hàng (tùy chọn, tối đa 5 ảnh)</label>
-              <div className="border-2 border-dashed border-d-outline-variant rounded-xl p-8 flex flex-col items-center justify-center gap-3 bg-white hover:bg-d-surface-container-low transition-colors cursor-pointer group">
-                <div className="w-12 h-12 rounded-full bg-d-primary/10 flex items-center justify-center text-d-primary group-hover:scale-110 transition-transform">
-                  <MaterialIcon name="add_a_photo" className="text-[28px]" />
-                </div>
-                <div className="text-center">
-                  <p className="font-d-body-md text-d-on-surface">Kéo thả ảnh vào đây hoặc <span className="text-d-primary font-bold">Chọn từ thiết bị</span></p>
-                  <p className="font-d-label-sm text-d-on-surface-variant mt-1">JPG, PNG, WEBP — Tối đa 5MB mỗi ảnh</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Sales Strategy Radio */}
-            <div className="space-y-3 pt-2">
-              <label className="block font-d-label-md text-d-label-md text-d-on-surface">Hình thức bán</label>
-              <div className="space-y-3">
-                <label className="flex items-center gap-3 cursor-pointer group">
-                  <input 
-                    type="radio" 
-                    name="salesStrategy" 
-                    value="public" 
-                    checked={salesStrategy === 'public'} 
-                    onChange={() => setSalesStrategy('public')}
-                    className="w-5 h-5 text-d-primary border-d-outline-variant focus:ring-d-primary bg-white cursor-pointer"
-                  />
-                  <span className="font-d-body-md text-d-on-surface group-hover:text-d-primary transition-colors">Đăng công khai lên Marketplace</span>
-                </label>
-                <label className="flex items-center gap-3 cursor-pointer group">
-                  <input 
-                    type="radio" 
-                    name="salesStrategy" 
-                    value="direct" 
-                    checked={salesStrategy === 'direct'}
-                    onChange={() => setSalesStrategy('direct')}
-                    className="w-5 h-5 text-d-primary border-d-outline-variant focus:ring-d-primary bg-white cursor-pointer"
-                  />
-                  <span className="font-d-body-md text-d-on-surface group-hover:text-d-primary transition-colors">Chỉ định nhà máy cụ thể</span>
-                </label>
-              </div>
-            </div>
-
-            {/* Conditional Factory Select */}
-            {salesStrategy === 'direct' && (
-              <div className="space-y-2 animate-in slide-in-from-top-2 duration-200 fade-in">
-                <label className="block font-d-label-md text-d-label-md text-d-on-surface">Chọn nhà máy</label>
-                <div className="relative">
-                  <select className="w-full bg-white border border-d-outline-variant text-d-on-surface font-d-body-md rounded-lg focus:ring-2 focus:ring-d-primary focus:border-d-primary block p-3 appearance-none transition-colors outline-none shadow-sm" defaultValue="">
-                    <option disabled value="">Chọn nhà máy đối tác</option>
-                    <option value="f1">Nhà máy Tái chế Xanh VN</option>
-                    <option value="f2">EcoPlast Industries</option>
-                    <option value="f3">Công ty TNHH Vòng Tuần Hoàn</option>
-                  </select>
-                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-d-on-surface-variant">
-                    <MaterialIcon name="expand_more" />
-                  </div>
-                </div>
-              </div>
-            )}
-            
-          </form>
-        </div>
-
-        {/* Footer */}
-        <div className="px-6 py-5 border-t border-d-border-subtle bg-d-surface-container-lowest shrink-0 flex items-center justify-end gap-4">
-          <button 
-            onClick={onClose}
-            className="px-6 py-2.5 rounded-lg border border-d-outline-variant text-d-on-surface font-d-label-md hover:bg-d-surface-container-low transition-colors"
-          >
-            Hủy
-          </button>
-          <button className="px-6 py-2.5 rounded-lg bg-d-primary text-d-on-primary font-d-label-md hover:bg-[#3b5b00] transition-colors shadow-sm">
-            Tạo lô xuất hàng
-          </button>
-        </div>
-
-      </div>
-    </div>
-  );
-};
-
-export default CreateBatchModal;
+export default function CreateBatchModal({ isOpen, onClose }) {
+  return isOpen ? <CreateBatchForm onClose={onClose} /> : null;
+}
+function CreateBatchForm({ onClose }) {
+  const [form, setForm] = useState({ operationId: crypto.randomUUID(), materialType: '', weightKg: '', description: '', targetFactoryId: '' });
+  const [strategy, setStrategy] = useState('public');
+  const [factorySearch, setFactorySearch] = useState('');
+  const [page, setPage] = useState(1);
+  const stock = useDepotQuery('inventory');
+  const factories = useDepotQuery('partners', { page, search: factorySearch }, strategy === 'direct');
+  const save = useDepotMutation('post', 'batches', onClose);
+  const available = stock.data?.find((i) => i.materialType === form.materialType)?.availableKg ?? 0;
+  const field = (key, value) => setForm({ ...form, [key]: value });
+  return <Dialog title="Tạo Lô Xuất Hàng" onClose={onClose} busy={save.isPending}>
+    <form className="space-y-5" onSubmit={(e) => { e.preventDefault(); save.mutate({ body: { ...form, weightKg: Number(form.weightKg), targetFactoryId: strategy === 'direct' ? form.targetFactoryId : null } }); }}>
+      <QueryState query={stock}><label className="block">Loại phế liệu<select required className={inputClass} value={form.materialType} onChange={(e) => field('materialType', e.target.value)}>
+        <option value="">Chọn loại phế liệu</option>{stock.data?.filter((i) => i.availableKg > 0).map((i) => <option key={i.materialType}>{i.materialType}</option>)}</select></label>
+        <p className="text-d-primary mt-2">Tồn kho khả dụng: {number(available)} kg</p></QueryState>
+      <label className="block">Khối lượng (kg)<input required type="number" step="any" min="0.000001" max={available} value={form.weightKg} onChange={(e) => field('weightKg', e.target.value)} className={inputClass} /></label>
+      <label className="block">Hình thức bán<select value={strategy} onChange={(e) => setStrategy(e.target.value)} className={inputClass}><option value="public">Đăng công khai</option><option value="direct">Chỉ định nhà máy</option></select></label>
+      {strategy === 'direct' && <><label className="block">Tìm nhà máy<input className={inputClass} value={factorySearch} onChange={(e) => { setFactorySearch(e.target.value); setPage(1); }} /></label>
+        <QueryState query={factories}><label className="block">Nhà máy<select required value={form.targetFactoryId} onChange={(e) => field('targetFactoryId', e.target.value)} className={inputClass}>
+          <option value="">Chọn nhà máy</option>{factories.data?.items.map((f) => <option key={f.id} value={f.id} disabled={f.partnershipStatus === 'BLOCKED'}>{f.name}{f.partnershipStatus === 'BLOCKED' ? ' — Đã chặn' : ''}</option>)}</select></label>
+          <Pager page={page} setPage={setPage} total={factories.data?.totalCount} /></QueryState>
+        <p className="text-sm">Đối tác mới cần nhà máy duyệt trước khi vận chuyển.</p></>}
+      <label className="block">Mô tả / ghi chú<textarea className={inputClass} value={form.description} onChange={(e) => field('description', e.target.value)} /></label>
+      <p className="text-sm text-d-on-surface-variant">Giá được thỏa thuận sau QC tại nhà máy. Khối lượng tạo lô sẽ được giữ khỏi tồn khả dụng.</p>
+      <MutationError mutation={save} /><div className="flex justify-end gap-3"><button type="button" className={buttonClass} onClick={onClose} disabled={save.isPending}>Hủy bỏ</button>
+        <button className={buttonClass} disabled={save.isPending || stock.isPending || stock.isError}>{save.isPending ? 'Đang tạo…' : 'Tạo lô xuất hàng'}</button></div>
+    </form>
+  </Dialog>;
+}
