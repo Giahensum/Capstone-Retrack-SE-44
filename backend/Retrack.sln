@@ -5,6 +5,8 @@ VisualStudioVersion = 17.13.35931.197 d17.13
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Retrack.API", "Retrack.API\Retrack.API.csproj", "{9582BF9C-8D57-43FB-BDBC-2F91054C6638}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Retrack.API.Tests", "Retrack.API.Tests\Retrack.API.Tests.csproj", "{61DC7671-03F1-4FE6-A612-F276EB4DDC0A}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -15,6 +17,10 @@ Global
 		{9582BF9C-8D57-43FB-BDBC-2F91054C6638}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{9582BF9C-8D57-43FB-BDBC-2F91054C6638}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{9582BF9C-8D57-43FB-BDBC-2F91054C6638}.Release|Any CPU.Build.0 = Release|Any CPU
+		{61DC7671-03F1-4FE6-A612-F276EB4DDC0A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{61DC7671-03F1-4FE6-A612-F276EB4DDC0A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{61DC7671-03F1-4FE6-A612-F276EB4DDC0A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{61DC7671-03F1-4FE6-A612-F276EB4DDC0A}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -23,4 +29,3 @@ Global
 		SolutionGuid = {52E9FA65-7F9C-4EFF-9E31-8125333B7EC3}
 	EndGlobalSection
 EndGlobal
-

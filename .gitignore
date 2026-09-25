@@ -16,6 +16,12 @@ backend/**/*.user
 backend/**/*.suo
 backend/**/.vs/
 backend/**/appsettings.Development.json
+be/**/bin/
+be/**/obj/
+be/**/*.user
+be/**/*.suo
+be/**/.vs/
+be/**/appsettings.Development.json
 
 # ── Frontend (React/Vite) ──
 frontend/node_modules/
@@ -23,6 +29,11 @@ frontend/dist/
 frontend/.env
 frontend/.env.local
 frontend/.env.*.local
+fe/node_modules/
+fe/dist/
+fe/.env
+fe/.env.local
+fe/.env.*.local
 
 # ── IDE ──
 .vs/

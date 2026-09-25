@@ -10,6 +10,18 @@ namespace Retrack.API.Data
     {
         public static async Task SeedAsync(AppDbContext db)
         {
+            if (!await db.MarketPrices.AnyAsync())
+            {
+                db.MarketPrices.AddRange(
+                    new MarketPrice { MaterialType = Retrack.API.Models.Enums.MaterialType.PET, PricePerKg = 10000, EffectiveDate = DateTime.UtcNow.Date, Source = "Dữ liệu mẫu phát triển — Admin cần xác minh/cập nhật" },
+                    new MarketPrice { MaterialType = Retrack.API.Models.Enums.MaterialType.HDPE, PricePerKg = 12000, EffectiveDate = DateTime.UtcNow.Date, Source = "Dữ liệu mẫu phát triển — Admin cần xác minh/cập nhật" },
+                    new MarketPrice { MaterialType = Retrack.API.Models.Enums.MaterialType.PAPER, PricePerKg = 3000, EffectiveDate = DateTime.UtcNow.Date, Source = "Dữ liệu mẫu phát triển — Admin cần xác minh/cập nhật" },
+                    new MarketPrice { MaterialType = Retrack.API.Models.Enums.MaterialType.CARDBOARD, PricePerKg = 2500, EffectiveDate = DateTime.UtcNow.Date, Source = "Dữ liệu mẫu phát triển — Admin cần xác minh/cập nhật" },
+                    new MarketPrice { MaterialType = Retrack.API.Models.Enums.MaterialType.ALUMINUM, PricePerKg = 28000, EffectiveDate = DateTime.UtcNow.Date, Source = "Dữ liệu mẫu phát triển — Admin cần xác minh/cập nhật" }
+                );
+                await db.SaveChangesAsync();
+            }
+
             // Chỉ seed khi bảng users còn trống
             if (await db.Users.AnyAsync()) return;
 

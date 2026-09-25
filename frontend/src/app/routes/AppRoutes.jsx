@@ -11,7 +11,6 @@ const LandingPage = lazy(() => import('@/features/landing/pages/LandingPage'));
 // Seller
 const SellerDashboard = lazy(() => import('@/features/seller/pages/SellerDashboard'));
 // Depot
-const DepotDashboard = lazy(() => import('@/features/depot/pages/DepotDashboard'));
 
 // My Depot Owner New UIs (TV2)
 import DepotLayout from '@/components/layout/DepotLayout';
@@ -30,7 +29,7 @@ const EmployeeDashboard = lazy(() => import('@/features/employee/pages/EmployeeD
 // Driver
 const DriverDashboard = lazy(() => import('@/features/driver/pages/DriverDashboard'));
 // Factory
-const FactoryDashboard = lazy(() => import('@/features/factory/pages/FactoryDashboard'));
+const FactoryDashboard = lazy(() => import('@/features/factory/workspace/FactoryApp'));
 // Admin
 const AdminDashboard = lazy(() => import('@/features/admin/pages/AdminDashboard'));
 // Loading fallback
@@ -77,9 +76,7 @@ export function AppRoutes() {
               </PrivateRoute>}/>
 
           {/* Factory */}
-          <Route path="/factory/*" element={<PrivateRoute allowedRoles={[ROLES.FACTORY]}>
-                <FactoryDashboard />
-              </PrivateRoute>}/>
+          <Route path="/factory/*" element={<FactoryDashboard />}/>
 
           {/* Admin */}
           <Route path="/admin/*" element={<PrivateRoute allowedRoles={[ROLES.ADMIN]}>

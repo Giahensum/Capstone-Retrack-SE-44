@@ -1,16 +1,15 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Retrack.API.Controllers.Shared;
+using Retrack.API.Services.Interfaces;
 
 namespace Retrack.API.Controllers.Factory;
 
-/// <summary>
-/// Factory stats
-/// </summary>
-[ApiController]
 [Route("api/factory/dashboard")]
-public class FactoryDashboardController : ControllerBase
+[Authorize(Roles = "FACTORY")]
+public class FactoryDashboardController(IFactoryDashboardService service) : FactoryControllerBase
 {
-    // TODO: Inject services via constructor
-    // TODO: Implement endpoints
+    [HttpGet]
+    public async Task<IActionResult> Get(CancellationToken ct)
+        => this.ToActionResult(await service.GetAsync(CurrentUserId, ct));
 }
-
-
