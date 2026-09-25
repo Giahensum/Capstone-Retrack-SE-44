@@ -2,8 +2,8 @@
 
 **Người phụ trách: Ngô Sỹ Giá (TV2 — Depot Owner).**
 
-Mốc nguồn: `origin/develop` tại `cd35f33`. Nhánh thực hiện: `feature/TV2-depot-backend-integration`.
-Trước khi triển khai, thư mục làm việc không có thay đổi. Chưa commit, push, gộp nhánh hoặc triển khai lên máy chủ. Tên nhánh và database có chữ TV2 được giữ nguyên vì là định danh đang sử dụng.
+Mốc bắt đầu: `origin/develop` tại `cd35f33`. Nhánh hiện tại: `feature/ngo-sy-gia-depot-backend-integration` (đã đổi từ nhánh TV2 theo yêu cầu Ngô Sỹ Giá).
+Trước khi triển khai, thư mục làm việc không có thay đổi. Đã lưu ba commit local theo nhóm backend, frontend và tài liệu để bảo toàn công việc trước khi tích hợp develop. Chưa push hay triển khai lên máy chủ. Tên database có chữ TV2 được giữ nguyên để bảo toàn cấu hình đang sử dụng.
 
 ## Kiến trúc đã xác minh
 
@@ -92,6 +92,8 @@ Dữ liệu demo còn lại: đơn `22222222-2222-2222-2222-222222222201` ở DO
 
 ## Phần chưa hoàn thành và phối hợp nhóm
 
+**Cập nhật sau khi lấy develop `7ffae6d`:** develop đã bổ sung Factory, Driver, giá tham khảo Admin và đăng nhập Google. Các ghi nhận thiếu module bên dưới mô tả mốc kiểm thử ban đầu; không còn có nghĩa toàn bộ Factory/Driver chỉ là khung. Cần kiểm chứng tiếp luồng liên vai trò, nhất là trạng thái lô chỉ định, tồn kho khi Driver lấy hàng và doanh thu theo `SettledAt` mới. Build và kiểm thử từng module đạt chưa chứng minh các hợp đồng này đã tương thích xuyên suốt.
+
 1. **TV1/TV3:** nối giao diện Seller xác nhận nhận tiền; triển khai Employee check-in và gửi đơn sang AWAITING_PAYMENT. Dữ liệu kiểm thử bắt đầu ở AWAITING_PAYMENT không chứng minh toàn bộ luồng trước đó.
 2. **TV3/TV4:** thống nhất nguồn cước vận chuyển, quy trình trả hàng và ngày thanh toán QC; triển khai nhận lô/hợp tác, vận chuyển và quyết toán. Depot hiện đọc các trường đã ánh xạ và giữ tồn kho, không tự tạo sự kiện của vai trò khác.
 3. **TV5:** phát hành hóa đơn tháng theo chủ kho và đối soát; không tự chuyển SUBMITTED thành PAID. Cần thống nhất bảng/kiểu dữ liệu hóa đơn mới với Admin trước khi đưa lên môi trường chung.
@@ -99,3 +101,13 @@ Dữ liệu demo còn lại: đơn `22222222-2222-2222-2222-222222222201` ở DO
 5. **Kiểm thử mở rộng:** mọi tổ hợp validation, giao diện khi phiên hết hạn, phiên trình duyệt của chủ kho thứ hai, tạo tài khoản qua giao diện và đối chiếu từng thiết kế tham chiếu.
 
 Không đánh dấu toàn bộ UC-2.1–2.25 hoàn thành xuyên suốt khi các phần phụ thuộc trên chưa có. Quy tắc cộng tác nằm ở `AGENTS.md`; người phụ trách phần Chủ kho vựa là **Ngô Sỹ Giá**.
+
+## Đồng bộ develop và kiểm tra kiến trúc
+
+- Đã lấy develop tới `7ffae6d`; có 9 file xung đột: `.gitignore`, `README.md`, `AppDbContext.cs`, `AppDbContextModelSnapshot.cs`, `Program.cs`, `Retrack.sln`, `frontend/package.json`, `Partners.jsx`, `Payments.jsx`.
+- Hợp nhất đăng ký dịch vụ, model, snapshot và cả hai dự án kiểm thử. Giữ truy vấn/biểu mẫu Depot, bổ sung tab duyệt yêu cầu hợp tác từ develop qua Axios dùng chung. API hợp tác nhận depotId, kiểm tra quyền và không giả định chủ chỉ có một kho.
+- Sửa xung đột tên namespace/model `Factory`. Không sửa các migration đã áp dụng. Kiểm tra EF không phát hiện thay đổi model chưa có trong snapshot.
+- Sau tích hợp: backend build 0 lỗi/0 cảnh báo; 46 kiểm thử PostgreSQL Depot, 19 kiểm thử Factory .NET và 6 kiểm thử trạng thái Factory frontend đạt. Các kiểm thử Factory .NET dùng InMemory, không được tính thành kiểm thử PostgreSQL.
+- Giữ cấu hình PostgreSQL local trước merge. `appsettings.json` và `.env` chỉ lưu trên máy; bản mẫu cấu hình chia sẻ không có thông tin mật. Quy tắc ignore bổ sung cấu hình local, kết quả kiểm thử, coverage và tệp khóa/chứng chỉ riêng.
+- **Kiến trúc chưa đủ ba lớp cho toàn bộ Depot:** đã có Controller → Service/interface. Pickup/Auth dùng repository đang có, nhưng service Depot mới vẫn dùng AppDbContext trực tiếp; chưa có repository Depot chuyên biệt. Không được báo phần repository đã hoàn thành.
+- **Skill đã đọc và áp dụng:** using-agent-skills, git-workflow-and-versioning, spec-driven-development, incremental-implementation, test-driven-development, api-and-interface-design, security-and-hardening, frontend-ui-engineering, browser-testing-with-devtools trong `.agent-skills/skills`. Có bằng chứng kiểm thử lỗi trước/sau cho thanh toán, phân quyền, transaction và kiểm tra trình duyệt. Chưa tuân thủ trọn vẹn mọi tiêu chí: từng tích lũy thay đổi lớn chưa commit, lớp repository Depot còn thiếu và ma trận E2E chưa đầy đủ. Kiểm thử trình duyệt dùng công cụ CUA sẵn có thay vì Chrome DevTools MCP.

@@ -101,7 +101,7 @@ Capstone/
 - **Node.js** đáp ứng engine của Vite 8 trong lockfile (khuyến nghị Node 22.12+)
 
 ### 2. Cấu hình Database
-Tạo database local riêng, ví dụ `Retrack_TV2_dev`. Sao chép `backend/Retrack.API/.env.example` thành `.env` cùng thư mục, điền connection string và JWT key riêng trong file local đã ignore. Không sửa/commit mật khẩu trong `appsettings.json`.
+Tạo database local riêng, ví dụ `Retrack_TV2_dev`. Với máy mới, sao chép `backend/Retrack.API/appsettings.example.json` thành `appsettings.json`, rồi sao chép `.env.example` thành `.env` cùng thư mục và điền thông tin riêng. Nếu đã có cấu hình local, giữ nguyên file hiện có. Cả `appsettings.json` và `.env` đều được Git bỏ qua; chỉ đưa các bản mẫu không có thông tin mật vào commit.
 
 Ở Development, đặt `Database__Initialize=true` để áp dụng EF migrations và seed dữ liệu demo khi khởi động. Không chạy đồng thời script tạo schema thủ công với EF. Không bật tùy chọn này trên database dùng chung/production. Biến môi trường có sẵn được ưu tiên hơn `.env`.
 
@@ -137,7 +137,7 @@ Hệ thống đã tạo sẵn 6 tài khoản để test cho 6 role. **Mật kh�
 
 ## 📝 Git Workflow
 ```bash
-git checkout -b feature/TV2-depot-dashboard    # Tạo branch theo TV + feature
+git checkout -b feature/ngo-sy-gia-depot-dashboard    # Ví dụ nhánh của Ngô Sỹ Giá
 # ... code ...
 git add <cac-file-cua-task>
 git commit -m "feat(depot): implement dashboard API"

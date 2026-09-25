@@ -56,10 +56,10 @@ public sealed class BatchService(AppDbContext db, IDepotService scope, IInventor
         var stock = (await inventory.GetAsync(ownerId, depotId)).SingleOrDefault(i => i.MaterialType == dto.MaterialType);
         if (stock == null || stock.AvailableKg < dto.WeightKg) throw new DepotConflictException("Tồn kho khả dụng không đủ.");
         var status = "LISTED";
-        Factory? factory = null;
+        Retrack.API.Models.Factory? factory = null;
         if (dto.TargetFactoryId.HasValue)
         {
-            factory = await db.Factories.SingleOrDefaultAsync(f => f.Id == dto.TargetFactoryId && f.Owner.IsActive)
+            factory = await db.Factories.SingleOrDefaultAsync(f => f.Id == dto.TargetFactoryId && f.Owner != null && f.Owner.IsActive)
                 ?? throw new ArgumentException("Nhà máy không tồn tại hoặc đã ngừng hoạt động.");
             var partner = await db.FactoryDepotPartnerships.SingleOrDefaultAsync(p => p.DepotId == depotId && p.FactoryId == dto.TargetFactoryId);
             if (partner?.Status == "BLOCKED") throw new DepotConflictException("Nhà máy đã chặn hợp tác với kho.");

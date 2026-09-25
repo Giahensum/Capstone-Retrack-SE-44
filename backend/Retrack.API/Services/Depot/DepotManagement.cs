@@ -27,7 +27,7 @@ public sealed partial class DepotService
     public async Task<PagedResult<FactoryPartnerDto>> GetFactoriesAsync(Guid ownerId, Guid depotId, DepotQuery query)
     {
         await RequireOwnerAsync(ownerId, depotId);
-        var source = db.Factories.AsNoTracking().Where(f => f.Owner.IsActive);
+        var source = db.Factories.AsNoTracking().Where(f => f.Owner != null && f.Owner.IsActive);
         if (!string.IsNullOrWhiteSpace(query.Search)) source = source.Where(f => f.Name.Contains(query.Search));
         if (!string.IsNullOrEmpty(query.Status))
         {
@@ -41,7 +41,7 @@ public sealed partial class DepotService
     {
         await RequireOwnerAsync(ownerId, depotId);
         var now = DateTime.UtcNow;
-        var source = db.FactoryDemands.AsNoTracking().Where(d => d.IsActive && d.Deadline >= now && d.Factory.Owner.IsActive);
+        var source = db.FactoryDemands.AsNoTracking().Where(d => d.IsActive && d.Deadline >= now && d.Factory.Owner != null && d.Factory.Owner.IsActive);
         if (!string.IsNullOrWhiteSpace(query.Search)) source = source.Where(d => d.MaterialType.Contains(query.Search) || d.Factory.Name.Contains(query.Search));
         return await PageAsync(source.OrderBy(d => d.Deadline).ThenBy(d => d.Id).Select(d => new DemandDto(d.Id,
             d.FactoryId, d.Factory.Name, d.MaterialType, d.RequiredWeightKg, d.MinPricePerKg, d.MaxPricePerKg, d.Deadline)), query);

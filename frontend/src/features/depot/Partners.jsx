@@ -1,13 +1,29 @@
 import { useState } from 'react';
-import { useDepotQuery, number, money, date } from './depotApi';
-import { Page, QueryState, GridTable, Pager, inputClass, buttonClass, cellClass } from './components/DepotUI';
+import { useDepotQuery, useDepotMutation, number, money, date } from './depotApi';
+import { Page, QueryState, GridTable, Pager, MutationError, inputClass, buttonClass, cellClass } from './components/DepotUI';
 const labels={APPROVED:'Đã hợp tác',PENDING:'Chờ duyệt',BLOCKED:'Đã chặn'};
+function PartnershipRequests() {
+  const query = useDepotQuery('partnerships');
+  const update = useDepotMutation('put', (id) => `partnerships/${id}/status`);
+  return <><MutationError mutation={update} /><QueryState query={query}>
+    <GridTable headers={['Nhà máy', 'Liên hệ', 'Ngày gửi', 'Trạng thái', 'Thao tác']} empty={!query.data?.length}>
+      {query.data?.map((p) => <tr key={p.id}><td className={cellClass}>{p.factoryName}</td><td className={cellClass}>{p.contactPhone}</td>
+        <td className={cellClass}>{date(p.createdAt)}</td><td className={cellClass}>{labels[p.status] ?? p.status}</td>
+        <td className={cellClass}>{p.status === 'PENDING' && <div className="flex gap-2">
+          <button className={buttonClass} disabled={update.isPending} onClick={() => update.mutate({id:p.factoryId,body:{status:'APPROVED'}})}>Duyệt</button>
+          <button className={buttonClass} disabled={update.isPending} onClick={() => update.mutate({id:p.factoryId,body:{status:'BLOCKED'}})}>Từ chối</button>
+        </div>}</td></tr>)}
+    </GridTable>
+  </QueryState></>;
+}
 export default function Partners(){
   const [tab,setTab]=useState('partners'),[page,setPage]=useState(1),[search,setSearch]=useState(''),[status,setStatus]=useState('');
-  const query=useDepotQuery(tab==='partners'?'partners':'partners/demands',{page,search,...(tab==='partners'?{status}:{})});
+  const query=useDepotQuery(tab==='partners'?'partners':'partners/demands',{page,search,...(tab==='partners'?{status}:{})},tab!=='requests');
   return <Page title="Nhà máy đối tác" description="Tìm nhà máy phù hợp và xem nhu cầu thu mua đang còn hiệu lực.">
-    <nav className="flex gap-3">{[['partners','Danh sách nhà máy'],['demands','Nhu cầu thu mua']].map(([key,label])=><button key={key} aria-pressed={key===tab} className={buttonClass} onClick={()=>{setTab(key);setPage(1);}}>{label}</button>)}</nav>
+    <nav className="flex flex-wrap gap-3">{[['partners','Danh sách nhà máy'],['demands','Nhu cầu thu mua'],['requests','Yêu cầu hợp tác']].map(([key,label])=><button key={key} aria-pressed={key===tab} className={buttonClass} onClick={()=>{setTab(key);setPage(1);}}>{label}</button>)}</nav>
+    {tab==='requests'?<PartnershipRequests/>:<>
     <div className="flex flex-wrap gap-4"><label>Tìm kiếm<input value={search} className={inputClass} onChange={(e)=>{setSearch(e.target.value);setPage(1);}}/></label>{tab==='partners'&&<label>Quan hệ đối tác<select value={status} className={inputClass} onChange={(e)=>{setStatus(e.target.value);setPage(1);}}><option value="">Tất cả nhà máy</option>{Object.entries(labels).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label>}</div>
     <QueryState query={query}>{tab==='partners'?<GridTable headers={['Nhà máy','Địa chỉ','Đánh giá','Quan hệ']} empty={!query.data?.items.length}>{query.data?.items.map((f)=><tr key={f.id}><td className={cellClass}>{f.name}</td><td className={cellClass}>{f.address}</td><td className={cellClass}>★ {f.rating}</td><td className={cellClass}>{labels[f.partnershipStatus]??'Chưa hợp tác'}</td></tr>)}</GridTable>:<GridTable headers={['Nhà máy','Vật liệu','Nhu cầu','Giá tham khảo / kg','Hạn nhận']} empty={!query.data?.items.length}>{query.data?.items.map((d)=><tr key={d.id}><td className={cellClass}>{d.factoryName}</td><td className={cellClass}>{d.materialType}</td><td className={cellClass}>{number(d.requiredWeightKg)} kg</td><td className={cellClass}>{d.minPricePerKg!=null?money(d.minPricePerKg):'Thỏa thuận'} — {d.maxPricePerKg!=null?money(d.maxPricePerKg):'Thỏa thuận'}</td><td className={cellClass}>{date(d.deadline)}</td></tr>)}</GridTable>}<Pager page={page} setPage={setPage} total={query.data?.totalCount}/></QueryState>
+    </>}
   </Page>;
 }
