@@ -15,6 +15,9 @@ backend/**/*.user
 backend/**/*.suo
 backend/**/.vs/
 backend/**/appsettings.Development.json
+backend/**/.env
+backend/**/.env.local
+backend/**/TestResults/
 
 # ── Frontend (React/Vite) ──
 frontend/node_modules/
