@@ -1,5 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Retrack.API.Data;
 using Retrack.API.DTOs;
+using Retrack.API.Models;
 using Retrack.API.Services;
 
 namespace Retrack.API.Controllers
@@ -10,11 +13,13 @@ namespace Retrack.API.Controllers
     {
         private readonly IAuthService _authService;
         private readonly ILogger<AuthController> _logger;
+        private readonly AppDbContext _db;
 
-        public AuthController(IAuthService authService, ILogger<AuthController> logger)
+        public AuthController(IAuthService authService, ILogger<AuthController> logger, AppDbContext db)
         {
             _authService = authService;
             _logger = logger;
+            _db = db;
         }
 
         /// <summary>Đăng nhập bằng Email/Password</summary>
@@ -39,6 +44,20 @@ namespace Retrack.API.Controllers
                 return BadRequest(ApiResponse<string>.Fail("Mật khẩu phải có ít nhất 6 ký tự."));
 
             var result = await _authService.RegisterAsync(dto);
+            if (string.Equals(result.Role, "FACTORY", StringComparison.OrdinalIgnoreCase))
+            {
+                var exists = await _db.Factories.AnyAsync(x => x.OwnerId == result.UserId);
+                if (!exists)
+                {
+                    _db.Factories.Add(new Retrack.API.Models.Factory
+                    {
+                        OwnerId = result.UserId,
+                        Name = result.FullName,
+                        Address = "Chưa cập nhật"
+                    });
+                    await _db.SaveChangesAsync();
+                }
+            }
             return Ok(ApiResponse<AuthResponseDto>.Ok(result, "Đăng ký thành công."));
         }
 

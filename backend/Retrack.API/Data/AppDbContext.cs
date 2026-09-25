@@ -24,6 +24,7 @@ namespace Retrack.API.Data
         public DbSet<FactoryDepotReview> FactoryDepotReviews { get; set; }
         public DbSet<PlatformTransaction> PlatformTransactions { get; set; }
         public DbSet<MarketPrice> MarketPrices { get; set; }
+        // Admin DbSets
         public DbSet<AuditLog> AuditLogs { get; set; }
         public DbSet<PlatformInvoice> PlatformInvoices { get; set; }
         public DbSet<Notification> Notifications { get; set; }
@@ -31,8 +32,6 @@ namespace Retrack.API.Data
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
-
-            // SystemConfig - composite key already via [Key] on config_key
 
             // User - unique email
             modelBuilder.Entity<User>()
@@ -54,6 +53,17 @@ namespace Retrack.API.Data
             // FactoryDepotPartnership - unique constraint
             modelBuilder.Entity<FactoryDepotPartnership>()
                 .HasIndex(p => new { p.DepotId, p.FactoryId }).IsUnique();
+
+            modelBuilder.Entity<InventoryBatch>()
+                .HasOne(batch => batch.DirectOfferFactory)
+                .WithMany()
+                .HasForeignKey(batch => batch.DirectOfferFactoryId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<FactoryDemand>().Property(x => x.UpdatedAt).HasDefaultValueSql("NOW()");
+
+            modelBuilder.Entity<MarketPrice>()
+                .Property(p => p.MaterialType).HasConversion<string>().HasMaxLength(100);
 
             // TransportJob - unique batch_id
             modelBuilder.Entity<TransportJob>()
@@ -107,9 +117,8 @@ namespace Retrack.API.Data
                 ConfigKey = "PLATFORM_FEE_PERCENTAGE",
                 ConfigValue = "1.00",
                 Description = "Phí nền tảng 1%",
-                UpdatedAt = DateTime.UtcNow
+                UpdatedAt = new DateTime(2026, 9, 24, 1, 49, 18, 364, DateTimeKind.Utc).AddTicks(3745)
             });
         }
     }
 }
-

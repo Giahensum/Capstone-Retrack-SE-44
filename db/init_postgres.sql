@@ -1,12 +1,12 @@
 -- ============================================================
--- ReNATS_DB - PostgreSQL Init Script
+-- ReTrack_DB - PostgreSQL Init Script
 -- Converted from MSSQL (renat_db.docx)
 -- Run: psql -U postgres -f init_postgres.sql
 -- ============================================================
 
 -- Tạo database (chạy riêng nếu cần)
--- CREATE DATABASE "ReNATS_DB";
--- \c "ReNATS_DB";
+-- CREATE DATABASE "ReTrack_DB";
+-- \c "ReTrack_DB";
 
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -62,6 +62,14 @@ CREATE TABLE IF NOT EXISTS factories (
     latitude        DECIMAL(10, 7),
     longitude       DECIMAL(10, 7),
     rating          DECIMAL(3, 2) DEFAULT 0.0,
+    tax_code        VARCHAR(50),
+    industrial_zone VARCHAR(200),
+    contact_phone   VARCHAR(30),
+    business_license_url TEXT,
+    environmental_license_url TEXT,
+    capacity_kg_per_month DECIMAL(18, 2) NOT NULL DEFAULT 0,
+    minimum_purity_percent DECIMAL(5, 2) NOT NULL DEFAULT 0,
+    accepted_materials TEXT NOT NULL DEFAULT 'PET',
     created_at      TIMESTAMPTZ  DEFAULT NOW()
 );
 
@@ -137,7 +145,9 @@ CREATE TABLE IF NOT EXISTS factory_demands (
     max_price_per_kg    DECIMAL(18, 2),
     deadline            TIMESTAMPTZ  NOT NULL,
     is_active           BOOLEAN      DEFAULT TRUE,
-    created_at          TIMESTAMPTZ  DEFAULT NOW()
+    note                TEXT,
+    created_at          TIMESTAMPTZ  DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ  DEFAULT NOW()
 );
 
 -- Quan hệ đối tác Depot - Factory
@@ -156,10 +166,21 @@ CREATE TABLE IF NOT EXISTS inventory_batches (
     id                  UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
     depot_id            UUID         NOT NULL REFERENCES depots(id),
     target_factory_id   UUID         REFERENCES factories(id),
+    direct_offer_factory_id UUID     REFERENCES factories(id),
     material_type       VARCHAR(100) NOT NULL,
     declared_weight_kg  DECIMAL(18, 2) NOT NULL,
     description         TEXT,
     status              VARCHAR(50)  NOT NULL,
+    actual_weight_kg    DECIMAL(18, 2),
+    factory_received_at TIMESTAMPTZ,
+    factory_decided_at  TIMESTAMPTZ,
+    rejection_reason    TEXT,
+    agreed_price_per_kg DECIMAL(18, 2),
+    gross_amount        DECIMAL(18, 2),
+    platform_fee_amount DECIMAL(18, 2),
+    net_amount          DECIMAL(18, 2),
+    payment_reference   VARCHAR(200),
+    settled_at          TIMESTAMPTZ,
     -- MARKETPLACE, PENDING_APPROVAL, TRANSPORT_READY, COMPLETED
     created_at          TIMESTAMPTZ  DEFAULT NOW(),
     updated_at          TIMESTAMPTZ  DEFAULT NOW()
@@ -181,6 +202,16 @@ CREATE TABLE IF NOT EXISTS transport_jobs (
     updated_at                  TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Bảng giá tham khảo. Giá trong ứng dụng phải được Admin cập nhật kèm nguồn.
+CREATE TABLE IF NOT EXISTS market_prices (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    material_type   VARCHAR(100) NOT NULL,
+    price_per_kg    DECIMAL(18, 2) NOT NULL CHECK (price_per_kg > 0),
+    effective_date  TIMESTAMPTZ NOT NULL,
+    source          TEXT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- Kiểm tra chất lượng tại nhà máy
 CREATE TABLE IF NOT EXISTS batch_quality_checks (
     id                      UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -196,6 +227,19 @@ CREATE TABLE IF NOT EXISTS batch_quality_checks (
     net_amount              DECIMAL(18, 2) NOT NULL,
     payment_proof_url       TEXT,
     is_accepted             BOOLEAN      NOT NULL,
+    gross_weight_kg         DECIMAL(18, 2),
+    tare_weight_kg          DECIMAL(18, 2),
+    difference_percentage  DECIMAL(8, 2),
+    ticket_number           VARCHAR(100),
+    ticket_image_url        TEXT,
+    purity_percent          DECIMAL(5, 2),
+    moisture_percent        DECIMAL(5, 2),
+    contamination_percent   DECIMAL(5, 2),
+    quality_note            TEXT,
+    resolution              VARCHAR(20),
+    invoice_number          VARCHAR(100),
+    invoice_file_url        TEXT,
+    invoice_status          VARCHAR(30),
     created_at              TIMESTAMPTZ  DEFAULT NOW()
 );
 
