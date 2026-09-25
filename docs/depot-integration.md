@@ -104,6 +104,10 @@ Không đánh dấu toàn bộ UC-2.1–2.25 hoàn thành xuyên suốt khi các
 
 ## Đồng bộ develop và kiểm tra kiến trúc
 
+- Đã hoàn tất commit merge local `cf3dc8f` trên nhánh `feature/ngo-sy-gia-depot-backend-integration`; `origin/develop` là tổ tiên của HEAD, không còn file xung đột. Chưa push.
+- Kiểm tra chạy thật sau merge ngày 25/09/2026: API khởi động tại localhost:5000; đăng nhập tài khoản Depot thử nghiệm thành công; API hợp tác, hồ sơ, tồn kho và thanh toán trả 200; yêu cầu hợp tác với kho không thuộc chủ trả 403. Đây là kiểm tra API cơ bản, chưa thay thế kiểm thử trình duyệt xuyên suốt sau merge.
+- Đối chiếu chuỗi kết nối PostgreSQL local với commit trước merge cho kết quả giữ nguyên; cả `appsettings.json` và `.env` được Git bỏ qua.
+
 - Đã lấy develop tới `7ffae6d`; có 9 file xung đột: `.gitignore`, `README.md`, `AppDbContext.cs`, `AppDbContextModelSnapshot.cs`, `Program.cs`, `Retrack.sln`, `frontend/package.json`, `Partners.jsx`, `Payments.jsx`.
 - Hợp nhất đăng ký dịch vụ, model, snapshot và cả hai dự án kiểm thử. Giữ truy vấn/biểu mẫu Depot, bổ sung tab duyệt yêu cầu hợp tác từ develop qua Axios dùng chung. API hợp tác nhận depotId, kiểm tra quyền và không giả định chủ chỉ có một kho.
 - Sửa xung đột tên namespace/model `Factory`. Không sửa các migration đã áp dụng. Kiểm tra EF không phát hiện thay đổi model chưa có trong snapshot.
