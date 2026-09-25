@@ -50,6 +50,7 @@
 ## Cấu hình và kiểm thử
 
 - Secret chỉ dùng biến môi trường hoặc `backend/Retrack.API/.env` local đã ignore; mẫu dùng `.env.example`. Không ghi mật khẩu DB, token hay key vào code, frontend, log hoặc tài liệu.
+- Giữ nguyên tài khoản/mật khẩu PostgreSQL local của Ngô Sỹ Giá khi đồng bộ nhánh. `appsettings.json` là cấu hình riêng, không theo dõi bằng Git; dùng `appsettings.example.json` làm bản mẫu chia sẻ. Không thay file local bằng cấu hình từ develop.
 - `.env` chỉ nạp ở Development; biến môi trường có sẵn được ưu tiên. Tự migrate/seed chỉ khi `Database__Initialize=true`. Không bật seed tài khoản demo ở production.
 - Backend: `dotnet restore backend/Retrack.sln`, `dotnet build backend/Retrack.sln --no-restore`.
 - PostgreSQL tests: đặt `RETRACK_TEST_CONNECTION` tới đúng `Retrack_TV2_test`, rồi `dotnet test backend/Retrack.sln --no-restore`. Tests chỉ dọn dữ liệu fixture của mình và từ chối database khác.

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import '../../features/depot/styles/depot-theme.css';
 import clsx from 'clsx';
