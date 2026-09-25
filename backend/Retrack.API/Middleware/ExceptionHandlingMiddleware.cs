@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using Retrack.API.DTOs;
+using Retrack.API.Services.Depot;
 
 namespace Retrack.API.Middleware
 {
@@ -32,10 +33,13 @@ namespace Retrack.API.Middleware
         {
             var (statusCode, message) = ex switch
             {
+                DepotForbiddenException => (HttpStatusCode.Forbidden, ex.Message),
+                DepotConflictException => (HttpStatusCode.Conflict, ex.Message),
                 KeyNotFoundException => (HttpStatusCode.NotFound, ex.Message),
                 UnauthorizedAccessException => (HttpStatusCode.Unauthorized, ex.Message),
                 InvalidOperationException => (HttpStatusCode.BadRequest, ex.Message),
                 ArgumentException => (HttpStatusCode.BadRequest, ex.Message),
+                System.ComponentModel.DataAnnotations.ValidationException => (HttpStatusCode.BadRequest, ex.Message),
                 _ => (HttpStatusCode.InternalServerError, "Đã xảy ra lỗi hệ thống. Vui lòng thử lại sau.")
             };
 

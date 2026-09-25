@@ -117,6 +117,9 @@ namespace Retrack.API.Models
     [Table("inventory_batches")]
     public class InventoryBatch
     {
+        [Column("code"), MaxLength(40)]
+        public string? Code { get; set; }
+
         [Key]
         [Column("id")]
         public Guid Id { get; set; } = Guid.NewGuid();

@@ -10,6 +10,13 @@ using Retrack.API.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
+if (builder.Environment.IsDevelopment())
+{
+    Retrack.API.Helpers.LocalEnvironment.Load(Path.Combine(builder.Environment.ContentRootPath, ".env"));
+    // Nạp lại biến môi trường sau .env; tham số dòng lệnh vẫn có ưu tiên cao nhất.
+    builder.Configuration.AddEnvironmentVariables().AddCommandLine(args);
+}
+
 // ===== DATABASE =====
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
@@ -28,6 +35,18 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidIssuer = builder.Configuration["Jwt:Issuer"],
             ValidAudience = builder.Configuration["Jwt:Audience"],
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
+        };
+        options.Events = new JwtBearerEvents
+        {
+            OnTokenValidated = async context =>
+            {
+                var id = context.Principal?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                var role = context.Principal?.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
+                var db = context.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
+                if (!Guid.TryParse(id, out var userId) || !await db.Users.AsNoTracking()
+                    .AnyAsync(u => u.Id == userId && u.IsActive && u.Role == role))
+                    context.Fail("Tài khoản không còn hoạt động hoặc quyền đã thay đổi.");
+            }
         };
     });
 
@@ -52,6 +71,11 @@ builder.Services.AddScoped<IPickupRequestRepository, PickupRequestRepository>();
 // Services
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IPickupService, PickupService>();
+builder.Services.AddScoped<Retrack.API.Services.Interfaces.IDepotService, Retrack.API.Services.Depot.DepotService>();
+builder.Services.AddScoped<Retrack.API.Services.Interfaces.IInventoryService, Retrack.API.Services.Depot.InventoryService>();
+builder.Services.AddScoped<Retrack.API.Services.Interfaces.IBatchService, Retrack.API.Services.Depot.BatchService>();
+builder.Services.AddScoped<Retrack.API.Services.Interfaces.IStaffService, Retrack.API.Services.Depot.StaffService>();
+builder.Services.AddScoped<Retrack.API.Services.Interfaces.IDepotReportService, Retrack.API.Services.Depot.DepotReportService>();
 
 // ===== CONTROLLERS & SWAGGER =====
 builder.Services.AddControllers();
@@ -110,7 +134,7 @@ app.UseAuthorization();
 app.MapControllers();
 
 // ===== AUTO MIGRATE & SEED (dev only) =====
-if (app.Environment.IsDevelopment())
+if (app.Environment.IsDevelopment() && builder.Configuration.GetValue<bool>("Database:Initialize"))
 {
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
