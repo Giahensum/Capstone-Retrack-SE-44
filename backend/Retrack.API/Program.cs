@@ -50,10 +50,17 @@ builder.Services.AddCors(options =>
 // Repositories
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IPickupRequestRepository, PickupRequestRepository>();
+builder.Services.AddScoped<IMarketPriceRepository, MarketPriceRepository>();
+builder.Services.AddScoped<IAuditLogRepository, AuditLogRepository>();
+builder.Services.AddScoped<IPlatformInvoiceRepository, PlatformInvoiceRepository>();
 
-// Services
+// Services - Admin
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IPickupService, PickupService>();
+builder.Services.AddScoped<IAdminService, AdminService>();
+builder.Services.AddScoped<Retrack.API.Services.Interfaces.INotificationService, Retrack.API.Services.Shared.NotificationService>();
+
+// Services - Factory
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IFactoryDashboardService, Retrack.API.Services.Factory.FactoryDashboardService>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IFactoryDemandService, Retrack.API.Services.Factory.FactoryDemandService>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IFactoryMarketService, Retrack.API.Services.Factory.FactoryMarketService>();
