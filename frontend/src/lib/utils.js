@@ -39,6 +39,21 @@ export const ROLE_LABEL = {
     DRIVER: 'Tài xế',
     FACTORY: 'Nhà máy',
 };
+// Khớp 1-1 với enum Retrack.API.Models.Enums.MaterialType ở backend.
+// Bảng giá thị trường lưu đúng các giá trị này, không nhận chuỗi tự do.
+export const MATERIAL_TYPE_LABEL = {
+    PET: 'Nhựa PET',
+    HDPE: 'Nhựa HDPE',
+    PVC: 'Nhựa PVC',
+    PAPER: 'Giấy',
+    CARDBOARD: 'Bìa carton',
+    ALUMINUM: 'Nhôm',
+    IRON: 'Sắt',
+    STEEL: 'Thép',
+    COPPER: 'Đồng',
+    ELECTRONIC_WASTE: 'Rác điện tử',
+    OTHER: 'Khác',
+};
 export const INVOICE_STATUS_LABEL = {
     PENDING: 'Chưa thanh toán',
     PAID: 'Đã thanh toán',

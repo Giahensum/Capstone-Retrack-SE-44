@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Retrack.API.Data;
 using Retrack.API.DTOs;
 using Retrack.API.Models;
+using Retrack.API.Models.Enums;
 using Retrack.API.Repositories;
 using Retrack.API.Services.Interfaces;
 
@@ -239,15 +240,27 @@ namespace Retrack.API.Services
         // ── Market Prices ──────────────────────────────────────────────
         public async Task<List<MarketPriceDto>> GetMarketPricesAsync(string? materialType)
         {
-            var prices = await _priceRepo.GetAllAsync(materialType);
+            MaterialType? filter = string.IsNullOrWhiteSpace(materialType) ? null : ParseMaterialType(materialType);
+            var prices = await _priceRepo.GetAllAsync(filter);
             return prices.Select(MapPrice).ToList();
+        }
+
+        /// <summary>
+        /// MarketPrice.MaterialType là enum (lưu DB dạng string qua HasConversion), còn DTO nhận/trả string —
+        /// parse tại biên service để giá trị sai trả 400 kèm thông báo thay vì lỗi hệ thống.
+        /// </summary>
+        private static MaterialType ParseMaterialType(string? value)
+        {
+            if (!Enum.TryParse<MaterialType>(value?.Trim(), ignoreCase: true, out var parsed) || !Enum.IsDefined(parsed))
+                throw new ArgumentException($"Loại vật liệu không hợp lệ. Giá trị cho phép: {string.Join(", ", Enum.GetNames<MaterialType>())}.");
+            return parsed;
         }
 
         public async Task<MarketPriceDto> CreateMarketPriceAsync(UpsertMarketPriceDto dto, Guid actorId)
         {
             var price = new MarketPrice
             {
-                MaterialType = dto.MaterialType,
+                MaterialType = ParseMaterialType(dto.MaterialType),
                 PricePerKg = dto.PricePerKg,
                 EffectiveDate = dto.EffectiveDate,
                 Source = dto.Source
@@ -262,8 +275,8 @@ namespace Retrack.API.Services
             var price = await _priceRepo.GetByIdAsync(id)
                 ?? throw new KeyNotFoundException("Không tìm thấy giá tham khảo.");
 
-            var oldData = new { price.MaterialType, price.PricePerKg, price.EffectiveDate, price.Source };
-            price.MaterialType = dto.MaterialType;
+            var oldData = new { MaterialType = price.MaterialType.ToString(), price.PricePerKg, price.EffectiveDate, price.Source };
+            price.MaterialType = ParseMaterialType(dto.MaterialType);
             price.PricePerKg = dto.PricePerKg;
             price.EffectiveDate = dto.EffectiveDate;
             price.Source = dto.Source;
@@ -278,13 +291,13 @@ namespace Retrack.API.Services
             var price = await _priceRepo.GetByIdAsync(id)
                 ?? throw new KeyNotFoundException("Không tìm thấy giá tham khảo.");
             await _priceRepo.DeleteAsync(price);
-            await LogAsync(actorId, "DELETE", "MarketPrice", id, new { price.MaterialType, price.PricePerKg }, null);
+            await LogAsync(actorId, "DELETE", "MarketPrice", id, new { MaterialType = price.MaterialType.ToString(), price.PricePerKg }, null);
         }
 
         private static MarketPriceDto MapPrice(MarketPrice p) => new()
         {
             Id = p.Id,
-            MaterialType = p.MaterialType,
+            MaterialType = p.MaterialType.ToString(),
             PricePerKg = p.PricePerKg,
             EffectiveDate = p.EffectiveDate,
             Source = p.Source,
@@ -332,21 +345,25 @@ namespace Retrack.API.Services
                 .Where(t => t.CreatedAt >= from && t.CreatedAt <= to)
                 .ToListAsync();
 
-            var format = groupBy?.ToLower() switch
-            {
-                "month" => "yyyy-MM",
-                "week" => "yyyy-'W'ww",
-                _ => "yyyy-MM-dd"
-            };
-
             var points = transactions
-                .GroupBy(t => t.CreatedAt.ToString(format, CultureInfo.InvariantCulture))
+                .GroupBy(t => PeriodLabel(t.CreatedAt, groupBy))
                 .Select(g => new RevenuePointDto { PeriodLabel = g.Key, Amount = g.Sum(t => t.FeeAmount) })
-                .OrderBy(p => p.PeriodLabel)
+                .OrderBy(p => p.PeriodLabel, StringComparer.Ordinal)
                 .ToList();
 
             return new RevenueReportDto { TotalRevenue = transactions.Sum(t => t.FeeAmount), Points = points };
         }
+
+        /// <summary>
+        /// Nhãn kỳ dùng để gộp doanh thu. Tuần theo ISO-8601: "ww" không phải custom format
+        /// specifier hợp lệ của .NET nên ToString("yyyy-'W'ww") ném FormatException.
+        /// </summary>
+        private static string PeriodLabel(DateTime at, string? groupBy) => groupBy?.ToLowerInvariant() switch
+        {
+            "month" => at.ToString("yyyy-MM", CultureInfo.InvariantCulture),
+            "week" => $"{ISOWeek.GetYear(at)}-W{ISOWeek.GetWeekOfYear(at):00}",
+            _ => at.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
+        };
 
         public async Task<PagedResult<TransactionHistoryItemDto>> GetTransactionsAsync(DateTime? from, DateTime? to, string? sourceType, int page, int pageSize)
         {
