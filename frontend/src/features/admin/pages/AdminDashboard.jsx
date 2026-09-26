@@ -26,12 +26,12 @@ const KPI = [
 ];
 
 function StatsOverview() {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ['admin', 'dashboard', 'stats'],
     queryFn: adminApi.getDashboardStats,
   });
 
-  const { data: revenue, isLoading: revenueLoading } = useQuery({
+  const { data: revenue, isLoading: revenueLoading, isError: revenueError } = useQuery({
     queryKey: ['admin', 'dashboard', 'revenue-trend'],
     queryFn: () => adminApi.getRevenue({ from: sevenDaysAgoISO(), to: new Date().toISOString(), groupBy: 'day' }),
   });
@@ -55,9 +55,9 @@ function StatsOverview() {
               <div className="relative z-10">
                 <p className="font-d-label-md text-d-label-md text-d-on-surface-variant mb-1">{k.label}</p>
                 <p className="font-d-headline-lg text-d-headline-lg text-d-on-surface">
-                  {isLoading ? '—' : k.format ? k.format(data[k.key]) : data[k.key]}
+                  {!data ? '—' : k.format ? k.format(data[k.key]) : data[k.key]}
                 </p>
-                {!isLoading && k.hint && <p className="font-d-body-sm text-d-body-sm text-d-on-surface-variant mt-1">{k.hint(data)}</p>}
+                {data && k.hint && <p className="font-d-body-sm text-d-body-sm text-d-on-surface-variant mt-1">{k.hint(data)}</p>}
               </div>
             </div>
           ))}
@@ -68,7 +68,9 @@ function StatsOverview() {
             <h3 className="font-d-headline-md text-d-headline-md text-d-on-background mb-4">Doanh thu 7 ngày gần nhất</h3>
             {revenueLoading ? (
               <p className="font-d-body-sm text-d-body-sm text-d-on-surface-variant">Đang tải...</p>
-            ) : revenue.points.length === 0 ? (
+            ) : revenueError ? (
+              <p className="font-d-body-sm text-d-body-sm text-d-error">Không tải được dữ liệu doanh thu.</p>
+            ) : !revenue?.points?.length ? (
               <div className="h-[240px] flex flex-col items-center justify-center text-d-on-surface-variant">
                 <MaterialIcon name="trending_up" className="text-[32px] mb-2 opacity-30" />
                 <p className="font-d-body-sm text-d-body-sm">Chưa có doanh thu trong 7 ngày qua.</p>
@@ -82,6 +84,8 @@ function StatsOverview() {
             <h3 className="font-d-headline-md text-d-headline-md text-d-on-background mb-4">Phân bổ người dùng theo vai trò</h3>
             {isLoading ? (
               <p className="font-d-body-sm text-d-body-sm text-d-on-surface-variant">Đang tải...</p>
+            ) : isError || !data ? (
+              <p className="font-d-body-sm text-d-body-sm text-d-error">Không tải được số liệu người dùng.</p>
             ) : (
               <>
                 <RoleDonutChart usersByRole={data.usersByRole} />

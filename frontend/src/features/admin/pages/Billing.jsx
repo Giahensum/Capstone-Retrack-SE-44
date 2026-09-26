@@ -44,7 +44,7 @@ function TabBar({ tab, setTab }) {
 // ── Revenue Tab ──────────────────────────────────────────────
 function RevenueTab() {
   const [range, setRange] = useState({ from: monthAgoISO(), to: todayISO(), groupBy: 'day' });
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ['admin', 'billing', 'revenue', range],
     queryFn: () => adminApi.getRevenue({ from: new Date(range.from).toISOString(), to: endOfDayISO(range.to), groupBy: range.groupBy }),
   });
@@ -74,6 +74,8 @@ function RevenueTab() {
         <h3 className="font-d-headline-md text-d-headline-md text-d-on-background mb-1">Tổng doanh thu nền tảng</h3>
         {isLoading ? (
           <p className="font-d-body-sm text-d-body-sm text-d-on-surface-variant mt-4">Đang tải...</p>
+        ) : isError || !data ? (
+          <p className="font-d-body-sm text-d-body-sm text-d-error mt-4">Không tải được báo cáo doanh thu.</p>
         ) : (
           <>
             <p className="font-d-headline-xl text-d-headline-xl text-d-secondary my-3">{formatCurrency(data.totalRevenue)}</p>
@@ -121,7 +123,9 @@ function TransactionsTab() {
                     {t.sourceType === 'PICKUP_REQUEST' ? 'Thu gom' : 'Xuất lô'}
                   </span>
                 </td>
-                <td className="px-6 py-4 font-medium text-d-on-surface">{t.payerName ?? '—'}</td>
+                <td className="px-6 py-4 font-medium text-d-on-surface">
+                  {t.payerName ?? <span className="text-d-on-surface-variant italic">Chưa xác định</span>}
+                </td>
                 <td className="px-6 py-4 text-right font-bold text-d-error">{formatCurrency(t.feeAmount)}</td>
                 <td className="px-6 py-4 text-d-on-surface-variant">{t.description ?? '—'}</td>
                 <td className="px-6 py-4 text-d-on-surface-variant">{formatDate(t.createdAt)}</td>
