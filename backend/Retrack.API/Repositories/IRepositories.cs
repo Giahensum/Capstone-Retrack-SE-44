@@ -1,4 +1,5 @@
 using Retrack.API.Models;
+using Retrack.API.Models.Enums;
 
 namespace Retrack.API.Repositories
 {
@@ -17,7 +18,7 @@ namespace Retrack.API.Repositories
     public interface IMarketPriceRepository
     {
         Task<MarketPrice?> GetByIdAsync(Guid id);
-        Task<List<MarketPrice>> GetAllAsync(string? materialType = null);
+        Task<List<MarketPrice>> GetAllAsync(MaterialType? materialType = null);
         Task<MarketPrice> CreateAsync(MarketPrice price);
         Task<MarketPrice> UpdateAsync(MarketPrice price);
         Task DeleteAsync(MarketPrice price);

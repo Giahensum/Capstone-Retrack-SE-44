@@ -5,9 +5,10 @@ import AdminLayout from '@/components/layout/AdminLayout';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
 import Modal from '@/components/ui/Modal';
 import { adminApi, apiErrorMessage } from '../api';
-import { formatCurrency, formatDate } from '@/lib/utils';
+import { formatCurrency, formatDate, MATERIAL_TYPE_LABEL } from '@/lib/utils';
 
-const COMMON_MATERIALS = ['Sắt vụn', 'Đồng cáp', 'Nhôm', 'Giấy Carton', 'Nhựa PET', 'Nhựa HDPE', 'Nhựa cứng', 'Rác điện tử'];
+const MATERIAL_OPTIONS = Object.keys(MATERIAL_TYPE_LABEL);
+const materialLabel = (value) => MATERIAL_TYPE_LABEL[value] ?? value;
 const emptyForm = { materialType: '', pricePerKg: '', effectiveDate: new Date().toISOString().slice(0, 10), source: '' };
 const inputClass = 'w-full h-11 px-4 bg-white border border-d-outline-variant rounded-lg font-d-body-md text-d-body-md text-d-on-surface placeholder:text-d-outline focus:border-d-primary focus:ring-1 focus:ring-d-primary transition-all shadow-sm outline-none';
 const labelClass = 'font-d-body-sm text-d-body-sm font-medium text-d-on-surface';
@@ -78,7 +79,7 @@ export default function MarketPrices() {
                 )}
                 {data?.map((p) => (
                   <tr key={p.id} className="hover:bg-d-surface-accent/20 transition-colors">
-                    <td className="px-6 py-4 font-medium text-d-on-surface">{p.materialType}</td>
+                    <td className="px-6 py-4 font-medium text-d-on-surface">{materialLabel(p.materialType)}</td>
                     <td className="px-6 py-4 font-semibold text-d-secondary">{formatCurrency(p.pricePerKg)}</td>
                     <td className="px-6 py-4 text-d-on-surface-variant">{formatDate(p.effectiveDate)}</td>
                     <td className="px-6 py-4 text-d-on-surface-variant">{p.source || '—'}</td>
@@ -87,7 +88,7 @@ export default function MarketPrices() {
                         <button title="Sửa" onClick={() => openEdit(p)} className="p-1.5 text-d-on-surface-variant hover:text-d-primary rounded-full hover:bg-d-surface-variant transition-colors">
                           <MaterialIcon name="edit" className="text-[20px]" />
                         </button>
-                        <button title="Xóa" onClick={() => window.confirm(`Xóa giá "${p.materialType}"?`) && deleteMutation.mutate(p.id)} className="p-1.5 text-d-on-surface-variant hover:text-d-error rounded-full hover:bg-d-error-container/40 transition-colors">
+                        <button title="Xóa" onClick={() => window.confirm(`Xóa giá "${materialLabel(p.materialType)}"?`) && deleteMutation.mutate(p.id)} className="p-1.5 text-d-on-surface-variant hover:text-d-error rounded-full hover:bg-d-error-container/40 transition-colors">
                           <MaterialIcon name="delete" className="text-[20px]" />
                         </button>
                       </div>
@@ -104,8 +105,18 @@ export default function MarketPrices() {
         <form className="flex flex-col gap-5" onSubmit={handleSubmit}>
           <div className="flex flex-col gap-1.5">
             <label className={labelClass}>Loại vật liệu</label>
-            <input list="material-types" required value={form.materialType} onChange={(e) => setForm((f) => ({ ...f, materialType: e.target.value }))} className={inputClass} />
-            <datalist id="material-types">{COMMON_MATERIALS.map((m) => <option key={m} value={m} />)}</datalist>
+            <div className="relative">
+              <select
+                required
+                value={form.materialType}
+                onChange={(e) => setForm((f) => ({ ...f, materialType: e.target.value }))}
+                className={`${inputClass} appearance-none pr-10 cursor-pointer`}
+              >
+                <option value="" disabled>-- Chọn loại vật liệu --</option>
+                {MATERIAL_OPTIONS.map((m) => <option key={m} value={m}>{MATERIAL_TYPE_LABEL[m]}</option>)}
+              </select>
+              <MaterialIcon name="keyboard_arrow_down" className="absolute right-3 top-1/2 -translate-y-1/2 text-d-outline pointer-events-none" />
+            </div>
           </div>
           <div className="flex flex-col gap-1.5">
             <label className={labelClass}>Giá / kg (VNĐ)</label>
