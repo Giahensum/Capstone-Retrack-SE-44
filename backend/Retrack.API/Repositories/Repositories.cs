@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Retrack.API.Data;
 using Retrack.API.Models;
+using Retrack.API.Models.Enums;
 
 namespace Retrack.API.Repositories
 {
@@ -77,11 +78,11 @@ namespace Retrack.API.Repositories
         public async Task<MarketPrice?> GetByIdAsync(Guid id)
             => await _db.MarketPrices.FindAsync(id);
 
-        public async Task<List<MarketPrice>> GetAllAsync(string? materialType = null)
+        public async Task<List<MarketPrice>> GetAllAsync(MaterialType? materialType = null)
         {
             var query = _db.MarketPrices.AsQueryable();
-            if (!string.IsNullOrWhiteSpace(materialType))
-                query = query.Where(m => m.MaterialType == materialType);
+            if (materialType.HasValue)
+                query = query.Where(m => m.MaterialType == materialType.Value);
             return await query.OrderByDescending(m => m.EffectiveDate).ToListAsync();
         }
 

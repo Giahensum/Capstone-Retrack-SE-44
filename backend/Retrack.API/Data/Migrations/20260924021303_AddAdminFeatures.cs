@@ -35,21 +35,19 @@ namespace Retrack.API.Data.Migrations
                         onDelete: ReferentialAction.SetNull);
                 });
 
-            migrationBuilder.CreateTable(
-                name: "market_prices",
-                columns: table => new
-                {
-                    id = table.Column<Guid>(type: "uuid", nullable: false),
-                    material_type = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
-                    price_per_kg = table.Column<decimal>(type: "numeric", nullable: false),
-                    effective_date = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    source = table.Column<string>(type: "character varying(255)", maxLength: 255, nullable: true),
-                    created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_market_prices", x => x.id);
-                });
+            // market_prices was already created by 20260924014347_FactoryWorkflowExtension (merged in from the
+            // Factory branch) with `source text`. This migration only needs to narrow that column to the
+            // varchar(255) shape the model expects — the original CreateTable here duplicated the table and
+            // made every fresh database fail with "relation market_prices already exists".
+            migrationBuilder.AlterColumn<string>(
+                name: "source",
+                table: "market_prices",
+                type: "character varying(255)",
+                maxLength: 255,
+                nullable: true,
+                oldClrType: typeof(string),
+                oldType: "text",
+                oldNullable: true);
 
             migrationBuilder.CreateTable(
                 name: "notifications",
@@ -127,8 +125,17 @@ namespace Retrack.API.Data.Migrations
             migrationBuilder.DropTable(
                 name: "audit_logs");
 
-            migrationBuilder.DropTable(
-                name: "market_prices");
+            // market_prices is owned by 20260924014347_FactoryWorkflowExtension — only revert the column
+            // narrowing this migration applied, don't drop the table out from under that migration.
+            migrationBuilder.AlterColumn<string>(
+                name: "source",
+                table: "market_prices",
+                type: "text",
+                nullable: true,
+                oldClrType: typeof(string),
+                oldType: "character varying(255)",
+                oldMaxLength: 255,
+                oldNullable: true);
 
             migrationBuilder.DropTable(
                 name: "notifications");
