@@ -50,7 +50,7 @@ public sealed class StaffProfileService(IStaffProfileRepository repository, IClo
         await upload.WriteAsync(header.AsMemory(0, read), ct);
         await stream.CopyToAsync(upload, ct);
         upload.Position = 0;
-        staff.User.AvatarUrl = await images.UploadImageAsync(upload, $"avatar-{Guid.NewGuid():N}.{(png ? "png" : "jpg")}");
+        staff.User.AvatarUrl = await images.UploadAvatarAsync(upload, $"avatar-{Guid.NewGuid():N}.{(png ? "png" : "jpg")}");
         staff.User.UpdatedAt = DateTime.UtcNow;
         await repository.SaveAsync(ct);
         return Map(staff);
