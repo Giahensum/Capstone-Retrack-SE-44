@@ -1,4 +1,5 @@
 using System.Text;
+using System.Security.Claims;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
@@ -30,6 +31,24 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidAudience = builder.Configuration["Jwt:Audience"],
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
         };
+        options.Events = new JwtBearerEvents
+        {
+            OnTokenValidated = async context =>
+            {
+                if (!Guid.TryParse(context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier), out var id))
+                {
+                    context.Fail("Invalid identity.");
+                    return;
+                }
+                var db = context.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
+                var user = await db.Users.AsNoTracking().SingleOrDefaultAsync(u => u.Id == id, context.HttpContext.RequestAborted);
+                var role = context.Principal?.FindFirstValue(ClaimTypes.Role);
+                if (user == null || !user.IsActive || user.Role != role ||
+                    ((role is "DEPOT_EMPLOYEE" or "DRIVER") && !await db.DepotStaffs.AnyAsync(
+                        s => s.UserId == id && s.StaffType == role && s.IsActive, context.HttpContext.RequestAborted)))
+                    context.Fail("Account or depot membership is inactive.");
+            }
+        };
     });
 
 builder.Services.AddAuthorization();
@@ -56,6 +75,9 @@ builder.Services.AddScoped<IPlatformInvoiceRepository, PlatformInvoiceRepository
 
 // Services - Admin
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IStaffProfileRepository, StaffProfileRepository>();
+builder.Services.AddScoped<Retrack.API.Services.Staff.IStaffProfileService, Retrack.API.Services.Staff.StaffProfileService>();
+builder.Services.AddScoped<Retrack.API.Services.Interfaces.ICloudinaryService, Retrack.API.Services.Shared.CloudinaryService>();
 builder.Services.AddScoped<IPickupService, PickupService>();
 builder.Services.AddScoped<IAdminService, AdminService>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.INotificationService, Retrack.API.Services.Shared.NotificationService>();
@@ -121,7 +143,7 @@ if (app.Environment.IsDevelopment())
     });
 }
 
-app.UseHttpsRedirection();
+if (!app.Environment.IsDevelopment()) app.UseHttpsRedirection();
 app.UseCors("AllowFrontend");
 app.UseAuthentication();
 app.UseAuthorization();
