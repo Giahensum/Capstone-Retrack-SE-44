@@ -1,0 +1,67 @@
+import { StyleSheet } from "react-native";
+export const colors = {
+  background: "#f8f9ff",
+  card: "#ffffff",
+  low: "#eff4ff",
+  ink: "#0b1c30",
+  muted: "#424936",
+  primary: "#446900",
+  lime: "#a3e635",
+  border: "#c2cab0",
+  mint: "#a3f1b2",
+  error: "#ba1a1a",
+};
+export const styles = StyleSheet.create({
+  page: { flex: 1, backgroundColor: colors.background },
+  content: { padding: 20, gap: 20, paddingBottom: 36, flexGrow: 1 },
+  title: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 26,
+    lineHeight: 34,
+    color: colors.ink,
+  },
+  text: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 15,
+    lineHeight: 23,
+    color: colors.ink,
+  },
+  muted: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 14,
+    lineHeight: 22,
+    color: colors.muted,
+  },
+  label: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 13,
+    lineHeight: 20,
+    color: colors.muted,
+  },
+  card: {
+    backgroundColor: colors.card,
+    borderRadius: 28,
+    padding: 24,
+    gap: 16,
+    borderWidth: 1,
+    borderColor: "#e2e7db",
+  },
+  row: { flexDirection: "row", alignItems: "center", gap: 14 },
+  input: {
+    minHeight: 56,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 16,
+    backgroundColor: colors.card,
+    fontFamily: "Inter_400Regular",
+    fontSize: 16,
+    color: colors.ink,
+  },
+  error: {
+    color: colors.error,
+    fontFamily: "Inter_400Regular",
+    fontSize: 14,
+    lineHeight: 21,
+  },
+});
