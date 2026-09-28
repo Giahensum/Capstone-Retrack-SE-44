@@ -44,6 +44,10 @@ namespace Retrack.API.Models
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
         // Navigation
+        [Column("avatar_url")]
+        [MaxLength(2048)]
+        public string? AvatarUrl { get; set; }
+
         public ICollection<Depot> OwnedDepots { get; set; } = new List<Depot>();
         public ICollection<Factory> OwnedFactories { get; set; } = new List<Factory>();
         public ICollection<DepotStaff> DepotStaffs { get; set; } = new List<DepotStaff>();
