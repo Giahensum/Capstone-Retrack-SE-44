@@ -30,7 +30,7 @@ namespace Retrack.API.Services
         // ── Email / Password Login ──────────────────────────────────────
         public async Task<AuthResponseDto?> LoginAsync(LoginDto dto)
         {
-            var user = await _userRepo.GetByEmailAsync(dto.Email);
+            var user = await _userRepo.GetByEmailAsync(dto.Email.Trim());
             if (user == null || !BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash))
                 return null;
 
@@ -43,6 +43,9 @@ namespace Retrack.API.Services
         // ── Register ────────────────────────────────────────────────────
         public async Task<AuthResponseDto> RegisterAsync(RegisterDto dto)
         {
+            var role = dto.Role?.ToUpperInvariant();
+            if (role is not ("SELLER" or "DEPOT_OWNER" or "FACTORY"))
+                throw new ArgumentException("Nhân viên và tài xế phải được chủ kho tạo tài khoản.");
             var existing = await _userRepo.GetByEmailAsync(dto.Email);
             if (existing != null)
                 throw new InvalidOperationException("Email đã được sử dụng.");
@@ -53,7 +56,7 @@ namespace Retrack.API.Services
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password),
                 FullName = dto.FullName,
                 Phone = dto.Phone,
-                Role = dto.Role.ToUpper(),
+                Role = role,
                 IsActive = true
             };
 

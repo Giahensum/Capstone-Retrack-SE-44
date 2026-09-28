@@ -36,6 +36,13 @@ fe/.env.local
 fe/.env.*.local
 
 # ── IDE ──
+mobile/node_modules/
+mobile/.expo/
+mobile/dist/
+mobile/.env
+mobile/android/
+mobile/ios/
+
 .vs/
 .vscode/
 .idea/
