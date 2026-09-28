@@ -1,25 +1,34 @@
 import { Routes, Route } from 'react-router-dom';
-import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { StatCard } from '@/components/ui/CommonUI';
-import { Package, CheckCircle, Clock, DollarSign } from 'lucide-react';
-function SellerRequestsPage() {
-    return (<DashboardLayout title="Yêu cầu thu gom">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <StatCard title="Tổng yêu cầu" value="0" icon={<Package size={20}/>} color="blue"/>
-        <StatCard title="Đang xử lý" value="0" icon={<Clock size={20}/>} color="orange"/>
-        <StatCard title="Hoàn thành" value="0" icon={<CheckCircle size={20}/>} color="emerald"/>
-        <StatCard title="Tổng thu nhập" value="0 ₫" icon={<DollarSign size={20}/>} color="purple"/>
-      </div>
-      <div className="bg-slate-900 border border-slate-800 border-dashed rounded-xl p-10 text-center text-slate-500">
-        <Package size={40} className="mx-auto mb-3 opacity-30"/>
-        <p className="text-sm">Chưa có yêu cầu thu gom nào. Quay lại trang chủ để tạo yêu cầu!</p>
-      </div>
-    </DashboardLayout>);
-}
+import { lazy, Suspense } from 'react';
+import SellerLayout from '@/components/layout/SellerLayout';
+
+const SellerHome = lazy(() => import('./SellerHome'));
+const CreateRequest = lazy(() => import('./CreateRequest'));
+const RequestList = lazy(() => import('./RequestList'));
+const RequestDetail = lazy(() => import('./RequestDetail'));
+const SellerIncome = lazy(() => import('./SellerIncome'));
+const SellerProfile = lazy(() => import('./SellerProfile'));
+
+const PageLoader = () => (
+  <div className="flex items-center justify-center h-64">
+    <div className="w-8 h-8 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+  </div>
+);
+
 export default function SellerDashboard() {
-    return (<Routes>
-      <Route index element={<SellerRequestsPage />}/>
-      <Route path="requests" element={<SellerRequestsPage />}/>
-      <Route path="*" element={<SellerRequestsPage />}/>
-    </Routes>);
+  return (
+    <SellerLayout>
+      <Suspense fallback={<PageLoader />}>
+        <Routes>
+          <Route index element={<SellerHome />} />
+          <Route path="create" element={<CreateRequest />} />
+          <Route path="requests" element={<RequestList />} />
+          <Route path="requests/:id" element={<RequestDetail />} />
+          <Route path="income" element={<SellerIncome />} />
+          <Route path="profile" element={<SellerProfile />} />
+          <Route path="*" element={<SellerHome />} />
+        </Routes>
+      </Suspense>
+    </SellerLayout>
+  );
 }
