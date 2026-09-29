@@ -112,13 +112,7 @@ public class SellerPickupController : ControllerBase
     [HttpPost("{id:guid}/confirm-payment")]
     public async Task<IActionResult> ConfirmPayment(Guid id)
     {
-        var req = await _db.PickupRequests.FindAsync(id);
-        if (req == null) return NotFound(ApiResponse<string>.Fail("Không tìm thấy."));
-        if (req.SellerId != GetUserId()) return Forbid();
-        if (req.Status != "PAYMENT_SENT")
-            return BadRequest(ApiResponse<string>.Fail("Đơn chưa ở trạng thái đã thanh toán."));
-        req.Status = "DONE";
-        await _db.SaveChangesAsync();
+        await _pickupService.MarkDoneAsync(id, GetUserId());
         return Ok(ApiResponse<string>.Ok("Xác nhận nhận tiền thành công. Đơn hoàn tất!"));
     }
 
