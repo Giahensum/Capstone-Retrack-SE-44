@@ -594,6 +594,42 @@ namespace Retrack.API.Data.Migrations
                     b.ToTable("market_prices");
                 });
 
+            modelBuilder.Entity("Retrack.API.Models.Notification", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<bool>("IsRead")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_read");
+
+                    b.Property<string>("Message")
+                        .HasColumnType("text")
+                        .HasColumnName("message");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("title");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("notifications");
+                });
+
             modelBuilder.Entity("Retrack.API.Models.PickupRequest", b =>
                 {
                     b.Property<Guid>("Id")
@@ -933,6 +969,11 @@ namespace Retrack.API.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("AvatarUrl")
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)")
+                        .HasColumnName("avatar_url");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -980,6 +1021,16 @@ namespace Retrack.API.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("users");
+                });
+
+            modelBuilder.Entity("Retrack.API.Models.AuditLog", b =>
+                {
+                    b.HasOne("Retrack.API.Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("Retrack.API.Models.BatchQualityCheck", b =>
@@ -1107,20 +1158,31 @@ namespace Retrack.API.Data.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("Retrack.API.Models.Factory", "TargetFactory")
-                        .WithMany()
-                        .HasForeignKey("TargetFactoryId");
-
                     b.HasOne("Retrack.API.Models.Factory", "DirectOfferFactory")
                         .WithMany()
                         .HasForeignKey("DirectOfferFactoryId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("Retrack.API.Models.Factory", "TargetFactory")
+                        .WithMany()
+                        .HasForeignKey("TargetFactoryId");
+
                     b.Navigation("Depot");
 
-                    b.Navigation("TargetFactory");
-
                     b.Navigation("DirectOfferFactory");
+
+                    b.Navigation("TargetFactory");
+                });
+
+            modelBuilder.Entity("Retrack.API.Models.Notification", b =>
+                {
+                    b.HasOne("Retrack.API.Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("Retrack.API.Models.PickupRequest", b =>
@@ -1250,6 +1312,114 @@ namespace Retrack.API.Data.Migrations
                     b.Navigation("PickupRequests");
 
                     b.Navigation("TransportJobs");
+                });
+            modelBuilder.Entity("Retrack.API.Models.AuditLog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("action");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("EntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("entity_id");
+
+                    b.Property<string>("EntityName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("entity_name");
+
+                    b.Property<string>("NewData")
+                        .HasColumnType("text")
+                        .HasColumnName("new_data");
+
+                    b.Property<string>("OldData")
+                        .HasColumnType("text")
+                        .HasColumnName("old_data");
+
+                    b.Property<Guid?>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("audit_logs");
+                });
+            modelBuilder.Entity("Retrack.API.Models.AuditLog", b =>
+                {
+                    b.HasOne("Retrack.API.Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("User");
+                });
+            modelBuilder.Entity("Retrack.API.Models.PlatformInvoice", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("PaidAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("paid_at");
+
+                    b.Property<Guid>("PayerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("payer_id");
+
+                    b.Property<int>("PeriodMonth")
+                        .HasColumnType("integer")
+                        .HasColumnName("period_month");
+
+                    b.Property<int>("PeriodYear")
+                        .HasColumnType("integer")
+                        .HasColumnName("period_year");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<decimal>("TotalFeeAmount")
+                        .HasColumnType("numeric")
+                        .HasColumnName("total_fee_amount");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PayerId", "PeriodYear", "PeriodMonth")
+                        .IsUnique();
+
+                    b.ToTable("platform_invoices");
+                });
+            modelBuilder.Entity("Retrack.API.Models.PlatformInvoice", b =>
+                {
+                    b.HasOne("Retrack.API.Models.User", "Payer")
+                        .WithMany()
+                        .HasForeignKey("PayerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Payer");
                 });
 #pragma warning restore 612, 618
         }

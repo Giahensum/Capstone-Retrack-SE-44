@@ -1,4 +1,5 @@
 using Retrack.API.DTOs;
+using RevenueReportDto = Retrack.API.DTOs.Depot.RevenueReportDto;
 using Retrack.API.DTOs.Depot;
 namespace Retrack.API.Services.Interfaces;
 public interface IDepotReportService

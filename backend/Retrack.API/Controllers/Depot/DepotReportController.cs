@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Retrack.API.DTOs;
+using RevenueReportDto = Retrack.API.DTOs.Depot.RevenueReportDto;
 using Retrack.API.DTOs.Depot;
 using Retrack.API.Services.Interfaces;
 namespace Retrack.API.Controllers.Depot;

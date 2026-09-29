@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using RevenueReportDto = Retrack.API.DTOs.Depot.RevenueReportDto;
+using RevenuePointDto = Retrack.API.DTOs.Depot.RevenuePointDto;
 using Retrack.API.Data;
 using Retrack.API.DTOs;
 using Retrack.API.DTOs.Depot;
