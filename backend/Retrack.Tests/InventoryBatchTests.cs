@@ -141,7 +141,7 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         await db.SaveChangesAsync();
         try
         {
-            var service = new DepotReportService(db, new Retrack.API.Repositories.DepotReportRepository(db), new Retrack.API.Repositories.DepotStaffRepository(db), new DepotService(new Retrack.API.Repositories.DepotOwnerRepository(db), new Retrack.API.Repositories.DepotPaymentReadRepository(db)), new InventoryService(new Retrack.API.Repositories.DepotInventoryRepository(db), new DepotService(new Retrack.API.Repositories.DepotOwnerRepository(db), new Retrack.API.Repositories.DepotPaymentReadRepository(db))));
+            var service = new DepotReportService(new Retrack.API.Repositories.DepotUnitOfWork(db), new Retrack.API.Repositories.DepotReportRepository(db), new Retrack.API.Repositories.DepotStaffRepository(db), new DepotService(new Retrack.API.Repositories.DepotOwnerRepository(db), new Retrack.API.Repositories.DepotPaymentReadRepository(db)), new InventoryService(new Retrack.API.Repositories.DepotInventoryRepository(db), new DepotService(new Retrack.API.Repositories.DepotOwnerRepository(db), new Retrack.API.Repositories.DepotPaymentReadRepository(db))));
             Assert.Equal(invoice.Id, Assert.Single((await service.InvoicesAsync(ownerId, depotId, new())).Items).Id);
             var proof = new PaymentProofDto { PaymentProofUrl = "https://example.com/local-invoice-test.png" };
             await service.ConfirmInvoiceAsync(ownerId, depotId, invoice.Id, proof);
@@ -264,7 +264,7 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         db.InventoryBatches.Add(new InventoryBatch { DepotId = depotId, MaterialType = "PET", DeclaredWeightKg = 10,
             Status = "COMPLETED", NetAmount = 950, SettledAt = date });
         await db.SaveChangesAsync();
-        var service = new DepotReportService(db, new Retrack.API.Repositories.DepotReportRepository(db), new Retrack.API.Repositories.DepotStaffRepository(db), new DepotService(new Retrack.API.Repositories.DepotOwnerRepository(db), new Retrack.API.Repositories.DepotPaymentReadRepository(db)), new InventoryService(new Retrack.API.Repositories.DepotInventoryRepository(db), new DepotService(new Retrack.API.Repositories.DepotOwnerRepository(db), new Retrack.API.Repositories.DepotPaymentReadRepository(db))));
+        var service = new DepotReportService(new Retrack.API.Repositories.DepotUnitOfWork(db), new Retrack.API.Repositories.DepotReportRepository(db), new Retrack.API.Repositories.DepotStaffRepository(db), new DepotService(new Retrack.API.Repositories.DepotOwnerRepository(db), new Retrack.API.Repositories.DepotPaymentReadRepository(db)), new InventoryService(new Retrack.API.Repositories.DepotInventoryRepository(db), new DepotService(new Retrack.API.Repositories.DepotOwnerRepository(db), new Retrack.API.Repositories.DepotPaymentReadRepository(db))));
         var report = await service.RevenueAsync(ownerId, depotId, new() { From = new(2026, 9, 28), To = new(2026, 9, 28) });
         Assert.Equal(950, report.Revenue);
         Assert.Equal(new DateOnly(2026, 9, 28), Assert.Single(report.Points).Date);
@@ -298,7 +298,7 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         await using var db = Open(); var scope = new DepotService(new Retrack.API.Repositories.DepotOwnerRepository(db), new Retrack.API.Repositories.DepotPaymentReadRepository(db));
         var staff = new DepotStaff { DepotId = depotId, UserId = sellerId, StaffType = "DEPOT_EMPLOYEE" };
         db.DepotStaffs.Add(staff); await db.SaveChangesAsync();
-        var service = new DepotReportService(db, new Retrack.API.Repositories.DepotReportRepository(db), new Retrack.API.Repositories.DepotStaffRepository(db), scope, new InventoryService(new Retrack.API.Repositories.DepotInventoryRepository(db), scope));
+        var service = new DepotReportService(new Retrack.API.Repositories.DepotUnitOfWork(db), new Retrack.API.Repositories.DepotReportRepository(db), new Retrack.API.Repositories.DepotStaffRepository(db), scope, new InventoryService(new Retrack.API.Repositories.DepotInventoryRepository(db), scope));
         Assert.Equal(100, (await service.DashboardAsync(ownerId, depotId)).AvailableKg);
         Assert.Equal(0, (await service.RevenueAsync(ownerId, depotId, new())).Revenue);
         Assert.Single((await service.PerformanceAsync(ownerId, depotId, new(), new())).Items);
@@ -312,7 +312,7 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         await using var db = Open(); var scope = new DepotService(new Retrack.API.Repositories.DepotOwnerRepository(db), new Retrack.API.Repositories.DepotPaymentReadRepository(db));
         var invoice = new PlatformInvoice { PayerId = ownerId, PeriodYear = 2026, PeriodMonth = 8, TotalFeeAmount = 100 };
         db.PlatformInvoices.Add(invoice); await db.SaveChangesAsync();
-        var service = new DepotReportService(db, new Retrack.API.Repositories.DepotReportRepository(db), new Retrack.API.Repositories.DepotStaffRepository(db), scope, new InventoryService(new Retrack.API.Repositories.DepotInventoryRepository(db), scope));
+        var service = new DepotReportService(new Retrack.API.Repositories.DepotUnitOfWork(db), new Retrack.API.Repositories.DepotReportRepository(db), new Retrack.API.Repositories.DepotStaffRepository(db), scope, new InventoryService(new Retrack.API.Repositories.DepotInventoryRepository(db), scope));
         await service.ConfirmInvoiceAsync(ownerId, depotId, invoice.Id, new() { PaymentProofUrl = "https://example.com/test.png" });
         await service.ConfirmInvoiceAsync(ownerId, depotId, invoice.Id, new() { PaymentProofUrl = "https://example.com/test.png" });
         Assert.Equal("SUBMITTED", (await db.PlatformInvoices.FindAsync(invoice.Id))!.Status);
