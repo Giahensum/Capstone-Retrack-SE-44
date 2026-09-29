@@ -9,7 +9,7 @@ namespace Retrack.API.Services.Depot;
 
 public sealed class BatchService(AppDbContext db, IDepotService scope, IInventoryService inventory) : IBatchService
 {
-    private static readonly string[] States = ["DRAFT", "LISTED", "MARKETPLACE", "PENDING_APPROVAL", "TRANSPORT_READY", "ACCEPTED", "READY_FOR_PICKUP", "IN_PROGRESS", "IN_TRANSIT", "DELIVERED", "VERIFIED", "COMPLETED", "REJECTED", "CANCELLED"];
+    private static readonly string[] States = ["DRAFT", "LISTED", "MARKETPLACE", "PENDING_APPROVAL", "PENDING_FACTORY", "TRANSPORT_READY", "ACCEPTED", "READY_FOR_PICKUP", "IN_PROGRESS", "IN_TRANSIT", "DELIVERED", "RECEIVED", "WEIGHED", "VERIFIED", "COMPLETED", "PAID", "REJECTED", "CANCELLED"];
 
     public async Task<PagedResult<DepotBatchDto>> ListAsync(Guid ownerId, Guid depotId, DepotQuery query)
     {

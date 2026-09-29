@@ -15,9 +15,15 @@ public sealed class DepotReportService(AppDbContext db, IDepotService scope, IIn
     {
         await scope.RequireOwnerAsync(ownerId, depotId);
         var (start, end) = period.Bounds();
-        var revenue = await db.BatchQualityChecks.AsNoTracking().Where(q => q.Batch.DepotId == depotId && q.IsAccepted &&
+        var settled = db.InventoryBatches.AsNoTracking().Where(b => b.DepotId == depotId && b.SettledAt >= start && b.SettledAt < end &&
+            (b.Status == "COMPLETED" || b.Status == "PAID") && b.NetAmount != null)
+            .Select(b => new { Date = b.SettledAt!.Value, Amount = b.NetAmount!.Value });
+        // Giữ dữ liệu QC cũ chưa có SettledAt, không cộng trùng lô đã quyết toán theo contract mới.
+        var legacy = db.BatchQualityChecks.AsNoTracking().Where(q => q.Batch.DepotId == depotId && q.Batch.SettledAt == null && q.IsAccepted &&
             q.PaymentProofUrl != null && q.CreatedAt >= start && q.CreatedAt < end)
-            .GroupBy(q => q.CreatedAt.AddHours(7).Date).Select(g => new { Date = g.Key, Amount = g.Sum(q => q.NetAmount) }).ToListAsync();
+            .Select(q => new { Date = q.CreatedAt, Amount = q.NetAmount });
+        var revenue = await settled.Concat(legacy).GroupBy(q => q.Date.AddHours(7).Date)
+            .Select(g => new { Date = g.Key, Amount = g.Sum(q => q.Amount) }).ToListAsync();
         var costs = await (from t in db.PlatformTransactions.AsNoTracking()
             join p in db.PickupRequests on t.SourceId equals p.Id
             where t.SourceType == "PICKUP_REQUEST" && p.TargetDepotId == depotId && t.CreatedAt >= start && t.CreatedAt < end

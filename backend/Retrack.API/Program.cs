@@ -88,6 +88,7 @@ builder.Services.AddScoped<Retrack.API.Services.Interfaces.ICloudinaryService, R
 builder.Services.AddScoped<IPickupService, PickupService>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IDepotService, Retrack.API.Services.Depot.DepotService>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IInventoryService, Retrack.API.Services.Depot.InventoryService>();
+builder.Services.AddScoped<IDepotInventoryRepository, DepotInventoryRepository>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IBatchService, Retrack.API.Services.Depot.BatchService>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IStaffService, Retrack.API.Services.Depot.StaffService>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IDepotReportService, Retrack.API.Services.Depot.DepotReportService>();
@@ -170,6 +171,7 @@ if (app.Environment.IsDevelopment() && builder.Configuration.GetValue<bool>("Dat
     await DataSeeder.SeedAsync(db);
 }
 
+if (app.Environment.IsDevelopment() && builder.Configuration.GetValue<bool>("Database:Initialize"))
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -187,8 +189,8 @@ using (var scope = app.Services.CreateScope())
             await db.SaveChangesAsync();
             app.Logger.LogInformation("SEED MORE DEPOTS SUCCESS");
         }
-    } 
-    catch (Exception ex) { 
+    }
+    catch (Exception ex) {
         app.Logger.LogError(ex, "SEED MORE DEPOTS FAILED");
     }
 }

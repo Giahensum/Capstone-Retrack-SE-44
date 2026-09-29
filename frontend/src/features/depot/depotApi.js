@@ -19,4 +19,5 @@ export const number = (n) => Number(n ?? 0).toLocaleString('vi-VN');
 export const date = (value) => new Date(value).toLocaleDateString('vi-VN');
 export const batchLabels = { DRAFT: 'Nháp', LISTED: 'Đang đăng', MARKETPLACE: 'Đang đăng', PENDING_APPROVAL: 'Chờ nhà máy duyệt',
   TRANSPORT_READY: 'Chờ vận chuyển', ACCEPTED: 'Đã nhận', READY_FOR_PICKUP: 'Chờ lấy hàng', IN_PROGRESS: 'Đang vận chuyển', IN_TRANSIT: 'Đang vận chuyển',
-  DELIVERED: 'Đã giao', VERIFIED: 'Đã QC', COMPLETED: 'Hoàn tất', REJECTED: 'Bị từ chối', CANCELLED: 'Đã hủy' };
+  DELIVERED: 'Đã giao', RECEIVED: 'Nhà máy đã nhận', WEIGHED: 'Đã cân tại nhà máy', PENDING_FACTORY: 'Chờ nhà máy duyệt',
+  VERIFIED: 'Đã QC', COMPLETED: 'Hoàn tất', PAID: 'Đã quyết toán', REJECTED: 'Bị từ chối', CANCELLED: 'Đã hủy' };
