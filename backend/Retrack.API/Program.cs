@@ -82,6 +82,8 @@ builder.Services.AddScoped<IPlatformInvoiceRepository, PlatformInvoiceRepository
 
 builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IDepotOwnerRepository, DepotOwnerRepository>();
 
+builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IDepotPaymentReadRepository, DepotPaymentReadRepository>();
+
 // Services - Admin
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IStaffProfileRepository, StaffProfileRepository>();
