@@ -8,6 +8,12 @@ namespace Retrack.API.Repositories;
 
 public sealed class DepotReportRepository(AppDbContext db) : IDepotReportRepository
 {
+    public async Task<PlatformInvoice?> LockInvoiceAsync(Guid id)
+    {
+        var invoice = await db.PlatformInvoices.FromSqlInterpolated($"SELECT * FROM platform_invoices WHERE id = {id} FOR UPDATE").SingleOrDefaultAsync();
+        if (invoice != null) await db.Entry(invoice).ReloadAsync();
+        return invoice;
+    }
     public async Task<(List<DepotDailyAmount> Revenue, List<DepotDailyAmount> Costs)> DailyAmountsAsync(Guid depotId, DateTime start, DateTime end)
     {
         var settled = db.InventoryBatches.AsNoTracking().Where(b => b.DepotId == depotId && b.SettledAt >= start && b.SettledAt < end &&

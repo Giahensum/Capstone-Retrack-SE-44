@@ -1,16 +1,13 @@
-using Microsoft.EntityFrameworkCore;
 using RevenueReportDto = Retrack.API.DTOs.Depot.RevenueReportDto;
 using RevenuePointDto = Retrack.API.DTOs.Depot.RevenuePointDto;
-using Retrack.API.Data;
 using Retrack.API.Repositories.Interfaces;
 using Retrack.API.DTOs;
 using Retrack.API.DTOs.Depot;
-using Retrack.API.Models;
 using Retrack.API.Services.Interfaces;
 
 namespace Retrack.API.Services.Depot;
 
-public sealed class DepotReportService(AppDbContext db, IDepotReportRepository reports, IDepotStaffRepository staffRepository, IDepotService scope, IInventoryService inventory) : IDepotReportService
+public sealed class DepotReportService(IDepotUnitOfWork work, IDepotReportRepository reports, IDepotStaffRepository staffRepository, IDepotService scope, IInventoryService inventory) : IDepotReportService
 {
     public async Task<RevenueReportDto> RevenueAsync(Guid ownerId, Guid depotId, PeriodQuery period)
     {
@@ -70,10 +67,9 @@ public sealed class DepotReportService(AppDbContext db, IDepotReportRepository r
     {
         await scope.RequireOwnerAsync(ownerId, depotId);
         if (!Uri.TryCreate(dto.PaymentProofUrl, UriKind.Absolute, out var url) || (url.Scheme != "https" && url.Scheme != "http")) throw new ArgumentException("Chứng từ phải là URL HTTP/HTTPS.");
-        await using var tx = await db.Database.BeginTransactionAsync();
-        var invoice = await db.PlatformInvoices.FromSqlInterpolated($"SELECT * FROM platform_invoices WHERE id = {id} FOR UPDATE").SingleOrDefaultAsync()
+        await using var tx = await work.BeginAsync();
+        var invoice = await reports.LockInvoiceAsync(id)
             ?? throw new KeyNotFoundException("Không tìm thấy hóa đơn.");
-        await db.Entry(invoice).ReloadAsync();
         if (invoice.PayerId != ownerId) throw new DepotForbiddenException();
         if (invoice.Status != "PENDING")
         {
@@ -81,6 +77,6 @@ public sealed class DepotReportService(AppDbContext db, IDepotReportRepository r
             throw new DepotConflictException("Hóa đơn đã có chứng từ thanh toán.");
         }
         invoice.Status = "SUBMITTED"; invoice.PaymentProofUrl = dto.PaymentProofUrl; invoice.SubmittedAt = DateTime.UtcNow;
-        await db.SaveChangesAsync(); await tx.CommitAsync();
+        await work.SaveAsync(); await tx.CommitAsync();
     }
 }
