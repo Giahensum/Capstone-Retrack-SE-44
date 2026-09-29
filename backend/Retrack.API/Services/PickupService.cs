@@ -24,11 +24,13 @@ namespace Retrack.API.Services
     {
         private readonly IPickupRequestRepository _repo;
         private readonly AppDbContext _db;
+        private readonly Interfaces.IDepotPaymentService _payments;
 
-        public PickupService(IPickupRequestRepository repo, AppDbContext db)
+        public PickupService(IPickupRequestRepository repo, AppDbContext db, Interfaces.IDepotPaymentService payments)
         {
             _repo = repo;
             _db = db;
+            _payments = payments;
         }
 
         public async Task<PickupRequestDto> CreateAsync(Guid sellerId, CreatePickupRequestDto dto)
@@ -165,50 +167,7 @@ namespace Retrack.API.Services
         }
 
         public async Task<PickupRequestDto> MarkPaymentSentAsync(Guid requestId, Guid ownerId, string paymentProofUrl)
-        {
-            if (!await _db.Users.AnyAsync(u => u.Id == ownerId && u.IsActive && u.Role == "DEPOT_OWNER"))
-                throw new DepotForbiddenException();
-            if (string.IsNullOrWhiteSpace(paymentProofUrl) ||
-                !Uri.TryCreate(paymentProofUrl, UriKind.Absolute, out var proof) ||
-                (proof.Scheme != Uri.UriSchemeHttps && proof.Scheme != Uri.UriSchemeHttp))
-                throw new ArgumentException("Đường dẫn chứng từ phải là URL HTTP hoặc HTTPS hợp lệ.");
-
-            await using var transaction = await _db.Database.BeginTransactionAsync();
-            // Tuần tự hóa thanh toán giữa các tiến trình, không chỉ chặn nhấn nút lặp trên trình duyệt.
-            var locked = await _db.PickupRequests
-                .FromSqlInterpolated($"SELECT * FROM pickup_requests WHERE id = {requestId} FOR UPDATE")
-                .SingleOrDefaultAsync() ?? throw new KeyNotFoundException("Không tìm thấy yêu cầu.");
-            await _db.Entry(locked).ReloadAsync();
-            var req = await _repo.GetByIdAsync(requestId)
-                ?? throw new KeyNotFoundException("Không tìm thấy yêu cầu.");
-            if (req.TargetDepotId is null || !await _db.Depots.AnyAsync(d => d.Id == req.TargetDepotId && d.OwnerId == ownerId))
-                throw new DepotForbiddenException();
-            if (req.Status is "PAYMENT_SENT" or "DONE")
-            {
-                if (req.PaymentProofUrl != paymentProofUrl)
-                    throw new DepotConflictException("Đơn đã có chứng từ thanh toán khác.");
-                await transaction.CommitAsync();
-                return await MapToDto(req);
-            }
-            if (req.Status != "AWAITING_PAYMENT")
-                throw new DepotConflictException("Chỉ được thanh toán đơn đang chờ thanh toán.");
-            req.PaymentProofUrl = paymentProofUrl;
-            req.Status = "PAYMENT_SENT";
-            req.UpdatedAt = DateTime.UtcNow;
-
-            // Record platform transaction
-            _db.PlatformTransactions.Add(new PlatformTransaction
-            {
-                SourceType = "PICKUP_REQUEST",
-                SourceId = requestId,
-                FeeAmount = req.PlatformFeeAmount,
-                Description = $"Phí thu gom phế liệu #{requestId}"
-            });
-            await _db.SaveChangesAsync();
-            await transaction.CommitAsync();
-
-            return await MapToDto(req);
-        }
+            => await MapToDto(await _payments.MarkSentAsync(requestId, ownerId, paymentProofUrl));
 
         public async Task<PickupRequestDto> MarkDoneAsync(Guid requestId, Guid sellerId)
         {

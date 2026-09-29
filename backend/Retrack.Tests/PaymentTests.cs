@@ -62,7 +62,7 @@ public sealed class PaymentTests : IAsyncLifetime
 
     private static async Task<PickupRequestDto> Pay(AppDbContext db, Guid request, Guid owner, string proof = Proof)
     {
-        var service = new PickupService(new PickupRequestRepository(db), db);
+        var service = new PickupService(new PickupRequestRepository(db), db, new DepotPaymentService(new DepotOwnerRepository(db), new DepotPaymentRepository(db), new DepotUnitOfWork(db)));
         return await service.MarkPaymentSentAsync(request, owner, proof);
     }
 
