@@ -80,6 +80,8 @@ builder.Services.AddScoped<IMarketPriceRepository, MarketPriceRepository>();
 builder.Services.AddScoped<IAuditLogRepository, AuditLogRepository>();
 builder.Services.AddScoped<IPlatformInvoiceRepository, PlatformInvoiceRepository>();
 
+builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IDepotOwnerRepository, DepotOwnerRepository>();
+
 // Services - Admin
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IStaffProfileRepository, StaffProfileRepository>();

@@ -254,7 +254,7 @@ public sealed class PaymentTests : IAsyncLifetime
         var secondDepot = (await db.Depots.FindAsync(secondRequest.TargetDepotId))!;
         secondDepot.OwnerId = first.Owner;
         await db.SaveChangesAsync();
-        var service = new DepotService(db);
+        var service = new DepotService(db, new Retrack.API.Repositories.DepotOwnerRepository(db));
         var depots = await service.GetDepotsAsync(first.Owner);
         Assert.Equal(2, depots.Count);
         Assert.DoesNotContain(depots, d => d.Id == foreignRequest.TargetDepotId);
@@ -278,7 +278,7 @@ public sealed class PaymentTests : IAsyncLifetime
         var depotId = (await db.PickupRequests.FindAsync(seed.Request))!.TargetDepotId!.Value;
         db.PickupRequestItems.Add(new PickupRequestItem { PickupRequestId = seed.Request, MaterialType = "PAPER", WeightKg = 100 });
         await db.SaveChangesAsync();
-        var rows = await new InventoryService(new Retrack.API.Repositories.DepotInventoryRepository(db), new DepotService(db)).GetAsync(seed.Owner, depotId);
+        var rows = await new InventoryService(new Retrack.API.Repositories.DepotInventoryRepository(db), new DepotService(db, new Retrack.API.Repositories.DepotOwnerRepository(db))).GetAsync(seed.Owner, depotId);
         Assert.Equal(expected, rows.Sum(r => r.ReceivedKg));
     }
 
@@ -298,7 +298,7 @@ public sealed class PaymentTests : IAsyncLifetime
             new InventoryBatch { DepotId = depotId, MaterialType = "PAPER", DeclaredWeightKg = 20, Status = "IN_TRANSIT" },
             new InventoryBatch { DepotId = depotId, MaterialType = "PAPER", DeclaredWeightKg = 15, Status = "CANCELLED" });
         await db.SaveChangesAsync();
-        var service = new InventoryService(new Retrack.API.Repositories.DepotInventoryRepository(db), new DepotService(db));
+        var service = new InventoryService(new Retrack.API.Repositories.DepotInventoryRepository(db), new DepotService(db, new Retrack.API.Repositories.DepotOwnerRepository(db)));
         var row = Assert.Single(await service.GetAsync(seed.Owner, depotId));
         Assert.Equal(100m, row.ReceivedKg);
         Assert.Equal(30m, row.ReservedKg);
