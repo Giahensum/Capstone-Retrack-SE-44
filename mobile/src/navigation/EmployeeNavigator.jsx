@@ -1,18 +1,44 @@
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import { createStackNavigator } from "@react-navigation/stack";
 import Feather from "@expo/vector-icons/Feather";
 import ProfileNavigator from "./ProfileNavigator";
 import DashboardScreen from "../screens/employee/DashboardScreen";
 import PickupPoolScreen from "../screens/employee/PickupPoolScreen";
-import MapScreen from "../screens/employee/MapScreen";
-import NotificationsScreen from "../screens/employee/NotificationsScreen";
+import PickupDetailScreen from "../screens/employee/PickupDetailScreen";
+import PlaceholderScreen from "../components/common/PlaceholderScreen";
+import Brand from "../components/common/Brand";
 const Tabs = createBottomTabNavigator();
+const Stack = createStackNavigator();
 const icons = {
   Dashboard: "home",
   Pool: "list",
-  Map: "map-pin",
-  Notifications: "bell",
+  History: "clock",
   Profile: "user",
 };
+function PickupStackNavigator() {
+  return (
+    <Stack.Navigator
+      id="PickupStack"
+      screenOptions={{
+        headerStyle: { backgroundColor: "#f8f9ff" },
+        headerTintColor: "#446900",
+        headerTitleStyle: { fontFamily: "Inter_700Bold" },
+        headerShadowVisible: false,
+      }}
+    >
+      <Stack.Screen
+        name="PickupPool"
+        component={PickupPoolScreen}
+        options={{ headerTitle: () => <Brand /> }}
+      />
+      <Stack.Screen
+        name="PickupDetail"
+        component={PickupDetailScreen}
+        options={{ title: "Chi tiết đơn" }}
+      />
+    </Stack.Navigator>
+  );
+}
 export default function EmployeeNavigator() {
   return (
     <Tabs.Navigator
@@ -24,6 +50,7 @@ export default function EmployeeNavigator() {
         tabBarLabelStyle: { fontFamily: "Inter_600SemiBold", fontSize: 11 },
         headerStyle: { backgroundColor: "#f8f9ff" },
         headerTintColor: "#446900",
+        headerTitle: () => <Brand />,
         tabBarIcon: ({ color, size }) => (
           <Feather name={icons[route.name]} color={color} size={size} />
         ),
@@ -32,27 +59,22 @@ export default function EmployeeNavigator() {
       <Tabs.Screen
         name="Dashboard"
         component={DashboardScreen}
-        options={{ title: "Dashboard" }}
+        options={{ title: "Trang chủ" }}
       />
       <Tabs.Screen
         name="Pool"
-        component={PickupPoolScreen}
-        options={{ title: "Đơn hàng" }}
+        component={PickupStackNavigator}
+        options={{ title: "Đơn chờ", headerShown: false }}
       />
-      <Tabs.Screen
-        name="Map"
-        component={MapScreen}
-        options={{ title: "Bản đồ" }}
-      />
-      <Tabs.Screen
-        name="Notifications"
-        component={NotificationsScreen}
-        options={{ title: "Thông báo" }}
-      />
+      <Tabs.Screen name="History" options={{ title: "Lịch sử" }}>
+        {() => (
+          <PlaceholderScreen title="Lịch sử" useCase="UC-57/58" icon="clock" />
+        )}
+      </Tabs.Screen>
       <Tabs.Screen
         name="Profile"
         component={ProfileNavigator}
-        options={{ title: "Hồ sơ", headerShown: false }}
+        options={{ title: "Cá nhân", headerShown: false }}
       />
     </Tabs.Navigator>
   );

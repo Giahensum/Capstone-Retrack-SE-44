@@ -19,6 +19,7 @@ public class StaffProfileTests
     private sealed class Images : ICloudinaryService
     {
         public Task<string> UploadImageAsync(Stream stream, string name) => Task.FromResult("https://example.com/avatar.jpg");
+        public Task<string> UploadAvatarAsync(Stream stream, string name) => Task.FromResult("https://example.com/avatar.jpg");
         public Task<bool> DeleteImageAsync(string id) => Task.FromResult(true);
     }
     private static AppDbContext NewDb() => new(new DbContextOptionsBuilder<AppDbContext>()
