@@ -199,6 +199,7 @@ function InvoicesTab() {
           <select value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }} className={`${inputClass} h-9 cursor-pointer`}>
             <option value="">Tất cả</option>
             <option value="PENDING">Chưa thanh toán</option>
+            <option value="SUBMITTED">Chờ đối soát</option>
             <option value="PAID">Đã thanh toán</option>
           </select>
         </div>
@@ -229,18 +230,20 @@ function InvoicesTab() {
                       </span>
                     ) : (
                       <span className="bg-[#FFF8E1] text-[#F57F17] border border-[#FFECB3] px-3 py-1 rounded-full font-d-label-sm text-d-label-sm flex items-center w-max">
-                        <MaterialIcon name="warning" className="text-[14px] mr-1" />Chờ thanh toán
+                        <MaterialIcon name="warning" className="text-[14px] mr-1" />{inv.status === 'SUBMITTED' ? 'Chờ đối soát' : 'Chờ thanh toán'}
                       </span>
                     )}
                   </td>
-                  <td className="px-6 py-4 text-d-on-surface-variant">{inv.paidAt ? formatDate(inv.paidAt) : '-'}</td>
+                  <td className="px-6 py-4 text-d-on-surface-variant">{inv.paidAt ? formatDate(inv.paidAt) : '-'}
+                    {/^https?:\/\//i.test(inv.paymentProofUrl || '') && <a href={inv.paymentProofUrl} target="_blank" rel="noopener noreferrer" className="block underline text-d-secondary">Xem chứng từ</a>}
+                  </td>
                   <td className="px-6 py-4 text-right">
                     {inv.status !== 'PAID' ? (
                       <div className="flex items-center justify-end gap-2">
                         <button onClick={() => remindMutation.mutate(inv.id)} title="Gửi nhắc nhở" className="p-1.5 text-d-on-surface-variant hover:text-[#F57F17] rounded-full hover:bg-d-surface-variant transition-colors">
                           <MaterialIcon name="notifications_active" className="text-[20px]" />
                         </button>
-                        <button onClick={() => markPaidMutation.mutate(inv.id)} className="bg-d-secondary text-white px-4 py-2 rounded-full font-d-body-sm text-d-body-sm font-medium hover:opacity-90 transition-opacity shadow-sm inline-flex items-center gap-1">
+                        <button disabled={markPaidMutation.isPending} onClick={() => markPaidMutation.mutate(inv.id)} className="bg-d-secondary text-white px-4 py-2 rounded-full font-d-body-sm text-d-body-sm font-medium hover:opacity-90 transition-opacity shadow-sm inline-flex items-center gap-1 disabled:opacity-60">
                           <MaterialIcon name="payment" className="text-[16px]" />
                           Đã thanh toán
                         </button>

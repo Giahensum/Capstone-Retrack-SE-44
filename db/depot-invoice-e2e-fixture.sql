@@ -4,7 +4,7 @@ DO $$ BEGIN
     RAISE EXCEPTION 'Dữ liệu kiểm thử chỉ được dùng trên Retrack_TV2_dev';
   END IF;
 END $$;
-INSERT INTO platform_fee_invoices (id, owner_id, period_start, amount, status, created_at)
+INSERT INTO platform_invoices (id, payer_id, period_year, period_month, total_fee_amount, status, created_at)
 VALUES ('22222222-2222-2222-2222-222222222203',
-        '00000000-0000-0000-0000-000000000003', DATE '2026-08-01', 5000, 'UNPAID', now())
+        '00000000-0000-0000-0000-000000000003', 2026, 8, 5000, 'PENDING', now())
 ON CONFLICT DO NOTHING;

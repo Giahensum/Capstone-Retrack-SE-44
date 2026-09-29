@@ -20,7 +20,9 @@ Bộ kiểm thử còn bao gồm giữ/hủy tồn kho đồng thời, tạo lô
 quan hệ nhà máy, mã lô tự sinh, validation hồ sơ, tạo/khóa nhân viên, truy vấn báo cáo,
 gửi chứng từ hóa đơn và chặn vai trò đặc quyền khi đăng ký công khai. Khởi tạo migration
 được tuần tự hóa giữa các lớp, không tắt kiểm thử giao dịch đồng thời.
-**Kết quả lần chạy gần nhất: 46 đạt, 0 lỗi, 0 bỏ qua.**
+Các ca bổ sung kiểm tra tồn kho theo vận chuyển/nhận hàng Factory, doanh thu theo ngày
+quyết toán, nhận/hủy lô đồng thời, hóa đơn Admin–Depot và phát hành tháng theo UTC+7.
+Kết quả chạy và bằng chứng chi tiết lưu local trong `.ai-context/depot-owner`, không đưa báo cáo tiến trình vào Git.
 
 Bằng chứng trình duyệt/HTTP thật và phần còn thiếu: `.ai-context/depot-owner/tien-do/depot-integration.md`
 (tính đường dẫn từ thư mục gốc repository).

@@ -143,6 +143,8 @@ namespace Retrack.API.DTOs
         public decimal TotalFeeAmount { get; set; }
         public string Status { get; set; } = string.Empty;
         public DateTime? PaidAt { get; set; }
+        public string? PaymentProofUrl { get; set; }
+        public DateTime? SubmittedAt { get; set; }
         public DateTime CreatedAt { get; set; }
     }
 

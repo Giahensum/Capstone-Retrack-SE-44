@@ -90,24 +90,27 @@ public sealed class DepotReportService(AppDbContext db, IDepotService scope, IIn
         await scope.RequireOwnerAsync(ownerId, depotId);
         var (start, end) = period.Bounds();
         return new(await FeeRows(depotId).Where(t => t.CreatedAt >= start && t.CreatedAt < end).SumAsync(t => t.FeeAmount),
-            await db.PlatformFeeInvoices.Where(i => i.OwnerId == ownerId && i.Status == "UNPAID").SumAsync(i => i.Amount),
-            await db.PlatformFeeInvoices.Where(i => i.OwnerId == ownerId && i.Status == "SUBMITTED").SumAsync(i => i.Amount));
+            await db.PlatformInvoices.Where(i => i.PayerId == ownerId && i.Status == "PENDING").SumAsync(i => i.TotalFeeAmount),
+            await db.PlatformInvoices.Where(i => i.PayerId == ownerId && i.Status == "SUBMITTED").SumAsync(i => i.TotalFeeAmount));
     }
     public async Task<PagedResult<FeeInvoiceDto>> InvoicesAsync(Guid ownerId, Guid depotId, DepotQuery query)
     {
         await scope.RequireOwnerAsync(ownerId, depotId);
-        return await DepotService.PageAsync(db.PlatformFeeInvoices.AsNoTracking().Where(i => i.OwnerId == ownerId)
-            .OrderByDescending(i => i.PeriodStart).ThenBy(i => i.Id).Select(i => new FeeInvoiceDto(i.Id, i.PeriodStart, i.Amount, i.Status, i.PaymentProofUrl, i.SubmittedAt)), query);
+        return await DepotService.PageAsync(db.PlatformInvoices.AsNoTracking().Where(i => i.PayerId == ownerId)
+            .OrderByDescending(i => i.PeriodYear).ThenByDescending(i => i.PeriodMonth).ThenBy(i => i.Id)
+            .Select(i => new FeeInvoiceDto(i.Id, new DateOnly(i.PeriodYear, i.PeriodMonth, 1), i.TotalFeeAmount,
+                i.Status == "PENDING" ? "UNPAID" : i.Status, i.PaymentProofUrl, i.SubmittedAt)), query);
     }
     public async Task ConfirmInvoiceAsync(Guid ownerId, Guid depotId, Guid id, PaymentProofDto dto)
     {
         await scope.RequireOwnerAsync(ownerId, depotId);
         if (!Uri.TryCreate(dto.PaymentProofUrl, UriKind.Absolute, out var url) || (url.Scheme != "https" && url.Scheme != "http")) throw new ArgumentException("Chứng từ phải là URL HTTP/HTTPS.");
         await using var tx = await db.Database.BeginTransactionAsync();
-        var invoice = await db.PlatformFeeInvoices.FromSqlInterpolated($"SELECT * FROM platform_fee_invoices WHERE id = {id} FOR UPDATE").SingleOrDefaultAsync()
+        var invoice = await db.PlatformInvoices.FromSqlInterpolated($"SELECT * FROM platform_invoices WHERE id = {id} FOR UPDATE").SingleOrDefaultAsync()
             ?? throw new KeyNotFoundException("Không tìm thấy hóa đơn.");
-        if (invoice.OwnerId != ownerId) throw new DepotForbiddenException();
-        if (invoice.Status != "UNPAID")
+        await db.Entry(invoice).ReloadAsync();
+        if (invoice.PayerId != ownerId) throw new DepotForbiddenException();
+        if (invoice.Status != "PENDING")
         {
             if (invoice.PaymentProofUrl == dto.PaymentProofUrl) return;
             throw new DepotConflictException("Hóa đơn đã có chứng từ thanh toán.");

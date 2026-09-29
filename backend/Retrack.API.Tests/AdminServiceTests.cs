@@ -271,6 +271,23 @@ public class AdminServiceTests
     // ── Hóa đơn phí nền tảng ──────────────────────────────────────
 
     [Fact]
+    public async Task Invoice_month_uses_Vietnam_midnight_boundaries()
+    {
+        await using var db = NewDb();
+        var owner = new User { Role = "DEPOT_OWNER" };
+        var pickup = new PickupRequest { Seller = new User { Role = "SELLER" }, TargetDepot = new Depot { Owner = owner } };
+        db.PickupRequests.Add(pickup);
+        await db.SaveChangesAsync();
+        db.PlatformTransactions.AddRange(
+            Tx(new DateTime(2026, 8, 31, 16, 59, 59, DateTimeKind.Utc), 1, pickup.Id),
+            Tx(new DateTime(2026, 8, 31, 17, 0, 0, DateTimeKind.Utc), 10, pickup.Id),
+            Tx(new DateTime(2026, 9, 30, 16, 59, 59, DateTimeKind.Utc), 100, pickup.Id),
+            Tx(new DateTime(2026, 9, 30, 17, 0, 0, DateTimeKind.Utc), 1000, pickup.Id));
+        await db.SaveChangesAsync();
+        Assert.Equal(110, Assert.Single(await NewService(db).GenerateMonthlyInvoicesAsync(2026, 9, Guid.NewGuid())).TotalFeeAmount);
+    }
+
+    [Fact]
     public async Task GenerateMonthlyInvoicesAggregatesPerDepotOwnerAndSkipsExistingPeriod()
     {
         await using var db = NewDb();
