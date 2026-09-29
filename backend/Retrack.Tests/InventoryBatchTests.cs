@@ -282,7 +282,7 @@ public sealed class InventoryBatchTests : IAsyncLifetime
     }
     [Fact] public async Task Staff_account_membership_validation_and_disable_persist()
     {
-        await using var db = Open(); var service = new StaffService(db, new DepotService(db));
+        await using var db = Open(); var service = new StaffService(new Retrack.API.Repositories.DepotStaffRepository(db), new DepotService(db));
         var input = new CreateStaffDto { Email = $"staff-{Guid.NewGuid()}@test.invalid", FullName = "Employee", Phone = "0901234567", Password = "TestOnly123!", Role = "DEPOT_EMPLOYEE" };
         var staff = await service.CreateAsync(ownerId, depotId, input);
         Assert.Equal(depotId, (await db.DepotStaffs.FindAsync(staff.Id))!.DepotId);

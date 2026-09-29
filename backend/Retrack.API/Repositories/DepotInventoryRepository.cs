@@ -1,16 +1,11 @@
 using Microsoft.EntityFrameworkCore;
 using Retrack.API.Data;
+using Retrack.API.Repositories.Interfaces;
 
 namespace Retrack.API.Repositories;
 
 public record DepotReceivedWeight(string Material, decimal Kg);
 public record DepotAllocatedWeight(string Material, string Status, bool HasLeftDepot, decimal Kg);
-
-public interface IDepotInventoryRepository
-{
-    Task<List<DepotReceivedWeight>> ReceivedAsync(Guid depotId);
-    Task<List<DepotAllocatedWeight>> AllocatedAsync(Guid depotId);
-}
 
 public sealed class DepotInventoryRepository(AppDbContext db) : IDepotInventoryRepository
 {
