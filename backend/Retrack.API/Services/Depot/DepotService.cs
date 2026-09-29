@@ -7,25 +7,24 @@ using Retrack.API.Services.Interfaces;
 
 namespace Retrack.API.Services.Depot;
 
-public sealed partial class DepotService(AppDbContext db) : IDepotService
+public sealed partial class DepotService(AppDbContext db, Retrack.API.Repositories.Interfaces.IDepotOwnerRepository owners) : IDepotService
 {
     public async Task<List<DepotSummaryDto>> GetDepotsAsync(Guid ownerId)
     {
         await RequireActiveOwnerAsync(ownerId);
-        return await db.Depots.AsNoTracking().Where(d => d.OwnerId == ownerId)
-            .OrderBy(d => d.Name).ThenBy(d => d.Id).Select(d => new DepotSummaryDto(d.Id, d.Name)).ToListAsync();
+        return await owners.ListAsync(ownerId);
     }
 
     private async Task RequireActiveOwnerAsync(Guid ownerId)
     {
-        if (!await db.Users.AnyAsync(u => u.Id == ownerId && u.IsActive && u.Role == "DEPOT_OWNER"))
+        if (!await owners.IsActiveOwnerAsync(ownerId))
             throw new DepotForbiddenException();
     }
 
     public async Task RequireOwnerAsync(Guid ownerId, Guid depotId)
     {
         await RequireActiveOwnerAsync(ownerId);
-        if (!await db.Depots.AnyAsync(d => d.Id == depotId && d.OwnerId == ownerId))
+        if (!await owners.OwnsAsync(ownerId, depotId))
             throw new DepotForbiddenException();
     }
 
