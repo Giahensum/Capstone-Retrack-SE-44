@@ -20,7 +20,7 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         if (new NpgsqlConnectionStringBuilder(connection).Database != "Retrack_TV2_test") throw new InvalidOperationException("Test database required");
         return new(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(connection).Options);
     }
-    private static BatchService Batches(AppDbContext db) => new(db, new DepotService(new Retrack.API.Repositories.DepotOwnerRepository(db), new Retrack.API.Repositories.DepotPaymentReadRepository(db)), new InventoryService(new Retrack.API.Repositories.DepotInventoryRepository(db), new DepotService(new Retrack.API.Repositories.DepotOwnerRepository(db), new Retrack.API.Repositories.DepotPaymentReadRepository(db))));
+    private static BatchService Batches(AppDbContext db) => new(new Retrack.API.Repositories.DepotBatchRepository(db), new Retrack.API.Repositories.DepotUnitOfWork(db), new DepotService(new Retrack.API.Repositories.DepotOwnerRepository(db), new Retrack.API.Repositories.DepotPaymentReadRepository(db)), new InventoryService(new Retrack.API.Repositories.DepotInventoryRepository(db), new DepotService(new Retrack.API.Repositories.DepotOwnerRepository(db), new Retrack.API.Repositories.DepotPaymentReadRepository(db))));
     public async Task InitializeAsync()
     {
         await using var db = Open();
