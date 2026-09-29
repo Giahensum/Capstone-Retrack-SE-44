@@ -1,7 +1,6 @@
-using Microsoft.EntityFrameworkCore;
-using Retrack.API.Data;
 using Retrack.API.DTOs.Depot;
 using Retrack.API.Services.Interfaces;
+using Retrack.API.Repositories.Interfaces;
 using Retrack.API.Repositories;
 
 namespace Retrack.API.Services.Depot;
