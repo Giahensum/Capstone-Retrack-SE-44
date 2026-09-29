@@ -432,8 +432,11 @@ namespace Retrack.API.Services
         // ── Platform Invoices ──────────────────────────────────────────
         public async Task<List<PlatformInvoiceDto>> GenerateMonthlyInvoicesAsync(int year, int month, Guid actorId)
         {
-            var periodStart = new DateTime(year, month, 1, 0, 0, 0, DateTimeKind.Utc);
-            var periodEnd = periodStart.AddMonths(1);
+            if (year is < 1900 or > 9998 || month is < 1 or > 12) throw new ArgumentException("Kỳ hóa đơn không hợp lệ.");
+            var localMonth = new DateTime(year, month, 1, 0, 0, 0, DateTimeKind.Utc);
+            var periodStart = localMonth.AddHours(-7);
+            var periodEnd = localMonth.AddMonths(1).AddHours(-7);
+            await using var transaction = _db.Database.IsRelational() ? await _db.Database.BeginTransactionAsync() : null;
 
             var transactions = await _db.PlatformTransactions
                 .Where(t => t.CreatedAt >= periodStart && t.CreatedAt < periodEnd)
@@ -447,8 +450,11 @@ namespace Retrack.API.Services
                 .Select(g => new { PayerId = g.Key, Total = g.Sum(t => t.FeeAmount) });
 
             var created = new List<PlatformInvoiceDto>();
-            foreach (var group in totalsByPayer)
+            foreach (var group in totalsByPayer.OrderBy(g => g.PayerId))
             {
+                // Tuần tự hóa việc phát hành theo người trả phí giữa các yêu cầu đồng thời.
+                if (_db.Database.IsRelational())
+                    await _db.Users.FromSqlInterpolated($"SELECT * FROM users WHERE id = {group.PayerId} FOR UPDATE").LoadAsync();
                 var existing = await _invoiceRepo.GetByPayerAndPeriodAsync(group.PayerId, year, month);
                 if (existing != null) continue; // already invoiced this period
 
@@ -470,6 +476,7 @@ namespace Retrack.API.Services
             }
 
             await LogAsync(actorId, "GENERATE", "PlatformInvoice", null, null, new { year, month, count = created.Count });
+            if (transaction != null) await transaction.CommitAsync();
             return created;
         }
 
@@ -487,14 +494,19 @@ namespace Retrack.API.Services
 
         public async Task<PlatformInvoiceDto> MarkInvoicePaidAsync(Guid id, Guid actorId)
         {
+            await using var transaction = _db.Database.IsRelational() ? await _db.Database.BeginTransactionAsync() : null;
+            if (_db.Database.IsRelational())
+                await _db.PlatformInvoices.FromSqlInterpolated($"SELECT * FROM platform_invoices WHERE id = {id} FOR UPDATE").LoadAsync();
             var invoice = await _invoiceRepo.GetByIdAsync(id)
                 ?? throw new KeyNotFoundException("Không tìm thấy hóa đơn.");
-
+            await _db.Entry(invoice).ReloadAsync();
+            if (invoice.Status == "PAID") return await MapInvoiceAsync(invoice);
             invoice.Status = "PAID";
             invoice.PaidAt = DateTime.UtcNow;
             await _invoiceRepo.UpdateAsync(invoice);
 
             await LogAsync(actorId, "MARK_PAID", "PlatformInvoice", invoice.Id, null, new { invoice.Status, invoice.PaidAt });
+            if (transaction != null) await transaction.CommitAsync();
             return await MapInvoiceAsync(invoice);
         }
 
@@ -518,6 +530,8 @@ namespace Retrack.API.Services
             TotalFeeAmount = i.TotalFeeAmount,
             Status = i.Status,
             PaidAt = i.PaidAt,
+            PaymentProofUrl = i.PaymentProofUrl,
+            SubmittedAt = i.SubmittedAt,
             CreatedAt = i.CreatedAt
         };
 

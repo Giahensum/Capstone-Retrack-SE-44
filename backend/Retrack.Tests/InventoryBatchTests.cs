@@ -45,10 +45,88 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         await db.DepotStaffs.Where(s => s.DepotId == depotId).ExecuteDeleteAsync();
         await db.Users.Where(u => staffUsers.Contains(u.Id)).ExecuteDeleteAsync();
         await db.PlatformFeeInvoices.Where(i => i.OwnerId == ownerId).ExecuteDeleteAsync();
+        await db.PlatformInvoices.Where(i => i.PayerId == ownerId).ExecuteDeleteAsync();
         await db.Depots.Where(d => d.Id == depotId).ExecuteDeleteAsync();
         await db.Users.Where(u => u.Id == ownerId || u.Id == sellerId || u.Id == factoryOwnerId).ExecuteDeleteAsync();
     }
     private static CreateDepotBatchDto Input(decimal kg = 60) => new() { OperationId = Guid.NewGuid(), MaterialType = "PET", WeightKg = kg };
+
+    private sealed class NoNotifications : Retrack.API.Services.Interfaces.INotificationService
+    {
+        public Task SendAsync(Guid userId, string title, string message) => Task.CompletedTask;
+        public Task<IEnumerable<object>> GetByUserIdAsync(Guid userId) => Task.FromResult<IEnumerable<object>>([]);
+        public Task MarkAsReadAsync(Guid notificationId) => Task.CompletedTask;
+    }
+
+    [Fact]
+    public async Task Concurrent_invoice_generation_is_unique_and_uses_Vietnam_period_on_Postgres()
+    {
+        Guid sourceId;
+        await using (var db = Open())
+        {
+            sourceId = await db.PickupRequests.Where(p => p.TargetDepotId == depotId).Select(p => p.Id).SingleAsync();
+            db.PlatformTransactions.Add(new PlatformTransaction { SourceType = "PICKUP_REQUEST", SourceId = sourceId,
+                FeeAmount = 123, CreatedAt = new DateTime(1980, 8, 31, 17, 0, 0, DateTimeKind.Utc) });
+            await db.SaveChangesAsync();
+        }
+        try
+        {
+            var results = await Task.WhenAll(Enumerable.Range(0, 2).Select(async _ => {
+                await using var db = Open();
+                var admin = new Retrack.API.Services.AdminService(new Retrack.API.Repositories.UserRepository(db),
+                    new Retrack.API.Repositories.MarketPriceRepository(db), new Retrack.API.Repositories.AuditLogRepository(db),
+                    new Retrack.API.Repositories.PlatformInvoiceRepository(db), new NoNotifications(), db);
+                return await admin.GenerateMonthlyInvoicesAsync(1980, 9, ownerId);
+            }));
+            Assert.Single(results.SelectMany(x => x), i => i.PayerId == ownerId);
+            await using var verify = Open();
+            var invoice = Assert.Single(await verify.PlatformInvoices.Where(i => i.PayerId == ownerId).ToListAsync());
+            Assert.Equal(123, invoice.TotalFeeAmount);
+        }
+        finally
+        {
+            await using var db = Open();
+            await db.PlatformTransactions.Where(t => t.SourceId == sourceId).ExecuteDeleteAsync();
+            await db.AuditLogs.Where(a => a.UserId == ownerId).ExecuteDeleteAsync();
+        }
+    }
+
+    [Fact]
+    public async Task Depot_reads_admin_invoice_and_submits_proof_for_admin_reconciliation()
+    {
+        await using var db = Open();
+        var invoice = new PlatformInvoice { PayerId = ownerId, PeriodYear = 2026, PeriodMonth = 9, TotalFeeAmount = 5000 };
+        db.PlatformInvoices.Add(invoice);
+        await db.SaveChangesAsync();
+        try
+        {
+            var service = new DepotReportService(db, new DepotService(db), new InventoryService(new Retrack.API.Repositories.DepotInventoryRepository(db), new DepotService(db)));
+            Assert.Equal(invoice.Id, Assert.Single((await service.InvoicesAsync(ownerId, depotId, new())).Items).Id);
+            var proof = new PaymentProofDto { PaymentProofUrl = "https://example.com/local-invoice-test.png" };
+            await service.ConfirmInvoiceAsync(ownerId, depotId, invoice.Id, proof);
+            await service.ConfirmInvoiceAsync(ownerId, depotId, invoice.Id, proof);
+            Assert.Equal("SUBMITTED", (await db.PlatformInvoices.AsNoTracking().SingleAsync(i => i.Id == invoice.Id)).Status);
+            Assert.Equal(5000, (await service.FeeSummaryAsync(ownerId, depotId, new())).SubmittedInvoiceAmount);
+            await Assert.ThrowsAsync<DepotForbiddenException>(() => service.ConfirmInvoiceAsync(sellerId, depotId, invoice.Id, proof));
+            var admin = new Retrack.API.Services.AdminService(new Retrack.API.Repositories.UserRepository(db),
+                new Retrack.API.Repositories.MarketPriceRepository(db), new Retrack.API.Repositories.AuditLogRepository(db),
+                new Retrack.API.Repositories.PlatformInvoiceRepository(db), new Retrack.API.Services.Shared.NotificationService(db), db);
+            var paid = await admin.MarkInvoicePaidAsync(invoice.Id, ownerId);
+            var persistedPaidAt = await db.PlatformInvoices.AsNoTracking().Where(i => i.Id == invoice.Id).Select(i => i.PaidAt).SingleAsync();
+            var repeated = await admin.MarkInvoicePaidAsync(invoice.Id, ownerId);
+            Assert.NotNull(paid.PaidAt);
+            Assert.Equal(persistedPaidAt, repeated.PaidAt);
+            var displayed = Assert.Single((await service.InvoicesAsync(ownerId, depotId, new())).Items);
+            Assert.Equal("PAID", displayed.Status);
+            Assert.Equal(proof.PaymentProofUrl, displayed.PaymentProofUrl);
+            Assert.Equal(0, (await service.FeeSummaryAsync(ownerId, depotId, new())).SubmittedInvoiceAmount);
+        }
+        finally
+        {
+            await db.AuditLogs.Where(a => a.UserId == ownerId).ExecuteDeleteAsync();
+            await db.PlatformInvoices.Where(i => i.Id == invoice.Id).ExecuteDeleteAsync();
+        }
+    }
 
     [Theory]
     [InlineData(false)]
@@ -191,12 +269,12 @@ public sealed class InventoryBatchTests : IAsyncLifetime
     [Fact] public async Task Invoice_confirmation_waits_for_admin_and_is_idempotent()
     {
         await using var db = Open(); var scope = new DepotService(db);
-        var invoice = new PlatformFeeInvoice { OwnerId = ownerId, PeriodStart = new(2026, 8, 1), Amount = 100 };
-        db.PlatformFeeInvoices.Add(invoice); await db.SaveChangesAsync();
+        var invoice = new PlatformInvoice { PayerId = ownerId, PeriodYear = 2026, PeriodMonth = 8, TotalFeeAmount = 100 };
+        db.PlatformInvoices.Add(invoice); await db.SaveChangesAsync();
         var service = new DepotReportService(db, scope, new InventoryService(new Retrack.API.Repositories.DepotInventoryRepository(db), scope));
         await service.ConfirmInvoiceAsync(ownerId, depotId, invoice.Id, new() { PaymentProofUrl = "https://example.com/test.png" });
         await service.ConfirmInvoiceAsync(ownerId, depotId, invoice.Id, new() { PaymentProofUrl = "https://example.com/test.png" });
-        Assert.Equal("SUBMITTED", (await db.PlatformFeeInvoices.FindAsync(invoice.Id))!.Status);
+        Assert.Equal("SUBMITTED", (await db.PlatformInvoices.FindAsync(invoice.Id))!.Status);
         Assert.Equal(100, (await service.FeeSummaryAsync(ownerId, depotId, new())).SubmittedInvoiceAmount);
         Assert.Single((await service.InvoicesAsync(ownerId, depotId, new())).Items);
         await Assert.ThrowsAsync<DepotConflictException>(() => service.ConfirmInvoiceAsync(ownerId, depotId, invoice.Id, new() { PaymentProofUrl = "https://example.com/other.png" }));

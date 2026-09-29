@@ -34,6 +34,12 @@ namespace Retrack.API.Models
         [Column("paid_at")]
         public DateTime? PaidAt { get; set; }
 
+        [Column("payment_proof_url")]
+        public string? PaymentProofUrl { get; set; }
+
+        [Column("submitted_at")]
+        public DateTime? SubmittedAt { get; set; }
+
         [Column("created_at")]
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
