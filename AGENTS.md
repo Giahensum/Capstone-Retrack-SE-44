@@ -56,4 +56,4 @@
 - PostgreSQL tests: đặt `RETRACK_TEST_CONNECTION` tới đúng `Retrack_TV2_test`, rồi `dotnet test backend/Retrack.sln --no-restore`. Tests chỉ dọn dữ liệu fixture của mình và từ chối database khác.
 - Frontend: trong `frontend`, chạy `npm ci`, `npm run lint`, `npm run build`. Lint dùng Oxlint đã khai báo; các file scaffold rỗng hiện có cảnh báo.
 - Luồng tài chính/tồn kho cần thử validation, sai role/owner, retry, race, rollback, persistence. Kiểm thử trình duyệt cần thao tác thật và tải lại; build hoặc HTTP 200 chưa đủ để kết luận E2E.
-- Hồ sơ kiểm chứng và các phụ thuộc hiện tại: `docs/depot-integration.md`.
+- Hồ sơ kiểm chứng và các phụ thuộc hiện tại: `.ai-context/depot-owner/tien-do/depot-integration.md`.

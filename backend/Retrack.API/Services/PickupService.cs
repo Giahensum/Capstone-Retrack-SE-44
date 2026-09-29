@@ -250,6 +250,7 @@ namespace Retrack.API.Services
                 Latitude = r.Latitude,
                 Longitude = r.Longitude,
                 PreferredDatetime = r.PreferredDatetime,
+                RequestImageUrl = r.RequestImageUrl,
                 Status = r.Status,
                 GrossAmount = r.GrossAmount,
                 NetAmount = r.NetAmount,

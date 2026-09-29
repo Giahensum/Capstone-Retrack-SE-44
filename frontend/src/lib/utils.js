@@ -31,6 +31,33 @@ export const BATCH_STATUS_LABEL = {
     TRANSPORT_READY: 'Sẵn sàng vận chuyển',
     COMPLETED: 'Hoàn thành',
 };
+export const ROLE_LABEL = {
+    ADMIN: 'Quản trị viên',
+    SELLER: 'Người bán',
+    DEPOT_OWNER: 'Chủ kho vựa',
+    DEPOT_EMPLOYEE: 'Nhân viên thu gom',
+    DRIVER: 'Tài xế',
+    FACTORY: 'Nhà máy',
+};
+// Khớp 1-1 với enum Retrack.API.Models.Enums.MaterialType ở backend.
+// Bảng giá thị trường lưu đúng các giá trị này, không nhận chuỗi tự do.
+export const MATERIAL_TYPE_LABEL = {
+    PET: 'Nhựa PET',
+    HDPE: 'Nhựa HDPE',
+    PVC: 'Nhựa PVC',
+    PAPER: 'Giấy',
+    CARDBOARD: 'Bìa carton',
+    ALUMINUM: 'Nhôm',
+    IRON: 'Sắt',
+    STEEL: 'Thép',
+    COPPER: 'Đồng',
+    ELECTRONIC_WASTE: 'Rác điện tử',
+    OTHER: 'Khác',
+};
+export const INVOICE_STATUS_LABEL = {
+    PENDING: 'Chưa thanh toán',
+    PAID: 'Đã thanh toán',
+};
 // Format tiền VND
 export function formatCurrency(amount) {
     return new Intl.NumberFormat('vi-VN', {
@@ -66,6 +93,13 @@ export function getStatusColor(status) {
         BLOCKED: 'bg-red-500/20 text-red-400 border-red-500/30',
         IN_TRANSIT: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
         DELIVERED: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+        PAID: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+        ADMIN: 'bg-red-500/20 text-red-400 border-red-500/30',
+        SELLER: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
+        DEPOT_OWNER: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+        DEPOT_EMPLOYEE: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+        DRIVER: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
+        FACTORY: 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30',
     };
     return colors[status] ?? 'bg-slate-500/20 text-slate-400 border-slate-500/30';
 }

@@ -1,4 +1,5 @@
 using System.Text;
+using System.Security.Claims;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
@@ -41,12 +42,18 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         {
             OnTokenValidated = async context =>
             {
-                var id = context.Principal?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-                var role = context.Principal?.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
+                if (!Guid.TryParse(context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier), out var id))
+                {
+                    context.Fail("Invalid identity.");
+                    return;
+                }
                 var db = context.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
-                if (!Guid.TryParse(id, out var userId) || !await db.Users.AsNoTracking()
-                    .AnyAsync(u => u.Id == userId && u.IsActive && u.Role == role))
-                    context.Fail("Tài khoản không còn hoạt động hoặc quyền đã thay đổi.");
+                var user = await db.Users.AsNoTracking().SingleOrDefaultAsync(u => u.Id == id, context.HttpContext.RequestAborted);
+                var role = context.Principal?.FindFirstValue(ClaimTypes.Role);
+                if (user == null || !user.IsActive || user.Role != role ||
+                    ((role is "DEPOT_EMPLOYEE" or "DRIVER") && !await db.DepotStaffs.AnyAsync(
+                        s => s.UserId == id && s.StaffType == role && s.IsActive, context.HttpContext.RequestAborted)))
+                    context.Fail("Account or depot membership is inactive.");
             }
         };
     });
@@ -69,15 +76,26 @@ builder.Services.AddCors(options =>
 // Repositories
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IPickupRequestRepository, PickupRequestRepository>();
+builder.Services.AddScoped<IMarketPriceRepository, MarketPriceRepository>();
+builder.Services.AddScoped<IAuditLogRepository, AuditLogRepository>();
+builder.Services.AddScoped<IPlatformInvoiceRepository, PlatformInvoiceRepository>();
 
-// Services
+// Services - Admin
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IStaffProfileRepository, StaffProfileRepository>();
+builder.Services.AddScoped<Retrack.API.Services.Staff.IStaffProfileService, Retrack.API.Services.Staff.StaffProfileService>();
+builder.Services.AddScoped<Retrack.API.Services.Interfaces.ICloudinaryService, Retrack.API.Services.Shared.CloudinaryService>();
 builder.Services.AddScoped<IPickupService, PickupService>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IDepotService, Retrack.API.Services.Depot.DepotService>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IInventoryService, Retrack.API.Services.Depot.InventoryService>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IBatchService, Retrack.API.Services.Depot.BatchService>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IStaffService, Retrack.API.Services.Depot.StaffService>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IDepotReportService, Retrack.API.Services.Depot.DepotReportService>();
+builder.Services.AddScoped<IAdminService, AdminService>();
+builder.Services.AddScoped<Retrack.API.Services.Interfaces.INotificationService, Retrack.API.Services.Shared.NotificationService>();
+
+
+// Services - Factory
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IFactoryDashboardService, Retrack.API.Services.Factory.FactoryDashboardService>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IFactoryDemandService, Retrack.API.Services.Factory.FactoryDemandService>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IFactoryMarketService, Retrack.API.Services.Factory.FactoryMarketService>();
@@ -137,7 +155,7 @@ if (app.Environment.IsDevelopment())
     });
 }
 
-app.UseHttpsRedirection();
+if (!app.Environment.IsDevelopment()) app.UseHttpsRedirection();
 app.UseCors("AllowFrontend");
 app.UseAuthentication();
 app.UseAuthorization();
@@ -150,6 +168,29 @@ if (app.Environment.IsDevelopment() && builder.Configuration.GetValue<bool>("Dat
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.Migrate();
     await DataSeeder.SeedAsync(db);
+}
+
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    try {
+        var existingCount = await db.Depots.CountAsync(d => d.Name == "Vựa Phế Liệu Bình Thạnh");
+        if (existingCount == 0)
+        {
+            var ownerId = Guid.Parse("00000000-0000-0000-0000-000000000003");
+            db.Depots.AddRange(
+                new Retrack.API.Models.Depot { Id = Guid.Parse("00000000-0000-0000-0000-000000000101"), OwnerId = ownerId, Name = "Vựa Phế Liệu Bình Thạnh", Address = "150 Điện Biên Phủ, Phường 25, Bình Thạnh, TP.HCM", Latitude = 10.8037m, Longitude = 106.7119m, Rating = 4.8m },
+                new Retrack.API.Models.Depot { Id = Guid.Parse("00000000-0000-0000-0000-000000000102"), OwnerId = ownerId, Name = "Kho Thu Mua Phế Liệu Quận 10", Address = "212 Lý Thái Tổ, Phường 1, Quận 10, TP.HCM", Latitude = 10.7675m, Longitude = 106.6781m, Rating = 4.2m },
+                new Retrack.API.Models.Depot { Id = Guid.Parse("00000000-0000-0000-0000-000000000103"), OwnerId = ownerId, Name = "Điểm Thu Gom Tân Bình", Address = "78 Cộng Hòa, Phường 4, Tân Bình, TP.HCM", Latitude = 10.8023m, Longitude = 106.6575m, Rating = 4.5m },
+                new Retrack.API.Models.Depot { Id = Guid.Parse("00000000-0000-0000-0000-000000000104"), OwnerId = ownerId, Name = "Kho Phế Liệu Lớn Gò Vấp", Address = "152 Quang Trung, Phường 10, Gò Vấp, TP.HCM", Latitude = 10.8329m, Longitude = 106.6713m, Rating = 4.9m }
+            );
+            await db.SaveChangesAsync();
+            app.Logger.LogInformation("SEED MORE DEPOTS SUCCESS");
+        }
+    } 
+    catch (Exception ex) { 
+        app.Logger.LogError(ex, "SEED MORE DEPOTS FAILED");
+    }
 }
 
 app.Run();

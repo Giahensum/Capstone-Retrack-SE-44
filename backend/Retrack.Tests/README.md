@@ -22,7 +22,7 @@ gửi chứng từ hóa đơn và chặn vai trò đặc quyền khi đăng ký 
 được tuần tự hóa giữa các lớp, không tắt kiểm thử giao dịch đồng thời.
 **Kết quả lần chạy gần nhất: 46 đạt, 0 lỗi, 0 bỏ qua.**
 
-Bằng chứng trình duyệt/HTTP thật và phần còn thiếu: `docs/depot-integration.md`
+Bằng chứng trình duyệt/HTTP thật và phần còn thiếu: `.ai-context/depot-owner/tien-do/depot-integration.md`
 (tính đường dẫn từ thư mục gốc repository).
 
 Lần chạy hồi quy đầu với hàm thanh toán cũ có 19 ca lỗi và một ca thanh toán thông thường

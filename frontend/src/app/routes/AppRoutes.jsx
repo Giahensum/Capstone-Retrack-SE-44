@@ -26,9 +26,8 @@ import DepotStaffPerformance from '@/features/depot/StaffPerformance';
 import DepotProfile from '@/features/depot/Profile';
 import { DepotProvider } from '@/features/depot/DepotContext';
 // Employee
-const EmployeeDashboard = lazy(() => import('@/features/employee/pages/EmployeeDashboard'));
+const StaffMobilePage = lazy(() => import('@/features/auth/pages/StaffMobilePage'));
 // Driver
-const DriverDashboard = lazy(() => import('@/features/driver/pages/DriverDashboard'));
 // Factory
 const FactoryDashboard = lazy(() => import('@/features/factory/workspace/FactoryApp'));
 // Admin
@@ -45,6 +44,7 @@ export function AppRoutes() {
           <Route path="/" element={<LandingPage />}/>
           <Route path="/login" element={<LoginPage />}/>
           <Route path="/register" element={<RegisterPage />}/>
+          <Route path="/staff-app" element={<StaffMobilePage />}/>
 
           {/* Seller */}
           <Route path="/seller/*" element={<PrivateRoute allowedRoles={[ROLES.SELLER]}>
@@ -69,12 +69,12 @@ export function AppRoutes() {
 
           {/* Depot Employee */}
           <Route path="/employee/*" element={<PrivateRoute allowedRoles={[ROLES.DEPOT_EMPLOYEE]}>
-                <EmployeeDashboard />
+                <StaffMobilePage />
               </PrivateRoute>}/>
 
           {/* Driver */}
           <Route path="/driver/*" element={<PrivateRoute allowedRoles={[ROLES.DRIVER]}>
-                <DriverDashboard />
+                <StaffMobilePage />
               </PrivateRoute>}/>
 
           {/* Factory */}

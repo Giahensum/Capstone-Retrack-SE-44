@@ -30,7 +30,7 @@ namespace Retrack.API.Services
         // ── Email / Password Login ──────────────────────────────────────
         public async Task<AuthResponseDto?> LoginAsync(LoginDto dto)
         {
-            var user = await _userRepo.GetByEmailAsync(dto.Email);
+            var user = await _userRepo.GetByEmailAsync(dto.Email.Trim());
             if (user == null || !BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash))
                 return null;
 
@@ -44,7 +44,7 @@ namespace Retrack.API.Services
         public async Task<AuthResponseDto> RegisterAsync(RegisterDto dto)
         {
             // Chủ kho tạo tài khoản nhân viên; đăng ký công khai không được cấp quyền Admin/nhân viên.
-            var role = dto.Role.Trim().ToUpperInvariant();
+            var role = dto.Role?.Trim().ToUpperInvariant();
             if (role is not ("SELLER" or "DEPOT_OWNER" or "FACTORY"))
                 throw new ArgumentException("Vai trò không được phép tự đăng ký.");
             if (string.IsNullOrWhiteSpace(dto.FullName) || dto.FullName.Length > 255 ||
