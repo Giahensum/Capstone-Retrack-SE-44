@@ -1,10 +1,11 @@
 import { useState } from 'react';
+import ProofUpload from './components/ProofUpload';
 import { useDepotQuery, useDepotMutation, money, date } from './depotApi';
 import { Page, Cards, QueryState, GridTable, Pager, PeriodFilter, Dialog, MutationError, inputClass, buttonClass, cellClass } from './components/DepotUI';
 const labels={UNPAID:'Chưa thanh toán',SUBMITTED:'Chờ đối soát',PAID:'Đã thanh toán'};
 function ConfirmInvoice({invoice,onClose}){
- const [proof,setProof]=useState(''); const save=useDepotMutation('patch',`reports/invoices/${invoice.id}/confirmation`,onClose);
- return <Dialog title="Xác nhận chuyển khoản phí nền tảng" busy={save.isPending} onClose={onClose}><p>Hóa đơn tháng {date(invoice.periodStart)}: {money(invoice.amount)}</p><form className="mt-4 space-y-4" onSubmit={(e)=>{e.preventDefault();save.mutate({body:{paymentProofUrl:proof}});}}><label className="block">Đường dẫn chứng từ<input className={inputClass} required type="url" pattern="https?://.+" value={proof} onChange={(e)=>setProof(e.target.value)}/></label><p>Gửi chứng từ sau khi chuyển khoản. Hóa đơn sẽ chờ Admin đối soát.</p><MutationError mutation={save}/><button disabled={save.isPending} className={buttonClass}>Gửi xác nhận</button></form></Dialog>;
+ const [proof,setProof]=useState(''); const [uploading,setUploading]=useState(false); const save=useDepotMutation('patch',`reports/invoices/${invoice.id}/confirmation`,onClose);
+ return <Dialog title="Xác nhận chuyển khoản phí nền tảng" busy={save.isPending || uploading} onClose={onClose}><p>Hóa đơn tháng {date(invoice.periodStart)}: {money(invoice.amount)}</p><form className="mt-4 space-y-4" onSubmit={(e)=>{e.preventDefault();if (!uploading && !save.isPending) save.mutate({body:{paymentProofUrl:proof}});}}><ProofUpload onUploaded={setProof} onBusyChange={setUploading} disabled={save.isPending}/><label className="block">Đường dẫn chứng từ<input className={inputClass} disabled={uploading || save.isPending} required type="url" pattern="https?://.+" value={proof} onChange={(e)=>setProof(e.target.value)}/></label><p>Gửi chứng từ sau khi chuyển khoản. Hóa đơn sẽ chờ Admin đối soát.</p><MutationError mutation={save}/><button disabled={save.isPending || uploading} className={buttonClass}>Gửi xác nhận</button></form></Dialog>;
 }
 export default function PlatformFees(){
  const [period,setPeriod]=useState({}),[tab,setTab]=useState('fees'),[page,setPage]=useState(1),[invoice,setInvoice]=useState(null);
