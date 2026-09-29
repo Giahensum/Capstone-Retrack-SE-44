@@ -89,6 +89,7 @@ builder.Services.AddScoped<IPickupService, PickupService>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IDepotService, Retrack.API.Services.Depot.DepotService>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IInventoryService, Retrack.API.Services.Depot.InventoryService>();
 builder.Services.AddScoped<IDepotInventoryRepository, DepotInventoryRepository>();
+builder.Services.AddScoped<Retrack.API.Services.Interfaces.IDepotProofService, Retrack.API.Services.Depot.DepotProofService>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IBatchService, Retrack.API.Services.Depot.BatchService>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IStaffService, Retrack.API.Services.Depot.StaffService>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IDepotReportService, Retrack.API.Services.Depot.DepotReportService>();

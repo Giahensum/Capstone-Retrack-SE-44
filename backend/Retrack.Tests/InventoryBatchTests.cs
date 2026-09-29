@@ -51,6 +51,47 @@ public sealed class InventoryBatchTests : IAsyncLifetime
     }
     private static CreateDepotBatchDto Input(decimal kg = 60) => new() { OperationId = Guid.NewGuid(), MaterialType = "PET", WeightKg = kg };
 
+    private sealed class ProofImages : Retrack.API.Services.Interfaces.ICloudinaryService
+    {
+        public int Uploads { get; private set; }
+        public Task<string> UploadImageAsync(Stream stream, string name) { Uploads++; return Task.FromResult("https://example.com/proof.png"); }
+        public Task<string> UploadAvatarAsync(Stream stream, string name) => throw new NotSupportedException();
+        public Task<bool> DeleteImageAsync(string id) => throw new NotSupportedException();
+    }
+
+    [Theory]
+    [InlineData("image/svg+xml", false)]
+    [InlineData("image/png", false)]
+    [InlineData("image/png", true)]
+    public async Task Proof_upload_validates_image_bytes_and_owner(string type, bool valid)
+    {
+        await using var db = Open();
+        var images = new ProofImages();
+        var service = new DepotProofService(new DepotService(db), images);
+        byte[] bytes = valid ? [137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 0] : [60, 115, 118, 103, 62];
+        var file = new Microsoft.AspNetCore.Http.FormFile(new MemoryStream(bytes), 0, bytes.Length, "file", "proof.png")
+            { Headers = new Microsoft.AspNetCore.Http.HeaderDictionary(), ContentType = type };
+        await Assert.ThrowsAsync<DepotForbiddenException>(() => service.UploadAsync(sellerId, depotId, file));
+        Assert.Equal(0, images.Uploads);
+        if (valid) Assert.Equal("https://example.com/proof.png", await service.UploadAsync(ownerId, depotId, file));
+        else await Assert.ThrowsAsync<ArgumentException>(() => service.UploadAsync(ownerId, depotId, file));
+        Assert.Equal(valid ? 1 : 0, images.Uploads);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(10485761)]
+    public async Task Proof_upload_rejects_empty_or_oversized_file_before_provider(long length)
+    {
+        await using var db = Open();
+        var images = new ProofImages();
+        var service = new DepotProofService(new DepotService(db), images);
+        var file = new Microsoft.AspNetCore.Http.FormFile(new MemoryStream(), 0, length, "file", "proof.png")
+            { Headers = new Microsoft.AspNetCore.Http.HeaderDictionary(), ContentType = "image/png" };
+        await Assert.ThrowsAsync<ArgumentException>(() => service.UploadAsync(ownerId, depotId, file));
+        Assert.Equal(0, images.Uploads);
+    }
+
     private sealed class NoNotifications : Retrack.API.Services.Interfaces.INotificationService
     {
         public Task SendAsync(Guid userId, string title, string message) => Task.CompletedTask;
