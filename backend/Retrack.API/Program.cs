@@ -92,6 +92,9 @@ builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IDepotBatchReposi
 
 builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IDepotReportRepository, DepotReportRepository>();
 
+builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IDepotPartnershipRepository, DepotPartnershipRepository>();
+builder.Services.AddScoped<Retrack.API.Services.Interfaces.IDepotPartnershipService, Retrack.API.Services.Depot.DepotPartnershipService>();
+
 // Services - Admin
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IStaffProfileRepository, StaffProfileRepository>();
