@@ -1,3 +1,4 @@
+using Retrack.API.DTOs;
 using Retrack.API.DTOs.Depot;
 using Retrack.API.Repositories.Interfaces;
 using Retrack.API.Services.Interfaces;
@@ -13,8 +14,8 @@ public sealed class DepotPartnershipService(IDepotService scope, IDepotPartnersh
         if (depots.Count > 1) throw new ArgumentException("Vui lòng chọn kho bằng depotId.");
         return depots.SingleOrDefault()?.Id ?? throw new KeyNotFoundException("Tài khoản chưa có hồ sơ vựa.");
     }
-    public async Task<List<DepotPartnershipDto>> ListAsync(Guid ownerId, Guid? depotId, CancellationToken ct) =>
-        await repository.ListAsync(await ResolveAsync(ownerId, depotId), ct);
+    public async Task<PagedResult<DepotPartnershipDto>> ListAsync(Guid ownerId, Guid? depotId, DepotQuery query, CancellationToken ct) =>
+        await repository.ListAsync(await ResolveAsync(ownerId, depotId), query, ct);
     public async Task<DepotPartnershipStatusDto> UpdateAsync(Guid ownerId, Guid? depotId, Guid factoryId, string status, CancellationToken ct)
     {
         var selected = await ResolveAsync(ownerId, depotId);

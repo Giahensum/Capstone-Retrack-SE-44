@@ -3,17 +3,18 @@ import { useDepotQuery, useDepotMutation, number, money, date } from './depotApi
 import { Page, QueryState, GridTable, Pager, MutationError, inputClass, buttonClass, cellClass } from './components/DepotUI';
 const labels={APPROVED:'Đã hợp tác',PENDING:'Chờ duyệt',BLOCKED:'Đã chặn'};
 function PartnershipRequests() {
-  const query = useDepotQuery('partnerships');
+  const [page, setPage] = useState(1);
+  const query = useDepotQuery('partnerships', { page });
   const update = useDepotMutation('put', (id) => `partnerships/${id}/status`);
   return <><MutationError mutation={update} /><QueryState query={query}>
-    <GridTable headers={['Nhà máy', 'Liên hệ', 'Ngày gửi', 'Trạng thái', 'Thao tác']} empty={!query.data?.length}>
-      {query.data?.map((p) => <tr key={p.id}><td className={cellClass}>{p.factoryName}</td><td className={cellClass}>{p.contactPhone}</td>
+    <GridTable headers={['Nhà máy', 'Liên hệ', 'Ngày gửi', 'Trạng thái', 'Thao tác']} empty={!query.data?.items.length}>
+      {query.data?.items.map((p) => <tr key={p.id}><td className={cellClass}>{p.factoryName}</td><td className={cellClass}>{p.contactPhone}</td>
         <td className={cellClass}>{date(p.createdAt)}</td><td className={cellClass}>{labels[p.status] ?? p.status}</td>
         <td className={cellClass}>{p.status === 'PENDING' && <div className="flex gap-2">
           <button className={buttonClass} disabled={update.isPending} onClick={() => update.mutate({id:p.factoryId,body:{status:'APPROVED'}})}>Duyệt</button>
           <button className={buttonClass} disabled={update.isPending} onClick={() => update.mutate({id:p.factoryId,body:{status:'BLOCKED'}})}>Từ chối</button>
         </div>}</td></tr>)}
-    </GridTable>
+    </GridTable><Pager page={page} setPage={setPage} total={query.data?.totalCount}/>
   </QueryState></>;
 }
 export default function Partners(){
