@@ -12,8 +12,8 @@ namespace Retrack.API.Controllers.Depot;
 public class DepotFactoryPartnershipController(IDepotPartnershipService service) : ControllerBase
 {
     [HttpGet]
-    public async Task<IActionResult> List([FromQuery] Guid? depotId, CancellationToken ct) =>
-        Ok(ApiResponse<List<DepotPartnershipDto>>.Ok(await service.ListAsync(GetUserId(), depotId, ct)));
+    public async Task<IActionResult> List([FromQuery] Guid? depotId, [FromQuery] DepotQuery query, CancellationToken ct) =>
+        Ok(ApiResponse<PagedResult<DepotPartnershipDto>>.Ok(await service.ListAsync(GetUserId(), depotId, query, ct)));
     [HttpPut("{factoryId:guid}/status")]
     public async Task<IActionResult> Update(Guid factoryId, [FromBody] UpdatePartnershipRequest request, [FromQuery] Guid? depotId, CancellationToken ct) =>
         Ok(ApiResponse<DepotPartnershipStatusDto>.Ok(await service.UpdateAsync(GetUserId(), depotId, factoryId, request.Status, ct)));

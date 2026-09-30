@@ -108,7 +108,27 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         Assert.Equal("APPROVED", (await service.UpdateAsync(ownerId, depotId, factory.Id, "APPROVED", default)).Status);
         await using var verify = Open();
         Assert.Equal("APPROVED", (await verify.FactoryDepotPartnerships.SingleAsync(p => p.DepotId == depotId)).Status);
-        Assert.Equal(factory.Id, Assert.Single(await service.ListAsync(ownerId, depotId, default)).FactoryId);
+        Assert.Equal(factory.Id, Assert.Single((await service.ListAsync(ownerId, depotId, new(), default)).Items).FactoryId);
+    }
+
+    [Fact]
+    public async Task Partnership_list_pages_in_database_and_reports_total()
+    {
+        await using var db = Open();
+        db.Users.Add(new User { Id = factoryOwnerId, Email = $"page-{factoryOwnerId}@test.invalid", Role = "FACTORY", FullName = "Factory" });
+        var older = new Factory { OwnerId = factoryOwnerId, Name = "Older", Address = "Test" };
+        var newer = new Factory { OwnerId = factoryOwnerId, Name = "Newer", Address = "Test" };
+        db.Factories.AddRange(older, newer);
+        db.FactoryDepotPartnerships.AddRange(
+            new FactoryDepotPartnership { DepotId = depotId, FactoryId = older.Id, CreatedAt = new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
+            new FactoryDepotPartnership { DepotId = depotId, FactoryId = newer.Id, CreatedAt = new DateTime(2021, 1, 1, 0, 0, 0, DateTimeKind.Utc) });
+        await db.SaveChangesAsync();
+        var repository = new Retrack.API.Repositories.DepotPartnershipRepository(db);
+        var page = await repository.ListAsync(depotId, new() { Page = 2, PageSize = 1 }, default);
+        Assert.Equal(2, page.TotalCount);
+        Assert.Equal(older.Id, Assert.Single(page.Items).FactoryId);
+        Assert.Empty((await repository.ListAsync(depotId, new() { Page = int.MaxValue }, default)).Items);
+        await Assert.ThrowsAsync<ArgumentException>(() => repository.ListAsync(depotId, new() { Page = 0 }, default));
     }
 
     private sealed class NoNotifications : Retrack.API.Services.Interfaces.INotificationService
