@@ -150,4 +150,4 @@ git commit -m "feat(depot): implement dashboard API"
 - Tạo riêng `Retrack_TV2_test`, đặt biến môi trường `RETRACK_TEST_CONNECTION`, chạy `dotnet test backend/Retrack.sln --no-restore`. Tests dùng PostgreSQL thật, tự migrate và chỉ dọn fixture của chúng; không dùng database ứng dụng.
 - Trong `frontend`: `npm run lint` và `npm run build`.
 - Quy tắc chung: [AGENTS.md](AGENTS.md). API, state mapping, bằng chứng và phần chưa hoàn thành: [.ai-context/depot-owner/tien-do/depot-integration.md](.ai-context/depot-owner/tien-do/depot-integration.md).
-- Schema scripts được review ở `db/depot-*.sql`; tests thực ở `backend/Retrack.Tests`, không phải thư mục `tests` scaffold. Nhiều controller role vẫn là scaffold; xem code/DI thực trước khi mở rộng.
+- Schema tổng hợp cho toàn hệ thống ở `db/depot ower/retrack-system.sql` (sinh từ EF migrations, không kèm dữ liệu demo; dùng DB rỗng hoặc có lịch sử migration tương thích). Các SQL cũ ở gốc `db` là script lịch sử của nhóm, không chạy nối tiếp với bản tổng hợp; tests thực ở `backend/Retrack.Tests`, không phải thư mục `tests` scaffold. Nhiều controller role vẫn là scaffold; xem code/DI thực trước khi mở rộng.
