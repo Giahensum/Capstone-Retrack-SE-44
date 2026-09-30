@@ -92,6 +92,25 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         Assert.Equal(0, images.Uploads);
     }
 
+    [Fact]
+    public async Task Partnership_update_preserves_scope_and_persists_status()
+    {
+        await using var db = Open();
+        db.Users.Add(new User { Id = factoryOwnerId, Email = $"partner-{factoryOwnerId}@test.invalid", Role = "FACTORY", FullName = "Factory" });
+        var factory = new Factory { OwnerId = factoryOwnerId, Name = "Partner", Address = "Test" };
+        db.Factories.Add(factory);
+        db.FactoryDepotPartnerships.Add(new FactoryDepotPartnership { DepotId = depotId, FactoryId = factory.Id });
+        await db.SaveChangesAsync();
+        var service = new DepotPartnershipService(new DepotService(new Retrack.API.Repositories.DepotOwnerRepository(db),
+            new Retrack.API.Repositories.DepotPaymentReadRepository(db)), new Retrack.API.Repositories.DepotPartnershipRepository(db));
+        await Assert.ThrowsAsync<DepotForbiddenException>(() => service.UpdateAsync(sellerId, depotId, factory.Id, "APPROVED", default));
+        await Assert.ThrowsAsync<ArgumentException>(() => service.UpdateAsync(ownerId, depotId, factory.Id, "INVALID", default));
+        Assert.Equal("APPROVED", (await service.UpdateAsync(ownerId, depotId, factory.Id, "APPROVED", default)).Status);
+        await using var verify = Open();
+        Assert.Equal("APPROVED", (await verify.FactoryDepotPartnerships.SingleAsync(p => p.DepotId == depotId)).Status);
+        Assert.Equal(factory.Id, Assert.Single(await service.ListAsync(ownerId, depotId, default)).FactoryId);
+    }
+
     private sealed class NoNotifications : Retrack.API.Services.Interfaces.INotificationService
     {
         public Task SendAsync(Guid userId, string title, string message) => Task.CompletedTask;
