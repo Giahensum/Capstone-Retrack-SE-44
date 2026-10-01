@@ -17,16 +17,17 @@ export async function callSeller(phone) {
   }
 }
 
-export async function openSellerMaps(pickup) {
+export async function openSellerMaps(pickup, vehicle = "car") {
   const point = coordinatesOf(pickup);
   const destination = point
     ? `${point.latitude},${point.longitude}`
     : pickup.address;
   if (!destination) return;
   const encoded = encodeURIComponent(destination);
+  const motorcycle = vehicle === "motorbike";
   if (Platform.OS === "android") {
     try {
-      await Linking.openURL(`google.navigation:q=${encoded}&mode=d`);
+      await Linking.openURL(`google.navigation:q=${encoded}&mode=${motorcycle ? "l" : "d"}`);
       return;
     } catch {
       /* Browser fallback. */
@@ -34,7 +35,7 @@ export async function openSellerMaps(pickup) {
   }
   try {
     await Linking.openURL(
-      `https://www.google.com/maps/dir/?api=1&destination=${encoded}&travelmode=driving`,
+      `https://www.google.com/maps/dir/?api=1&destination=${encoded}&travelmode=${motorcycle ? "two-wheeler" : "driving"}`,
     );
   } catch {
     Alert.alert(
