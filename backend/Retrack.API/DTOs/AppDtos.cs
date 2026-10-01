@@ -1,9 +1,13 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace Retrack.API.DTOs
 {
     // ===== AUTH =====
     public class LoginDto
     {
+        [Required, EmailAddress, MaxLength(255)]
         public string Email { get; set; } = string.Empty;
+        [Required, MaxLength(128)]
         public string Password { get; set; } = string.Empty;
     }
 
@@ -54,6 +58,7 @@ namespace Retrack.API.DTOs
         public decimal? Latitude { get; set; }
         public decimal? Longitude { get; set; }
         public DateTime? PreferredDatetime { get; set; }
+        public string? RequestImageUrl { get; set; }
         public string Status { get; set; } = string.Empty;
         public decimal GrossAmount { get; set; }
         public decimal NetAmount { get; set; }
@@ -122,6 +127,13 @@ namespace Retrack.API.DTOs
     {
         public int Rating { get; set; }
         public string? Comment { get; set; }
+    }
+
+    // ===== SELLER PROFILE =====
+    public class UpdateSellerProfileDto
+    {
+        public string? FullName { get; set; }
+        public string? Phone { get; set; }
     }
 
     // ===== GENERIC RESPONSE =====
