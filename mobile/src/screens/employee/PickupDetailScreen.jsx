@@ -1,17 +1,25 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Image, RefreshControl, Text, View } from "react-native";
 import { useIsFocused } from "@react-navigation/native";
 import Screen from "../../components/common/Screen";
 import Button from "../../components/common/Button";
 import PickupMap from "../../components/pickup/PickupMap";
 import ResourceState from "../../components/pickup/ResourceState";
+import RouteOptions from "../../components/pickup/RouteOptions";
 import usePickupResource from "../../hooks/usePickupResource";
 import useAcceptPickup from "../../hooks/useAcceptPickup";
 import useEmployeeLocation from "../../hooks/useEmployeeLocation";
 import { pickupApi } from "../../api/pickupApi";
 import { formatViDatetime } from "../../helpers/format";
 import { coordinatesOf } from "../../helpers/coordinates";
-import { getRoute } from "../../helpers/goongDirections";
+import { getRoutes } from "../../helpers/goongDirections";
+import { selectRoute } from "../../helpers/routeSelection";
+import {
+  ROUTE_MODES,
+  ROUTE_VEHICLES,
+  formatRouteDistance,
+  formatRouteDuration,
+} from "../../helpers/routePreferences";
 import { callSeller, openSellerMaps } from "../../helpers/pickupLinks";
 import { colors, styles as s } from "../../theme";
 
@@ -28,15 +36,29 @@ export default function PickupDetailScreen({ route }) {
   } = usePickupResource(loader);
   const focused = useIsFocused();
   const gps = useEmployeeLocation(focused);
-  const [directions, setDirections] = useState(null);
-  const [routeError, setRouteError] = useState("");
-  const [routeLoading, setRouteLoading] = useState(false);
+  const [vehicle, setVehicle] = useState(null);
+  const [mode, setMode] = useState("balanced");
+  const [routeResult, setRouteResult] = useState(null);
   const [retry, setRetry] = useState(0);
   const destination = coordinatesOf(pickup);
   const destLat = destination?.latitude,
     destLng = destination?.longitude;
   const originLat = gps.location?.latitude,
     originLng = gps.location?.longitude;
+  // Match results to the complete request, so an old car route cannot appear
+  // under the motorcycle label, even before the effect cleans up its request.
+  const requestKey = focused && vehicle && destination && gps.location
+    ? JSON.stringify([id, originLat, originLng, destLat, destLng, vehicle, retry])
+    : null;
+  const currentResult = requestKey && routeResult?.key === requestKey ? routeResult : null;
+  const routeLoading = Boolean(requestKey && !currentResult);
+  const routeError = currentResult?.error;
+  const directions = useMemo(
+    () => selectRoute(currentResult?.routes, mode),
+    [currentResult, mode],
+  );
+  const vehicleLabel = ROUTE_VEHICLES.find((option) => option.value === vehicle)?.label;
+  const modeLabel = ROUTE_MODES.find((option) => option.value === mode)?.label;
   const { acceptingId, confirm } = useAcceptPickup(
     () => {
       setData((previous) => ({
@@ -51,38 +73,25 @@ export default function PickupDetailScreen({ route }) {
     },
   );
   useEffect(() => {
+    if (!requestKey) return;
     const controller = new AbortController();
-    // Clear the previous route before requesting directions for a new origin/destination.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setDirections(null);
-    setRouteError("");
-    setRouteLoading(false);
-    if (
-      !focused ||
-      destLat == null ||
-      destLng == null ||
-      originLat == null ||
-      originLng == null
-    )
-      return () => controller.abort();
-    setRouteLoading(true);
-    getRoute(originLat, originLng, destLat, destLng, controller.signal)
-      .then((result) => {
-        if (!controller.signal.aborted) setDirections(result);
+    getRoutes(originLat, originLng, destLat, destLng, { vehicle, signal: controller.signal })
+      .then((routes) => {
+        if (!controller.signal.aborted)
+          setRouteResult({ key: requestKey, routes, error: "" });
       })
       .catch((e) => {
         if (!controller.signal.aborted)
-          setRouteError(
-            e?.response
+          setRouteResult({
+            key: requestKey,
+            routes: [],
+            error: e?.response
               ? "Dịch vụ chỉ đường chưa phản hồi được. Hãy thử lại hoặc mở Google Maps."
               : e.message || "Không tải được tuyến đường.",
-          );
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setRouteLoading(false);
+          });
       });
     return () => controller.abort();
-  }, [focused, destLat, destLng, originLat, originLng, retry]);
+  }, [requestKey, destLat, destLng, originLat, originLng, vehicle]);
   return (
     <Screen
       refreshControl={
@@ -131,6 +140,12 @@ export default function PickupDetailScreen({ route }) {
             ) : null}
           </View>
           <Text style={[s.title, { fontSize: 21 }]}>Bản đồ và tuyến đường</Text>
+          <RouteOptions
+            vehicle={vehicle}
+            mode={mode}
+            onVehicleChange={setVehicle}
+            onModeChange={setMode}
+          />
           {destination ? (
             <PickupMap
               pickups={[pickup]}
@@ -165,20 +180,32 @@ export default function PickupDetailScreen({ route }) {
           ) : null}
           {directions ? (
             <View style={s.card}>
-              <Text style={s.text}>Khoảng cách: {directions.distanceText}</Text>
+              <Text style={[s.label, { color: colors.primary }]}>
+                {vehicleLabel} · {modeLabel}
+              </Text>
+              <Text style={s.text}>Khoảng cách: {formatRouteDistance(directions.distanceMeters)}</Text>
               <Text style={s.text}>
-                Thời gian ước tính: {directions.durationText}
+                Thời gian ước tính: {formatRouteDuration(directions.durationSeconds)}
               </Text>
               <Text style={s.muted}>
-                Tuyến ô tô theo đường phố từ Goong; cập nhật vị trí để tính lại.
+                {currentResult.routes.length === 1
+                  ? "Goong trả về 1 tuyến hợp lệ; các ưu tiên đang dùng chung tuyến này."
+                  : `Đã so sánh ${currentResult.routes.length} tuyến Goong trả về theo ưu tiên của bạn.`}
+              </Text>
+              <Text style={s.muted}>
+                Thời gian mang tính ước tính, chưa xác nhận tình trạng kẹt xe hiện tại.
               </Text>
             </View>
           ) : null}
           <Button
             title="Mở trên Google Maps"
             variant="secondary"
-            onPress={() => openSellerMaps(pickup)}
+            disabled={!vehicle}
+            onPress={() => openSellerMaps(pickup, vehicle)}
           />
+          <Text style={s.muted}>
+            Google Maps sẽ tự tính tuyến cho phương tiện đã chọn; tuyến có thể khác đề xuất ở đây.
+          </Text>
           {!pickup.isAcceptedByMe && pickup.status === "PENDING" ? (
             <Button
               title="Nhận đơn này"

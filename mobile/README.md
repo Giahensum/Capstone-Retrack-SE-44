@@ -1,5 +1,7 @@
 # ReTrack Nhân sự
 
+Chọn tuyến **Cân bằng / Ít km nhất / Nhanh nhất dự kiến** và phương tiện **Ô tô / Xe máy**: xem [hướng dẫn cập nhật app và kiểm thử tuyến đường trên điện thoại thật](./ROUTING_TEST_GUIDE.md). Bản cập nhật JavaScript này dùng app ReTrack đã cài cùng Metro, không cần build lại APK.
+
 Test trên điện thoại thật: [Sửa kết nối Expo CLI và bản đồ Google Maps trống](../docs/ANDROID_REAL_DEVICE_TROUBLESHOOTING.md). Sau khi đổi key Maps, chạy `npm run android:prepare` rồi build/cài lại APK.
 
 Nhánh `feature/emp-pickup-pool`: xem [hướng dẫn Dashboard, đơn chờ, nhận đơn và bản đồ](../docs/EMP_PICKUP_POOL_GUIDE.md). Employee hiện có 4 tab **Trang chủ · Đơn chờ · Lịch sử · Cá nhân**; cần cấu hình key Google Maps/Goong và build lại Android sau khi cài dependency mới.
