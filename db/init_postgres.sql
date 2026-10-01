@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS users (
     role            VARCHAR(50)  NOT NULL,   -- SELLER, DEPOT_OWNER, DEPOT_EMPLOYEE, DRIVER, FACTORY, ADMIN
     full_name       VARCHAR(255) NOT NULL,
     phone           VARCHAR(20)  NOT NULL,
+    avatar_url      VARCHAR(2048),
     is_active       BOOLEAN      DEFAULT TRUE,
     created_at      TIMESTAMPTZ  DEFAULT NOW(),
     updated_at      TIMESTAMPTZ  DEFAULT NOW()
