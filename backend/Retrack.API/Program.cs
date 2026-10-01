@@ -149,12 +149,14 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
-// ===== AUTO MIGRATE & SEED (dev only) =====
+// ===== DB-FIRST: schema do db/init_postgres.sql tạo sẵn, app KHÔNG tự migrate =====
+// Trước khi chạy: `psql -U postgres -f db/init_postgres.sql` để tạo schema (chỉ cần 1 lần,
+// script dùng CREATE TABLE IF NOT EXISTS nên chạy lại nhiều lần vẫn an toàn).
+// Nhánh này chỉ seed dữ liệu mẫu (dev), không còn gọi db.Database.Migrate().
 if (app.Environment.IsDevelopment())
 {
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    db.Database.Migrate();
     await DataSeeder.SeedAsync(db);
 }
 
