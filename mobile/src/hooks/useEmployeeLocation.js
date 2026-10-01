@@ -24,22 +24,38 @@ export default function useEmployeeLocation(enabled = true) {
           "Hãy bật dịch vụ vị trí/GPS trên thiết bị rồi thử lại.",
         );
       if (request !== generation.current) return;
-      const position = await Promise.race([
-        Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Balanced,
-        }),
-        new Promise((_, reject) => {
-          timer = setTimeout(
-            () =>
-              reject(
-                new Error(
-                  "Chưa lấy được vị trí GPS. Vui lòng kiểm tra dịch vụ vị trí và thử lại.",
-                ),
-              ),
-            15000,
-          );
-        }),
-      ]);
+      // A cold location provider may not have a fix on the first request.
+      // Retry once automatically; each attempt is bounded and stale results
+      // cannot update a screen that has blurred or started another request.
+      let position;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        if (request !== generation.current) return;
+        try {
+          position = await Promise.race([
+            Location.getCurrentPositionAsync({
+              accuracy: Location.Accuracy.Balanced,
+            }),
+            new Promise((_, reject) => {
+              timer = setTimeout(
+                () =>
+                  reject(
+                    new Error(
+                      "Chưa lấy được vị trí GPS. Vui lòng kiểm tra dịch vụ vị trí và thử lại.",
+                    ),
+                  ),
+                20000,
+              );
+            }),
+          ]);
+          break;
+        } catch (cause) {
+          if (request !== generation.current) return;
+          if (attempt === 1) throw cause;
+        } finally {
+          clearTimeout(timer);
+        }
+      }
+      if (!position) return;
       if (request === generation.current) setLocation(position.coords);
     } catch (e) {
       if (request === generation.current)

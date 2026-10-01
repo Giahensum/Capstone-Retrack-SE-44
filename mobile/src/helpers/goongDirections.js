@@ -1,13 +1,20 @@
 import axios from "axios";
-import { coordinatesOf, decodePolyline } from "./coordinates";
+import { coordinatesOf, decodePolyline } from "./coordinates.js";
+import { normalizeRoutes } from "./routeSelection.js";
 
-export async function getRoute(
+// The official maps.goong.io motorcycle option uses the legacy Direction API's
+// "bike" profile. "motorbike" is our UI value, not a Goong API parameter.
+const GOONG_VEHICLES = { car: "car", motorbike: "bike" };
+
+export async function getRoutes(
   originLat,
   originLng,
   destLat,
   destLng,
-  signal = undefined,
+  { vehicle = "car", signal = undefined } = {},
 ) {
+  if (!Object.hasOwn(GOONG_VEHICLES, vehicle))
+    throw new Error("Phương tiện chỉ đường không hợp lệ.");
   const key = process.env.EXPO_PUBLIC_GOONG_API_KEY?.trim();
   if (!key || key.startsWith("your_"))
     throw new Error(
@@ -24,20 +31,18 @@ export async function getRoute(
     params: {
       origin: `${originLat},${originLng}`,
       destination: `${destLat},${destLng}`,
-      vehicle: "car",
+      vehicle: GOONG_VEHICLES[vehicle],
+      alternatives: true,
       api_key: key,
     },
     timeout: 15000,
     signal,
   });
-  const route = data.routes?.[0];
-  const leg = route?.legs?.[0];
-  if (!leg || !route?.overview_polyline?.points)
+  const routes = normalizeRoutes(data?.routes);
+  if (!routes.length)
     throw new Error("Không tìm được tuyến đường. Hãy thử Google Maps.");
-  return {
-    distanceText: leg.distance?.text || "—",
-    durationText: leg.duration?.text || "—",
-    polylineEncoded: route.overview_polyline.points,
-    coordinates: decodePolyline(route.overview_polyline.points),
-  };
+  return routes.map((route) => ({
+    ...route,
+    coordinates: decodePolyline(route.polylineEncoded),
+  }));
 }
