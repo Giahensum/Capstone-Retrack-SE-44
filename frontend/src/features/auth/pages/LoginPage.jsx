@@ -32,6 +32,10 @@ export default function LoginPage() {
     const [form, setForm] = useState({ email: '', password: '' });
     // ── Helpers ──────────────────────────────────────────
     const handleSuccess = (data) => {
+        if (data.role === 'DEPOT_EMPLOYEE' || data.role === 'DRIVER') {
+            navigate('/staff-app');
+            return;
+        }
         login(data.token, {
             userId: data.userId,
             email: data.email,
