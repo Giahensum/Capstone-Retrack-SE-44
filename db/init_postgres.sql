@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS users (
     role            VARCHAR(50)  NOT NULL,   -- SELLER, DEPOT_OWNER, DEPOT_EMPLOYEE, DRIVER, FACTORY, ADMIN
     full_name       VARCHAR(255) NOT NULL,
     phone           VARCHAR(20)  NOT NULL,
+    avatar_url      VARCHAR(2048),
     is_active       BOOLEAN      DEFAULT TRUE,
     created_at      TIMESTAMPTZ  DEFAULT NOW(),
     updated_at      TIMESTAMPTZ  DEFAULT NOW()
@@ -269,6 +270,45 @@ CREATE TABLE IF NOT EXISTS platform_transactions (
 );
 
 -- ==========================================
+-- MODULE 6: ADMIN - AUDIT LOG, HÓA ĐƠN PHÍ, THÔNG BÁO
+-- ==========================================
+
+-- Nhật ký hành động của Admin trên hệ thống (tạo/sửa/xóa user, giá tham khảo, cấu hình phí, hóa đơn...)
+CREATE TABLE IF NOT EXISTS audit_logs (
+    id          UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id     UUID         REFERENCES users(id) ON DELETE SET NULL,  -- NULL nếu user bị xóa, log vẫn giữ lại
+    action      VARCHAR(100) NOT NULL,   -- CREATE, UPDATE, DELETE, ACTIVATE, DEACTIVATE, MARK_PAID, GENERATE...
+    entity_name VARCHAR(100) NOT NULL,   -- User, MarketPrice, SystemConfig, PlatformInvoice...
+    entity_id   UUID,
+    old_data    TEXT,   -- JSON snapshot trước khi đổi
+    new_data    TEXT,   -- JSON snapshot sau khi đổi
+    created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+-- Thông báo trong hệ thống (ví dụ: nhắc thanh toán hóa đơn phí nền tảng)
+CREATE TABLE IF NOT EXISTS notifications (
+    id          UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id     UUID         NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    title       VARCHAR(255) NOT NULL,
+    message     TEXT,
+    is_read     BOOLEAN      NOT NULL DEFAULT FALSE,
+    created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+-- Hóa đơn phí nền tảng hàng tháng, gộp theo từng Depot Owner / Factory có phát sinh giao dịch
+CREATE TABLE IF NOT EXISTS platform_invoices (
+    id               UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
+    payer_id         UUID         NOT NULL REFERENCES users(id),
+    period_year      INT          NOT NULL,
+    period_month     INT          NOT NULL,
+    total_fee_amount DECIMAL(18, 2) NOT NULL,
+    status           VARCHAR(20)  NOT NULL DEFAULT 'PENDING',  -- PENDING, PAID
+    paid_at          TIMESTAMPTZ,
+    created_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_platform_invoice_period UNIQUE (payer_id, period_year, period_month)
+);
+
+-- ==========================================
 -- FUNCTIONS & TRIGGERS (updated_at tự động)
 -- ==========================================
 
@@ -323,3 +363,8 @@ CREATE INDEX IF NOT EXISTS idx_ib_depot        ON inventory_batches(depot_id);
 CREATE INDEX IF NOT EXISTS idx_ib_status       ON inventory_batches(status);
 CREATE INDEX IF NOT EXISTS idx_tj_driver       ON transport_jobs(driver_id);
 CREATE INDEX IF NOT EXISTS idx_pt_source       ON platform_transactions(source_type, source_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_user     ON audit_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_entity   ON audit_logs(entity_name);
+CREATE INDEX IF NOT EXISTS idx_notifications_user  ON notifications(user_id);
+CREATE INDEX IF NOT EXISTS idx_pi_payer            ON platform_invoices(payer_id);
+CREATE INDEX IF NOT EXISTS idx_pi_status           ON platform_invoices(status);
