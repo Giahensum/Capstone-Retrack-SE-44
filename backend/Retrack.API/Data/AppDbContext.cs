@@ -33,7 +33,8 @@ namespace Retrack.API.Data
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
-            modelBuilder.HasSequence<long>("depot_batch_number");
+            if (Database.ProviderName == "Npgsql.EntityFrameworkCore.PostgreSQL")
+                modelBuilder.HasSequence<long>("depot_batch_number");
             modelBuilder.Entity<InventoryBatch>().HasIndex(b => b.Code).IsUnique();
 
             // User - unique email

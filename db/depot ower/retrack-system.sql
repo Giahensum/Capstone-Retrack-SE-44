@@ -1,534 +1,410 @@
-﻿CREATE TABLE IF NOT EXISTS "__EFMigrationsHistory" (
-    "MigrationId" character varying(150) NOT NULL,
-    "ProductVersion" character varying(32) NOT NULL,
-    CONSTRAINT "PK___EFMigrationsHistory" PRIMARY KEY ("MigrationId")
+-- ============================================================
+-- ReTrack — schema PostgreSQL đầy đủ cho toàn hệ thống
+-- Nguồn cấu trúc cơ sở dữ liệu duy nhất (DB-first)
+-- Chạy: psql -U postgres -d <database> -f "db/depot ower/retrack-system.sql"
+-- ============================================================
+
+-- Tạo database (chạy riêng nếu cần)
+-- CREATE DATABASE "ReTrack_DB";
+-- \c "ReTrack_DB";
+
+-- Enable UUID extension
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- ==========================================
+-- MODULE 1: HỆ THỐNG & TÀI KHOẢN (ROLES)
+-- ==========================================
+
+-- Bảng cấu hình hệ thống (Admin quản lý phí)
+CREATE TABLE IF NOT EXISTS system_configs (
+    config_key      VARCHAR(50)  PRIMARY KEY,
+    config_value    TEXT         NOT NULL,
+    description     TEXT,
+    updated_at      TIMESTAMPTZ  DEFAULT NOW()
 );
 
-START TRANSACTION;
+-- Insert mặc định
+INSERT INTO system_configs (config_key, config_value, description)
+VALUES ('PLATFORM_FEE_PERCENTAGE', '5.00', 'Phí nền tảng mặc định 5%')
+ON CONFLICT (config_key) DO NOTHING;
+UPDATE system_configs SET config_value = '5.00', description = 'Phí nền tảng mặc định 5%'
+WHERE config_key = 'PLATFORM_FEE_PERCENTAGE' AND config_value = '1.00';
 
-CREATE TABLE platform_transactions (
-    id uuid NOT NULL,
-    source_type character varying(50) NOT NULL,
-    source_id uuid NOT NULL,
-    fee_amount numeric NOT NULL,
-    description text,
-    created_at timestamp with time zone NOT NULL,
-    CONSTRAINT "PK_platform_transactions" PRIMARY KEY (id)
+-- Bảng người dùng
+CREATE TABLE IF NOT EXISTS users (
+    id              UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
+    email           VARCHAR(255) UNIQUE NOT NULL,
+    password_hash   TEXT         NOT NULL,
+    role            VARCHAR(50)  NOT NULL,   -- SELLER, DEPOT_OWNER, DEPOT_EMPLOYEE, DRIVER, FACTORY, ADMIN
+    full_name       VARCHAR(255) NOT NULL,
+    phone           VARCHAR(20)  NOT NULL,
+    avatar_url      VARCHAR(2048),
+    is_active       BOOLEAN      DEFAULT TRUE,
+    created_at      TIMESTAMPTZ  DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ  DEFAULT NOW()
 );
 
-CREATE TABLE system_configs (
-    config_key character varying(50) NOT NULL,
-    config_value text NOT NULL,
-    description text,
-    updated_at timestamp with time zone NOT NULL,
-    CONSTRAINT "PK_system_configs" PRIMARY KEY (config_key)
+-- Bảng kho/depot
+CREATE TABLE IF NOT EXISTS depots (
+    id              UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
+    owner_id        UUID         NOT NULL REFERENCES users(id),
+    name            VARCHAR(255) NOT NULL,
+    address         TEXT         NOT NULL,
+    latitude        DECIMAL(10, 7),
+    longitude       DECIMAL(10, 7),
+    rating          DECIMAL(3, 2) DEFAULT 0.0,
+    contact_phone   VARCHAR(20),
+    tax_code        TEXT,
+    description     TEXT,
+    created_at      TIMESTAMPTZ  DEFAULT NOW()
+);
+ALTER TABLE depots ADD COLUMN IF NOT EXISTS contact_phone VARCHAR(20);
+ALTER TABLE depots ADD COLUMN IF NOT EXISTS tax_code TEXT;
+ALTER TABLE depots ADD COLUMN IF NOT EXISTS description TEXT;
+
+-- Bảng nhà máy
+CREATE TABLE IF NOT EXISTS factories (
+    id              UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
+    owner_id        UUID         NOT NULL REFERENCES users(id),
+    name            VARCHAR(255) NOT NULL,
+    address         TEXT         NOT NULL,
+    latitude        DECIMAL(10, 7),
+    longitude       DECIMAL(10, 7),
+    rating          DECIMAL(3, 2) DEFAULT 0.0,
+    tax_code        VARCHAR(50),
+    industrial_zone VARCHAR(200),
+    contact_phone   VARCHAR(30),
+    business_license_url TEXT,
+    environmental_license_url TEXT,
+    capacity_kg_per_month DECIMAL(18, 2) NOT NULL DEFAULT 0,
+    minimum_purity_percent DECIMAL(5, 2) NOT NULL DEFAULT 0,
+    accepted_materials TEXT NOT NULL DEFAULT 'PET',
+    created_at      TIMESTAMPTZ  DEFAULT NOW()
 );
 
-CREATE TABLE users (
-    id uuid NOT NULL,
-    email character varying(255) NOT NULL,
-    password_hash text NOT NULL,
-    role character varying(50) NOT NULL,
-    full_name character varying(255) NOT NULL,
-    phone character varying(20) NOT NULL,
-    is_active boolean NOT NULL,
-    created_at timestamp with time zone NOT NULL,
-    updated_at timestamp with time zone NOT NULL,
-    CONSTRAINT "PK_users" PRIMARY KEY (id)
+-- Nhân viên & Tài xế thuộc về 1 Depot
+CREATE TABLE IF NOT EXISTS depot_staffs (
+    id              UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
+    depot_id        UUID         NOT NULL REFERENCES depots(id),
+    user_id         UUID         NOT NULL REFERENCES users(id),
+    staff_type      VARCHAR(50)  NOT NULL,   -- DEPOT_EMPLOYEE, DRIVER
+    is_active       BOOLEAN      DEFAULT TRUE
 );
 
-CREATE TABLE depots (
-    id uuid NOT NULL,
-    owner_id uuid NOT NULL,
-    name character varying(255) NOT NULL,
-    address text NOT NULL,
-    latitude numeric,
-    longitude numeric,
-    rating numeric NOT NULL,
-    created_at timestamp with time zone NOT NULL,
-    CONSTRAINT "PK_depots" PRIMARY KEY (id),
-    CONSTRAINT "FK_depots_users_owner_id" FOREIGN KEY (owner_id) REFERENCES users (id) ON DELETE RESTRICT
+-- ==========================================
+-- MODULE 2: GIAI ĐOẠN 1 - THU GOM PHẾ LIỆU & PHÍ 1%
+-- ==========================================
+
+-- Yêu cầu thu gom của Seller
+CREATE TABLE IF NOT EXISTS pickup_requests (
+    id                       UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
+    seller_id                UUID         NOT NULL REFERENCES users(id),
+    target_depot_id          UUID         REFERENCES depots(id),
+    accepted_collector_id    UUID         REFERENCES users(id),
+    description              TEXT,
+    request_image_url        TEXT,
+    address                  TEXT         NOT NULL,
+    latitude                 DECIMAL(10, 7),
+    longitude                DECIMAL(10, 7),
+    preferred_datetime       TIMESTAMPTZ,
+    checkin_image_url        TEXT,
+    -- Hạch toán tài chính (có phí 1%)
+    gross_amount             DECIMAL(18, 2) DEFAULT 0,
+    platform_fee_percentage  DECIMAL(5, 2)  DEFAULT 0,
+    platform_fee_amount      DECIMAL(18, 2) DEFAULT 0,
+    net_amount               DECIMAL(18, 2) DEFAULT 0,
+    payment_proof_url        TEXT,
+    status                   VARCHAR(50)  NOT NULL DEFAULT 'PENDING',
+    -- PENDING, SCHEDULED, WEIGHED, SELLER_CONFIRMED, AWAITING_PAYMENT, PAYMENT_SENT, DONE
+    created_at               TIMESTAMPTZ  DEFAULT NOW(),
+    updated_at               TIMESTAMPTZ  DEFAULT NOW()
 );
 
-CREATE TABLE factories (
-    id uuid NOT NULL,
-    owner_id uuid NOT NULL,
-    name character varying(255) NOT NULL,
-    address text NOT NULL,
-    latitude numeric,
-    longitude numeric,
-    rating numeric NOT NULL,
-    created_at timestamp with time zone NOT NULL,
-    CONSTRAINT "PK_factories" PRIMARY KEY (id),
-    CONSTRAINT "FK_factories_users_owner_id" FOREIGN KEY (owner_id) REFERENCES users (id) ON DELETE RESTRICT
+-- Chi tiết các loại phế liệu (NV cân và nhập)
+CREATE TABLE IF NOT EXISTS pickup_request_items (
+    id                  UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
+    pickup_request_id   UUID         NOT NULL REFERENCES pickup_requests(id) ON DELETE CASCADE,
+    material_type       VARCHAR(100) NOT NULL,
+    weight_kg           DECIMAL(10, 2) NOT NULL,
+    price_per_kg        DECIMAL(18, 2) NOT NULL,
+    sub_total           DECIMAL(18, 2) NOT NULL
 );
 
-CREATE TABLE depot_staffs (
-    id uuid NOT NULL,
-    depot_id uuid NOT NULL,
-    user_id uuid NOT NULL,
-    staff_type character varying(50) NOT NULL,
-    is_active boolean NOT NULL,
-    CONSTRAINT "PK_depot_staffs" PRIMARY KEY (id),
-    CONSTRAINT "FK_depot_staffs_depots_depot_id" FOREIGN KEY (depot_id) REFERENCES depots (id) ON DELETE CASCADE,
-    CONSTRAINT "FK_depot_staffs_users_user_id" FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+-- Đánh giá Seller dành cho Depot
+CREATE TABLE IF NOT EXISTS seller_depot_reviews (
+    id                  UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
+    pickup_request_id   UUID         NOT NULL REFERENCES pickup_requests(id),
+    depot_id            UUID         NOT NULL REFERENCES depots(id),
+    rating              INT          CHECK (rating >= 1 AND rating <= 5),
+    comment             TEXT,
+    created_at          TIMESTAMPTZ  DEFAULT NOW()
 );
 
-CREATE TABLE pickup_requests (
-    id uuid NOT NULL,
-    seller_id uuid NOT NULL,
-    target_depot_id uuid,
-    accepted_collector_id uuid,
-    description text,
-    request_image_url text,
-    address text NOT NULL,
-    latitude numeric,
-    longitude numeric,
-    preferred_datetime timestamp with time zone,
-    checkin_image_url text,
-    gross_amount numeric NOT NULL,
-    platform_fee_percentage numeric NOT NULL,
-    platform_fee_amount numeric NOT NULL,
-    net_amount numeric NOT NULL,
-    payment_proof_url text,
-    status character varying(50) NOT NULL,
-    created_at timestamp with time zone NOT NULL,
-    updated_at timestamp with time zone NOT NULL,
-    CONSTRAINT "PK_pickup_requests" PRIMARY KEY (id),
-    CONSTRAINT "FK_pickup_requests_depots_target_depot_id" FOREIGN KEY (target_depot_id) REFERENCES depots (id),
-    CONSTRAINT "FK_pickup_requests_users_accepted_collector_id" FOREIGN KEY (accepted_collector_id) REFERENCES users (id) ON DELETE SET NULL,
-    CONSTRAINT "FK_pickup_requests_users_seller_id" FOREIGN KEY (seller_id) REFERENCES users (id) ON DELETE RESTRICT
+-- ==========================================
+-- MODULE 3: DEMAND BOARD & LÔ HÀNG (GIAI ĐOẠN 2)
+-- ==========================================
+
+-- Bảng nhu cầu nhà máy (Demand Board)
+CREATE TABLE IF NOT EXISTS factory_demands (
+    id                  UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
+    factory_id          UUID         NOT NULL REFERENCES factories(id),
+    material_type       VARCHAR(100) NOT NULL,
+    required_weight_kg  DECIMAL(18, 2) NOT NULL,
+    min_price_per_kg    DECIMAL(18, 2),
+    max_price_per_kg    DECIMAL(18, 2),
+    deadline            TIMESTAMPTZ  NOT NULL,
+    is_active           BOOLEAN      DEFAULT TRUE,
+    note                TEXT,
+    created_at          TIMESTAMPTZ  DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ  DEFAULT NOW()
 );
 
-CREATE TABLE factory_demands (
-    id uuid NOT NULL,
-    factory_id uuid NOT NULL,
-    material_type character varying(100) NOT NULL,
-    required_weight_kg numeric NOT NULL,
-    min_price_per_kg numeric,
-    max_price_per_kg numeric,
-    deadline timestamp with time zone NOT NULL,
-    is_active boolean NOT NULL,
-    created_at timestamp with time zone NOT NULL,
-    CONSTRAINT "PK_factory_demands" PRIMARY KEY (id),
-    CONSTRAINT "FK_factory_demands_factories_factory_id" FOREIGN KEY (factory_id) REFERENCES factories (id) ON DELETE CASCADE
+-- Quan hệ đối tác Depot - Factory
+CREATE TABLE IF NOT EXISTS factory_depot_partnerships (
+    id          UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
+    depot_id    UUID        NOT NULL REFERENCES depots(id),
+    factory_id  UUID        NOT NULL REFERENCES factories(id),
+    status      VARCHAR(50) NOT NULL DEFAULT 'PENDING',   -- PENDING, APPROVED, BLOCKED
+    created_at  TIMESTAMPTZ DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ DEFAULT NOW(),
+    blocked_by_depot BOOLEAN NOT NULL DEFAULT FALSE,
+    blocked_by_factory BOOLEAN NOT NULL DEFAULT FALSE,
+    CONSTRAINT uq_factory_depot UNIQUE (depot_id, factory_id)
+);
+ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS blocked_by_depot BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS blocked_by_factory BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- Lô hàng tồn kho
+CREATE TABLE IF NOT EXISTS inventory_batches (
+    id                  UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
+    depot_id            UUID         NOT NULL REFERENCES depots(id),
+    target_factory_id   UUID         REFERENCES factories(id),
+    direct_offer_factory_id UUID     REFERENCES factories(id),
+    material_type       VARCHAR(100) NOT NULL,
+    declared_weight_kg  DECIMAL(18, 2) NOT NULL,
+    description         TEXT,
+    status              VARCHAR(50)  NOT NULL,
+    actual_weight_kg    DECIMAL(18, 2),
+    factory_received_at TIMESTAMPTZ,
+    factory_decided_at  TIMESTAMPTZ,
+    rejection_reason    TEXT,
+    agreed_price_per_kg DECIMAL(18, 2),
+    gross_amount        DECIMAL(18, 2),
+    platform_fee_amount DECIMAL(18, 2),
+    net_amount          DECIMAL(18, 2),
+    payment_reference   VARCHAR(200),
+    settled_at          TIMESTAMPTZ,
+    code                VARCHAR(40),
+    image_urls          TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+    -- MARKETPLACE, PENDING_APPROVAL, TRANSPORT_READY, COMPLETED
+    created_at          TIMESTAMPTZ  DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ  DEFAULT NOW()
+);
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS code VARCHAR(40);
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS image_urls TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];
+CREATE SEQUENCE IF NOT EXISTS depot_batch_number START WITH 1 INCREMENT BY 1 NO MINVALUE NO MAXVALUE NO CYCLE;
+CREATE UNIQUE INDEX IF NOT EXISTS ix_inventory_batches_code ON inventory_batches(code);
+
+-- ==========================================
+-- MODULE 4: VẬN CHUYỂN & QC & QUYẾT TOÁN CÓ PHÍ (GIAI ĐOẠN 3)
+-- ==========================================
+
+-- Công việc vận chuyển
+CREATE TABLE IF NOT EXISTS transport_jobs (
+    id                          UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
+    batch_id                    UUID        NOT NULL UNIQUE REFERENCES inventory_batches(id),
+    driver_id                   UUID        REFERENCES users(id),
+    status                      VARCHAR(50) NOT NULL DEFAULT 'PENDING',  -- PENDING, IN_TRANSIT, DELIVERED
+    checkin_depot_image_url     TEXT,
+    checkout_factory_image_url  TEXT,
+    created_at                  TIMESTAMPTZ DEFAULT NOW(),
+    updated_at                  TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE factory_depot_partnerships (
-    id uuid NOT NULL,
-    depot_id uuid NOT NULL,
-    factory_id uuid NOT NULL,
-    status character varying(50) NOT NULL,
-    created_at timestamp with time zone NOT NULL,
-    updated_at timestamp with time zone NOT NULL,
-    CONSTRAINT "PK_factory_depot_partnerships" PRIMARY KEY (id),
-    CONSTRAINT "FK_factory_depot_partnerships_depots_depot_id" FOREIGN KEY (depot_id) REFERENCES depots (id) ON DELETE CASCADE,
-    CONSTRAINT "FK_factory_depot_partnerships_factories_factory_id" FOREIGN KEY (factory_id) REFERENCES factories (id) ON DELETE CASCADE
+-- Bảng giá tham khảo. Giá trong ứng dụng phải được Admin cập nhật kèm nguồn.
+CREATE TABLE IF NOT EXISTS market_prices (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    material_type   VARCHAR(100) NOT NULL,
+    price_per_kg    DECIMAL(18, 2) NOT NULL CHECK (price_per_kg > 0),
+    effective_date  TIMESTAMPTZ NOT NULL,
+    source          TEXT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE inventory_batches (
-    id uuid NOT NULL,
-    depot_id uuid NOT NULL,
-    target_factory_id uuid,
-    material_type character varying(100) NOT NULL,
-    declared_weight_kg numeric NOT NULL,
-    description text,
-    status character varying(50) NOT NULL,
-    created_at timestamp with time zone NOT NULL,
-    updated_at timestamp with time zone NOT NULL,
-    CONSTRAINT "PK_inventory_batches" PRIMARY KEY (id),
-    CONSTRAINT "FK_inventory_batches_depots_depot_id" FOREIGN KEY (depot_id) REFERENCES depots (id) ON DELETE CASCADE,
-    CONSTRAINT "FK_inventory_batches_factories_target_factory_id" FOREIGN KEY (target_factory_id) REFERENCES factories (id)
+-- Kiểm tra chất lượng tại nhà máy
+CREATE TABLE IF NOT EXISTS batch_quality_checks (
+    id                      UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
+    batch_id                UUID         NOT NULL UNIQUE REFERENCES inventory_batches(id),
+    factory_id              UUID         NOT NULL REFERENCES factories(id),
+    actual_weight_kg        DECIMAL(18, 2) NOT NULL,
+    grade                   VARCHAR(10)  NOT NULL,
+    agreed_price_per_kg     DECIMAL(18, 2) NOT NULL,
+    -- Hạch toán tài chính (có phí 1%)
+    gross_amount            DECIMAL(18, 2) NOT NULL,
+    platform_fee_percentage DECIMAL(5, 2)  DEFAULT 0,
+    platform_fee_amount     DECIMAL(18, 2) DEFAULT 0,
+    net_amount              DECIMAL(18, 2) NOT NULL,
+    payment_proof_url       TEXT,
+    is_accepted             BOOLEAN      NOT NULL,
+    gross_weight_kg         DECIMAL(18, 2),
+    tare_weight_kg          DECIMAL(18, 2),
+    difference_percentage  DECIMAL(8, 2),
+    ticket_number           VARCHAR(100),
+    ticket_image_url        TEXT,
+    purity_percent          DECIMAL(5, 2),
+    moisture_percent        DECIMAL(5, 2),
+    contamination_percent   DECIMAL(5, 2),
+    quality_note            TEXT,
+    resolution              VARCHAR(20),
+    invoice_number          VARCHAR(100),
+    invoice_file_url        TEXT,
+    invoice_status          VARCHAR(30),
+    created_at              TIMESTAMPTZ  DEFAULT NOW()
 );
 
-CREATE TABLE pickup_request_items (
-    id uuid NOT NULL,
-    pickup_request_id uuid NOT NULL,
-    material_type character varying(100) NOT NULL,
-    weight_kg numeric NOT NULL,
-    price_per_kg numeric NOT NULL,
-    sub_total numeric NOT NULL,
-    CONSTRAINT "PK_pickup_request_items" PRIMARY KEY (id),
-    CONSTRAINT "FK_pickup_request_items_pickup_requests_pickup_request_id" FOREIGN KEY (pickup_request_id) REFERENCES pickup_requests (id) ON DELETE CASCADE
+-- Factory đánh giá Depot
+CREATE TABLE IF NOT EXISTS factory_depot_reviews (
+    id          UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
+    batch_id    UUID        NOT NULL REFERENCES inventory_batches(id),
+    factory_id  UUID        NOT NULL REFERENCES factories(id),
+    depot_id    UUID        NOT NULL REFERENCES depots(id),
+    rating      INT         CHECK (rating >= 1 AND rating <= 5),
+    comment     TEXT,
+    created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE seller_depot_reviews (
-    id uuid NOT NULL,
-    pickup_request_id uuid NOT NULL,
-    depot_id uuid NOT NULL,
-    rating integer,
-    comment text,
-    created_at timestamp with time zone NOT NULL,
-    CONSTRAINT "PK_seller_depot_reviews" PRIMARY KEY (id),
-    CONSTRAINT "FK_seller_depot_reviews_depots_depot_id" FOREIGN KEY (depot_id) REFERENCES depots (id) ON DELETE CASCADE,
-    CONSTRAINT "FK_seller_depot_reviews_pickup_requests_pickup_request_id" FOREIGN KEY (pickup_request_id) REFERENCES pickup_requests (id) ON DELETE CASCADE
+-- ==========================================
+-- MODULE 5: REVENUE - DOANH THU NỀN TẢNG
+-- ==========================================
+
+-- Bảng lưu vết doanh thu của nền tảng để hiển thị cho Admin
+CREATE TABLE IF NOT EXISTS platform_transactions (
+    id          UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
+    source_type VARCHAR(50) NOT NULL,  -- 'PICKUP_REQUEST' hoặc 'BATCH_ORDER'
+    source_id   UUID        NOT NULL,  -- ID của pickup_requests hoặc inventory_batches
+    fee_amount  DECIMAL(18, 2) NOT NULL,
+    description TEXT,
+    created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE batch_quality_checks (
-    id uuid NOT NULL,
-    batch_id uuid NOT NULL,
-    factory_id uuid NOT NULL,
-    actual_weight_kg numeric NOT NULL,
-    grade character varying(10) NOT NULL,
-    agreed_price_per_kg numeric NOT NULL,
-    gross_amount numeric NOT NULL,
-    platform_fee_percentage numeric NOT NULL,
-    platform_fee_amount numeric NOT NULL,
-    net_amount numeric NOT NULL,
-    payment_proof_url text,
-    is_accepted boolean NOT NULL,
-    created_at timestamp with time zone NOT NULL,
-    CONSTRAINT "PK_batch_quality_checks" PRIMARY KEY (id),
-    CONSTRAINT "FK_batch_quality_checks_factories_factory_id" FOREIGN KEY (factory_id) REFERENCES factories (id) ON DELETE CASCADE,
-    CONSTRAINT "FK_batch_quality_checks_inventory_batches_batch_id" FOREIGN KEY (batch_id) REFERENCES inventory_batches (id) ON DELETE CASCADE
+-- ==========================================
+-- MODULE 6: ADMIN - AUDIT LOG, HÓA ĐƠN PHÍ, THÔNG BÁO
+-- ==========================================
+
+-- Nhật ký hành động của Admin trên hệ thống (tạo/sửa/xóa user, giá tham khảo, cấu hình phí, hóa đơn...)
+CREATE TABLE IF NOT EXISTS audit_logs (
+    id          UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id     UUID         REFERENCES users(id) ON DELETE SET NULL,  -- NULL nếu user bị xóa, log vẫn giữ lại
+    action      VARCHAR(100) NOT NULL,   -- CREATE, UPDATE, DELETE, ACTIVATE, DEACTIVATE, MARK_PAID, GENERATE...
+    entity_name VARCHAR(100) NOT NULL,   -- User, MarketPrice, SystemConfig, PlatformInvoice...
+    entity_id   UUID,
+    old_data    TEXT,   -- JSON snapshot trước khi đổi
+    new_data    TEXT,   -- JSON snapshot sau khi đổi
+    created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE factory_depot_reviews (
-    id uuid NOT NULL,
-    batch_id uuid NOT NULL,
-    factory_id uuid NOT NULL,
-    depot_id uuid NOT NULL,
-    rating integer,
-    comment text,
-    created_at timestamp with time zone NOT NULL,
-    CONSTRAINT "PK_factory_depot_reviews" PRIMARY KEY (id),
-    CONSTRAINT "FK_factory_depot_reviews_depots_depot_id" FOREIGN KEY (depot_id) REFERENCES depots (id) ON DELETE CASCADE,
-    CONSTRAINT "FK_factory_depot_reviews_factories_factory_id" FOREIGN KEY (factory_id) REFERENCES factories (id) ON DELETE CASCADE,
-    CONSTRAINT "FK_factory_depot_reviews_inventory_batches_batch_id" FOREIGN KEY (batch_id) REFERENCES inventory_batches (id) ON DELETE CASCADE
+-- Thông báo trong hệ thống (ví dụ: nhắc thanh toán hóa đơn phí nền tảng)
+CREATE TABLE IF NOT EXISTS notifications (
+    id          UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id     UUID         NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    title       VARCHAR(255) NOT NULL,
+    message     TEXT,
+    is_read     BOOLEAN      NOT NULL DEFAULT FALSE,
+    created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE transport_jobs (
-    id uuid NOT NULL,
-    batch_id uuid NOT NULL,
-    driver_id uuid,
-    status character varying(50) NOT NULL,
-    checkin_depot_image_url text,
-    checkout_factory_image_url text,
-    created_at timestamp with time zone NOT NULL,
-    updated_at timestamp with time zone NOT NULL,
-    CONSTRAINT "PK_transport_jobs" PRIMARY KEY (id),
-    CONSTRAINT "FK_transport_jobs_inventory_batches_batch_id" FOREIGN KEY (batch_id) REFERENCES inventory_batches (id) ON DELETE CASCADE,
-    CONSTRAINT "FK_transport_jobs_users_driver_id" FOREIGN KEY (driver_id) REFERENCES users (id)
+-- Hóa đơn phí nền tảng hàng tháng, gộp theo từng Depot Owner / Factory có phát sinh giao dịch
+CREATE TABLE IF NOT EXISTS platform_invoices (
+    id               UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
+    payer_id         UUID         NOT NULL REFERENCES users(id),
+    period_year      INT          NOT NULL,
+    period_month     INT          NOT NULL,
+    total_fee_amount DECIMAL(18, 2) NOT NULL,
+    status           VARCHAR(20)  NOT NULL DEFAULT 'PENDING',  -- PENDING, PAID
+    paid_at          TIMESTAMPTZ,
+    payment_proof_url TEXT,
+    submitted_at     TIMESTAMPTZ,
+    created_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_platform_invoice_period UNIQUE (payer_id, period_year, period_month)
 );
+ALTER TABLE platform_invoices ADD COLUMN IF NOT EXISTS payment_proof_url TEXT;
+ALTER TABLE platform_invoices ADD COLUMN IF NOT EXISTS submitted_at TIMESTAMPTZ;
 
-INSERT INTO system_configs (config_key, config_value, description, updated_at)
-VALUES ('PLATFORM_FEE_PERCENTAGE', '1.00', 'Phí n?n t?ng 1%', TIMESTAMPTZ '2026-09-20T07:49:15.238039Z');
-
-CREATE UNIQUE INDEX "IX_batch_quality_checks_batch_id" ON batch_quality_checks (batch_id);
-
-CREATE INDEX "IX_batch_quality_checks_factory_id" ON batch_quality_checks (factory_id);
-
-CREATE INDEX "IX_depot_staffs_depot_id" ON depot_staffs (depot_id);
-
-CREATE INDEX "IX_depot_staffs_user_id" ON depot_staffs (user_id);
-
-CREATE INDEX "IX_depots_owner_id" ON depots (owner_id);
-
-CREATE INDEX "IX_factories_owner_id" ON factories (owner_id);
-
-CREATE INDEX "IX_factory_demands_factory_id" ON factory_demands (factory_id);
-
-CREATE UNIQUE INDEX "IX_factory_depot_partnerships_depot_id_factory_id" ON factory_depot_partnerships (depot_id, factory_id);
-
-CREATE INDEX "IX_factory_depot_partnerships_factory_id" ON factory_depot_partnerships (factory_id);
-
-CREATE INDEX "IX_factory_depot_reviews_batch_id" ON factory_depot_reviews (batch_id);
-
-CREATE INDEX "IX_factory_depot_reviews_depot_id" ON factory_depot_reviews (depot_id);
-
-CREATE INDEX "IX_factory_depot_reviews_factory_id" ON factory_depot_reviews (factory_id);
-
-CREATE INDEX "IX_inventory_batches_depot_id" ON inventory_batches (depot_id);
-
-CREATE INDEX "IX_inventory_batches_target_factory_id" ON inventory_batches (target_factory_id);
-
-CREATE INDEX "IX_pickup_request_items_pickup_request_id" ON pickup_request_items (pickup_request_id);
-
-CREATE INDEX "IX_pickup_requests_accepted_collector_id" ON pickup_requests (accepted_collector_id);
-
-CREATE INDEX "IX_pickup_requests_seller_id" ON pickup_requests (seller_id);
-
-CREATE INDEX "IX_pickup_requests_target_depot_id" ON pickup_requests (target_depot_id);
-
-CREATE INDEX "IX_seller_depot_reviews_depot_id" ON seller_depot_reviews (depot_id);
-
-CREATE INDEX "IX_seller_depot_reviews_pickup_request_id" ON seller_depot_reviews (pickup_request_id);
-
-CREATE UNIQUE INDEX "IX_transport_jobs_batch_id" ON transport_jobs (batch_id);
-
-CREATE INDEX "IX_transport_jobs_driver_id" ON transport_jobs (driver_id);
-
-CREATE UNIQUE INDEX "IX_users_email" ON users (email);
-
-INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-VALUES ('20260920074916_InitialCreate', '8.0.10');
-
-COMMIT;
-
-START TRANSACTION;
-
-ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS actual_weight_kg NUMERIC;
-ALTER TABLE batch_quality_checks ADD COLUMN IF NOT EXISTS actual_weight_kg NUMERIC;
-
-ALTER TABLE inventory_batches ADD agreed_price_per_kg numeric;
-
-ALTER TABLE inventory_batches ADD factory_decided_at timestamp with time zone;
-
-ALTER TABLE inventory_batches ADD factory_received_at timestamp with time zone;
-
-ALTER TABLE inventory_batches ADD gross_amount numeric;
-
-ALTER TABLE inventory_batches ADD net_amount numeric;
-
-ALTER TABLE inventory_batches ADD payment_reference character varying(200);
-
-ALTER TABLE inventory_batches ADD platform_fee_amount numeric;
-
-ALTER TABLE inventory_batches ADD rejection_reason text;
-
-ALTER TABLE inventory_batches ADD settled_at timestamp with time zone;
-
-ALTER TABLE factory_demands ADD note text;
-
-ALTER TABLE factory_demands ADD updated_at timestamp with time zone NOT NULL DEFAULT (NOW());
-
-ALTER TABLE factories ADD accepted_materials text NOT NULL DEFAULT '';
-
-ALTER TABLE factories ADD business_license_url text;
-
-ALTER TABLE factories ADD capacity_kg_per_month numeric NOT NULL DEFAULT 0.0;
-
-ALTER TABLE factories ADD contact_phone character varying(30);
-
-ALTER TABLE factories ADD environmental_license_url text;
-
-ALTER TABLE factories ADD industrial_zone character varying(200);
-
-ALTER TABLE factories ADD minimum_purity_percent numeric NOT NULL DEFAULT 0.0;
-
-ALTER TABLE factories ADD tax_code character varying(50);
-
-ALTER TABLE batch_quality_checks ADD contamination_percent numeric;
-
-ALTER TABLE batch_quality_checks ADD difference_percentage numeric;
-
-ALTER TABLE batch_quality_checks ADD gross_weight_kg numeric;
-
-ALTER TABLE batch_quality_checks ADD invoice_file_url text;
-
-ALTER TABLE batch_quality_checks ADD invoice_number character varying(100);
-
-ALTER TABLE batch_quality_checks ADD invoice_status character varying(30);
-
-ALTER TABLE batch_quality_checks ADD moisture_percent numeric;
-
-ALTER TABLE batch_quality_checks ADD purity_percent numeric;
-
-ALTER TABLE batch_quality_checks ADD quality_note text;
-
-ALTER TABLE batch_quality_checks ADD resolution character varying(20);
-
-ALTER TABLE batch_quality_checks ADD tare_weight_kg numeric;
-
-ALTER TABLE batch_quality_checks ADD ticket_image_url text;
-
-ALTER TABLE batch_quality_checks ADD ticket_number character varying(100);
-
-CREATE TABLE market_prices (
-    id uuid NOT NULL,
-    material_type character varying(100) NOT NULL,
-    price_per_kg numeric NOT NULL,
-    effective_date timestamp with time zone NOT NULL,
-    source text,
-    created_at timestamp with time zone NOT NULL,
-    CONSTRAINT "PK_market_prices" PRIMARY KEY (id)
+CREATE TABLE IF NOT EXISTS platform_fee_invoices (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    owner_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    period_start DATE NOT NULL,
+    amount DECIMAL(18, 2) NOT NULL CHECK (amount >= 0),
+    status VARCHAR(20) NOT NULL DEFAULT 'UNPAID' CHECK (status IN ('UNPAID', 'SUBMITTED', 'PAID')),
+    payment_proof_url TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    submitted_at TIMESTAMPTZ
 );
+CREATE UNIQUE INDEX IF NOT EXISTS ix_platform_fee_invoices_owner_period ON platform_fee_invoices(owner_id, period_start);
 
-INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-VALUES ('20260924014347_FactoryWorkflowExtension', '8.0.10');
+-- ==========================================
+-- FUNCTIONS & TRIGGERS (updated_at tự động)
+-- ==========================================
 
-COMMIT;
+-- Function dùng chung cho trigger updated_at
+CREATE OR REPLACE FUNCTION set_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
 
-START TRANSACTION;
+-- Trigger cho system_configs
+DROP TRIGGER IF EXISTS trg_system_configs_upd ON system_configs;
+CREATE TRIGGER trg_system_configs_upd
+    BEFORE UPDATE ON system_configs
+    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
-ALTER TABLE inventory_batches ADD direct_offer_factory_id uuid;
+-- Trigger cho users
+DROP TRIGGER IF EXISTS trg_users_upd ON users;
+CREATE TRIGGER trg_users_upd
+    BEFORE UPDATE ON users
+    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
-ALTER TABLE inventory_batches ADD CONSTRAINT "FK_inventory_batches_factories_direct_offer_factory_id" FOREIGN KEY (direct_offer_factory_id) REFERENCES factories (id) ON DELETE SET NULL;
+-- Trigger cho pickup_requests
+DROP TRIGGER IF EXISTS trg_pickup_requests_upd ON pickup_requests;
+CREATE TRIGGER trg_pickup_requests_upd
+    BEFORE UPDATE ON pickup_requests
+    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
-INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-VALUES ('20260924014918_FactoryDirectOffers', '8.0.10');
+-- Trigger cho inventory_batches
+DROP TRIGGER IF EXISTS trg_inventory_batches_upd ON inventory_batches;
+CREATE TRIGGER trg_inventory_batches_upd
+    BEFORE UPDATE ON inventory_batches
+    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
-COMMIT;
+-- Trigger cho transport_jobs
+DROP TRIGGER IF EXISTS trg_transport_jobs_upd ON transport_jobs;
+CREATE TRIGGER trg_transport_jobs_upd
+    BEFORE UPDATE ON transport_jobs
+    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
-START TRANSACTION;
+-- Trigger cho factory_depot_partnerships
+DROP TRIGGER IF EXISTS trg_partnerships_upd ON factory_depot_partnerships;
+CREATE TRIGGER trg_partnerships_upd
+    BEFORE UPDATE ON factory_depot_partnerships
+    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
-CREATE TABLE audit_logs (
-    id uuid NOT NULL,
-    user_id uuid,
-    action character varying(100) NOT NULL,
-    entity_name character varying(100) NOT NULL,
-    entity_id uuid,
-    old_data text,
-    new_data text,
-    created_at timestamp with time zone NOT NULL,
-    CONSTRAINT "PK_audit_logs" PRIMARY KEY (id),
-    CONSTRAINT "FK_audit_logs_users_user_id" FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL
-);
-
-ALTER TABLE market_prices ALTER COLUMN source TYPE character varying(255);
-
-CREATE TABLE notifications (
-    id uuid NOT NULL,
-    user_id uuid NOT NULL,
-    title character varying(255) NOT NULL,
-    message text,
-    is_read boolean NOT NULL,
-    created_at timestamp with time zone NOT NULL,
-    CONSTRAINT "PK_notifications" PRIMARY KEY (id),
-    CONSTRAINT "FK_notifications_users_user_id" FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
-);
-
-CREATE TABLE platform_invoices (
-    id uuid NOT NULL,
-    payer_id uuid NOT NULL,
-    period_year integer NOT NULL,
-    period_month integer NOT NULL,
-    total_fee_amount numeric NOT NULL,
-    status character varying(20) NOT NULL,
-    paid_at timestamp with time zone,
-    created_at timestamp with time zone NOT NULL,
-    CONSTRAINT "PK_platform_invoices" PRIMARY KEY (id),
-    CONSTRAINT "FK_platform_invoices_users_payer_id" FOREIGN KEY (payer_id) REFERENCES users (id) ON DELETE RESTRICT
-);
-
-UPDATE system_configs SET description = 'Phí nền tảng 1%', updated_at = TIMESTAMPTZ '2026-09-24T02:13:01.666535Z'
-WHERE config_key = 'PLATFORM_FEE_PERCENTAGE';
-
-CREATE INDEX "IX_audit_logs_user_id" ON audit_logs (user_id);
-
-CREATE INDEX "IX_notifications_user_id" ON notifications (user_id);
-
-CREATE UNIQUE INDEX "IX_platform_invoices_payer_id_period_year_period_month" ON platform_invoices (payer_id, period_year, period_month);
-
-INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-VALUES ('20260924021303_AddAdminFeatures', '8.0.10');
-
-COMMIT;
-
-START TRANSACTION;
-
-CREATE UNIQUE INDEX "IX_platform_transactions_source_type_source_id" ON platform_transactions (source_type, source_id);
-
-INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-VALUES ('20260924064439_DepotPaymentUniqueness', '8.0.10');
-
-COMMIT;
-
-START TRANSACTION;
-
-ALTER TABLE depots ADD contact_phone character varying(20);
-
-ALTER TABLE depots ADD description text;
-
-ALTER TABLE depots ADD tax_code text;
-
-CREATE TABLE platform_fee_invoices (
-    id uuid NOT NULL,
-    owner_id uuid NOT NULL,
-    period_start date NOT NULL,
-    amount numeric NOT NULL,
-    status text NOT NULL,
-    payment_proof_url text,
-    created_at timestamp with time zone NOT NULL,
-    submitted_at timestamp with time zone,
-    CONSTRAINT "PK_platform_fee_invoices" PRIMARY KEY (id),
-    CONSTRAINT "CK_fee_invoice_amount" CHECK (amount >= 0),
-    CONSTRAINT "CK_fee_invoice_status" CHECK (status IN ('UNPAID', 'SUBMITTED', 'PAID')),
-    CONSTRAINT "FK_platform_fee_invoices_users_owner_id" FOREIGN KEY (owner_id) REFERENCES users (id) ON DELETE RESTRICT
-);
-
-UPDATE system_configs SET config_value = '5.00', description = 'Phí nền tảng mặc định 5%' WHERE config_key = 'PLATFORM_FEE_PERCENTAGE' AND config_value = '1.00';
-
-CREATE UNIQUE INDEX "IX_platform_fee_invoices_owner_id_period_start" ON platform_fee_invoices (owner_id, period_start);
-
-INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-VALUES ('20260924131224_DepotProfileAndFeeInvoices', '8.0.10');
-
-COMMIT;
-
-START TRANSACTION;
-
-CREATE SEQUENCE depot_batch_number START WITH 1 INCREMENT BY 1 NO MINVALUE NO MAXVALUE NO CYCLE;
-
-ALTER TABLE inventory_batches ADD code character varying(40);
-
-CREATE UNIQUE INDEX "IX_inventory_batches_code" ON inventory_batches (code);
-
-INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-VALUES ('20260924133220_DepotBatchCodes', '8.0.10');
-
-COMMIT;
-
-START TRANSACTION;
-
-ALTER TABLE users ADD avatar_url character varying(2048);
-
-INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-VALUES ('20260927154743_AddStaffAvatar', '8.0.10');
-
-COMMIT;
-
-START TRANSACTION;
-
-ALTER TABLE platform_invoices ADD payment_proof_url text;
-
-ALTER TABLE platform_invoices ADD submitted_at timestamp with time zone;
-
-DO $$ BEGIN
-    IF EXISTS (
-        SELECT 1 FROM platform_fee_invoices old
-        JOIN platform_invoices current ON current.payer_id = old.owner_id
-            AND current.period_year = EXTRACT(YEAR FROM old.period_start)::int
-            AND current.period_month = EXTRACT(MONTH FROM old.period_start)::int
-        WHERE current.total_fee_amount <> old.amount
-    ) THEN
-        RAISE EXCEPTION 'Hoa don Depot/Admin cung ky khac so tien: can doi soat truoc khi chuyen du lieu';
-    END IF;
-END $$;
-INSERT INTO platform_invoices
-    (id, payer_id, period_year, period_month, total_fee_amount, status, created_at, payment_proof_url, submitted_at)
-SELECT id, owner_id, EXTRACT(YEAR FROM period_start)::int, EXTRACT(MONTH FROM period_start)::int,
-    amount, CASE WHEN status = 'UNPAID' THEN 'PENDING' ELSE status END, created_at, payment_proof_url, submitted_at
-FROM platform_fee_invoices
-ON CONFLICT (payer_id, period_year, period_month) DO UPDATE SET
-    payment_proof_url = COALESCE(platform_invoices.payment_proof_url, EXCLUDED.payment_proof_url),
-    submitted_at = COALESCE(platform_invoices.submitted_at, EXCLUDED.submitted_at),
-    status = CASE WHEN platform_invoices.status = 'PAID' OR EXCLUDED.status = 'PAID' THEN 'PAID'
-        WHEN platform_invoices.status = 'SUBMITTED' OR EXCLUDED.status = 'SUBMITTED' THEN 'SUBMITTED'
-        ELSE platform_invoices.status END;
-
-INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-VALUES ('20260929015907_DepotAdminInvoiceProof', '8.0.10');
-
-COMMIT;
-
-START TRANSACTION;
-
-ALTER TABLE factory_depot_partnerships ADD blocked_by_depot boolean NOT NULL DEFAULT FALSE;
-
-ALTER TABLE factory_depot_partnerships ADD blocked_by_factory boolean NOT NULL DEFAULT FALSE;
-
-INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-VALUES ('20260930114738_DepotPartnershipBlocking', '8.0.10');
-
-COMMIT;
-
-START TRANSACTION;
-
-ALTER TABLE inventory_batches ADD image_urls text[] NOT NULL DEFAULT ARRAY[]::text[];
-
-INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-VALUES ('20261001135514_DepotBatchMaterialPhotos', '8.0.10');
-
-COMMIT;
-
+-- ==========================================
+-- INDEX GỢI Ý (Performance)
+-- ==========================================
+CREATE INDEX IF NOT EXISTS idx_users_email     ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_role      ON users(role);
+CREATE INDEX IF NOT EXISTS idx_pr_seller       ON pickup_requests(seller_id);
+CREATE INDEX IF NOT EXISTS idx_pr_status       ON pickup_requests(status);
+CREATE INDEX IF NOT EXISTS idx_pr_depot        ON pickup_requests(target_depot_id);
+CREATE INDEX IF NOT EXISTS idx_ib_depot        ON inventory_batches(depot_id);
+CREATE INDEX IF NOT EXISTS idx_ib_status       ON inventory_batches(status);
+CREATE INDEX IF NOT EXISTS idx_tj_driver       ON transport_jobs(driver_id);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_platform_transactions_source ON platform_transactions(source_type, source_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_user     ON audit_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_entity   ON audit_logs(entity_name);
+CREATE INDEX IF NOT EXISTS idx_notifications_user  ON notifications(user_id);
+CREATE INDEX IF NOT EXISTS idx_pi_payer            ON platform_invoices(payer_id);
+CREATE INDEX IF NOT EXISTS idx_pi_status           ON platform_invoices(status);
