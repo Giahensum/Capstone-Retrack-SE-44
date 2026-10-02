@@ -11,7 +11,8 @@ export function useDepotMutation(method, path, onSuccess) {
   const { depotId } = useDepot();
   const client = useQueryClient();
   return useMutation({ mutationFn: ({ body, id } = {}) => api.request({ method,
-    url: `/depot/${typeof path === 'function' ? path(id) : path}`, params: { depotId }, data: body }),
+    url: `/depot/${typeof path === 'function' ? path(id) : path}`, params: { depotId }, data: body,
+    ...(body instanceof FormData ? { headers: { 'Content-Type': 'multipart/form-data' } } : {}) }),
     onSuccess: async () => { await client.invalidateQueries({ queryKey: ['depot'] }); onSuccess?.(); } });
 }
 export const money = (n) => Number(n ?? 0).toLocaleString('vi-VN') + ' đ';

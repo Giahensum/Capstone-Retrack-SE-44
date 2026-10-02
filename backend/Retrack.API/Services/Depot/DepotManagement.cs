@@ -24,7 +24,7 @@ public sealed partial class DepotService
     public async Task<PagedResult<FactoryPartnerDto>> GetFactoriesAsync(Guid ownerId, Guid depotId, DepotQuery query)
     {
         await RequireOwnerAsync(ownerId, depotId);
-        if (!string.IsNullOrEmpty(query.Status) && query.Status is not ("APPROVED" or "PENDING" or "BLOCKED"))
+        if (!string.IsNullOrEmpty(query.Status) && query.Status is not ("APPROVED" or "PENDING" or "BLOCKED" or "DECLINED"))
             throw new ArgumentException("Trạng thái đối tác không hợp lệ.");
         return await owners.FactoriesAsync(depotId, query);
     }

@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Retrack.API.Data;
@@ -11,9 +12,11 @@ using Retrack.API.Data;
 namespace Retrack.API.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260930114738_DepotPartnershipBlocking")]
+    partial class DepotPartnershipBlocking
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -560,11 +563,6 @@ namespace Retrack.API.Data.Migrations
                     b.Property<decimal?>("GrossAmount")
                         .HasColumnType("numeric")
                         .HasColumnName("gross_amount");
-
-                    b.Property<string[]>("ImageUrls")
-                        .IsRequired()
-                        .HasColumnType("text[]")
-                        .HasColumnName("image_urls");
 
                     b.Property<string>("MaterialType")
                         .IsRequired()

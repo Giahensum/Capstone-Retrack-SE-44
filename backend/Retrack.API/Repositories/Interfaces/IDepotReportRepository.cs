@@ -5,7 +5,7 @@ using Retrack.API.Models;
 namespace Retrack.API.Repositories.Interfaces;
 
 public record DepotDailyAmount(DateTime Date, decimal Amount);
-public record DepotDashboardCounts(int NewRequests, int OpenBatches, int AwaitingPayment);
+public record DepotDashboardCounts(int NewRequests, int OpenBatches, int AwaitingPayment, int RejectedQualityBatches = 0);
 
 public interface IDepotReportRepository
 {

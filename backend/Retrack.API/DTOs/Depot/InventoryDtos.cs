@@ -16,4 +16,5 @@ public sealed class CreateDepotBatchDto
     public string? Description { get; set; }
 }
 public record DepotBatchDto(Guid Id, Guid DepotId, string MaterialType, decimal WeightKg,
-    string? Description, string Status, Guid? TargetFactoryId, string? FactoryName, DateTime CreatedAt, string? Code = null);
+    string? Description, string Status, Guid? TargetFactoryId, string? FactoryName, DateTime CreatedAt, string? Code = null,
+    string[]? ImageUrls = null);

@@ -79,3 +79,6 @@ npm-debug.log*
 *.key
 *.tmp
 *.bak
+
+# Bản sao giao diện Depot giữ local để đối chiếu, không đưa vào build/lint/Git.
+frontend/src/features/depot/*_old*.jsx

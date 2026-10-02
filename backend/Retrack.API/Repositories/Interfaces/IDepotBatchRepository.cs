@@ -6,6 +6,7 @@ namespace Retrack.API.Repositories.Interfaces;
 
 public interface IDepotBatchRepository
 {
+    Task<DepotBatchDetailDto?> DetailAsync(Guid depotId, Guid batchId);
     Task<PagedResult<DepotBatchDto>> ListAsync(Guid depotId, DepotQuery query);
     Task LockDepotAsync(Guid depotId);
     Task<InventoryBatch?> FindOperationAsync(Guid id);

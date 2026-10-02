@@ -21,18 +21,18 @@ public sealed class DepotOwnerRepository(AppDbContext db) : IDepotOwnerRepositor
     public async Task<PagedResult<FactoryPartnerDto>> FactoriesAsync(Guid depotId, DepotQuery query)
     {
         var source = db.Factories.AsNoTracking().Where(f => f.Owner != null && f.Owner.IsActive);
-        if (!string.IsNullOrWhiteSpace(query.Search)) source = source.Where(f => f.Name.Contains(query.Search));
+        if (!string.IsNullOrWhiteSpace(query.Search)) source = source.Where(f => EF.Functions.ILike(f.Name, $"%{query.Search}%"));
         if (!string.IsNullOrEmpty(query.Status))
         {
-            source = source.Where(f => db.FactoryDepotPartnerships.Any(p => p.DepotId == depotId && p.FactoryId == f.Id && p.Status == query.Status));
+            source = source.Where(f => db.FactoryDepotPartnerships.Any(p => p.DepotId == depotId && p.FactoryId == f.Id && (p.Status == "BLOCKED" || p.BlockedByDepot || p.BlockedByFactory ? "BLOCKED" : p.Status) == query.Status));
         }
         return await DepotRepositoryPage.ReadAsync(source.OrderBy(f => f.Name).ThenBy(f => f.Id).Select(f => new FactoryPartnerDto(f.Id,
-            f.Name, f.Address, f.Rating, db.FactoryDepotPartnerships.Where(p => p.DepotId == depotId && p.FactoryId == f.Id).Select(p => p.Status).FirstOrDefault())), query);
+            f.Name, f.Address, f.Rating, db.FactoryDepotPartnerships.Where(p => p.DepotId == depotId && p.FactoryId == f.Id).Select(p => p.Status == "BLOCKED" || p.BlockedByDepot || p.BlockedByFactory ? "BLOCKED" : p.Status).FirstOrDefault())), query);
     }
     public async Task<PagedResult<DemandDto>> DemandsAsync(DepotQuery query, DateTime now)
     {
         var source = db.FactoryDemands.AsNoTracking().Where(d => d.IsActive && d.Deadline >= now && d.Factory.Owner != null && d.Factory.Owner.IsActive);
-        if (!string.IsNullOrWhiteSpace(query.Search)) source = source.Where(d => d.MaterialType.Contains(query.Search) || d.Factory.Name.Contains(query.Search));
+        if (!string.IsNullOrWhiteSpace(query.Search)) source = source.Where(d => EF.Functions.ILike(d.MaterialType, $"%{query.Search}%") || EF.Functions.ILike(d.Factory.Name, $"%{query.Search}%"));
         return await DepotRepositoryPage.ReadAsync(source.OrderBy(d => d.Deadline).ThenBy(d => d.Id).Select(d => new DemandDto(d.Id,
             d.FactoryId, d.Factory.Name, d.MaterialType, d.RequiredWeightKg, d.MinPricePerKg, d.MaxPricePerKg, d.Deadline)), query);
     }

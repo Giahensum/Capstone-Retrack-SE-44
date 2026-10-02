@@ -340,7 +340,7 @@ export function Marketplace({ navigate }) {
           const d = state.depots.find((d) => d.id === b.depotId);
           return (
             <article className="batch-card" key={b.id}>
-              <div className={`material-cover material-${b.material}`}>
+              <div className={`material-cover material-${b.material}`} style={b.imageUrl ? { backgroundImage: `linear-gradient(#0005, #0008), url("${b.imageUrl}")`, backgroundSize: "cover", backgroundPosition: "center", color: "white" } : undefined}>
                 <span>{b.material}</span>
                 <span className="material-symbol">
                   {b.material === "PET"
@@ -361,7 +361,7 @@ export function Marketplace({ navigate }) {
                 <div className="batch-facts">
                   <div>
                     <small>Khối lượng dự kiến</small>
-                    <strong>{number(b.kg / 1000)} tấn</strong>
+                    <strong>{b.kg < 1000 ? `${number(b.kg)} kg` : `${number(b.kg / 1000)} tấn`}</strong>
                   </div>
                   <div>
                     <small>Đơn giá</small>
@@ -391,7 +391,7 @@ export function Marketplace({ navigate }) {
       )}
       {selected && (
         <Modal
-          title={`Chi tiết ${selected.id}`}
+          title={`Chi tiết ${selected.batchCode || selected.id}`}
           onClose={() => setSelected(null)}
         >
           <h3>
@@ -406,6 +406,9 @@ export function Marketplace({ navigate }) {
           </p>
           {depot?.status && <Status value={depot.status} />}
           <p>{selected.note}</p>
+          {selected.imageUrls?.length > 0 && <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 8, margin: "12px 0" }}>
+            {selected.imageUrls.map((url, index) => <a key={url} href={url} target="_blank" rel="noopener noreferrer"><img src={url} alt={`Ảnh vật liệu ${index + 1}`} style={{ width: "100%", height: 120, objectFit: "cover", borderRadius: 8 }} /></a>)}
+          </div>}
           <div className="info-box">
             Nhận lô sẽ tạo đơn chờ vận chuyển. Chưa chốt giá và chưa phát sinh
             thanh toán.
@@ -640,17 +643,17 @@ export function Partners({ navigate }) {
     <>
       <PageHead
         title="Vựa đối tác"
-        text="Theo dõi yêu cầu hợp tác do vựa duyệt. Factory có thể chặn đối tác; đánh giá được ghi nhận sau quyết toán."
+        text="Nhận lô đầu và kiểm tra chất lượng trước khi quyết định hợp tác. Kho đã hợp tác được gửi thẳng; không hợp tác thì lô sau phải duyệt lại."
       />
       <div className="filter-bar">
         <Field label="Trạng thái">
           <select value={filter} onChange={(e) => setFilter(e.target.value)}>
             <option value="">Tất cả</option>
-            {["PENDING", "APPROVED", "BLOCKED"].map((s) => (
+            {["PENDING", "APPROVED", "DECLINED", "BLOCKED"].map((s) => (
               <option key={s} value={s}>
                 {
                   {
-                    PENDING: "Chờ duyệt",
+                    PENDING: "Chưa quyết định", DECLINED: "Không hợp tác",
                     APPROVED: "Đã duyệt",
                     BLOCKED: "Đã chặn",
                   }[s]
@@ -705,13 +708,10 @@ export function Partners({ navigate }) {
                   >
                     Xem đơn & đánh giá
                   </Button>
-                  <Button
-                    secondary={false}
-                    danger={d.status !== "BLOCKED"}
-                    onClick={() => setChange(d)}
-                  >
-                    {d.status === "BLOCKED" ? "Đã chặn" : "Chặn vựa"}
-                  </Button>
+                  {d.status !== "BLOCKED" && <><Button onClick={() => setChange({...d, action:'APPROVED', title:'Đồng ý hợp tác?', message:'Sau kiểm tra hàng, cho phép kho gửi thẳng các lô sau mà không cần duyệt từng lô.'})}>Đồng ý hợp tác</Button>
+                  <Button secondary onClick={() => setChange({...d, action:'DECLINED', title:'Không hợp tác lâu dài?', message:'Các lô sau phải qua quy trình duyệt lô đầu. Quyết định này không hủy lô đã nhận và không chặn mọi giao dịch.'})}>Không hợp tác</Button></>}
+                  <Button danger={!d.blockedByFactory} onClick={() => setChange({...d, action:d.blockedByFactory?'UNBLOCKED':'BLOCKED', title:d.blockedByFactory?'Bỏ chặn của nhà máy?':'Chặn vựa?', message:d.blockedByFactory?'Chỉ bỏ chặn của nhà máy. Kho còn chặn hoặc trạng thái chặn cũ chưa đối chiếu thì vẫn không giao dịch mới.':'Ngừng nhận lô mới; không tự hủy các lô đang xử lý.'})}>{d.blockedByFactory?'Bỏ chặn của nhà máy':'Chặn vựa'}</Button>
+                  {d.blockedByDepot && <p>Kho đang chặn giao dịch.</p>}{d.legacyBlocked && <p>Trạng thái chặn cũ cần đối chiếu với quản trị viên.</p>}
                 </div>
                 {ratings.map((o) => (
                   <p className="review" key={o.id}>
@@ -729,15 +729,15 @@ export function Partners({ navigate }) {
       {!state.depots.some((d) => !filter || d.status === filter) && <Empty />}
       {change && (
         <Confirm
-          title="Chặn vựa?"
-          text={`${change.name}: ngừng nhận lô mới từ vựa. Vựa cần gửi yêu cầu hợp tác mới để được xem xét lại.`}
+          title={change.title}
+          text={`${change.name}: ${change.message}`}
           danger
           onClose={() => setChange(null)}
           onConfirm={async () => {
             if (
               await act("PARTNER_STATUS", {
                 id: change.id,
-                status: "BLOCKED",
+                status: change.action,
               })
             )
               setChange(null);

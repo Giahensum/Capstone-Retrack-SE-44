@@ -31,7 +31,7 @@ public sealed class DepotReportService(IDepotUnitOfWork work, IDepotReportReposi
         var report = await RevenueAsync(ownerId, depotId, new());
         var counts = await reports.DashboardCountsAsync(depotId, day);
         return new(counts.NewRequests, (await inventory.GetAsync(ownerId, depotId)).Sum(i => i.AvailableKg),
-            counts.OpenBatches, counts.AwaitingPayment, report.Revenue, report.PurchaseCost);
+            counts.OpenBatches, counts.AwaitingPayment, report.Revenue, report.PurchaseCost, counts.RejectedQualityBatches);
     }
     public async Task<PagedResult<StaffPerformanceDto>> PerformanceAsync(Guid ownerId, Guid depotId, PeriodQuery period, DepotQuery query)
     {

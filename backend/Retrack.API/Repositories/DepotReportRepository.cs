@@ -33,8 +33,9 @@ public sealed class DepotReportRepository(AppDbContext db) : IDepotReportReposit
     }
     public async Task<DepotDashboardCounts> DashboardCountsAsync(Guid depotId, DateTime day) => new(
         await db.PickupRequests.CountAsync(p => p.TargetDepotId == depotId && p.CreatedAt >= day),
-        await db.InventoryBatches.CountAsync(b => b.DepotId == depotId && b.Status != "COMPLETED" && b.Status != "CANCELLED" && b.Status != "REJECTED" && b.Status != "VERIFIED"),
-        await db.PickupRequests.CountAsync(p => p.TargetDepotId == depotId && p.Status == "AWAITING_PAYMENT"));
+        await db.InventoryBatches.CountAsync(b => b.DepotId == depotId && b.Status != "COMPLETED" && b.Status != "CANCELLED" && b.Status != "REJECTED" && b.Status != "PAID"),
+        await db.PickupRequests.CountAsync(p => p.TargetDepotId == depotId && p.Status == "AWAITING_PAYMENT"),
+        await db.InventoryBatches.CountAsync(b => b.DepotId == depotId && b.Status == "REJECTED" && b.QualityCheck != null));
     public async Task<PagedResult<StaffPerformanceDto>> PerformanceAsync(Guid depotId, DateTime start, DateTime end, DepotQuery query)
     {
         var source = db.DepotStaffs.AsNoTracking().Where(s => s.DepotId == depotId).Select(s => new { s.Id, s.User.FullName, s.StaffType,
