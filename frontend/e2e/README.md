@@ -20,6 +20,21 @@ npm run test:e2e -- --reporter=line --workers=1
 
 Thiếu tài khoản hoặc chưa bật cờ kiểm thử có ghi dữ liệu thì các bài tương ứng **Skipped**, không được báo cáo là Passed.
 
+Nếu backend đang mở là bản build cũ, chạy bản mới trên cổng riêng và trỏ Vite tới nó:
+
+```powershell
+# Terminal backend: build trước; giữ cấu hình local của mình, tắt seed nếu đã có dữ liệu.
+$env:Database__Initialize = 'false'
+dotnet run --project backend/Retrack.API --no-launch-profile -- --urls http://localhost:5010 --environment Development
+# Terminal frontend:
+$env:API_PROXY_TARGET = 'http://localhost:5010'
+npm run dev -- --port 5174 --strictPort
+# Terminal test:
+$env:E2E_BASE_URL = 'http://localhost:5174'
+```
+
+`API_PROXY_TARGET` chỉ cấu hình proxy của Vite, mặc định vẫn là cổng 5000. Phải khởi động lại Vite khi đổi biến này. Kiểm tra Swagger của backend có `/api/depot/reports/invoices/{id}/simulate-payment` trước khi thử PayOS.
+
 ## Ảnh vật liệu
 
 Backend cần có cấu hình Cloudinary hợp lệ trong `.env` local; trình duyệt cần truy cập được CDN. Kho cần ít nhất 1 kg tồn khả dụng. Nhà máy test phải xem được vật liệu của kho và không bị chặn hợp tác.
@@ -51,6 +66,10 @@ npm run test:e2e -- e2e/depot-factory-settlement.spec.js --reporter=line
 Mỗi lần chạy thành công giữ lại một lô đã quyết toán 1 kg PET với giá thử 12.000 đ/kg. Đây là ghi nhận mô phỏng, không chuyển tiền ngân hàng. Khi bài thất bại, lô dừng ở bước đã thực hiện; kiểm tra các lô mang tiền tố thử nghiệm trước lần báo cáo tiếp theo.
 
 ## Kiểm chứng và giới hạn
+
+### PayOS giả lập
+
+Chuẩn bị một hóa đơn phí riêng có trạng thái `UNPAID` ở trang đầu danh sách; đặt `E2E_PAYOS_INVOICE_ID` bằng UUID hóa đơn. Với frontend/backend Development, chạy `npm run test:e2e -- e2e/depot-payos.spec.js --reporter=line`. Bài này thay hóa đơn thành `SUBMITTED` (chờ Admin đối soát), kiểm tra sau reload và không gọi PayOS/chuyển tiền thật. Không dùng hóa đơn thật và không tự đổi lại trạng thái hóa đơn. PayOS production cần tích hợp riêng sau khi có cấu hình nhà cung cấp.
 
 - `node --test src/features/depot/proofDownload.test.js`: kiểm tra định dạng/chữ ký chứng từ, chặn HTML/SVG, dữ liệu lỗi và quá cỡ.
 - `npm run lint`, `npm run build`: kiểm tra source frontend.
