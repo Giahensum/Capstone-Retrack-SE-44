@@ -54,6 +54,7 @@ public static class FactoryOrderMapper
             RejectionReason = batch.RejectionReason,
             SettledAt = batch.SettledAt,
             FeeAmount = qc?.PlatformFeeAmount,
+            PlatformFeePercentage = qc?.PlatformFeePercentage,
             NetPayableAmount = qc?.NetAmount,
             PaymentReference = batch.PaymentReference,
             CreatedAt = batch.CreatedAt,

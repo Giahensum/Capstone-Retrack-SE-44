@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { useAuthStore } from "@/app/store/useAuthStore";
 import { labels } from "../data/factoryState";
 import {
   TOKEN_KEY,
@@ -6,6 +7,7 @@ import {
   login as apiLogin,
   performFactoryAction,
   register as apiRegister,
+  getStoredToken,
 } from "../data/factoryApi";
 
 const USER_KEY = "retrack.user";
@@ -15,9 +17,10 @@ export const useFactory = () => useContext(Context);
 export function FactoryProvider({ children }) {
   const [state, setState] = useState(null);
   const current = useRef(null);
-  const token = useRef(localStorage.getItem(TOKEN_KEY));
+  const sharedAuth = useAuthStore();
+  const token = useRef(getStoredToken());
   const [user, setUser] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(USER_KEY)); } catch { return null; }
+    try { return sharedAuth.user || JSON.parse(localStorage.getItem(USER_KEY)); } catch { return sharedAuth.user || null; }
   });
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -39,7 +42,7 @@ export function FactoryProvider({ children }) {
 
   useEffect(() => {
     let mounted = true;
-    const accessToken = localStorage.getItem(TOKEN_KEY);
+    const accessToken = getStoredToken();
     token.current = accessToken;
     if (!accessToken) { setLoading(false); return () => { mounted = false; }; }
     loadFactoryState(accessToken).then((next) => {
@@ -61,6 +64,7 @@ export function FactoryProvider({ children }) {
       localStorage.removeItem(USER_KEY);
       setState(null);
       setUser(null);
+      useAuthStore.getState().logout();
     };
     window.addEventListener("retrack:unauthorized", unauthorized);
     return () => window.removeEventListener("retrack:unauthorized", unauthorized);
@@ -78,6 +82,7 @@ export function FactoryProvider({ children }) {
       const session = await apiLogin(credentials.email, credentials.password);
       if (session.user?.role !== "FACTORY") throw new Error("Tài khoản này không có quyền Nhà máy.");
       token.current = session.accessToken;
+      useAuthStore.getState().login(session.accessToken, session.user);
       localStorage.setItem(TOKEN_KEY, session.accessToken);
       localStorage.setItem(USER_KEY, JSON.stringify(session.user));
       setUser(session.user);
@@ -108,6 +113,7 @@ export function FactoryProvider({ children }) {
   function logout() {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
+    useAuthStore.getState().logout();
     token.current = null;
     current.current = null;
     setState(null);

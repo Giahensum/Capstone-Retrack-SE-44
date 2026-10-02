@@ -15,6 +15,13 @@ public class FactoryProfileService(AppDbContext db) : FactoryServiceBase(db), IF
         var current = await CurrentFactory(userId, ct);
         var factory = await Db.Factories.Include(x => x.Owner).AsNoTracking()
             .SingleAsync(x => x.Id == current.Id, ct);
+        var feeText = await Db.SystemConfigs.AsNoTracking()
+            .Where(x => x.ConfigKey == "PLATFORM_FEE_PERCENTAGE")
+            .Select(x => x.ConfigValue)
+            .FirstOrDefaultAsync(ct);
+        var feePercentage = decimal.TryParse(feeText, System.Globalization.NumberStyles.Number,
+            System.Globalization.CultureInfo.InvariantCulture, out var configuredFee) ? configuredFee : 1m;
+        if (feePercentage is < 0 or > 100) feePercentage = 1m;
         return ServiceResult<ProfileResponse>.Success(data: new ProfileResponse
         {
             Id = factory.Id,
@@ -27,6 +34,7 @@ public class FactoryProfileService(AppDbContext db) : FactoryServiceBase(db), IF
             EnvironmentalLicenseUrl = factory.EnvironmentalLicenseUrl,
             CapacityKgPerMonth = factory.CapacityKgPerMonth,
             MinimumPurityPercent = factory.MinimumPurityPercent,
+            PlatformFeePercentage = feePercentage,
             AcceptedMaterials = factory.AcceptedMaterialsCsv.Split(',', StringSplitOptions.RemoveEmptyEntries),
             Latitude = factory.Latitude,
             Longitude = factory.Longitude,
