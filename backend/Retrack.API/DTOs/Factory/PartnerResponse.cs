@@ -2,6 +2,9 @@ namespace Retrack.API.DTOs.Factory;
 
 public sealed record PartnerResponse
 {
+    public bool BlockedByFactory { get; init; }
+    public bool BlockedByDepot { get; init; }
+    public bool LegacyBlocked { get; init; }
     public required Guid Id { get; init; }
     public required Guid DepotId { get; init; }
     public required string Name { get; init; }

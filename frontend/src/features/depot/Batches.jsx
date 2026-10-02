@@ -1,222 +1,203 @@
-import React, { useState } from 'react';
-import { MaterialIcon } from '../../components/ui/MaterialIcon';
+import { useState } from 'react';
 import CreateBatchModal from './components/CreateBatchModal';
+import BatchDetailModal from './components/BatchDetailModal';
+import { materialLabel } from './materialLabels';
+import { useDepotQuery, useDepotMutation, number, batchLabels } from './depotApi';
+import { QueryState, Pager, Dialog, MutationError, inputClass, buttonClass } from './components/DepotUI';
+import { MaterialIcon } from '@/components/ui/MaterialIcon';
 
-const Batches = () => {
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+export default function Batches() {
+  const [create, setCreate] = useState(false);
+  const [detail, setDetail] = useState(null);
+  const [cancel, setCancel] = useState(null);
+  const [page, setPage] = useState(1);
+  const [status, setStatus] = useState('');
+  const [search, setSearch] = useState('');
+
+  const query = useDepotQuery('batches', { page, status, search });
+  const dashboard = useDepotQuery('dashboard');
+  const remove = useDepotMutation('patch', (id) => `batches/${id}/cancel`, () => setCancel(null));
 
   return (
-    <div className="flex flex-col p-4 md:p-6 w-full h-[calc(100vh-4rem)] gap-6 overflow-hidden bg-d-surface">
-      <CreateBatchModal isOpen={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} />
-      
+    <div className="p-4 sm:p-8 max-w-7xl mx-auto space-y-6">
       {/* Page Header */}
-      <div className="flex justify-between items-end shrink-0">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h2 className="font-d-headline-lg text-d-headline-lg text-d-on-surface mb-1">Danh sách Lô Xuất Hàng</h2>
-          <p className="font-d-body-md text-d-body-md text-d-outline">Quản lý và theo dõi trạng thái các lô vật liệu tái chế đang xuất kho.</p>
+          <h2 className="text-3xl font-bold font-d-display-sm text-d-on-surface mb-2">Danh sách Lô Xuất Hàng</h2>
+          <p className="text-d-on-surface-variant font-d-body-lg">Quản lý và theo dõi trạng thái các lô vật liệu tái chế đang xuất kho.</p>
         </div>
-        <button 
-          onClick={() => setIsCreateModalOpen(true)}
-          className="bg-d-primary-container text-d-on-primary-container font-d-label-md text-d-label-md px-6 py-2.5 rounded-full hover:bg-d-secondary-container transition-all shadow-sm font-bold flex items-center gap-2"
+        <button
+          onClick={() => setCreate(true)}
+          className="bg-d-primary text-white font-bold px-6 py-3 rounded-full hover:bg-d-primary-hover transition-all shadow-lg hover:-translate-y-0.5 flex items-center gap-2"
         >
-          <MaterialIcon name="add" className="text-[18px]" /> Tạo lô xuất hàng mới
+          <MaterialIcon name="add" className="text-[20px]" /> Tạo lô xuất hàng mới
         </button>
       </div>
 
+      <CreateBatchModal isOpen={create} onClose={() => setCreate(false)} />
+      {detail && <BatchDetailModal id={detail} onClose={() => setDetail(null)}/>}
+      {cancel && (
+        <Dialog title={["PENDING_APPROVAL", "PENDING_FACTORY"].includes(cancel.status) ? "Xác nhận rút đề nghị" : "Xác nhận hủy lô hàng"} onClose={() => setCancel(null)} busy={remove.isPending}>
+          <div className="bg-red-50 text-red-700 p-4 rounded-xl mb-4">
+            <p>Hủy lô <strong>{cancel.code ?? cancel.id.slice(0, 8)}</strong> sẽ trả <strong>{number(cancel.weightKg)} kg</strong> về tồn khả dụng.</p>
+          </div>
+          <MutationError mutation={remove} />
+          <div className="flex justify-end gap-3 mt-2">
+            <button className={`${buttonClass} bg-transparent border border-d-border text-d-on-surface`} disabled={remove.isPending} onClick={() => setCancel(null)}>Đóng</button>
+            <button className={`${buttonClass} bg-d-error text-white`} disabled={remove.isPending} onClick={() => remove.mutate({ id: cancel.id })}>
+              {["PENDING_APPROVAL", "PENDING_FACTORY"].includes(cancel.status) ? "Xác nhận rút" : "Xác nhận hủy"}
+            </button>
+          </div>
+        </Dialog>
+      )}
+
       {/* KPI Bento Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 shrink-0">
-        <div className="bg-white/70 backdrop-blur-md border border-d-border-subtle p-6 rounded-xl flex flex-col justify-between shadow-sm">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white border border-d-border-subtle p-5 rounded-2xl flex flex-col justify-between shadow-sm hover:shadow-md transition-shadow group">
           <div className="flex justify-between items-start mb-4">
-            <span className="material-symbols-outlined text-d-primary bg-d-primary-container/20 p-2 rounded-lg">publish</span>
-            <span className="font-d-label-sm text-d-label-sm text-d-secondary px-2 py-1 bg-d-surface-accent rounded-full">+12%</span>
+            <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+              <MaterialIcon name="publish" className="text-[20px]" />
+            </div>
           </div>
           <div>
-            <p className="font-d-body-sm text-d-body-sm text-d-outline mb-1">Lô đang đăng</p>
-            <p className="font-d-headline-md text-d-headline-md text-d-on-surface">14</p>
+            <p className="text-sm font-medium text-d-on-surface-variant mb-1">Tổng Lô Đang Xử Lý</p>
+            <p className="text-3xl font-bold text-d-on-surface group-hover:text-blue-600 transition-colors">{dashboard.data?.activeBatches ?? 0}</p>
           </div>
         </div>
 
-        <div className="bg-white/70 backdrop-blur-md border border-d-border-subtle p-6 rounded-xl flex flex-col justify-between shadow-sm">
+        <div className="bg-white border border-d-border-subtle p-5 rounded-2xl flex flex-col justify-between shadow-sm hover:shadow-md transition-shadow group">
           <div className="flex justify-between items-start mb-4">
-            <span className="material-symbols-outlined text-d-secondary bg-d-secondary-container/20 p-2 rounded-lg">local_shipping</span>
+            <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
+              <MaterialIcon name="local_shipping" className="text-[20px]" />
+            </div>
           </div>
           <div>
-            <p className="font-d-body-sm text-d-body-sm text-d-outline mb-1">Lô đang vận chuyển</p>
-            <p className="font-d-headline-md text-d-headline-md text-d-on-surface">08</p>
+            <p className="text-sm font-medium text-d-on-surface-variant mb-1">Cảnh Báo Chất Lượng</p>
+            <p className="text-3xl font-bold text-d-on-surface group-hover:text-purple-600 transition-colors">{dashboard.data?.rejectedQualityBatches ?? 0}</p>
           </div>
         </div>
 
-        <div className="bg-white/70 backdrop-blur-md border border-d-border-subtle p-6 rounded-xl flex flex-col justify-between shadow-sm">
+        <div className="bg-white border border-d-border-subtle p-5 rounded-2xl flex flex-col justify-between shadow-sm hover:shadow-md transition-shadow group">
           <div className="flex justify-between items-start mb-4">
-            <span className="material-symbols-outlined text-d-primary bg-d-primary-container/20 p-2 rounded-lg">weight</span>
+            <div className="w-10 h-10 rounded-xl bg-green-50 text-green-600 flex items-center justify-center">
+              <MaterialIcon name="task_alt" className="text-[20px]" />
+            </div>
           </div>
           <div>
-            <p className="font-d-body-sm text-d-body-sm text-d-outline mb-1">Tổng KL đang xuất</p>
-            <p className="font-d-headline-md text-d-headline-md text-d-primary">45,500 <span className="text-d-body-md text-d-outline">kg</span></p>
+            <p className="text-sm font-medium text-d-on-surface-variant mb-1">Đơn Nhập Kho Mới</p>
+            <p className="text-3xl font-bold text-d-on-surface group-hover:text-green-600 transition-colors">{dashboard.data?.newRequestsToday ?? 0}</p>
           </div>
         </div>
 
-        <div className="bg-white/70 backdrop-blur-md border border-d-border-subtle p-6 rounded-xl flex flex-col justify-between shadow-sm">
+        <div className="bg-gradient-to-br from-d-primary to-d-secondary p-5 rounded-2xl flex flex-col justify-between shadow-sm hover:shadow-md transition-shadow text-white group">
           <div className="flex justify-between items-start mb-4">
-            <span className="material-symbols-outlined text-d-on-surface-variant bg-d-surface-variant/30 p-2 rounded-lg">check_circle</span>
+            <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center text-white">
+              <MaterialIcon name="auto_graph" className="text-[20px]" />
+            </div>
           </div>
           <div>
-            <p className="font-d-body-sm text-d-body-sm text-d-outline mb-1">Lô đã hoàn tất (Tháng này)</p>
-            <p className="font-d-headline-md text-d-headline-md text-d-on-surface">42</p>
+            <p className="text-sm font-medium text-white/80 mb-1">Khả Dụng Tồn Kho</p>
+            <p className="text-2xl font-bold truncate">{number(dashboard.data?.availableKg ?? 0)} kg</p>
           </div>
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="flex items-center gap-4 overflow-x-auto pb-2 shrink-0 scrollbar-hide">
-        <button className="px-4 py-1.5 rounded-full bg-d-primary-container text-d-on-primary-container font-d-label-md text-d-label-md border border-d-primary-container whitespace-nowrap font-bold">Tất cả</button>
-        <button className="px-4 py-1.5 rounded-full bg-d-surface-container-lowest text-d-on-surface-variant font-d-label-md text-d-label-md border border-d-border-subtle hover:bg-d-surface-container whitespace-nowrap">Nháp</button>
-        <button className="px-4 py-1.5 rounded-full bg-d-surface-container-lowest text-d-on-surface-variant font-d-label-md text-d-label-md border border-d-border-subtle hover:bg-d-surface-container whitespace-nowrap">Đang đăng</button>
-        <button className="px-4 py-1.5 rounded-full bg-d-surface-container-lowest text-d-on-surface-variant font-d-label-md text-d-label-md border border-d-border-subtle hover:bg-d-surface-container whitespace-nowrap">Đã chỉ định</button>
-        <button className="px-4 py-1.5 rounded-full bg-d-surface-container-lowest text-d-on-surface-variant font-d-label-md text-d-label-md border border-d-border-subtle hover:bg-d-surface-container whitespace-nowrap">Đang vận chuyển</button>
-        <button className="px-4 py-1.5 rounded-full bg-d-surface-container-lowest text-d-on-surface-variant font-d-label-md text-d-label-md border border-d-border-subtle hover:bg-d-surface-container whitespace-nowrap">Hoàn tất</button>
-        <button className="px-4 py-1.5 rounded-full bg-d-surface-container-lowest text-d-on-surface-variant font-d-label-md text-d-label-md border border-d-border-subtle hover:bg-d-surface-container whitespace-nowrap">Đã hủy</button>
-      </div>
-
-      {/* Data Table Card (Scrollable) */}
-      <div className="bg-white/70 backdrop-blur-md rounded-[20px] overflow-hidden border border-d-border-subtle flex flex-col flex-1 min-h-0 shadow-sm">
-        <div className="flex-1 overflow-y-auto">
-          <table className="w-full text-left border-collapse">
-            <thead className="sticky top-0 bg-d-surface-container-lowest z-10">
-              <tr className="border-b border-d-border-subtle shadow-sm">
-                <th className="py-4 px-6 font-d-label-md text-d-label-md text-d-on-surface-variant whitespace-nowrap">Mã Lô</th>
-                <th className="py-4 px-6 font-d-label-md text-d-label-md text-d-on-surface-variant whitespace-nowrap">Loại Vật Liệu</th>
-                <th className="py-4 px-6 font-d-label-md text-d-label-md text-d-on-surface-variant text-right whitespace-nowrap">Khối Lượng</th>
-                <th className="py-4 px-6 font-d-label-md text-d-label-md text-d-on-surface-variant whitespace-nowrap">Người Mua/Nhà Máy</th>
-                <th className="py-4 px-6 font-d-label-md text-d-label-md text-d-on-surface-variant whitespace-nowrap">Trạng Thái</th>
-                <th className="py-4 px-6 font-d-label-md text-d-label-md text-d-on-surface-variant text-center whitespace-nowrap">Hành Động</th>
-              </tr>
-            </thead>
-            <tbody className="font-d-body-sm text-d-body-sm">
-              
-              {/* Row 1: Đang đăng */}
-              <tr className="border-b border-d-border-subtle hover:bg-d-surface-container-low transition-colors">
-                <td className="py-4 px-6 font-d-label-sm text-d-label-sm font-bold whitespace-nowrap">SHP-2023-104</td>
-                <td className="py-4 px-6 whitespace-nowrap">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-                    PET Nhựa Trong
-                  </div>
-                </td>
-                <td className="py-4 px-6 text-right font-d-label-md text-d-label-md whitespace-nowrap">12,500 kg</td>
-                <td className="py-4 px-6 text-d-outline italic whitespace-nowrap">Chưa xác định (Marketplace)</td>
-                <td className="py-4 px-6 whitespace-nowrap">
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-700 font-d-label-sm text-d-label-sm border border-blue-200">
-                    <MaterialIcon name="storefront" className="text-[14px]" />
-                    Đang đăng
-                  </span>
-                </td>
-                <td className="py-4 px-6 text-center whitespace-nowrap">
-                  <button className="text-d-outline hover:text-d-primary"><MaterialIcon name="more_horiz" /></button>
-                </td>
-              </tr>
-
-              {/* Row 2: Đã chỉ định */}
-              <tr className="border-b border-d-border-subtle hover:bg-d-surface-container-low transition-colors">
-                <td className="py-4 px-6 font-d-label-sm text-d-label-sm font-bold whitespace-nowrap">SHP-2023-103</td>
-                <td className="py-4 px-6 whitespace-nowrap">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-gray-500"></span>
-                    Nhôm Phế Liệu
-                  </div>
-                </td>
-                <td className="py-4 px-6 text-right font-d-label-md text-d-label-md whitespace-nowrap">5,200 kg</td>
-                <td className="py-4 px-6 whitespace-nowrap">Nhà máy Tái chế Bình Dương</td>
-                <td className="py-4 px-6 whitespace-nowrap">
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-50 text-purple-700 font-d-label-sm text-d-label-sm border border-purple-200">
-                    <MaterialIcon name="assignment_ind" className="text-[14px]" />
-                    Đã chỉ định
-                  </span>
-                </td>
-                <td className="py-4 px-6 text-center whitespace-nowrap">
-                  <button className="text-d-outline hover:text-d-primary"><MaterialIcon name="more_horiz" /></button>
-                </td>
-              </tr>
-
-              {/* Row 3: Đang vận chuyển */}
-              <tr className="border-b border-d-border-subtle hover:bg-d-surface-container-low transition-colors">
-                <td className="py-4 px-6 font-d-label-sm text-d-label-sm font-bold whitespace-nowrap">SHP-2023-102</td>
-                <td className="py-4 px-6 whitespace-nowrap">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-yellow-500"></span>
-                    Giấy Carton
-                  </div>
-                </td>
-                <td className="py-4 px-6 text-right font-d-label-md text-d-label-md whitespace-nowrap">8,000 kg</td>
-                <td className="py-4 px-6 whitespace-nowrap">Công ty Bao bì Đồng Nai</td>
-                <td className="py-4 px-6 whitespace-nowrap">
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-orange-50 text-orange-700 font-d-label-sm text-d-label-sm border border-orange-200">
-                    <MaterialIcon name="local_shipping" className="text-[14px]" />
-                    Đang vận chuyển
-                  </span>
-                </td>
-                <td className="py-4 px-6 text-center whitespace-nowrap">
-                  <button className="text-d-outline hover:text-d-primary"><MaterialIcon name="more_horiz" /></button>
-                </td>
-              </tr>
-
-              {/* Row 4: Hoàn tất */}
-              <tr className="border-b border-d-border-subtle hover:bg-d-surface-container-low transition-colors">
-                <td className="py-4 px-6 font-d-label-sm text-d-label-sm font-bold whitespace-nowrap">SHP-2023-100</td>
-                <td className="py-4 px-6 whitespace-nowrap">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-                    HDPE Hạt Nhựa
-                  </div>
-                </td>
-                <td className="py-4 px-6 text-right font-d-label-md text-d-label-md whitespace-nowrap">20,000 kg</td>
-                <td className="py-4 px-6 whitespace-nowrap">Tập đoàn Nhựa ABC</td>
-                <td className="py-4 px-6 whitespace-nowrap">
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-d-surface-accent text-d-secondary font-d-label-sm text-d-label-sm border border-d-secondary-container">
-                    <MaterialIcon name="check_circle" className="text-[14px]" />
-                    Hoàn tất
-                  </span>
-                </td>
-                <td className="py-4 px-6 text-center whitespace-nowrap">
-                  <button className="text-d-outline hover:text-d-primary"><MaterialIcon name="more_horiz" /></button>
-                </td>
-              </tr>
-
-              {/* Row 5: Nháp */}
-              <tr className="border-b border-d-border-subtle hover:bg-d-surface-container-low transition-colors text-d-on-surface-variant opacity-70">
-                <td className="py-4 px-6 font-d-label-sm text-d-label-sm font-bold whitespace-nowrap">SHP-2023-105</td>
-                <td className="py-4 px-6 whitespace-nowrap">Chưa phân loại</td>
-                <td className="py-4 px-6 text-right font-d-label-md text-d-label-md whitespace-nowrap">--</td>
-                <td className="py-4 px-6 text-d-outline italic whitespace-nowrap">--</td>
-                <td className="py-4 px-6 whitespace-nowrap">
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-d-surface-variant text-d-on-surface-variant font-d-label-sm text-d-label-sm">
-                    <MaterialIcon name="edit_document" className="text-[14px]" />
-                    Nháp
-                  </span>
-                </td>
-                <td className="py-4 px-6 text-center whitespace-nowrap">
-                  <button className="text-d-outline hover:text-d-primary"><MaterialIcon name="more_horiz" /></button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        {/* Pagination */}
-        <div className="px-6 py-4 flex items-center justify-between border-t border-d-border-subtle bg-d-surface-container-lowest shrink-0">
-          <span className="font-d-body-sm text-d-body-sm text-d-outline">Hiển thị 1-5 trong số 24 lô hàng</span>
-          <div className="flex items-center gap-1">
-            <button className="w-8 h-8 rounded-full flex items-center justify-center text-d-outline hover:bg-d-surface-container transition-colors"><MaterialIcon name="chevron_left" className="text-[20px]" /></button>
-            <button className="w-8 h-8 rounded-full bg-d-primary text-d-on-primary flex items-center justify-center font-d-label-md text-d-label-md shadow-sm">1</button>
-            <button className="w-8 h-8 rounded-full flex items-center justify-center text-d-on-surface hover:bg-d-surface-container transition-colors font-d-label-md text-d-label-md">2</button>
-            <button className="w-8 h-8 rounded-full flex items-center justify-center text-d-on-surface hover:bg-d-surface-container transition-colors font-d-label-md text-d-label-md">3</button>
-            <button className="w-8 h-8 rounded-full flex items-center justify-center text-d-outline hover:bg-d-surface-container transition-colors"><MaterialIcon name="chevron_right" className="text-[20px]" /></button>
+      {/* Main List */}
+      <div className="bg-white border border-d-border-subtle rounded-2xl overflow-hidden shadow-sm">
+        <div className="p-4 border-b border-d-border-subtle bg-d-surface-accent/30 flex flex-col sm:flex-row gap-4 items-center justify-between">
+          <div className="relative flex-1 w-full max-w-sm">
+            <MaterialIcon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 text-d-on-surface-variant" />
+            <input
+              className={`${inputClass} pl-10 w-full bg-white`}
+              placeholder="Tìm mã lô hoặc vật liệu..."
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            />
+          </div>
+          <div className="flex items-center gap-3 w-full sm:w-auto">
+            <MaterialIcon name="filter_list" className="text-d-on-surface-variant" />
+            <select className={`${inputClass} bg-white min-w-[200px]`} value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
+              <option value="">Tất cả trạng thái</option>
+              {Object.entries(batchLabels).map(([s, label]) => <option key={s} value={s}>{label}</option>)}
+            </select>
           </div>
         </div>
-      </div>
 
+        <QueryState query={query}>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse min-w-[1000px]">
+              <thead>
+                <tr className="bg-d-surface-container-low border-b border-d-border-subtle">
+                  <th className="p-4 font-medium text-d-on-surface-variant">Mã lô</th>
+                  <th className="p-4 font-medium text-d-on-surface-variant">Vật liệu</th>
+                  <th className="p-4 font-medium text-d-on-surface-variant text-right">Khối lượng</th>
+                  <th className="p-4 font-medium text-d-on-surface-variant">Nhà máy / Đích đến</th>
+                  <th className="p-4 font-medium text-d-on-surface-variant text-center">Trạng thái</th>
+                  <th className="p-4 font-medium text-d-on-surface-variant text-right">Hành động</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-d-border-subtle">
+                {query.data?.items.map((b) => {
+                  const labelStatus = batchLabels[b.status] ?? b.status;
+                  const isPending = ['PENDING_APPROVAL', 'PENDING_FACTORY'].includes(b.status);
+                  const isCancelable = isPending || (['DRAFT', 'LISTED', 'MARKETPLACE'].includes(b.status) && !b.targetFactoryId);
+
+                  return (
+                    <tr key={b.id} className="hover:bg-d-surface transition-colors">
+                      <td className="p-4 font-bold text-d-on-surface" title={b.id}>{b.code ?? `#${b.id.slice(0, 8)}`}</td>
+                      <td className="p-4">
+                        <div className="font-medium text-d-on-surface flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full bg-d-primary"></div>
+                          {materialLabel(b.materialType)}
+                        </div>
+                        {b.description && <p className="text-xs text-d-on-surface-variant mt-1 max-w-[200px] truncate">{b.description}</p>}
+                      </td>
+                      <td className="p-4 text-right font-medium text-d-on-surface">{number(b.weightKg)} kg</td>
+                      <td className="p-4">
+                        {b.factoryName ? (
+                          <div className="flex items-center gap-2 font-medium text-d-on-surface">
+                            <MaterialIcon name="factory" className="text-d-on-surface-variant text-[16px]" />
+                            {b.factoryName}
+                          </div>
+                        ) : (
+                          <span className="text-d-primary font-medium flex items-center gap-1"><MaterialIcon name="public" className="text-[16px]" /> Đăng công khai</span>
+                        )}
+                      </td>
+                      <td className="p-4 text-center">
+                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold ${
+                          ['COMPLETED', 'DELIVERED'].includes(b.status) ? 'bg-green-100 text-green-700' :
+                          ['REJECTED', 'CANCELLED'].includes(b.status) ? 'bg-red-100 text-red-700' :
+                          'bg-blue-50 text-blue-700'
+                        }`}>
+                          {labelStatus}
+                        </span>
+                      </td>
+                      <td className="p-4 text-right">
+                        <div className="flex justify-end gap-2">
+                          <button className="text-d-primary hover:bg-blue-50 p-2 rounded-full transition-colors" onClick={() => setDetail(b.id)} title="Chi tiết lô hàng">
+                            <MaterialIcon name="visibility" className="text-[20px]" />
+                          </button>
+                          {isCancelable && (
+                            <button className="text-red-500 hover:bg-red-50 p-2 rounded-full transition-colors" onClick={() => { remove.reset(); setCancel(b); }} title={isPending ? 'Rút đề nghị' : 'Hủy lô'}>
+                              <MaterialIcon name={isPending ? 'undo' : 'cancel'} className="text-[20px]" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {!query.data?.items.length && (
+                  <tr><td colSpan="6" className="p-8 text-center text-d-on-surface-variant">Không tìm thấy lô hàng nào phù hợp.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          <div className="p-4 border-t border-d-border-subtle bg-gray-50 flex justify-center">
+            <Pager page={page} setPage={setPage} total={query.data?.totalCount} />
+          </div>
+        </QueryState>
+      </div>
     </div>
   );
-};
-
-export default Batches;
+}

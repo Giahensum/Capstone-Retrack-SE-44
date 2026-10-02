@@ -31,7 +31,7 @@ namespace Retrack.API.Controllers
         [HttpGet("{id:guid}")]
         public async Task<IActionResult> GetById(Guid id)
         {
-            var result = await _pickupService.GetByIdAsync(id);
+            var result = await _pickupService.GetByIdAsync(id, GetUserId());
             if (result == null) return NotFound(ApiResponse<string>.Fail("Không tìm thấy."));
             return Ok(ApiResponse<PickupRequestDto>.Ok(result));
         }
@@ -53,6 +53,14 @@ namespace Retrack.API.Controllers
             var result = await _pickupService.ConfirmBySellerAsync(id, GetUserId());
             return Ok(ApiResponse<PickupRequestDto>.Ok(result, "Đã xác nhận."));
         }
+
+        [HttpPatch("{id:guid}/payment-received")]
+        [Authorize(Roles = "SELLER")]
+        public async Task<IActionResult> ConfirmPaymentReceived(Guid id)
+        {
+            var result = await _pickupService.MarkDoneAsync(id, GetUserId());
+            return Ok(ApiResponse<PickupRequestDto>.Ok(result, "Đã xác nhận nhận tiền."));
+        }
     }
 
     // -------------------------------------------------------
@@ -71,12 +79,13 @@ namespace Retrack.API.Controllers
         [HttpGet("{depotId:guid}/pickup-requests")]
         public async Task<IActionResult> GetRequests(Guid depotId)
         {
-            var result = await _pickupService.GetPendingForDepotAsync(depotId);
+            var result = await _pickupService.GetPendingForDepotAsync(depotId, GetUserId());
             return Ok(ApiResponse<List<PickupRequestDto>>.Ok(result));
         }
 
         /// <summary>Nhân viên nhận đơn</summary>
         [HttpPatch("pickup-requests/{id:guid}/accept")]
+        [Authorize(Roles = "DEPOT_EMPLOYEE")]
         public async Task<IActionResult> Accept(Guid id)
         {
             var result = await _pickupService.AcceptRequestAsync(id, GetUserId());
@@ -85,9 +94,10 @@ namespace Retrack.API.Controllers
 
         /// <summary>Nhân viên nhập kết quả cân</summary>
         [HttpPatch("pickup-requests/{id:guid}/weigh")]
+        [Authorize(Roles = "DEPOT_EMPLOYEE")]
         public async Task<IActionResult> Weigh(Guid id, [FromBody] WeighRequestBody body)
         {
-            var result = await _pickupService.WeighAndUpdateAsync(id, body.Items, body.CheckinImageUrl);
+            var result = await _pickupService.WeighAndUpdateAsync(id, GetUserId(), body.Items, body.CheckinImageUrl);
             return Ok(ApiResponse<PickupRequestDto>.Ok(result, "Cập nhật cân thành công."));
         }
 
@@ -96,7 +106,7 @@ namespace Retrack.API.Controllers
         [Authorize(Roles = "DEPOT_OWNER")]
         public async Task<IActionResult> MarkPaymentSent(Guid id, [FromBody] PaymentProofBody body)
         {
-            var result = await _pickupService.MarkPaymentSentAsync(id, body.PaymentProofUrl);
+            var result = await _pickupService.MarkPaymentSentAsync(id, GetUserId(), body.PaymentProofUrl);
             return Ok(ApiResponse<PickupRequestDto>.Ok(result, "Đã ghi nhận thanh toán."));
         }
 

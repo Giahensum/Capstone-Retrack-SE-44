@@ -39,7 +39,7 @@ public class FactoryResponseContractTests
     {
         var batch = new InventoryBatch
         {
-            Status = "WEIGHED", MaterialType = "PET", DeclaredWeightKg = 100,
+            Status = "WEIGHED", Code = "LO-2610-007", MaterialType = "PET", DeclaredWeightKg = 100,
             Depot = new Depot { Name = "Depot", Address = "Address", Owner = new User { Phone = "123" } },
             QualityCheck = new BatchQualityCheck
             {
@@ -48,6 +48,7 @@ public class FactoryResponseContractTests
             }
         };
         var response = FactoryOrderMapper.Map(batch);
+        Assert.Equal("LO-2610-007", response.BatchCode);
         var json = JsonSerializer.SerializeToElement(response, JsonOptions);
         AssertFields(json, "id", "batchId", "batchCode", "materialType", "estimatedWeightKg", "actualWeightKg",
             "depotId", "depotName", "depotAddress", "depotPhone", "agreedPrice", "totalAmount", "status",

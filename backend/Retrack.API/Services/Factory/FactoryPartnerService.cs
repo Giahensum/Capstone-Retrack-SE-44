@@ -28,7 +28,7 @@ public class FactoryPartnerService(AppDbContext db) : FactoryServiceBase(db), IF
             Name = x.Depot.Name,
             Address = x.Depot.Address,
             ContactPhone = x.Depot.Owner.Phone,
-            Status = x.Status,
+            Status = x.EffectiveStatus, BlockedByFactory = x.BlockedByFactory, BlockedByDepot = x.BlockedByDepot, LegacyBlocked = x.Status == "BLOCKED",
             Rating = x.Depot.Rating,
             LatestRating = latestReviews.TryGetValue(x.DepotId, out var review) ? review.Rating : null,
             LatestComment = latestReviews.TryGetValue(x.DepotId, out review) ? review.Comment : null,
@@ -49,36 +49,35 @@ public class FactoryPartnerService(AppDbContext db) : FactoryServiceBase(db), IF
     public async Task<ServiceResult<PartnerStatusResponse>> UpdateStatusAsync(Guid userId, Guid depotId, PartnerStatusRequest request, CancellationToken ct)
     {
         var status = request.Status.ToString();
-        if (status != "BLOCKED") return ServiceResult<PartnerStatusResponse>.Invalid("Vựa duyệt quan hệ đối tác. Nhà máy chỉ có thể chặn đối tác.");
+        if (status is not ("APPROVED" or "DECLINED" or "BLOCKED" or "UNBLOCKED"))
+            return ServiceResult<PartnerStatusResponse>.Invalid("Chọn hợp tác, không hợp tác, chặn hoặc bỏ chặn.");
         var factory = await CurrentFactory(userId, ct);
+        await using var tx = Db.Database.IsRelational() ? await Db.Database.BeginTransactionAsync(ct) : null;
+        if (Db.Database.IsRelational())
+            await Db.Depots.FromSqlInterpolated($"SELECT * FROM depots WHERE id = {depotId} FOR UPDATE").LoadAsync(ct);
         var partner = await Db.FactoryDepotPartnerships.SingleOrDefaultAsync(x => x.FactoryId == factory.Id && x.DepotId == depotId, ct);
         if (partner is null) return ServiceResult<PartnerStatusResponse>.NotFound("Không tìm thấy đối tác.");
-        if (partner.Status == status) return ServiceResult<PartnerStatusResponse>.Success(data: new PartnerStatusResponse
+        await Db.Entry(partner).ReloadAsync(ct);
+        if (status is "APPROVED" or "DECLINED")
         {
-            Id = partner.Id,
-            DepotId = partner.DepotId,
-            Status = partner.Status
-        });
-        partner.Status = status;
-        partner.UpdatedAt = DateTime.UtcNow;
-        var waitingBatches = await Db.InventoryBatches.Where(x => x.DepotId == depotId && x.DirectOfferFactoryId == factory.Id && x.Status == "PENDING_FACTORY").ToListAsync(ct);
-        foreach (var batch in waitingBatches)
-        {
-            batch.Status = "REJECTED";
-            batch.RejectionReason = "Nhà máy đã chặn vựa đối tác.";
-            batch.DirectOfferFactoryId = null;
+            if (partner.IsBlocked) return ServiceResult<PartnerStatusResponse>.Conflict("Quan hệ đang bị chặn; quyết định hợp tác không được mở chặn.");
+            var inspected = await Db.InventoryBatches.AnyAsync(b => b.DepotId == depotId && b.TargetFactoryId == factory.Id &&
+                b.QualityCheck != null && (b.Status == "VERIFIED" || b.Status == "REJECTED" || b.Status == "COMPLETED" || b.Status == "PAID"), ct);
+            if (!inspected) return ServiceResult<PartnerStatusResponse>.Conflict("Cần hoàn tất kiểm tra chất lượng ít nhất một lô trước khi quyết định hợp tác.");
+            partner.Status = status;
         }
+        else partner.BlockedByFactory = status == "BLOCKED";
+        partner.UpdatedAt = DateTime.UtcNow;
         await Db.SaveChangesAsync(ct);
+        if (tx != null) await tx.CommitAsync(ct);
         return ServiceResult<PartnerStatusResponse>.Success(data: new PartnerStatusResponse
         {
-            Id = partner.Id,
-            DepotId = partner.DepotId,
-            Status = partner.Status
+            Id = partner.Id, DepotId = partner.DepotId, Status = partner.EffectiveStatus
         });
     }
-
     public async Task<ServiceResult<PartnerRatingResponse>> RateAsync(Guid userId, Guid orderId, RatingRequest request, CancellationToken ct)
     {
+        if (request.BlockPartner) return ServiceResult<PartnerRatingResponse>.Invalid("Dùng chức năng chặn đối tác riêng để xác nhận thao tác.");
         var factory = await CurrentFactory(userId, ct);
         var batch = await Db.InventoryBatches.SingleOrDefaultAsync(x => x.Id == orderId && x.TargetFactoryId == factory.Id, ct);
         if (batch is null) return ServiceResult<PartnerRatingResponse>.NotFound("Không tìm thấy đơn hàng.");
@@ -94,8 +93,8 @@ public class FactoryPartnerService(AppDbContext db) : FactoryServiceBase(db), IF
         var partner = await Db.FactoryDepotPartnerships.SingleOrDefaultAsync(x => x.FactoryId == factory.Id && x.DepotId == batch.DepotId, ct);
         if (partner is not null)
         {
-            if (request.BlockPartner) partner.Status = "BLOCKED";
-            // Đánh giá không được tự phê duyệt quan hệ; vựa phải duyệt ở vai trò của họ.
+            if (request.BlockPartner) partner.BlockedByFactory = true;
+            // Đánh giá không tự thay quyết định hợp tác sau kiểm tra.
             partner.UpdatedAt = DateTime.UtcNow;
         }
         await Db.SaveChangesAsync(ct);

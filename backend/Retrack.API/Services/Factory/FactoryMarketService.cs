@@ -13,31 +13,37 @@ public class FactoryMarketService(AppDbContext db) : FactoryServiceBase(db), IFa
     public async Task<ServiceResult<PageResponse<MarketBatchResponse>>> BatchesAsync(Guid userId, MarketQuery query, CancellationToken ct)
     {
         var factory = await CurrentFactory(userId, ct);
-        var accepted = factory.AcceptedMaterialsCsv.Split(',', StringSplitOptions.RemoveEmptyEntries);
+        var accepted = factory.AcceptedMaterialsCsv.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(MaterialCatalog.Normalize).ToArray();
         var source = Db.InventoryBatches.AsNoTracking()
-            .Where(x => ((x.Status == "MARKETPLACE" || x.Status == "LISTED" || x.Status == "DRAFT") && x.TargetFactoryId == null) ||
-                (x.DirectOfferFactoryId == factory.Id && (x.Status == "PENDING_FACTORY" || x.Status == "READY_FOR_PICKUP")))
+            .Where(x => ((x.Status == "MARKETPLACE" || x.Status == "LISTED" || x.Status == "DRAFT") && x.TargetFactoryId == null && x.DirectOfferFactoryId == null) ||
+                (x.DirectOfferFactoryId == factory.Id && (x.Status == "PENDING_FACTORY" || x.Status == "READY_FOR_PICKUP" || x.Status == "PENDING_APPROVAL")) ||
+                (x.TargetFactoryId == factory.Id && x.Status == "PENDING_APPROVAL"))
             .Include(x => x.Depot).ThenInclude(x => x.Owner).AsQueryable();
-        if (query.Material.HasValue) source = source.Where(x => x.MaterialType == query.Material.Value.ToString());
+        if (query.Material.HasValue) { var values = MaterialCatalog.Values(query.Material.Value.ToString()); source = source.Where(x => values.Contains(x.MaterialType)); }
         if (query.MinWeightKg.HasValue) source = source.Where(x => x.DeclaredWeightKg >= query.MinWeightKg.Value);
         if (query.MaxWeightKg.HasValue) source = source.Where(x => x.DeclaredWeightKg <= query.MaxWeightKg.Value);
         if (!string.IsNullOrWhiteSpace(query.Search)) source = source.Where(x => x.Description != null && x.Description.Contains(query.Search));
-        if (query.DirectOnly) source = source.Where(x => x.DirectOfferFactoryId == factory.Id);
+        if (query.DirectOnly) source = source.Where(x => x.DirectOfferFactoryId == factory.Id || (x.TargetFactoryId == factory.Id && x.Status == "PENDING_APPROVAL"));
         else source = source.Where(x => x.TargetFactoryId == null && x.DirectOfferFactoryId == null);
-        var all = await source.OrderByDescending(x => x.CreatedAt).ToListAsync(ct);
-        var matches = all.Where(x => accepted.Length == 0 || accepted.Contains(x.MaterialType))
-            .Where(x => factory.CapacityKgPerMonth <= 0 || x.DeclaredWeightKg <= factory.CapacityKgPerMonth).ToList();
-        var total = matches.Count;
-        var items = matches.Skip((query.Page - 1) * query.PageSize).Take(query.PageSize).Select(x => new MarketBatchResponse
+        if (accepted.Length > 0)
+        {
+            var materialValues = accepted.SelectMany(MaterialCatalog.Values).Distinct().ToArray();
+            source = source.Where(x => materialValues.Contains(x.MaterialType));
+        }
+        if (factory.CapacityKgPerMonth > 0) source = source.Where(x => x.DeclaredWeightKg <= factory.CapacityKgPerMonth);
+        var total = await source.CountAsync(ct);
+        var rows = await source.OrderByDescending(x => x.CreatedAt).ThenBy(x => x.Id)
+            .Skip((query.Page - 1) * query.PageSize).Take(query.PageSize).ToListAsync(ct);
+        var items = rows.Select(x => new MarketBatchResponse
         {
             Id = x.Id,
-            BatchCode = x.Id.ToString("N")[..8].ToUpperInvariant(),
-            MaterialType = x.MaterialType,
+            BatchCode = x.Code ?? x.Id.ToString("N")[..8].ToUpperInvariant(),
+            MaterialType = MaterialCatalog.Normalize(x.MaterialType),
             EstimatedWeightKg = x.DeclaredWeightKg,
             UnitPrice = (decimal?)null,
             Description = x.Description,
-            ThumbnailImageUrl = (string?)null,
-            ImageUrls = Array.Empty<string>(),
+            ThumbnailImageUrl = x.ImageUrls.FirstOrDefault(),
+            ImageUrls = x.ImageUrls,
             CreatedAt = x.CreatedAt,
             Depot = new MarketDepotResponse
             {
@@ -48,7 +54,7 @@ public class FactoryMarketService(AppDbContext db) : FactoryServiceBase(db), IFa
                 Latitude = x.Depot.Latitude,
                 Longitude = x.Depot.Longitude
             },
-            IsDirectOffer = x.DirectOfferFactoryId == factory.Id
+            IsDirectOffer = x.DirectOfferFactoryId == factory.Id || (x.TargetFactoryId == factory.Id && x.Status == "PENDING_APPROVAL")
         });
         return ServiceResult<PageResponse<MarketBatchResponse>>.Success(data: new PageResponse<MarketBatchResponse>
         {
@@ -76,34 +82,43 @@ public class FactoryMarketService(AppDbContext db) : FactoryServiceBase(db), IFa
     public async Task<ServiceResult<BatchAcceptedResponse>> AcceptAsync(Guid userId, Guid batchId, BatchOfferRequest request, CancellationToken ct)
     {
         var factory = await CurrentFactory(userId, ct);
-        var batch = await Db.InventoryBatches.Include(x => x.Depot)
+        await using var transaction = Db.Database.IsRelational() ? await Db.Database.BeginTransactionAsync(ct) : null;
+        var depotId = await Db.InventoryBatches.AsNoTracking().Where(x => x.Id == batchId).Select(x => (Guid?)x.DepotId).SingleOrDefaultAsync(ct);
+        if (depotId == null) return ServiceResult<BatchAcceptedResponse>.NotFound("Không tìm thấy lô hàng.");
+        if (Db.Database.IsRelational())
+        {
+            // Cùng thứ tự khóa với Depot: kho trước, lô sau.
+            await Db.Depots.FromSqlInterpolated($"SELECT * FROM depots WHERE id = {depotId.Value} FOR UPDATE").LoadAsync(ct);
+            await Db.InventoryBatches.FromSqlInterpolated($"SELECT * FROM inventory_batches WHERE id = {batchId} FOR UPDATE").LoadAsync(ct);
+        }
+        var batch = await Db.InventoryBatches.Include(x => x.Depot).Include(x => x.TransportJob)
             .SingleOrDefaultAsync(x => x.Id == batchId, ct);
         if (batch is null) return ServiceResult<BatchAcceptedResponse>.NotFound("Không tìm thấy lô hàng.");
+        await Db.Entry(batch).ReloadAsync(ct);
         var availableOnMarketplace = (batch.Status is "MARKETPLACE" or "LISTED" or "DRAFT") && batch.TargetFactoryId is null;
-        var directOfferForFactory = (batch.Status is "PENDING_FACTORY" or "READY_FOR_PICKUP") && batch.DirectOfferFactoryId == factory.Id;
+        var directOfferForFactory = ((batch.Status is "PENDING_FACTORY" or "READY_FOR_PICKUP" or "PENDING_APPROVAL") && batch.DirectOfferFactoryId == factory.Id) ||
+            (batch.Status == "PENDING_APPROVAL" && batch.TargetFactoryId == factory.Id);
         if (!availableOnMarketplace && !directOfferForFactory)
             return ServiceResult<BatchAcceptedResponse>.Conflict("Lô hàng không còn khả dụng cho nhà máy này.");
-        var accepted = factory.AcceptedMaterialsCsv.Split(',', StringSplitOptions.RemoveEmptyEntries);
-        if ((accepted.Length > 0 && !accepted.Contains(batch.MaterialType)) || (factory.CapacityKgPerMonth > 0 && batch.DeclaredWeightKg > factory.CapacityKgPerMonth))
+        var accepted = factory.AcceptedMaterialsCsv.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(MaterialCatalog.Normalize).ToArray();
+        if ((accepted.Length > 0 && !accepted.Contains(MaterialCatalog.Normalize(batch.MaterialType))) || (factory.CapacityKgPerMonth > 0 && batch.DeclaredWeightKg > factory.CapacityKgPerMonth))
             return ServiceResult<BatchAcceptedResponse>.Invalid("Vật liệu hoặc khối lượng lô không phù hợp năng lực nhà máy.");
-        var partnership = await Db.FactoryDepotPartnerships.SingleOrDefaultAsync(x => x.FactoryId == factory.Id && x.DepotId == batch.DepotId, ct);
-        if (partnership?.Status == "BLOCKED") return ServiceResult<BatchAcceptedResponse>.Conflict("Đối tác này đang bị chặn.");
+        var partnership = await Db.FactoryDepotPartnerships.AsNoTracking().SingleOrDefaultAsync(x => x.FactoryId == factory.Id && x.DepotId == batch.DepotId, ct);
+        if (partnership?.IsBlocked == true) return ServiceResult<BatchAcceptedResponse>.Conflict("Đối tác này đang bị chặn.");
         if (partnership is null)
         {
             partnership = new FactoryDepotPartnership { FactoryId = factory.Id, DepotId = batch.DepotId, Status = "PENDING" };
             Db.FactoryDepotPartnerships.Add(partnership);
         }
         await Db.SaveChangesAsync(ct);
-        if (!directOfferForFactory && partnership?.Status != "APPROVED")
-            return ServiceResult<BatchAcceptedResponse>.Conflict("Vựa cần duyệt quan hệ đối tác trước khi nhà máy nhận lô.");
-        if (directOfferForFactory && partnership?.Status != "APPROVED")
-            return ServiceResult<BatchAcceptedResponse>.Conflict("Quan hệ đối tác chưa được vựa duyệt.");
+        // Nhận lô đầu không tự thiết lập quan hệ hợp tác lâu dài.
         if (directOfferForFactory) batch.DirectOfferFactoryId = null;
         batch.TargetFactoryId = factory.Id;
         batch.Status = "ACCEPTED";
         if (batch.TransportJob is null)
             Db.TransportJobs.Add(new TransportJob { BatchId = batch.Id, Status = "PENDING" });
         await Db.SaveChangesAsync(ct);
+        if (transaction != null) await transaction.CommitAsync(ct);
         return ServiceResult<BatchAcceptedResponse>.Success(data: new BatchAcceptedResponse
         {
             Id = batch.Id,
@@ -117,16 +132,27 @@ public class FactoryMarketService(AppDbContext db) : FactoryServiceBase(db), IFa
     {
         if (string.IsNullOrWhiteSpace(request.Reason)) return ServiceResult.Invalid("Nhập lý do từ chối.");
         var factory = await CurrentFactory(userId, ct);
+        await using var transaction = Db.Database.IsRelational() ? await Db.Database.BeginTransactionAsync(ct) : null;
+        var depotId = await Db.InventoryBatches.AsNoTracking().Where(x => x.Id == batchId).Select(x => (Guid?)x.DepotId).SingleOrDefaultAsync(ct);
+        if (depotId == null) return ServiceResult.NotFound("Không tìm thấy lời mời hợp tác.");
+        if (Db.Database.IsRelational())
+        {
+            await Db.Depots.FromSqlInterpolated($"SELECT * FROM depots WHERE id = {depotId.Value} FOR UPDATE").LoadAsync(ct);
+            await Db.InventoryBatches.FromSqlInterpolated($"SELECT * FROM inventory_batches WHERE id = {batchId} FOR UPDATE").LoadAsync(ct);
+        }
         var batch = await Db.InventoryBatches.SingleOrDefaultAsync(x => x.Id == batchId, ct);
         if (batch is null) return ServiceResult.NotFound("Không tìm thấy lời mời hợp tác.");
-        var directOfferForFactory = (batch.Status is "PENDING_FACTORY" or "READY_FOR_PICKUP") && batch.DirectOfferFactoryId == factory.Id;
-        var marketplaceOffer = (batch.Status is "MARKETPLACE" or "LISTED" or "DRAFT") && batch.TargetFactoryId is null;
-        if (!directOfferForFactory && !marketplaceOffer)
+        await Db.Entry(batch).ReloadAsync(ct);
+        var directOfferForFactory = ((batch.Status is "PENDING_FACTORY" or "READY_FOR_PICKUP" or "PENDING_APPROVAL") && batch.DirectOfferFactoryId == factory.Id) ||
+            (batch.Status == "PENDING_APPROVAL" && batch.TargetFactoryId == factory.Id);
+        // Không cho một nhà máy gỡ lô công khai của chủ kho khỏi chợ.
+        if (!directOfferForFactory)
             return ServiceResult.Conflict("Lời mời không còn khả dụng.");
         batch.Status = "REJECTED";
         batch.RejectionReason = request.Reason.Trim();
         batch.DirectOfferFactoryId = null;
         await Db.SaveChangesAsync(ct);
+        if (transaction != null) await transaction.CommitAsync(ct);
         return ServiceResult.Success(message: "Đã từ chối lời mời.");
     }
 }

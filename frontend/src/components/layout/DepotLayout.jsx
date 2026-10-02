@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import '../../features/depot/styles/depot-theme.css';
 import clsx from 'clsx';
+import { DepotSelector, useDepot } from '@/features/depot/DepotContext';
+import { useAuthStore } from '@/app/store/useAuthStore';
 
 // Because we're using Material Symbols, we just render a span with the icon name.
 const MaterialIcon = ({ name, className }) => (
@@ -25,6 +27,10 @@ const SidebarItem = ({ iconName, label, to, active }) => (
 
 const DepotLayout = () => {
   const location = useLocation();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const { depotId } = useDepot();
+  const user = useAuthStore((s) => s.user);
+  const logout = useAuthStore((s) => s.logout);
 
   const navItems = [
     { iconName: 'dashboard', label: 'Tổng quan', to: '/depot/dashboard' },
@@ -42,7 +48,8 @@ const DepotLayout = () => {
   return (
     <div className="bg-d-background flex h-screen overflow-hidden font-d-body-md text-d-on-background">
       {/* SideNavBar */}
-      <aside className="w-64 bg-d-surface-container-lowest border-r border-d-border-subtle h-screen fixed top-0 left-0 flex flex-col z-40">
+      {menuOpen && <button aria-label="Đóng menu" className="fixed inset-0 bg-black/30 z-40 lg:hidden" onClick={() => setMenuOpen(false)} />}
+      <aside aria-label="Menu kho vựa" className={clsx("w-64 bg-d-surface-container-lowest border-r border-d-border-subtle h-screen fixed top-0 left-0 flex flex-col z-50 transition-transform lg:translate-x-0", menuOpen ? "translate-x-0" : "-translate-x-full")}>
         <div className="h-16 flex items-center px-6 border-b border-d-border-subtle">
           <Link to="/depot/dashboard" className="font-d-headline-md text-d-headline-md font-bold tracking-tighter text-d-primary">
             RETRACK
@@ -50,12 +57,12 @@ const DepotLayout = () => {
         </div>
         
         <div className="flex-1 overflow-y-auto py-6">
-          <nav className="px-4 space-y-2">
+          <nav className="px-4 space-y-2" onClick={() => setMenuOpen(false)}>
             {navItems.map((item) => (
               <SidebarItem 
                 key={item.to}
                 {...item}
-                active={location.pathname.startsWith(item.to) || (location.pathname === '/depot' && item.to === '/depot/dashboard')}
+                active={location.pathname === item.to || (location.pathname === '/depot' && item.to === '/depot/dashboard')}
               />
             ))}
           </nav>
@@ -67,48 +74,32 @@ const DepotLayout = () => {
               AD
             </div>
             <div>
-              <p className="font-d-label-md text-d-label-md text-d-on-surface">Depot Admin</p>
-              <p className="font-d-label-sm text-d-label-sm text-d-on-surface-variant">Kho ABC</p>
+              <p className="font-d-label-md text-d-label-md text-d-on-surface">{user?.fullName}</p>
+              <button onClick={logout} className="font-d-label-sm text-d-label-sm text-d-on-surface-variant">Đăng xuất</button>
             </div>
           </div>
         </div>
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 ml-64 flex flex-col h-screen overflow-hidden">
+      <main className="flex-1 min-w-0 lg:ml-64 flex flex-col h-screen overflow-hidden">
         {/* TopAppBar */}
-        <header className="d-glass-panel flex justify-between items-center h-16 px-8 shrink-0 z-40">
+        <header className="d-glass-panel flex justify-between gap-3 items-center min-h-16 px-4 lg:px-8 shrink-0 z-30">
+          <button aria-label="Mở menu" aria-expanded={menuOpen} className="lg:hidden" onClick={() => setMenuOpen(true)}><MaterialIcon name="menu" /></button>
           <div className="flex items-center text-d-on-surface-variant font-d-body-sm text-d-body-sm gap-2">
-            <span className="hover:text-d-primary cursor-pointer transition-colors">Trang chủ</span>
+            <Link to="/depot/dashboard" className="hidden sm:inline hover:text-d-primary transition-colors">Trang chủ</Link>
             <MaterialIcon name="chevron_right" className="text-[16px]" />
-            <span className="text-d-primary font-bold">Quản lý kho</span>
+            <span className="text-d-primary font-bold">{navItems.find((item) => item.to === location.pathname)?.label ?? 'Tổng quan'}</span>
           </div>
           
-          <div className="flex items-center gap-6">
-            <div className="relative w-64">
-              <MaterialIcon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 text-d-outline" />
-              <input 
-                type="text" 
-                className="w-full bg-d-surface-container-lowest border border-d-border-subtle rounded-full py-2 pl-10 pr-4 font-d-body-sm text-d-body-sm text-d-on-surface focus:outline-none focus:border-d-secondary transition-colors" 
-                placeholder="Tìm kiếm..." 
-              />
-            </div>
-            
-            <div className="flex items-center gap-4 text-d-on-surface-variant">
-              <button className="hover:text-d-primary transition-colors active:opacity-70 relative">
-                <MaterialIcon name="notifications" />
-                <span className="absolute top-0 right-0 w-2 h-2 bg-d-error rounded-full"></span>
-              </button>
-              <button className="hover:text-d-primary transition-colors active:opacity-70">
-                <MaterialIcon name="help_outline" />
-              </button>
-            </div>
+          <div className="flex items-center min-w-0 gap-3">
+            <DepotSelector />
           </div>
         </header>
 
         {/* Page Content */}
         <div className="flex-1 overflow-y-auto bg-d-background">
-          <Outlet />
+          {depotId ? <Outlet key={depotId} /> : <p role="status" className="p-6">Chọn kho để quản lý dữ liệu.</p>}
         </div>
       </main>
     </div>

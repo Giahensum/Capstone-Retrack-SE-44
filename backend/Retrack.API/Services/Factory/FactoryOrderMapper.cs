@@ -38,7 +38,7 @@ public static class FactoryOrderMapper
         {
             Id = batch.Id,
             BatchId = batch.Id,
-            BatchCode = batch.Id.ToString("N")[..8].ToUpperInvariant(),
+            BatchCode = batch.Code ?? batch.Id.ToString("N")[..8].ToUpperInvariant(),
             MaterialType = batch.MaterialType,
             EstimatedWeightKg = batch.DeclaredWeightKg,
             ActualWeightKg = batch.ActualWeightKg,

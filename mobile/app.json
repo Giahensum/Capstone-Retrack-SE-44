@@ -1,0 +1,57 @@
+{
+  "expo": {
+    "name": "ReTrack Nhân sự",
+    "slug": "retrack-staff",
+    "scheme": "retrack",
+    "version": "1.0.0",
+    "icon": "https://res.cloudinary.com/eiya3d1b/image/upload/v1790564763/retrack/branding/android-icon-492fa7f1a33378be.png",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "android": {
+      "package": "vn.retrack.staff",
+      "adaptiveIcon": {
+        "foregroundImage": "https://res.cloudinary.com/eiya3d1b/image/upload/v1790564763/retrack/branding/android-icon-492fa7f1a33378be.png",
+        "backgroundColor": "#f8f9ff"
+      },
+      "predictiveBackGestureEnabled": true,
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO"
+      ],
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "INTERNET"
+      ]
+    },
+    "plugins": [
+      "expo-secure-store",
+      "expo-font",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Cho phép ReTrack chọn ảnh đại diện của bạn.",
+          "cameraPermission": "Cho phép ReTrack dùng camera cho nghiệp vụ check-in.",
+          "microphonePermission": false
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#f8f9ff",
+          "image": "https://res.cloudinary.com/eiya3d1b/image/upload/v1790564757/retrack/branding/logo-11a0216c91dc41d2.png",
+          "imageWidth": 320
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ]
+    ]
+  }
+}
