@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Retrack.API.DTOs;
@@ -8,7 +9,7 @@ using Retrack.API.Services.Interfaces;
 namespace Retrack.API.Controllers.Depot;
 
 [ApiController, Route("api/depot/reports"), Authorize(Roles = "DEPOT_OWNER")]
-public sealed class DepotReportController(IDepotReportService service) : ControllerBase
+public sealed class DepotReportController(IDepotReportService service, IWebHostEnvironment environment) : ControllerBase
 {
     private Guid OwnerId => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
     [HttpGet("revenue")]
@@ -34,5 +35,13 @@ public sealed class DepotReportController(IDepotReportService service) : Control
     {
         await service.ConfirmInvoiceAsync(OwnerId, depotId, id, dto);
         return Ok(ApiResponse<string>.Ok("Đã gửi xác nhận, chờ Admin đối soát."));
+    }
+
+    [HttpPost("invoices/{id:guid}/simulate-payment")]
+    public async Task<IActionResult> SimulatePayment(Guid id, [FromQuery] Guid depotId)
+    {
+        if (!environment.IsDevelopment()) return NotFound();
+        await service.SimulatePaymentAsync(OwnerId, depotId, id);
+        return Ok(ApiResponse<string>.Ok("Đã mô phỏng thanh toán. Không có tiền thật được chuyển; hóa đơn vẫn chờ Admin đối soát."));
     }
 }
