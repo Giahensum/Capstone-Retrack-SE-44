@@ -23,6 +23,16 @@ namespace Retrack.API.Models
         [Column("address")]
         public string Address { get; set; } = string.Empty;
 
+        [Column("tax_code")]
+        public string? TaxCode { get; set; }
+
+        [Column("contact_phone")]
+        [MaxLength(20)]
+        public string? ContactPhone { get; set; }
+
+        [Column("description")]
+        public string? Description { get; set; }
+
         [Column("latitude")]
         public decimal? Latitude { get; set; }
 

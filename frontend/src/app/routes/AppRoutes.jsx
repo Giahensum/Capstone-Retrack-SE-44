@@ -12,7 +12,7 @@ const LandingPage = lazy(() => import('@/features/landing/pages/LandingPage'));
 const SellerDashboard = lazy(() => import('@/features/seller/pages/SellerDashboard'));
 // Depot
 
-// My Depot Owner New UIs (TV2)
+// Giao diện Chủ kho vựa — Ngô Sỹ Giá (TV2)
 import DepotLayout from '@/components/layout/DepotLayout';
 import MyDepotDashboard from '@/features/depot/Dashboard';
 import DepotInventory from '@/features/depot/Inventory';
@@ -24,10 +24,10 @@ import DepotRevenueReport from '@/features/depot/RevenueReport';
 import DepotStaff from '@/features/depot/Staff';
 import DepotStaffPerformance from '@/features/depot/StaffPerformance';
 import DepotProfile from '@/features/depot/Profile';
+import { DepotProvider } from '@/features/depot/DepotContext';
 // Employee
-const EmployeeDashboard = lazy(() => import('@/features/employee/pages/EmployeeDashboard'));
+const StaffMobilePage = lazy(() => import('@/features/auth/pages/StaffMobilePage'));
 // Driver
-const DriverDashboard = lazy(() => import('@/features/driver/pages/DriverDashboard'));
 // Factory
 const FactoryDashboard = lazy(() => import('@/features/factory/workspace/FactoryApp'));
 // Admin
@@ -44,14 +44,16 @@ export function AppRoutes() {
           <Route path="/" element={<LandingPage />}/>
           <Route path="/login" element={<LoginPage />}/>
           <Route path="/register" element={<RegisterPage />}/>
+          <Route path="/staff-app" element={<StaffMobilePage />}/>
 
           {/* Seller */}
           <Route path="/seller/*" element={<PrivateRoute allowedRoles={[ROLES.SELLER]}>
                 <SellerDashboard />
               </PrivateRoute>}/>
 
-          {/* Depot Owner (Auth Bypassed for UI Preview) */}
-          <Route path="/depot" element={<DepotLayout />}>
+          {/* Depot Owner */}
+          <Route path="/depot" element={<PrivateRoute allowedRoles={[ROLES.DEPOT_OWNER]}><DepotProvider><DepotLayout /></DepotProvider></PrivateRoute>}>
+              <Route index element={<Navigate to="dashboard" replace />} />
               <Route path="dashboard" element={<MyDepotDashboard />} />
               <Route path="inventory" element={<DepotInventory />} />
               <Route path="batches" element={<DepotBatches />} />
@@ -67,12 +69,12 @@ export function AppRoutes() {
 
           {/* Depot Employee */}
           <Route path="/employee/*" element={<PrivateRoute allowedRoles={[ROLES.DEPOT_EMPLOYEE]}>
-                <EmployeeDashboard />
+                <StaffMobilePage />
               </PrivateRoute>}/>
 
           {/* Driver */}
           <Route path="/driver/*" element={<PrivateRoute allowedRoles={[ROLES.DRIVER]}>
-                <DriverDashboard />
+                <StaffMobilePage />
               </PrivateRoute>}/>
 
           {/* Factory */}

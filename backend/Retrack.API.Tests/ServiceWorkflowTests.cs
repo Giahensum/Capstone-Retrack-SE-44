@@ -110,7 +110,7 @@ public class FactoryServiceWorkflowTests
     }
 
     [Fact]
-    public async Task MarketplaceAcceptanceRequiresDepotApproval()
+    public async Task MarketplaceFirstAcceptanceDoesNotApproveLongTermPartnership()
     {
         await using var db = NewDb();
         var (factory, depot, batch) = await Seed(db, "MARKETPLACE");
@@ -118,23 +118,19 @@ public class FactoryServiceWorkflowTests
         batch.TargetFactoryId = null;
         await db.SaveChangesAsync();
         var service = new FactoryMarketService(db);
-        Assert.Equal(ServiceOutcome.Conflict,
+        Assert.Equal(ServiceOutcome.Success,
             (await service.AcceptAsync(factory.OwnerId, batch.Id, new BatchOfferRequest(), default)).Outcome);
         Assert.Equal("PENDING", (await db.FactoryDepotPartnerships.SingleAsync()).Status);
-        Assert.Empty(db.TransportJobs);
-        // Arrange an approved partnership as input to the Factory workflow.
-        (await db.FactoryDepotPartnerships.SingleAsync()).Status = "APPROVED";
-        await db.SaveChangesAsync();
+        Assert.Single(db.TransportJobs);
         var accepted = await service.AcceptAsync(factory.OwnerId, batch.Id, new BatchOfferRequest(), default);
-        Assert.Equal(ServiceOutcome.Success, accepted.Outcome);
-        Assert.Equal(batch.Id, accepted.ResourceId);
+        Assert.Equal(ServiceOutcome.Conflict, accepted.Outcome);
         Assert.Equal(factory.Id, batch.TargetFactoryId);
         Assert.Equal("ACCEPTED", batch.Status);
         Assert.Single(db.TransportJobs);
     }
 
     [Fact]
-    public async Task BlockingPartnerRejectsPendingDirectOffers()
+    public async Task BlockingPartnerPreventsAcceptanceWithoutSilentlyCancellingOffers()
     {
         await using var db = NewDb();
         var (factory, depot, batch) = await Seed(db, "PENDING_FACTORY");
@@ -144,8 +140,10 @@ public class FactoryServiceWorkflowTests
         var result = await new FactoryPartnerService(db).UpdateStatusAsync(factory.OwnerId, depot.Id,
             new PartnerStatusRequest { Status = PartnershipStatus.BLOCKED }, default);
         Assert.Equal(ServiceOutcome.Success, result.Outcome);
-        Assert.Equal("REJECTED", batch.Status);
-        Assert.Null(batch.DirectOfferFactoryId);
+        Assert.Equal("PENDING_FACTORY", batch.Status);
+        Assert.Equal(factory.Id, batch.DirectOfferFactoryId);
+        Assert.True((await db.FactoryDepotPartnerships.SingleAsync()).BlockedByFactory);
+        Assert.Equal(ServiceOutcome.Conflict, (await new FactoryMarketService(db).AcceptAsync(factory.OwnerId, batch.Id, new(), default)).Outcome);
     }
 
     [Fact]

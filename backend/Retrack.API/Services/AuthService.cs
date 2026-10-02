@@ -30,7 +30,7 @@ namespace Retrack.API.Services
         // ── Email / Password Login ──────────────────────────────────────
         public async Task<AuthResponseDto?> LoginAsync(LoginDto dto)
         {
-            var user = await _userRepo.GetByEmailAsync(dto.Email);
+            var user = await _userRepo.GetByEmailAsync(dto.Email.Trim());
             if (user == null || !BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash))
                 return null;
 
@@ -43,6 +43,14 @@ namespace Retrack.API.Services
         // ── Register ────────────────────────────────────────────────────
         public async Task<AuthResponseDto> RegisterAsync(RegisterDto dto)
         {
+            // Chủ kho tạo tài khoản nhân viên; đăng ký công khai không được cấp quyền Admin/nhân viên.
+            var role = dto.Role?.Trim().ToUpperInvariant();
+            if (role is not ("SELLER" or "DEPOT_OWNER" or "FACTORY"))
+                throw new ArgumentException("Vai trò không được phép tự đăng ký.");
+            if (string.IsNullOrWhiteSpace(dto.FullName) || dto.FullName.Length > 255 ||
+                !new System.ComponentModel.DataAnnotations.EmailAddressAttribute().IsValid(dto.Email) ||
+                dto.Password.Length < 6 || Encoding.UTF8.GetByteCount(dto.Password) > 72)
+                throw new ArgumentException("Tên, email hoặc mật khẩu không hợp lệ (mật khẩu ít nhất 6 ký tự, tối đa 72 byte).");
             var existing = await _userRepo.GetByEmailAsync(dto.Email);
             if (existing != null)
                 throw new InvalidOperationException("Email đã được sử dụng.");
@@ -53,7 +61,7 @@ namespace Retrack.API.Services
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password),
                 FullName = dto.FullName,
                 Phone = dto.Phone,
-                Role = dto.Role.ToUpper(),
+                Role = role,
                 IsActive = true
             };
 

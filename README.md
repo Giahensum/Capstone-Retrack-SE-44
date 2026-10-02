@@ -22,7 +22,7 @@ Capstone/
 │       ├── Controllers/            ← 🎮 API Endpoints (chia theo Role)
 │       │   ├── Auth/               ← Login, Register, Google OAuth
 │       │   ├── Seller/             ← TV1: Pickup request, confirm
-│       │   ├── Depot/              ← TV2: Dashboard, inventory, batch, payment, staff
+│       │   ├── Depot/              ← Ngô Sỹ Giá: tổng quan, tồn kho, lô hàng, thanh toán, nhân sự
 │       │   ├── Employee/           ← TV3: Accept order, check-in, sort & weigh
 │       │   ├── Driver/             ← TV3: Accept job, check-in/out
 │       │   ├── Factory/            ← TV4: Marketplace, QC, settlement, partner
@@ -32,7 +32,7 @@ Capstone/
 │       │   ├── Interfaces/         ← Interface definitions
 │       │   ├── Auth/               ← TV1
 │       │   ├── Seller/             ← TV1
-│       │   ├── Depot/              ← TV2
+│       │   ├── Depot/              ← Ngô Sỹ Giá (TV2)
 │       │   ├── Employee/           ← TV3
 │       │   ├── Driver/             ← TV3
 │       │   ├── Factory/            ← TV4
@@ -59,7 +59,7 @@ Capstone/
 │       ├── features/               ← ⭐ Mỗi người code trong folder role mình
 │       │   ├── auth/               ← TV1: Login, Register
 │       │   ├── seller/             ← TV1: Dashboard, CreateRequest
-│       │   ├── depot/              ← TV2: Dashboard, Inventory, Staff...
+│       │   ├── depot/              ← Ngô Sỹ Giá: tổng quan, tồn kho, nhân sự...
 │       │   ├── employee/           ← TV3: PickupPool, CheckIn, Weigh
 │       │   ├── driver/             ← TV3: TransportPool, CheckIn/Out
 │       │   ├── factory/            ← TV4: Marketplace, QC, Settlement
@@ -88,7 +88,7 @@ Capstone/
 | TV | Backend | Frontend |
 |----|---------|----------|
 | TV1 | `Controllers/Auth/` + `Services/Auth/` + `Controllers/Seller/` + `Services/Seller/` | `features/auth/` + `features/seller/` |
-| TV2 | `Controllers/Depot/` + `Services/Depot/` | `features/depot/` |
+| Ngô Sỹ Giá (TV2 — Chủ kho vựa) | `Controllers/Depot/` + `Services/Depot/` | `features/depot/` |
 | TV3 | `Controllers/Employee/` + `Services/Employee/` + `Controllers/Driver/` + `Services/Driver/` | `features/employee/` + `features/driver/` |
 | TV4 | `Controllers/Factory/` + `Services/Factory/` | `features/factory/` |
 | TV5 | `Controllers/Admin/` + `Services/Admin/` + Infrastructure setup | `features/admin/` |
@@ -96,40 +96,32 @@ Capstone/
 ## 🚀 Hướng Dẫn Cài Đặt và Chạy Dự Án (Getting Started)
 
 ### 1. Yêu cầu hệ thống
-- **PostgreSQL** (cài đặt và tạo sẵn database tên `ReNATS_DB`)
+- **PostgreSQL** (đã kiểm thử local với PostgreSQL 17; dùng database riêng cho phát triển và test)
 - **.NET 8 SDK**
-- **Node.js** (v18 trở lên)
+- **Node.js** đáp ứng engine của Vite 8 trong lockfile (khuyến nghị Node 22.12+)
 
 ### 2. Cấu hình Database
-Có 2 cách để khởi tạo database:
-- **Cách 1**: Chạy file `doc/init_postgres.sql` trong pgAdmin hoặc psql command line.
-- **Cách 2**: Để Entity Framework Core tự động migrate khi chạy Backend lần đầu.
+Tạo database local riêng, ví dụ `Retrack_TV2_dev`. Với máy mới, sao chép `backend/Retrack.API/appsettings.example.json` thành `appsettings.json`, rồi sao chép `.env.example` thành `.env` cùng thư mục và điền thông tin riêng. Nếu đã có cấu hình local, giữ nguyên file hiện có. Cả `appsettings.json` và `.env` đều được Git bỏ qua; chỉ đưa các bản mẫu không có thông tin mật vào commit.
 
-Tiếp theo, mở file `src/BE/ReTrack/ReTrack/appsettings.json` và cập nhật mật khẩu PostgreSQL của bạn:
-```json
-"ConnectionStrings": {
-  "DefaultConnection": "Host=localhost;Port=5432;Database=ReNATS_DB;Username=postgres;Password=MAT_KHAU_CUA_BAN"
-}
-```
+Ở Development, đặt `Database__Initialize=true` để áp dụng EF migrations và seed dữ liệu demo khi khởi động. Không chạy đồng thời script tạo schema thủ công với EF. Không bật tùy chọn này trên database dùng chung/production. Biến môi trường có sẵn được ưu tiên hơn `.env`.
 
 ### 3. Cấu hình Frontend
-Mở thư mục `src/FE/`, đổi tên file `.env.example` thành `.env`. 
+Mở thư mục `frontend/`, sao chép `.env.example` thành `.env` nếu cần cấu hình riêng.
 (Nếu có Client ID của Google để đăng nhập, bạn có thể điền vào `VITE_GOOGLE_CLIENT_ID`).
 
 ### 4. Chạy Backend (.NET 8)
 ```bash
-cd "src/BE/ReTrack/ReTrack"
-dotnet restore
-dotnet run
+dotnet restore backend/Retrack.sln
+dotnet run --project backend/Retrack.API --launch-profile http
 # API Endpoint: http://localhost:5000
 # Swagger UI: http://localhost:5000/swagger
 ```
-> Khi BE chạy lần đầu, nó sẽ tự động chạy DB Migrations và tạo (seed) dữ liệu mẫu.
+> Migrate/seed chỉ chạy ở Development khi `Database__Initialize=true`.
 
 ### 5. Chạy Frontend (React + Vite)
 ```bash
-cd "src/FE"
-npm install
+cd frontend
+npm ci
 npm run dev
 # Mở trình duyệt tại: http://localhost:5173
 ```
@@ -145,10 +137,17 @@ Hệ thống đã tạo sẵn 6 tài khoản để test cho 6 role. **Mật kh�
 
 ## 📝 Git Workflow
 ```bash
-git checkout -b feature/TV2-depot-dashboard    # Tạo branch theo TV + feature
+git checkout -b feature/ngo-sy-gia-depot-dashboard    # Ví dụ nhánh của Ngô Sỹ Giá
 # ... code ...
-git add .
+git add <cac-file-cua-task>
 git commit -m "feat(depot): implement dashboard API"
-git push origin feature/TV2-depot-dashboard
-# → Tạo Pull Request trên GitHub
+# Push / tạo PR khi đã được phép
 ```
+
+## Kiểm thử và bàn giao Depot
+
+- `dotnet build backend/Retrack.sln --no-restore`
+- Tạo riêng `Retrack_TV2_test`, đặt biến môi trường `RETRACK_TEST_CONNECTION`, chạy `dotnet test backend/Retrack.sln --no-restore`. Tests dùng PostgreSQL thật, tự migrate và chỉ dọn fixture của chúng; không dùng database ứng dụng.
+- Trong `frontend`: `npm run lint` và `npm run build`.
+- Quy tắc chung: [AGENTS.md](AGENTS.md). API, state mapping, bằng chứng và phần chưa hoàn thành: [.ai-context/depot-owner/tien-do/depot-integration.md](.ai-context/depot-owner/tien-do/depot-integration.md).
+- Schema PostgreSQL DB-first duy nhất cho toàn hệ thống ở `db/depot ower/retrack-system.sql`; đã gộp schema cơ sở, phần mở rộng Factory và các trường Depot mới. Dùng file này cho database rỗng hoặc để bổ sung cột/index còn thiếu; không chạy thêm file schema nối tiếp. Các file `seed_*.sql` chỉ nạp dữ liệu kiểm thử, không tạo schema. Kiểm thử backend nằm ở `backend/Retrack.Tests` và `backend/Retrack.API.Tests`.

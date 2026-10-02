@@ -7,6 +7,9 @@
 
 # ── AI Context (local docs cho AI agent, không push) ──
 .ai-context/
+.claude/
+# Worktree cục bộ nằm trong repo, không đưa nội dung checkout lồng vào Git.
+.worktrees/
 
 # ── Backend (.NET) ──
 backend/**/bin/
@@ -15,6 +18,14 @@ backend/**/*.user
 backend/**/*.suo
 backend/**/.vs/
 backend/**/appsettings.Development.json
+backend/**/.env
+backend/**/.env.local
+backend/**/TestResults/
+backend/**/appsettings.json
+backend/**/appsettings.*.json
+!backend/**/appsettings.example.json
+# Fixture dữ liệu riêng trên máy, không dùng làm seed chia sẻ.
+backend/seed_test_data.sql
 be/**/bin/
 be/**/obj/
 be/**/*.user
@@ -36,6 +47,13 @@ fe/.env.local
 fe/.env.*.local
 
 # ── IDE ──
+mobile/node_modules/
+mobile/.expo/
+mobile/dist/
+mobile/.env
+mobile/android/
+mobile/ios/
+
 .vs/
 .vscode/
 .idea/
@@ -53,5 +71,19 @@ desktop.ini
 npm-debug.log*
 
 # ── Misc ──
+**/.env
+**/.env.*
+!**/.env.example
+**/TestResults/
+**/coverage/
+**/playwright-report/
+*.trx
+*.pfx
+*.p12
+*.pem
+*.key
 *.tmp
 *.bak
+
+# Bản sao giao diện Depot giữ local để đối chiếu, không đưa vào build/lint/Git.
+frontend/src/features/depot/*_old*.jsx

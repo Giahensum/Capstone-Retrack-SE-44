@@ -189,6 +189,7 @@ export async function loadFactoryState(token) {
     createdAt: batch.createdAt,
     note: batch.description || "",
     imageUrl: batch.thumbnailImageUrl,
+    imageUrls: batch.imageUrls || [],
   }));
   const depotsById = new Map();
   for (const partner of partners) depotsById.set(partner.depotId, {
@@ -196,7 +197,7 @@ export async function loadFactoryState(token) {
     name: partner.name,
     address: partner.address || "",
     phone: partner.contactPhone || "",
-    status: partner.status,
+    status: partner.status, blockedByFactory: partner.blockedByFactory, blockedByDepot: partner.blockedByDepot, legacyBlocked: partner.legacyBlocked,
     distance: null,
     rating: partner.latestRating || partner.rating,
     comment: partner.latestComment || "",

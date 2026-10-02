@@ -23,17 +23,33 @@ namespace Retrack.API.Data
         public DbSet<BatchQualityCheck> BatchQualityChecks { get; set; }
         public DbSet<FactoryDepotReview> FactoryDepotReviews { get; set; }
         public DbSet<PlatformTransaction> PlatformTransactions { get; set; }
+        public DbSet<PlatformFeeInvoice> PlatformFeeInvoices { get; set; }
         public DbSet<MarketPrice> MarketPrices { get; set; }
+        // Admin DbSets
+        public DbSet<AuditLog> AuditLogs { get; set; }
+        public DbSet<PlatformInvoice> PlatformInvoices { get; set; }
+        public DbSet<Notification> Notifications { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
-
-            // SystemConfig - composite key already via [Key] on config_key
+            if (Database.ProviderName == "Npgsql.EntityFrameworkCore.PostgreSQL")
+                modelBuilder.HasSequence<long>("depot_batch_number");
+            modelBuilder.Entity<InventoryBatch>().HasIndex(b => b.Code).IsUnique();
 
             // User - unique email
             modelBuilder.Entity<User>()
                 .HasIndex(u => u.Email).IsUnique();
+
+            modelBuilder.Entity<PlatformTransaction>()
+                .HasIndex(t => new { t.SourceType, t.SourceId }).IsUnique();
+            modelBuilder.Entity<PlatformFeeInvoice>().HasIndex(i => new { i.OwnerId, i.PeriodStart }).IsUnique();
+            modelBuilder.Entity<PlatformFeeInvoice>().HasOne(i => i.Owner).WithMany().HasForeignKey(i => i.OwnerId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<PlatformFeeInvoice>().ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_fee_invoice_amount", "amount >= 0");
+                t.HasCheckConstraint("CK_fee_invoice_status", "status IN ('UNPAID', 'SUBMITTED', 'PAID')");
+            });
 
             // PickupRequest - multiple FK to User
             modelBuilder.Entity<PickupRequest>()
@@ -57,8 +73,6 @@ namespace Retrack.API.Data
                 .WithMany()
                 .HasForeignKey(batch => batch.DirectOfferFactoryId)
                 .OnDelete(DeleteBehavior.SetNull);
-
-            modelBuilder.Entity<FactoryDemand>().Property(x => x.UpdatedAt).HasDefaultValueSql("NOW()");
 
             modelBuilder.Entity<FactoryDemand>().Property(x => x.UpdatedAt).HasDefaultValueSql("NOW()");
 
@@ -87,15 +101,38 @@ namespace Retrack.API.Data
                 .HasForeignKey(f => f.OwnerId)
                 .OnDelete(DeleteBehavior.Restrict);
 
+            // PlatformInvoice -> User (payer) - restrict delete, one invoice per payer per period
+            modelBuilder.Entity<PlatformInvoice>()
+                .HasOne(i => i.Payer)
+                .WithMany()
+                .HasForeignKey(i => i.PayerId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<PlatformInvoice>()
+                .HasIndex(i => new { i.PayerId, i.PeriodYear, i.PeriodMonth }).IsUnique();
+
+            // AuditLog -> User (nullable, keep log if user is deleted)
+            modelBuilder.Entity<AuditLog>()
+                .HasOne(a => a.User)
+                .WithMany()
+                .HasForeignKey(a => a.UserId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            // Notification -> User
+            modelBuilder.Entity<Notification>()
+                .HasOne(n => n.User)
+                .WithMany()
+                .HasForeignKey(n => n.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
             // Seed data
             modelBuilder.Entity<SystemConfig>().HasData(new SystemConfig
             {
                 ConfigKey = "PLATFORM_FEE_PERCENTAGE",
-                ConfigValue = "1.00",
-                Description = "Phí nền tảng 1%",
-                UpdatedAt = new DateTime(2026, 9, 24, 1, 49, 18, 364, DateTimeKind.Utc).AddTicks(3745)
+                ConfigValue = "5.00",
+                Description = "Phí nền tảng mặc định 5%",
+                UpdatedAt = new DateTime(2026, 9, 20, 7, 49, 15, 238, DateTimeKind.Utc).AddTicks(399)
             });
         }
     }
 }
-
