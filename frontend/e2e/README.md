@@ -67,6 +67,10 @@ Mỗi lần chạy thành công giữ lại một lô đã quyết toán 1 kg PE
 
 ## Kiểm chứng và giới hạn
 
+### Hồi quy màn Depot
+
+`e2e/depot-regression.spec.js` mở 10 màn Depot, chọn kho, đợi API thật trả 200 và tải lại trang; thử route guard khi chưa đăng nhập/Seller; kiểm tra dashboard ở viewport 390 px. Đặt thêm `E2E_SELLER_EMAIL` và `E2E_SELLER_PASSWORD` bằng tài khoản Seller thử nghiệm, rồi chạy `npm run test:e2e -- e2e/depot-regression.spec.js --reporter=line`. Ảnh chụp màn hình mobile nằm trong `test-results` local đã ignore.
+
 ### PayOS giả lập
 
 Chuẩn bị một hóa đơn phí riêng có trạng thái `UNPAID` ở trang đầu danh sách; đặt `E2E_PAYOS_INVOICE_ID` bằng UUID hóa đơn. Với frontend/backend Development, chạy `npm run test:e2e -- e2e/depot-payos.spec.js --reporter=line`. Bài này thay hóa đơn thành `SUBMITTED` (chờ Admin đối soát), kiểm tra sau reload và không gọi PayOS/chuyển tiền thật. Không dùng hóa đơn thật và không tự đổi lại trạng thái hóa đơn. PayOS production cần tích hợp riêng sau khi có cấu hình nhà cung cấp.
