@@ -20,6 +20,7 @@ public sealed record OrderResponse
     public required string? RejectionReason { get; init; }
     public required DateTime? SettledAt { get; init; }
     public required decimal? FeeAmount { get; init; }
+    public required decimal? PlatformFeePercentage { get; init; }
     public required decimal? NetPayableAmount { get; init; }
     public required string? PaymentReference { get; init; }
     public required DateTime CreatedAt { get; init; }

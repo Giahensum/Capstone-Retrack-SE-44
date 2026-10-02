@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { FactoryProvider, useFactory } from "./components/FactoryUI";
 import FactoryAuth from "./components/FactoryAuth";
 import {
@@ -25,6 +26,7 @@ const tabs = [
 ];
 function Workspace() {
   const { state, user, logout, loading } = useFactory();
+  const navigateRoute = useNavigate();
   const [tab, setTab] = useState("dashboard");
   const [focusId, setFocusId] = useState(null);
   function navigate(next, orderId = null) {
@@ -89,7 +91,7 @@ function Workspace() {
             Nhà máy <span>/</span>{" "}
             <strong>{tabs.find((t) => t[0] === tab)?.[1]}</strong>
           </div>
-          <span className="user-chip"><span>{(user?.fullName || "F").slice(0, 2).toUpperCase()}</span>{user?.fullName || user?.email}<button className="logout-button" onClick={logout}>Đăng xuất</button></span>
+          <span className="user-chip"><span>{(user?.fullName || "F").slice(0, 2).toUpperCase()}</span>{user?.fullName || user?.email}<button className="logout-button" onClick={() => { logout(); navigateRoute("/login", { replace: true }); }}>Đăng xuất</button></span>
         </header>
         <main className="factory-main">
           <div className="demo-banner">

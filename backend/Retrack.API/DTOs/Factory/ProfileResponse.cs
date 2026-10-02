@@ -12,6 +12,7 @@ public sealed record ProfileResponse
     public required string? EnvironmentalLicenseUrl { get; init; }
     public required decimal CapacityKgPerMonth { get; init; }
     public required decimal MinimumPurityPercent { get; init; }
+    public required decimal PlatformFeePercentage { get; init; }
     public required IReadOnlyList<string> AcceptedMaterials { get; init; }
     public required decimal? Latitude { get; init; }
     public required decimal? Longitude { get; init; }

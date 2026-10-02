@@ -1,7 +1,20 @@
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 export const TOKEN_KEY = "retrack.accessToken";
 
-export async function request(path, { method = "GET", body, token = localStorage.getItem(TOKEN_KEY) } = {}) {
+export function getSharedSession() {
+  try {
+    const persisted = JSON.parse(localStorage.getItem("retrack-auth") || "null");
+    return persisted?.state || null;
+  } catch {
+    return null;
+  }
+}
+
+export function getStoredToken() {
+  return getSharedSession()?.token || localStorage.getItem(TOKEN_KEY);
+}
+
+export async function request(path, { method = "GET", body, token = getStoredToken() } = {}) {
   const response = await fetch(`${API_BASE}${path}`, {
     method,
     headers: {
@@ -54,6 +67,7 @@ function mapProfile(profile) {
     phone: profile.contactPhone || profile.user?.phone || "",
     capacity: profile.capacityKgPerMonth || 0,
     purity: profile.minimumPurityPercent || 0,
+    platformFeePercentage: profile.platformFeePercentage ?? 1,
     latitude: profile.latitude ?? "",
     longitude: profile.longitude ?? "",
     materials: accepted,
@@ -135,6 +149,7 @@ function mapOrder(order) {
       price: order.agreedPrice,
       total: order.totalAmount || net * order.agreedPrice,
       fee: order.feeAmount || 0,
+      feePercentage: order.platformFeePercentage ?? 1,
       payable: order.netPayableAmount || 0,
       reference: order.paymentReference || "",
       at: order.settledAt,
