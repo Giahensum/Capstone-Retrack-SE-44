@@ -6,6 +6,8 @@ using Retrack.API.Data;
 using Retrack.API.DTOs;
 using Retrack.API.Models;
 using Retrack.API.Services;
+using System.Net.Http;
+using System.Text.Json;
 using Retrack.API.Services.Interfaces;
 
 namespace Retrack.API.Controllers.Seller;
@@ -18,12 +20,14 @@ public class SellerPickupController : ControllerBase
     private readonly IPickupService _pickupService;
     private readonly ICloudinaryService _cloudinary;
     private readonly AppDbContext _db;
+    private readonly IConfiguration _config;
 
-    public SellerPickupController(IPickupService pickupService, ICloudinaryService cloudinary, AppDbContext db)
+    public SellerPickupController(IPickupService pickupService, ICloudinaryService cloudinary, AppDbContext db, IConfiguration config)
     {
         _pickupService = pickupService;
         _cloudinary = cloudinary;
         _db = db;
+        _config = config;
     }
 
     private Guid GetUserId() => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
@@ -146,6 +150,64 @@ public class SellerPickupController : ControllerBase
         // If seller has location, calculate distance and sort
         if (lat.HasValue && lng.HasValue)
         {
+            var validDepots = depots.Where(d => d.Latitude.HasValue && d.Longitude.HasValue).ToList();
+            
+            var apiKey = _config["Goong:ApiKey"];
+            if (!string.IsNullOrEmpty(apiKey) && validDepots.Any())
+            {
+                var origins = $"{lat.Value},{lng.Value}";
+                var destinations = string.Join("|", validDepots.Select(d => $"{d.Latitude.Value},{d.Longitude.Value}"));
+                
+                using var http = new HttpClient();
+                try 
+                {
+                    var response = await http.GetAsync($"https://rsapi.goong.io/DistanceMatrix?origins={origins}&destinations={destinations}&vehicle=bike&api_key={apiKey}");
+                    if (response.IsSuccessStatusCode)
+                    {
+                        var json = await response.Content.ReadAsStringAsync();
+                        using var doc = JsonDocument.Parse(json);
+                        var elements = doc.RootElement.GetProperty("rows")[0].GetProperty("elements");
+                        
+                        var resultList = new List<object>();
+                        for (int i = 0; i < validDepots.Count; i++)
+                        {
+                            var d = validDepots[i];
+                            var el = elements[i];
+                            double? distanceKm = null;
+                            string? durationText = null;
+                            
+                            if (el.GetProperty("status").GetString() == "OK")
+                            {
+                                distanceKm = el.GetProperty("distance").GetProperty("value").GetDouble() / 1000.0;
+                                durationText = el.GetProperty("duration").GetProperty("text").GetString();
+                            }
+                            else 
+                            {
+                                distanceKm = CalculateDistanceKm((double)lat.Value, (double)lng.Value, (double)d.Latitude.Value, (double)d.Longitude.Value);
+                            }
+                            
+                            resultList.Add(new {
+                                d.Id, d.Name, d.Address, d.Latitude, d.Longitude,
+                                d.OwnerName, d.AvgRating, d.TotalDone,
+                                DistanceKm = distanceKm,
+                                RoutingDurationText = durationText
+                            });
+                        }
+                        
+                        // Add depots without coordinates at the end
+                        var invalidDepots = depots.Where(d => !d.Latitude.HasValue || !d.Longitude.HasValue)
+                            .Select(d => new { d.Id, d.Name, d.Address, d.Latitude, d.Longitude, d.OwnerName, d.AvgRating, d.TotalDone, DistanceKm = (double?)null, RoutingDurationText = (string?)null });
+                        
+                        var finalSorted = resultList.OrderBy(x => (double?)x.GetType().GetProperty("DistanceKm")?.GetValue(x, null) ?? double.MaxValue)
+                            .Concat(invalidDepots).ToList();
+                        
+                        return Ok(ApiResponse<object>.Ok(finalSorted));
+                    }
+                }
+                catch { /* fallback to haversine */ }
+            }
+
+            // Fallback to Haversine if API key is missing or request fails
             var sorted = depots
                 .Select(d => new
                 {
@@ -154,7 +216,8 @@ public class SellerPickupController : ControllerBase
                     DistanceKm = d.Latitude.HasValue && d.Longitude.HasValue
                         ? CalculateDistanceKm((double)lat.Value, (double)lng.Value,
                             (double)d.Latitude.Value, (double)d.Longitude.Value)
-                        : (double?)null
+                        : (double?)null,
+                    RoutingDurationText = (string?)null
                 })
                 .OrderBy(d => d.DistanceKm ?? double.MaxValue)
                 .ToList();

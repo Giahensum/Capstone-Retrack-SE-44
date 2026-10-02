@@ -131,7 +131,7 @@ export default function RequestDetail() {
         <InfoRow icon={<Package size={14} className="text-blue-400" />} label="Mô tả" value={req.description || '(không có)'} />
         <InfoRow icon={<MapPin size={14} className="text-emerald-400" />} label="Địa chỉ" value={req.address} />
         <InfoRow icon={<Calendar size={14} className="text-purple-400" />} label="Ngày giờ" value={req.preferredDatetime ? formatDate(req.preferredDatetime) : 'Linh hoạt'} />
-        {req.depotName && <InfoRow icon={<Clock size={14} className="text-orange-400" />} label="Kho vựa" value={req.depotName} />}
+        <InfoRow icon={<Clock size={14} className="text-orange-400" />} label="Kho nhận" value={req.depotName ? req.depotName : 'Nổ đơn (Tất cả kho gần đây)'} />
         <InfoRow icon={<Clock size={14} className="text-slate-400" />} label="Ngày tạo" value={formatDate(req.createdAt)} />
       </div>
 

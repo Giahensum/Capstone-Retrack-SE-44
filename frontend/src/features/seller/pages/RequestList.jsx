@@ -93,8 +93,10 @@ export default function RequestList() {
                     <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${STATUS_STYLE[req.status] ?? 'bg-slate-500/15 text-slate-400 border-slate-500/30'}`}>
                       {PICKUP_STATUS_LABEL[req.status] ?? req.status}
                     </span>
-                    {req.depotName && (
-                      <span className="text-[10px] text-slate-500 font-medium">• {req.depotName}</span>
+                    {req.depotName ? (
+                      <span className="text-[10px] text-slate-500 font-medium">• Kho: {req.depotName}</span>
+                    ) : (
+                      <span className="text-[10px] text-orange-400 font-medium bg-orange-500/10 px-1.5 py-0.5 rounded ml-1">Nổ đơn (Tất cả kho)</span>
                     )}
                   </div>
                   <p className="text-sm font-medium text-slate-200 truncate">{req.description || 'Không có mô tả'}</p>

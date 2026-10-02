@@ -30,41 +30,10 @@ export default function CreateRequest() {
   const [images, setImages] = useState([]); // { file, preview, url, uploading }
   const [selectedDepot, setSelectedDepot] = useState(null);
 
-  // Fetch depots and calculate real routing distance using Goong API
+  // Fetch depots from backend (backend now handles Goong Distance Matrix)
   const { data: depots = [], isLoading: depotsLoading } = useQuery({
     queryKey: ['nearby-depots', form.latitude, form.longitude],
-    queryFn: async () => {
-      const dbDepots = await sellerApi.getNearbyDepots(form.latitude, form.longitude);
-      
-      if (!form.latitude || !form.longitude || dbDepots.length === 0) return dbDepots;
-      
-      try {
-        const GOONG_API_KEY = import.meta.env.VITE_GOONG_API_KEY;
-        if (!GOONG_API_KEY) return dbDepots;
-
-        const origins = `${form.latitude},${form.longitude}`;
-        const destinations = dbDepots.map(d => `${d.latitude},${d.longitude}`).join('|');
-        
-        const res = await fetch(`https://rsapi.goong.io/DistanceMatrix?origins=${origins}&destinations=${destinations}&vehicle=bike&api_key=${GOONG_API_KEY}`);
-        const data = await res.json();
-        
-        if (data.rows && data.rows[0]?.elements) {
-          const elements = data.rows[0].elements;
-          dbDepots.forEach((depot, idx) => {
-            if (elements[idx]?.status === 'OK') {
-              depot.routingDistanceKm = elements[idx].distance.value / 1000; // convert to km
-              depot.routingDurationText = elements[idx].duration.text;
-            }
-          });
-          
-          // Sort by real routing distance
-          return dbDepots.sort((a, b) => (a.routingDistanceKm || a.distanceKm || 999) - (b.routingDistanceKm || b.distanceKm || 999));
-        }
-      } catch (err) {
-        console.error("Goong DistanceMatrix API error:", err);
-      }
-      return dbDepots;
-    },
+    queryFn: () => sellerApi.getNearbyDepots(form.latitude, form.longitude),
     enabled: step === 2 && mode === 'choose',
   });
 
@@ -377,12 +346,10 @@ export default function CreateRequest() {
                         <Star size={12} fill="currentColor" /> {depot.avgRating?.toFixed(1) || '–'}
                       </span>
                       <span className="text-xs text-slate-500">{depot.totalDone} đơn hoàn tất</span>
-                      {depot.routingDistanceKm != null ? (
+                      {depot.distanceKm != null ? (
                         <span className="text-xs font-semibold text-emerald-400">
-                          📍 {depot.routingDistanceKm.toFixed(1)} km ({depot.routingDurationText})
+                          📍 {depot.distanceKm.toFixed(1)} km {depot.routingDurationText ? `(${depot.routingDurationText})` : ''}
                         </span>
-                      ) : depot.distanceKm != null ? (
-                        <span className="text-xs font-semibold text-emerald-400">📍 {depot.distanceKm.toFixed(1)} km</span>
                       ) : null}
                     </div>
                   </div>
