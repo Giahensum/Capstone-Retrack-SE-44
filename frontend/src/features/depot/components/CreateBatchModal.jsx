@@ -21,7 +21,7 @@ function CreateBatchForm({ onClose, initialMaterial, initialFactoryId }) {
   }, [photos]);
   const stock = useDepotQuery('inventory');
   const factories = useDepotQuery('partners', { page, search: factorySearch }, strategy === 'direct');
-  const save = useDepotMutation('post', 'batches', onClose);
+  const save = useDepotMutation('post', (_id, body) => body instanceof FormData ? 'batches/with-images' : 'batches', onClose);
   const available = stock.data?.find((i) => i.materialType === form.materialType)?.availableKg ?? 0;
   const field = (key, value) => setForm({ ...form, [key]: value });
   return <Dialog title="Tạo Lô Xuất Hàng" onClose={onClose} busy={save.isPending}>
