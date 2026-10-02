@@ -552,6 +552,26 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         Assert.Single((await service.InvoicesAsync(ownerId, depotId, new())).Items);
         await Assert.ThrowsAsync<DepotConflictException>(() => service.ConfirmInvoiceAsync(ownerId, depotId, invoice.Id, new() { PaymentProofUrl = "https://example.com/other.png" }));
     }
+
+    [Fact] public async Task Payos_simulation_submits_a_clearly_fake_receipt_and_never_marks_invoice_paid()
+    {
+        await using var db = Open(); var scope = new DepotService(new Retrack.API.Repositories.DepotOwnerRepository(db), new Retrack.API.Repositories.DepotPaymentReadRepository(db));
+        var invoice = new PlatformInvoice { PayerId = ownerId, PeriodYear = 2026, PeriodMonth = 9, TotalFeeAmount = 250 };
+        db.PlatformInvoices.Add(invoice); await db.SaveChangesAsync();
+        var service = new DepotReportService(new Retrack.API.Repositories.DepotUnitOfWork(db), new Retrack.API.Repositories.DepotReportRepository(db), new Retrack.API.Repositories.DepotStaffRepository(db), scope, new InventoryService(new Retrack.API.Repositories.DepotInventoryRepository(db), scope));
+
+        await service.SimulatePaymentAsync(ownerId, depotId, invoice.Id);
+        await service.SimulatePaymentAsync(ownerId, depotId, invoice.Id);
+
+        var saved = await db.PlatformInvoices.AsNoTracking().SingleAsync(i => i.Id == invoice.Id);
+        Assert.Equal("SUBMITTED", saved.Status);
+        Assert.StartsWith("https://payos-mock.invalid/", saved.PaymentProofUrl);
+        Assert.Contains("SIM-PAYOS-", saved.PaymentProofUrl);
+        Assert.Null(saved.PaidAt);
+        Assert.NotNull(saved.SubmittedAt);
+        Assert.Equal(250, (await service.FeeSummaryAsync(ownerId, depotId, new())).SubmittedInvoiceAmount);
+        await Assert.ThrowsAsync<DepotForbiddenException>(() => service.SimulatePaymentAsync(sellerId, depotId, invoice.Id));
+    }
     [Fact] public async Task Concurrent_exports_cannot_reserve_more_than_available_stock()
     {
         var outcomes = await Task.WhenAll(Enumerable.Range(0, 2).Select(async _ => {
