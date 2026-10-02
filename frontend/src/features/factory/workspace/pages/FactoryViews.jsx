@@ -38,6 +38,7 @@ export function Dashboard({ navigate }) {
   const weight = paid.reduce((n, o) => n + o.weight.net, 0);
   const spend = paid.reduce((n, o) => n + o.payment.payable, 0);
   const fees = paid.reduce((n, o) => n + o.payment.fee, 0);
+  const feePercentage = paid[0]?.payment?.feePercentage ?? state.profile?.platformFeePercentage ?? 1;
   const pending = state.orders.filter((o) =>
     ["DELIVERED", "RECEIVED", "WEIGHED"].includes(o.status),
   );
@@ -110,7 +111,7 @@ export function Dashboard({ navigate }) {
           [
             "Phí nền tảng tích lũy",
             money(fees),
-            "1% tiền hàng • Chưa đối soát",
+            `${feePercentage}% tiền hàng • Chưa đối soát`,
           ],
           ["Chờ quyết toán", `${ready.length} đơn`, "Đã nghiệm thu chất lượng"],
         ].map(([label, value, hint], i) => (

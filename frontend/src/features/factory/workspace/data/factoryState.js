@@ -61,14 +61,17 @@ export function weigh(gross, tare, estimated) {
     flagged: Math.abs(difference) > 5,
   };
 }
-export function settlement(net, price) {
+export function settlement(net, price, feePercentage = 1) {
   requireThat(
     positive(net) && positive(price),
     "Khối lượng và đơn giá phải lớn hơn 0.",
   );
   const total = Math.round(net * price);
-  const fee = Math.round(total * 0.01);
-  return { price: Number(price), total, fee, payable: total - fee };
+  const percentage = Number.isFinite(Number(feePercentage)) && Number(feePercentage) >= 0
+    ? Number(feePercentage)
+    : 1;
+  const fee = Math.round(total * percentage / 100);
+  return { price: Number(price), total, fee, feePercentage: percentage, payable: total - fee };
 }
 export function createInitialState() {
   const now = stamp();

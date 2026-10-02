@@ -16,7 +16,7 @@ export default function FactoryAuth() {
       <div className="factory-auth-brand"><span className="brand-mark">R</span><div>retrack<small>FACTORY WORKSPACE</small></div></div>
       {hasSession ? <>
         <h1>Không tải được dữ liệu nhà máy</h1>
-        <p>Kiểm tra backend tại <code>localhost:5211</code>, sau đó thử tải lại bằng phiên hiện tại.</p>
+        <p>Kiểm tra backend tại <code>localhost:5000</code>, sau đó thử tải lại bằng phiên hiện tại.</p>
         <button className="btn" disabled={loading} onClick={retry}>{loading ? "Đang tải…" : "Thử kết nối lại"}</button>
       </> : <>
         <h1>{mode === "login" ? "Đăng nhập nhà máy" : "Tạo tài khoản nhà máy"}</h1>
