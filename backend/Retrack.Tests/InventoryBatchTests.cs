@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Http;
 using Npgsql;
 using Retrack.API.Data;
 using Retrack.API.DTOs.Depot;
@@ -20,7 +21,7 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         if (new NpgsqlConnectionStringBuilder(connection).Database != "Retrack_TV2_test") throw new InvalidOperationException("Test database required");
         return new(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(connection).Options);
     }
-    private static BatchService Batches(AppDbContext db) => new(new Retrack.API.Repositories.DepotBatchRepository(db), new Retrack.API.Repositories.DepotUnitOfWork(db), new DepotService(new Retrack.API.Repositories.DepotOwnerRepository(db), new Retrack.API.Repositories.DepotPaymentReadRepository(db)), new InventoryService(new Retrack.API.Repositories.DepotInventoryRepository(db), new DepotService(new Retrack.API.Repositories.DepotOwnerRepository(db), new Retrack.API.Repositories.DepotPaymentReadRepository(db))));
+    private static BatchService Batches(AppDbContext db, ProofImages? images = null) => new(new Retrack.API.Repositories.DepotBatchRepository(db), new Retrack.API.Repositories.DepotUnitOfWork(db), new DepotService(new Retrack.API.Repositories.DepotOwnerRepository(db), new Retrack.API.Repositories.DepotPaymentReadRepository(db)), new InventoryService(new Retrack.API.Repositories.DepotInventoryRepository(db), new DepotService(new Retrack.API.Repositories.DepotOwnerRepository(db), new Retrack.API.Repositories.DepotPaymentReadRepository(db))), images ?? new ProofImages());
     public async Task InitializeAsync()
     {
         await using var db = Open();
@@ -51,10 +52,198 @@ public sealed class InventoryBatchTests : IAsyncLifetime
     }
     private static CreateDepotBatchDto Input(decimal kg = 60) => new() { OperationId = Guid.NewGuid(), MaterialType = "PET", WeightKg = kg };
 
+    [Fact]
+    public async Task Batch_photos_are_saved_and_visible_to_factory()
+    {
+        await using var db = Open();
+        db.Users.Add(new User { Id = factoryOwnerId, Email = $"photos-{factoryOwnerId}@test.invalid", Role = "FACTORY", FullName = "Nhà máy" });
+        db.Factories.Add(new Factory { OwnerId = factoryOwnerId, Name = "Factory", Address = "Test", AcceptedMaterialsCsv = "PET" });
+        await db.SaveChangesAsync();
+        var bytes = new byte[] { 137, 80, 78, 71, 13, 10, 26, 10, 1 };
+        var file = new FormFile(new MemoryStream(bytes), 0, bytes.Length, "images", "pet.png") { Headers = new HeaderDictionary(), ContentType = "image/png" };
+        var imageService = new ProofImages();
+        var created = await Batches(db, imageService).CreateAsync(ownerId, depotId, Input(), [file]);
+        Assert.Single(created.ImageUrls!);
+        Assert.Equal(1, imageService.Uploads);
+        var detail = await Batches(db).DetailAsync(ownerId, depotId, created.Id);
+        Assert.Equal(created.ImageUrls, detail.Batch.ImageUrls);
+        var factory = await db.Factories.SingleAsync(f => f.OwnerId == factoryOwnerId);
+        var market = await new Retrack.API.Services.Factory.FactoryMarketService(db).BatchesAsync(factoryOwnerId, new(), default);
+        var listing = Assert.Single(market.Data!.Items, x => x.Id == created.Id);
+        Assert.Equal(created.Code, listing.BatchCode);
+        Assert.Equal(created.ImageUrls![0], listing.ThumbnailImageUrl);
+        Assert.Equal(created.ImageUrls, listing.ImageUrls);
+    }
+
+    [Fact]
+    public async Task Invalid_batch_photo_does_not_create_a_batch()
+    {
+        await using var db = Open();
+        var input = Input();
+        var bytes = new byte[] { 1, 2, 3 };
+        var file = new FormFile(new MemoryStream(bytes), 0, bytes.Length, "images", "fake.png") { Headers = new HeaderDictionary(), ContentType = "image/png" };
+        var imageService = new ProofImages();
+        await Assert.ThrowsAsync<ArgumentException>(() => Batches(db, imageService).CreateAsync(ownerId, depotId, input, [file]));
+        Assert.Equal(0, imageService.Uploads);
+        Assert.False(await db.InventoryBatches.AnyAsync(b => b.Id == input.OperationId));
+    }
+
+    [Fact]
+    public async Task All_batch_photos_are_validated_before_uploading_any()
+    {
+        await using var db = Open();
+        var validBytes = new byte[] { 137, 80, 78, 71, 13, 10, 26, 10, 1 };
+        var invalidBytes = new byte[] { 1, 2, 3 };
+        var valid = new FormFile(new MemoryStream(validBytes), 0, validBytes.Length, "images", "pet.png") { Headers = new HeaderDictionary(), ContentType = "image/png" };
+        var invalid = new FormFile(new MemoryStream(invalidBytes), 0, invalidBytes.Length, "images", "fake.png") { Headers = new HeaderDictionary(), ContentType = "image/png" };
+        var fake = new ProofImages();
+        var input = Input();
+        await Assert.ThrowsAsync<ArgumentException>(() => Batches(db, fake).CreateAsync(ownerId, depotId, input, [valid, invalid]));
+        Assert.Equal(0, fake.Uploads);
+        Assert.False(await db.InventoryBatches.AnyAsync(b => b.Id == input.OperationId));
+    }
+
+    [Fact]
+    public async Task Image_provider_failure_rolls_back_batch_and_stock_reservation()
+    {
+        await using var db = Open();
+        var bytes = new byte[] { 137, 80, 78, 71, 13, 10, 26, 10, 1 };
+        var file = new FormFile(new MemoryStream(bytes), 0, bytes.Length, "images", "pet.png") { Headers = new HeaderDictionary(), ContentType = "image/png" };
+        var fake = new ProofImages { FailUpload = true };
+        var input = Input();
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Batches(db, fake).CreateAsync(ownerId, depotId, input, [file]));
+        Assert.False(await db.InventoryBatches.AnyAsync(b => b.Id == input.OperationId));
+        Assert.Equal(100, Assert.Single(await new InventoryService(new Retrack.API.Repositories.DepotInventoryRepository(db),
+            new DepotService(new Retrack.API.Repositories.DepotOwnerRepository(db), new Retrack.API.Repositories.DepotPaymentReadRepository(db))).GetAsync(ownerId, depotId)).AvailableKg);
+    }
+
+    [Fact]
+    public async Task Other_owner_cannot_upload_batch_photos()
+    {
+        await using var db = Open();
+        var bytes = new byte[] { 137, 80, 78, 71, 13, 10, 26, 10, 1 };
+        var file = new FormFile(new MemoryStream(bytes), 0, bytes.Length, "images", "pet.png") { Headers = new HeaderDictionary(), ContentType = "image/png" };
+        var imageService = new ProofImages();
+        await Assert.ThrowsAsync<DepotForbiddenException>(() => Batches(db, imageService).CreateAsync(sellerId, depotId, Input(), [file]));
+        Assert.Equal(0, imageService.Uploads);
+    }
+
+    [Fact]
+    public async Task Batch_detail_scopes_owner_and_keeps_missing_finance_null()
+    {
+        var input = Input();
+        await using (var db = Open()) { await Batches(db).CreateAsync(ownerId, depotId, input); }
+        await using var verify = Open();
+        var service = Batches(verify);
+        await Assert.ThrowsAsync<DepotForbiddenException>(() => service.DetailAsync(sellerId, depotId, input.OperationId));
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => service.DetailAsync(ownerId, depotId, Guid.NewGuid()));
+        var detail = await service.DetailAsync(ownerId, depotId, input.OperationId);
+        Assert.Equal(input.WeightKg, detail.Batch.WeightKg);
+        Assert.Null(detail.Quality);
+        Assert.Null(detail.Settlement);
+        Assert.Null(detail.TransportStatus);
+    }
+
+    [Fact]
+    public async Task Factory_filters_legacy_material_with_canonical_code()
+    {
+        await using var db = Open();
+        db.Users.Add(new User { Id = factoryOwnerId, Email = $"material-{factoryOwnerId}@test.invalid", Role = "FACTORY", FullName = "Nhà máy" });
+        var factory = new Factory { OwnerId = factoryOwnerId, Name = "Factory", Address = "Test", AcceptedMaterialsCsv = "PET" };
+        var batch = new InventoryBatch { DepotId = depotId, MaterialType = "Nhựa PET", DeclaredWeightKg = 10, Status = "LISTED" };
+        db.Factories.Add(factory); db.InventoryBatches.Add(batch); await db.SaveChangesAsync();
+        var market = new Retrack.API.Services.Factory.FactoryMarketService(db);
+        var page = await market.BatchesAsync(factoryOwnerId, new() { Material = Retrack.API.Models.Enums.MaterialType.PET }, default);
+        Assert.Contains(page.Data!.Items, b => b.Id == batch.Id && b.MaterialType == "PET");
+        Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Success, (await market.AcceptAsync(factoryOwnerId, batch.Id, new(), default)).Outcome);
+    }
+
+    [Fact]
+    public async Task Pending_direct_offer_can_be_withdrawn_and_retried_without_reserving_stock()
+    {
+        await using var db = Open();
+        db.Users.Add(new User { Id = factoryOwnerId, Email = $"withdraw-{factoryOwnerId}@test.invalid", Role = "FACTORY", FullName = "Nhà máy" });
+        var factory = new Factory { OwnerId = factoryOwnerId, Name = "Factory", Address = "Test" };
+        db.Factories.Add(factory); await db.SaveChangesAsync();
+        var input = Input(); input.TargetFactoryId = factory.Id;
+        var service = Batches(db);
+        await service.CreateAsync(ownerId, depotId, input);
+        await Assert.ThrowsAsync<DepotForbiddenException>(() => service.CancelAsync(sellerId, depotId, input.OperationId));
+        await service.CancelAsync(ownerId, depotId, input.OperationId);
+        await service.CancelAsync(ownerId, depotId, input.OperationId);
+        await using var verify = Open();
+        Assert.Equal("CANCELLED", (await verify.InventoryBatches.SingleAsync(b => b.Id == input.OperationId)).Status);
+        Assert.Empty(await verify.TransportJobs.Where(t => t.BatchId == input.OperationId).ToListAsync());
+        Assert.Equal("LISTED", (await Batches(verify).CreateAsync(ownerId, depotId, Input(100))).Status);
+    }
+
+    [Fact]
+    public async Task Factory_decides_cooperation_after_QC_and_each_side_owns_its_block()
+    {
+        await using var db = Open();
+        db.Users.Add(new User { Id = factoryOwnerId, Email = $"cooperate-{factoryOwnerId}@test.invalid", Role = "FACTORY", FullName = "Nhà máy" });
+        var factory = new Factory { OwnerId = factoryOwnerId, Name = "Factory", Address = "Test" };
+        db.Factories.Add(factory); await db.SaveChangesAsync();
+        var input = Input(10); input.TargetFactoryId = factory.Id;
+        await Batches(db).CreateAsync(ownerId, depotId, input);
+        var partnerService = new Retrack.API.Services.Factory.FactoryPartnerService(db);
+        var approve = new Retrack.API.DTOs.Factory.PartnerStatusRequest { Status = Retrack.API.Models.Enums.PartnershipStatus.APPROVED };
+        Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Conflict, (await partnerService.UpdateStatusAsync(factoryOwnerId, depotId, approve, default)).Outcome);
+        Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Success, (await new Retrack.API.Services.Factory.FactoryMarketService(db).AcceptAsync(factoryOwnerId, input.OperationId, new(), default)).Outcome);
+        var batch = await db.InventoryBatches.SingleAsync(b => b.Id == input.OperationId);
+        batch.Status = "VERIFIED";
+        batch.QualityCheck = new BatchQualityCheck { BatchId = batch.Id, FactoryId = factory.Id, ActualWeightKg = 10, Grade = "A", IsAccepted = true };
+        db.BatchQualityChecks.Add(batch.QualityCheck);
+        await db.SaveChangesAsync();
+        Assert.Equal("APPROVED", (await partnerService.UpdateStatusAsync(factoryOwnerId, depotId, approve, default)).Data!.Status);
+        var next = Input(10); next.TargetFactoryId = factory.Id;
+        Assert.Equal("TRANSPORT_READY", (await Batches(db).CreateAsync(ownerId, depotId, next)).Status);
+        Assert.Equal("DECLINED", (await partnerService.UpdateStatusAsync(factoryOwnerId, depotId, new() { Status = Retrack.API.Models.Enums.PartnershipStatus.DECLINED }, default)).Data!.Status);
+        var again = Input(10); again.TargetFactoryId = factory.Id;
+        Assert.Equal("PENDING_APPROVAL", (await Batches(db).CreateAsync(ownerId, depotId, again)).Status);
+        await partnerService.UpdateStatusAsync(factoryOwnerId, depotId, new() { Status = Retrack.API.Models.Enums.PartnershipStatus.BLOCKED }, default);
+        var depot = new DepotPartnershipService(new DepotService(new Retrack.API.Repositories.DepotOwnerRepository(db), new Retrack.API.Repositories.DepotPaymentReadRepository(db)), new Retrack.API.Repositories.DepotPartnershipRepository(db), new Retrack.API.Repositories.DepotUnitOfWork(db));
+        Assert.Equal("BLOCKED", (await depot.UpdateAsync(ownerId, depotId, factory.Id, "UNBLOCKED", default)).Status);
+        await Assert.ThrowsAsync<ArgumentException>(() => depot.UpdateAsync(ownerId, depotId, factory.Id, "APPROVED", default));
+        await depot.UpdateAsync(ownerId, depotId, factory.Id, "BLOCKED", default);
+        Assert.Equal("BLOCKED", (await partnerService.UpdateStatusAsync(factoryOwnerId, depotId, new() { Status = Retrack.API.Models.Enums.PartnershipStatus.UNBLOCKED }, default)).Data!.Status);
+        Assert.Equal("DECLINED", (await depot.UpdateAsync(ownerId, depotId, factory.Id, "UNBLOCKED", default)).Status);
+    }
+
+    [Fact]
+    public async Task Legacy_material_and_canonical_stock_share_one_balance()
+    {
+        await using var db = Open();
+        var receipt = new PickupRequest { SellerId = sellerId, TargetDepotId = depotId, Address = "Test", Status = "DONE" };
+        receipt.Items.Add(new PickupRequestItem { MaterialType = "Nhựa PET", WeightKg = 20, PricePerKg = 1, SubTotal = 20 });
+        db.PickupRequests.Add(receipt);
+        await db.SaveChangesAsync();
+        var input = Input(110); input.MaterialType = "Nhựa PET";
+        var batch = await Batches(db).CreateAsync(ownerId, depotId, input);
+        Assert.Equal("PET", batch.MaterialType);
+        var scope = new DepotService(new Retrack.API.Repositories.DepotOwnerRepository(db), new Retrack.API.Repositories.DepotPaymentReadRepository(db));
+        var row = Assert.Single(await new InventoryService(new Retrack.API.Repositories.DepotInventoryRepository(db), scope).GetAsync(ownerId, depotId));
+        Assert.Equal(120, row.ReceivedKg);
+        Assert.Equal(10, row.AvailableKg);
+    }
+
+    [Theory]
+    [InlineData("VERIFIED", 1)]
+    [InlineData("PAID", 0)]
+    public async Task Dashboard_counts_unsettled_but_not_paid_batches(string status, int expected)
+    {
+        await using var db = Open();
+        db.InventoryBatches.Add(new InventoryBatch { DepotId = depotId, MaterialType = "PET", DeclaredWeightKg = 1, Status = status });
+        await db.SaveChangesAsync();
+        var counts = await new Retrack.API.Repositories.DepotReportRepository(db).DashboardCountsAsync(depotId, DateTime.UtcNow.Date);
+        Assert.Equal(expected, counts.OpenBatches);
+    }
+
     private sealed class ProofImages : Retrack.API.Services.Interfaces.ICloudinaryService
     {
         public int Uploads { get; private set; }
-        public Task<string> UploadImageAsync(Stream stream, string name) { Uploads++; return Task.FromResult("https://example.com/proof.png"); }
+        public bool FailUpload { get; init; }
+        public Task<string> UploadImageAsync(Stream stream, string name) { Uploads++; return FailUpload ? Task.FromException<string>(new InvalidOperationException("Dịch vụ ảnh lỗi.")) : Task.FromResult("https://example.com/proof.png"); }
         public Task<string> UploadAvatarAsync(Stream stream, string name) => throw new NotSupportedException();
         public Task<bool> DeleteImageAsync(string id) => throw new NotSupportedException();
     }
@@ -102,12 +291,14 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         db.FactoryDepotPartnerships.Add(new FactoryDepotPartnership { DepotId = depotId, FactoryId = factory.Id });
         await db.SaveChangesAsync();
         var service = new DepotPartnershipService(new DepotService(new Retrack.API.Repositories.DepotOwnerRepository(db),
-            new Retrack.API.Repositories.DepotPaymentReadRepository(db)), new Retrack.API.Repositories.DepotPartnershipRepository(db));
+            new Retrack.API.Repositories.DepotPaymentReadRepository(db)), new Retrack.API.Repositories.DepotPartnershipRepository(db), new Retrack.API.Repositories.DepotUnitOfWork(db));
         await Assert.ThrowsAsync<DepotForbiddenException>(() => service.UpdateAsync(sellerId, depotId, factory.Id, "APPROVED", default));
         await Assert.ThrowsAsync<ArgumentException>(() => service.UpdateAsync(ownerId, depotId, factory.Id, "INVALID", default));
-        Assert.Equal("APPROVED", (await service.UpdateAsync(ownerId, depotId, factory.Id, "APPROVED", default)).Status);
+        await Assert.ThrowsAsync<ArgumentException>(() => service.UpdateAsync(ownerId, depotId, factory.Id, "APPROVED", default));
+        Assert.Equal("BLOCKED", (await service.UpdateAsync(ownerId, depotId, factory.Id, "BLOCKED", default)).Status);
+        Assert.Equal("PENDING", (await service.UpdateAsync(ownerId, depotId, factory.Id, "UNBLOCKED", default)).Status);
         await using var verify = Open();
-        Assert.Equal("APPROVED", (await verify.FactoryDepotPartnerships.SingleAsync(p => p.DepotId == depotId)).Status);
+        Assert.Equal("PENDING", (await verify.FactoryDepotPartnerships.SingleAsync(p => p.DepotId == depotId)).Status);
         Assert.Equal(factory.Id, Assert.Single((await service.ListAsync(ownerId, depotId, new(), default)).Items).FactoryId);
     }
 
@@ -226,8 +417,10 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         Assert.Equal(direct ? 100 : 40, stock.AvailableKg);
     }
 
-    [Fact]
-    public async Task Concurrent_factory_accept_and_depot_cancel_leave_one_consistent_outcome()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Concurrent_factory_accept_and_depot_cancel_leave_one_consistent_outcome(bool direct)
     {
         var input = Input();
         await using (var db = Open())
@@ -235,7 +428,8 @@ public sealed class InventoryBatchTests : IAsyncLifetime
             db.Users.Add(new User { Id = factoryOwnerId, Email = $"factory-{factoryOwnerId}@test.invalid", Role = "FACTORY", FullName = "Nhà máy thử" });
             var factory = new Factory { OwnerId = factoryOwnerId, Name = "Nhà máy thử", Address = "Thử nghiệm" };
             db.Factories.Add(factory);
-            db.FactoryDepotPartnerships.Add(new FactoryDepotPartnership { DepotId = depotId, FactoryId = factory.Id, Status = "APPROVED" });
+            db.FactoryDepotPartnerships.Add(new FactoryDepotPartnership { DepotId = depotId, FactoryId = factory.Id, Status = direct ? "PENDING" : "APPROVED" });
+            if (direct) input.TargetFactoryId = factory.Id;
             await db.SaveChangesAsync();
             await Batches(db).CreateAsync(ownerId, depotId, input);
         }
@@ -269,8 +463,7 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         var offers = await market.BatchesAsync(factoryOwnerId, new() { DirectOnly = true }, default);
         Assert.Contains(offers.Data!.Items, b => b.Id == input.OperationId);
         var partner = await db.FactoryDepotPartnerships.SingleAsync(p => p.DepotId == depotId);
-        partner.Status = "APPROVED";
-        await db.SaveChangesAsync();
+        Assert.Equal("PENDING", partner.Status);
         var accepted = await market.AcceptAsync(factoryOwnerId, input.OperationId, new() { AgreedPricePerKg = 10 }, default);
         Assert.Equal("ACCEPTED", accepted.Data!.Status);
         Assert.Single(await db.TransportJobs.Where(t => t.BatchId == input.OperationId).ToListAsync());
@@ -404,7 +597,8 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         else
         {
             Assert.Equal(expectedStatus, (await Batches(db).CreateAsync(ownerId, depotId, input)).Status);
-            await Assert.ThrowsAsync<DepotConflictException>(() => Batches(db).CancelAsync(ownerId, depotId, input.OperationId));
+            if (expectedStatus == "PENDING_APPROVAL") await Batches(db).CancelAsync(ownerId, depotId, input.OperationId);
+            else await Assert.ThrowsAsync<DepotConflictException>(() => Batches(db).CancelAsync(ownerId, depotId, input.OperationId));
         }
         Assert.Equal(jobs, await db.TransportJobs.CountAsync(t => t.BatchId == input.OperationId));
     }

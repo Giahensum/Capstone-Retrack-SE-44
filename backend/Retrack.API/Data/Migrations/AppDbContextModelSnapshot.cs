@@ -427,6 +427,14 @@ namespace Retrack.API.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<bool>("BlockedByDepot")
+                        .HasColumnType("boolean")
+                        .HasColumnName("blocked_by_depot");
+
+                    b.Property<bool>("BlockedByFactory")
+                        .HasColumnType("boolean")
+                        .HasColumnName("blocked_by_factory");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -552,6 +560,11 @@ namespace Retrack.API.Data.Migrations
                     b.Property<decimal?>("GrossAmount")
                         .HasColumnType("numeric")
                         .HasColumnName("gross_amount");
+
+                    b.Property<string[]>("ImageUrls")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("image_urls");
 
                     b.Property<string>("MaterialType")
                         .IsRequired()

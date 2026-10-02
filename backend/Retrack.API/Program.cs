@@ -14,6 +14,10 @@ var builder = WebApplication.CreateBuilder(args);
 
 if (builder.Environment.IsDevelopment())
 {
+    // EventLog trên Windows có thể từ chối ghi và che mất lỗi trả về từ API local.
+    builder.Logging.ClearProviders();
+    builder.Logging.AddConsole();
+    builder.Logging.AddDebug();
     Retrack.API.Helpers.LocalEnvironment.Load(Path.Combine(builder.Environment.ContentRootPath, ".env"));
     // Nạp lại biến môi trường sau .env; tham số dòng lệnh vẫn có ưu tiên cao nhất.
     builder.Configuration.AddEnvironmentVariables().AddCommandLine(args);

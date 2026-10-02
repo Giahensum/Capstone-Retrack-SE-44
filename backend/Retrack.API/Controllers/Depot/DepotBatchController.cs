@@ -16,12 +16,18 @@ namespace Retrack.API.Controllers.Depot;
 public class DepotBatchController(IBatchService service) : ControllerBase
 {
     private Guid OwnerId => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    [HttpGet("{id:guid}")]
+    public async Task<IActionResult> Detail(Guid id, [FromQuery] Guid depotId) =>
+        Ok(ApiResponse<DepotBatchDetailDto>.Ok(await service.DetailAsync(OwnerId, depotId, id)));
     [HttpGet]
     public async Task<IActionResult> List([FromQuery] Guid depotId, [FromQuery] DepotQuery query) =>
         Ok(ApiResponse<PagedResult<DepotBatchDto>>.Ok(await service.ListAsync(OwnerId, depotId, query)));
-    [HttpPost]
+    [HttpPost, Consumes("application/json")]
     public async Task<IActionResult> Create([FromQuery] Guid depotId, CreateDepotBatchDto dto) =>
         Ok(ApiResponse<DepotBatchDto>.Ok(await service.CreateAsync(OwnerId, depotId, dto)));
+    [HttpPost, Consumes("multipart/form-data")]
+    public async Task<IActionResult> CreateWithImages([FromQuery] Guid depotId, [FromForm] CreateDepotBatchDto dto, [FromForm] List<IFormFile> images) =>
+        Ok(ApiResponse<DepotBatchDto>.Ok(await service.CreateAsync(OwnerId, depotId, dto, images)));
     [HttpPatch("{id:guid}/cancel")]
     public async Task<IActionResult> Cancel(Guid id, [FromQuery] Guid depotId)
     {

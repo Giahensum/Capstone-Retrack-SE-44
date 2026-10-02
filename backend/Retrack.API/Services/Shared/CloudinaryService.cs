@@ -6,23 +6,33 @@ namespace Retrack.API.Services.Shared;
 
 public class CloudinaryService : ICloudinaryService
 {
-    private readonly Cloudinary _cloudinary;
+    private readonly IConfiguration _config;
+    private Cloudinary? _cloudinary;
 
     public CloudinaryService(IConfiguration config)
     {
-        var cloudName = config["Cloudinary:CloudName"];
-        var apiKey = config["Cloudinary:ApiKey"];
-        var apiSecret = config["Cloudinary:ApiSecret"];
+        _config = config;
+    }
 
-        if (string.IsNullOrWhiteSpace(cloudName) || string.IsNullOrWhiteSpace(apiKey) || string.IsNullOrWhiteSpace(apiSecret))
-            throw new InvalidOperationException("Chưa cấu hình dịch vụ ảnh. Vui lòng liên hệ quản trị viên.");
+    private Cloudinary Client
+    {
+        get
+        {
+            if (_cloudinary != null) return _cloudinary;
+            var cloudName = _config["Cloudinary:CloudName"];
+            var apiKey = _config["Cloudinary:ApiKey"];
+            var apiSecret = _config["Cloudinary:ApiSecret"];
 
-        _cloudinary = new Cloudinary(new Account(cloudName, apiKey, apiSecret)) { Api = { Secure = true } };
+            if (string.IsNullOrWhiteSpace(cloudName) || string.IsNullOrWhiteSpace(apiKey) || string.IsNullOrWhiteSpace(apiSecret))
+                throw new InvalidOperationException("Chưa cấu hình dịch vụ ảnh. Vui lòng liên hệ quản trị viên.");
+
+            return _cloudinary = new Cloudinary(new Account(cloudName, apiKey, apiSecret)) { Api = { Secure = true } };
+        }
     }
 
     public async Task<string> UploadImageAsync(Stream fileStream, string fileName)
     {
-        var result = await _cloudinary.UploadAsync(new ImageUploadParams
+        var result = await Client.UploadAsync(new ImageUploadParams
         {
             File = new FileDescription(fileName, fileStream),
             Folder = "retrack",
@@ -39,7 +49,7 @@ public class CloudinaryService : ICloudinaryService
 
     public async Task<string> UploadAvatarAsync(Stream fileStream, string fileName)
     {
-        var result = await _cloudinary.UploadAsync(new ImageUploadParams
+        var result = await Client.UploadAsync(new ImageUploadParams
         {
             File = new FileDescription(fileName, fileStream),
             Folder = "retrack/avatars",
@@ -55,5 +65,5 @@ public class CloudinaryService : ICloudinaryService
     }
 
     public async Task<bool> DeleteImageAsync(string publicId) =>
-        (await _cloudinary.DestroyAsync(new DeletionParams(publicId))).Result == "ok";
+        (await Client.DestroyAsync(new DeletionParams(publicId))).Result == "ok";
 }

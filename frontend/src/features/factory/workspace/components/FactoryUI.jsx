@@ -161,7 +161,7 @@ export function Empty({ text = "Chưa có dữ liệu phù hợp." }) {
 export function Field({ label, children, ...props }) {
   return <label className="field"><span>{label}</span>{children || <input {...props} />}</label>;
 }
-export function Modal({ title, children, onClose }) {
+export function Modal({ title, children, onClose, busy = false }) {
   const ref = useRef();
   useEffect(() => {
     const dialog = ref.current;
@@ -170,8 +170,8 @@ export function Modal({ title, children, onClose }) {
     dialog.showModal(); document.body.style.overflow = "hidden";
     return () => { dialog.close(); document.body.style.overflow = overflow; previous?.focus(); };
   }, []);
-  return <dialog ref={ref} className="factory-dialog" aria-labelledby="factory-dialog-title" onCancel={onClose}>
-    <div className="dialog-head"><h2 id="factory-dialog-title">{title}</h2><button onClick={onClose} aria-label="Đóng hộp thoại">×</button></div>
+  return <dialog ref={ref} className="factory-dialog" aria-labelledby="factory-dialog-title" onCancel={(e) => { if (busy) e.preventDefault(); else onClose(); }}>
+    <div className="dialog-head"><h2 id="factory-dialog-title">{title}</h2><button disabled={busy} onClick={onClose} aria-label="Đóng hộp thoại">×</button></div>
     <div className="dialog-body">{children}</div>
   </dialog>;
 }
@@ -198,5 +198,6 @@ export function Attachment({ label, value, onChange }) {
   </div>;
 }
 export function Confirm({ title, text, onClose, onConfirm, danger }) {
-  return <Modal title={title} onClose={onClose}><p>{text}</p><div className="form-actions"><Button secondary onClick={onClose}>Hủy</Button><Button danger={danger} onClick={onConfirm}>Xác nhận</Button></div></Modal>;
+  const [busy, setBusy] = useState(false);
+  return <Modal title={title} onClose={onClose} busy={busy}><p>{text}</p><div className="form-actions"><Button secondary disabled={busy} onClick={onClose}>Hủy</Button><Button danger={danger} disabled={busy} onClick={async () => { if (busy) return; setBusy(true); try { await onConfirm(); } finally { setBusy(false); } }}>{busy ? 'Đang lưu…' : 'Xác nhận'}</Button></div></Modal>;
 }

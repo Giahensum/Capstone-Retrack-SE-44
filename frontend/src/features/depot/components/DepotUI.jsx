@@ -28,9 +28,10 @@ export function GridTable({ headers, children, empty }) {
     {empty && <p role="status" className="p-8 text-center">Chưa có dữ liệu phù hợp.</p>}</div>;
 }
 export function Pager({ page, setPage, total = 0, size = 20 }) {
-  return <div className="flex justify-between items-center gap-4 text-sm"><span>Trang {page} · {total} mục</span><div className="flex gap-2">
-    <button className={buttonClass} disabled={page === 1} onClick={() => setPage(page - 1)}>Trước</button>
-    <button className={buttonClass} disabled={page * size >= total} onClick={() => setPage(page + 1)}>Sau</button></div></div>;
+  const pagerBtn = "px-3 py-1.5 rounded-lg border border-d-border-subtle bg-d-surface hover:bg-d-surface-container-low disabled:opacity-40 disabled:hover:bg-d-surface transition-colors font-medium";
+  return <div className="flex justify-between items-center gap-4 text-sm text-d-on-surface-variant"><span>Trang {page} · {total} mục</span><div className="flex gap-2">
+    <button type="button" className={pagerBtn} disabled={page === 1} onClick={() => setPage(page - 1)}>Trước</button>
+    <button type="button" className={pagerBtn} disabled={page * size >= total} onClick={() => setPage(page + 1)}>Sau</button></div></div>;
 }
 export function Dialog({ title, onClose, busy, children }) {
   const ref = useRef(null);

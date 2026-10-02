@@ -19,7 +19,7 @@ public sealed class PeriodQuery
 }
 public record RevenuePointDto(DateOnly Date, decimal Revenue, decimal PurchaseCost);
 public record RevenueReportDto(decimal Revenue, decimal PurchaseCost, List<RevenuePointDto> Points);
-public record DashboardDto(int NewRequestsToday, decimal AvailableKg, int ActiveBatches, int PendingPayments, decimal Revenue, decimal PurchaseCost);
+public record DashboardDto(int NewRequestsToday, decimal AvailableKg, int ActiveBatches, int PendingPayments, decimal Revenue, decimal PurchaseCost, int RejectedQualityBatches = 0);
 public record StaffPerformanceDto(Guid Id, string FullName, string Role, int CompletedCount, decimal WeightKg, decimal PurchaseAmount);
 public record StaffHistoryDto(Guid Id, string Type, string Status, decimal WeightKg, decimal Amount, DateTime Date);
 public record FeeEntryDto(Guid Id, Guid SourceId, decimal FeeAmount, DateTime Date);

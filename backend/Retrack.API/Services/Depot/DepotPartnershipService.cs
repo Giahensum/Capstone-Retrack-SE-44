@@ -5,7 +5,7 @@ using Retrack.API.Services.Interfaces;
 
 namespace Retrack.API.Services.Depot;
 
-public sealed class DepotPartnershipService(IDepotService scope, IDepotPartnershipRepository repository) : IDepotPartnershipService
+public sealed class DepotPartnershipService(IDepotService scope, IDepotPartnershipRepository repository, IDepotUnitOfWork work) : IDepotPartnershipService
 {
     private async Task<Guid> ResolveAsync(Guid ownerId, Guid? depotId)
     {
@@ -19,12 +19,15 @@ public sealed class DepotPartnershipService(IDepotService scope, IDepotPartnersh
     public async Task<DepotPartnershipStatusDto> UpdateAsync(Guid ownerId, Guid? depotId, Guid factoryId, string status, CancellationToken ct)
     {
         var selected = await ResolveAsync(ownerId, depotId);
-        if (status is not ("APPROVED" or "BLOCKED")) throw new ArgumentException("Trạng thái phải là APPROVED hoặc BLOCKED.");
+        if (status is not ("BLOCKED" or "UNBLOCKED")) throw new ArgumentException("Chủ kho chỉ được chặn hoặc bỏ chặn của mình. Nhà máy quyết định hợp tác sau kiểm tra hàng.");
+        await using var tx = await work.BeginAsync();
+        await repository.LockDepotAsync(selected, ct);
         var partnership = await repository.FindAsync(selected, factoryId, ct)
             ?? throw new KeyNotFoundException("Không tìm thấy yêu cầu hợp tác.");
-        partnership.Status = status;
+        partnership.BlockedByDepot = status == "BLOCKED";
         partnership.UpdatedAt = DateTime.UtcNow;
         await repository.SaveAsync(ct);
-        return new(partnership.Id, partnership.FactoryId, partnership.DepotId, partnership.Status);
+        await tx.CommitAsync();
+        return new(partnership.Id, partnership.FactoryId, partnership.DepotId, partnership.EffectiveStatus);
     }
 }

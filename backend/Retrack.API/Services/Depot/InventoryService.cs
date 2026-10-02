@@ -10,8 +10,8 @@ public sealed class InventoryService(IDepotInventoryRepository repository, IDepo
     public async Task<List<InventoryRowDto>> GetAsync(Guid ownerId, Guid depotId)
     {
         await scope.RequireOwnerAsync(ownerId, depotId);
-        var received = await repository.ReceivedAsync(depotId);
-        var allocated = await repository.AllocatedAsync(depotId);
+        var received = (await repository.ReceivedAsync(depotId)).Select(x => x with { Material = Retrack.API.Services.Shared.MaterialCatalog.Normalize(x.Material) }).ToList();
+        var allocated = (await repository.AllocatedAsync(depotId)).Select(x => x with { Material = Retrack.API.Services.Shared.MaterialCatalog.Normalize(x.Material) }).ToList();
         var exportedStates = new[] { "IN_PROGRESS", "IN_TRANSIT", "DELIVERED", "RECEIVED", "WEIGHED", "VERIFIED", "COMPLETED", "PAID" };
         bool Exported(DepotAllocatedWeight row) => row.HasLeftDepot || exportedStates.Contains(row.Status);
         // Từ chối lời mời chưa xuất kho giải phóng giữ chỗ; QC từ chối không chứng minh hàng đã trả về.

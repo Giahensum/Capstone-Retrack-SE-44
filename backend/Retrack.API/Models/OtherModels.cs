@@ -85,6 +85,11 @@ namespace Retrack.API.Models
     [Table("factory_depot_partnerships")]
     public class FactoryDepotPartnership
     {
+        [Column("blocked_by_depot")] public bool BlockedByDepot { get; set; }
+        [Column("blocked_by_factory")] public bool BlockedByFactory { get; set; }
+        // BLOCKED cũ không xác định bên chặn: giữ nguyên để đối chiếu, không tự mở.
+        [NotMapped] public bool IsBlocked => Status == "BLOCKED" || BlockedByDepot || BlockedByFactory;
+        [NotMapped] public string EffectiveStatus => IsBlocked ? "BLOCKED" : Status;
         [Key]
         [Column("id")]
         public Guid Id { get; set; } = Guid.NewGuid();
@@ -148,6 +153,9 @@ namespace Retrack.API.Models
 
         [Column("description")]
         public string? Description { get; set; }
+
+        [Column("image_urls", TypeName = "text[]")]
+        public string[] ImageUrls { get; set; } = [];
 
         [Required]
         [Column("status")]

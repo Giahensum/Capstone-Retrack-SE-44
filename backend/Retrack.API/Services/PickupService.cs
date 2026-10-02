@@ -136,7 +136,7 @@ namespace Retrack.API.Services
                 _db.PickupRequestItems.Add(new PickupRequestItem
                 {
                     PickupRequestId = requestId,
-                    MaterialType = item.MaterialType,
+                    MaterialType = Retrack.API.Services.Shared.MaterialCatalog.Normalize(item.MaterialType),
                     WeightKg = item.WeightKg,
                     PricePerKg = item.PricePerKg,
                     SubTotal = subTotal
@@ -225,4 +225,3 @@ namespace Retrack.API.Services
         }
     }
 }
-
