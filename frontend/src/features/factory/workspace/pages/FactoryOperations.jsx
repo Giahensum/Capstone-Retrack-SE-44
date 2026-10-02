@@ -389,7 +389,7 @@ function Financial({ values, net }) {
         <dd>{money(values.total)}</dd>
       </div>
       <div>
-        <dt>Phí nền tảng giữ lại (1%)</dt>
+        <dt>Phí nền tảng giữ lại ({values.feePercentage}%)</dt>
         <dd>− {money(values.fee)}</dd>
       </div>
       <div className="financial-total">
@@ -602,13 +602,13 @@ function QualityForm({ order, close }) {
   );
 }
 function SettlementForm({ order, close }) {
-  const { act } = useFactory();
+  const { act, state } = useFactory();
   const [price, setPrice] = useState("");
   const [reference, setReference] = useState("");
   const [confirmed, setConfirmed] = useState(false);
   let preview;
   try {
-    preview = settlement(order.weight.net, Number(price));
+    preview = settlement(order.weight.net, Number(price), state?.profile?.platformFeePercentage ?? order.payment?.feePercentage ?? 1);
   } catch {
     /* Price has not been entered. */
   }
