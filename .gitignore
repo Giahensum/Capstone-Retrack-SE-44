@@ -8,6 +8,8 @@
 # ── AI Context (local docs cho AI agent, không push) ──
 .ai-context/
 .claude/
+# Worktree cục bộ nằm trong repo, không đưa nội dung checkout lồng vào Git.
+.worktrees/
 
 # ── Backend (.NET) ──
 backend/**/bin/
@@ -22,6 +24,8 @@ backend/**/TestResults/
 backend/**/appsettings.json
 backend/**/appsettings.*.json
 !backend/**/appsettings.example.json
+# Fixture dữ liệu riêng trên máy, không dùng làm seed chia sẻ.
+backend/seed_test_data.sql
 be/**/bin/
 be/**/obj/
 be/**/*.user
