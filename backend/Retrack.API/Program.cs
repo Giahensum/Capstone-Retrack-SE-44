@@ -183,12 +183,13 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
-// ===== AUTO MIGRATE & SEED (dev only) =====
+// ===== DB-FIRST: app KHÔNG tự migrate; schema nằm ở db/depot ower/retrack-system.sql =====
+// Tạo/cập nhật schema bằng script SQL đã review trước khi khởi động ứng dụng.
+// Chỉ seed dữ liệu khi chủ động bật Database__Initialize trong Development.
 if (app.Environment.IsDevelopment() && builder.Configuration.GetValue<bool>("Database:Initialize"))
 {
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    db.Database.Migrate();
     await DataSeeder.SeedAsync(db);
 }
 
