@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Configuration;
 using Npgsql;
 using Retrack.API.Data;
 using Retrack.API.DTOs.Depot;
@@ -37,6 +38,8 @@ public sealed class InventoryBatchTests : IAsyncLifetime
     public async Task DisposeAsync()
     {
         await using var db = Open();
+        var batchIds = await db.InventoryBatches.Where(b => b.DepotId == depotId).Select(b => b.Id).ToListAsync();
+        await db.PlatformTransactions.Where(t => t.SourceType == "BATCH_ORDER" && batchIds.Contains(t.SourceId)).ExecuteDeleteAsync();
         await db.TransportJobs.Where(t => t.Batch.DepotId == depotId).ExecuteDeleteAsync();
         await db.InventoryBatches.Where(b => b.DepotId == depotId).ExecuteDeleteAsync();
         await db.FactoryDepotPartnerships.Where(p => p.DepotId == depotId).ExecuteDeleteAsync();
@@ -208,6 +211,62 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         await depot.UpdateAsync(ownerId, depotId, factory.Id, "BLOCKED", default);
         Assert.Equal("BLOCKED", (await partnerService.UpdateStatusAsync(factoryOwnerId, depotId, new() { Status = Retrack.API.Models.Enums.PartnershipStatus.UNBLOCKED }, default)).Data!.Status);
         Assert.Equal("DECLINED", (await depot.UpdateAsync(ownerId, depotId, factory.Id, "UNBLOCKED", default)).Status);
+    }
+
+    [Fact]
+    public async Task Depot_factory_batch_settlement_roundtrips_weight_qc_invoice_and_payment_details()
+    {
+        await using var db = Open();
+        db.Users.Add(new User { Id = factoryOwnerId, Email = $"roundtrip-{factoryOwnerId}@test.invalid", Role = "FACTORY", FullName = "Nhà máy thử" });
+        var factory = new Factory { OwnerId = factoryOwnerId, Name = "Nhà máy thử", Address = "Đà Nẵng", MinimumPurityPercent = 80, AcceptedMaterialsCsv = "PET" };
+        db.Factories.Add(factory);
+        await db.SaveChangesAsync();
+
+        var firstInput = Input(60); firstInput.TargetFactoryId = factory.Id;
+        var first = await Batches(db).CreateAsync(ownerId, depotId, firstInput);
+        Assert.Equal("PENDING_APPROVAL", first.Status);
+        var market = new Retrack.API.Services.Factory.FactoryMarketService(db);
+        Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Success,
+            (await market.AcceptAsync(factoryOwnerId, first.Id, new(), default)).Outcome);
+
+        var transport = await db.TransportJobs.SingleAsync(t => t.BatchId == first.Id);
+        transport.Status = "DELIVERED"; transport.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+
+        var orders = new Retrack.API.Services.Factory.FactoryOrderService(db);
+        Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Success, (await orders.ReceiveAsync(factoryOwnerId, first.Id, default)).Outcome);
+        var qc = new Retrack.API.Services.Factory.FactoryQCService(db, new ConfigurationBuilder().Build());
+        Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Success, (await qc.WeighAsync(factoryOwnerId, first.Id,
+            new() { GrossWeightKg = 70, TareWeightKg = 10, TicketNumber = "VE-TEST-001" }, default)).Outcome);
+        Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Success, (await qc.QualityAsync(factoryOwnerId, first.Id,
+            new() { Accept = true, PurityPercent = 95, MoisturePercent = 3, ContaminationPercent = 2, Grade = "A", Note = "Đạt KCS" }, default)).Outcome);
+
+        var partners = new Retrack.API.Services.Factory.FactoryPartnerService(db);
+        Assert.Equal("APPROVED", (await partners.UpdateStatusAsync(factoryOwnerId, depotId,
+            new() { Status = Retrack.API.Models.Enums.PartnershipStatus.APPROVED }, default)).Data!.Status);
+        Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Success, (await orders.InvoiceAsync(factoryOwnerId, first.Id,
+            new() { InvoiceNumber = "HD-TEST-001", InvoiceFileUrl = "https://example.com/factory-invoice-test.pdf" }, default)).Outcome);
+        var settled = await orders.SettleAsync(factoryOwnerId, first.Id,
+            new() { AgreedPricePerKg = 12000, PaymentReference = "SIM-FACTORY-001" }, default);
+        Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Success, settled.Outcome);
+        Assert.Equal("PAID", (await orders.GetAsync(factoryOwnerId, first.Id, default)).Data!.Status);
+
+        var detail = await Batches(db).DetailAsync(ownerId, depotId, first.Id);
+        Assert.Equal("COMPLETED", detail.Batch.Status);
+        Assert.Equal("DELIVERED", detail.TransportStatus);
+        Assert.NotNull(detail.ReceivedAt);
+        Assert.NotNull(detail.DecidedAt);
+        Assert.Equal(60, detail.Quality!.ActualWeightKg);
+        Assert.True(detail.Quality.IsAccepted);
+        Assert.Equal("A", detail.Quality.Grade);
+        Assert.Equal("HD-TEST-001", detail.Quality.InvoiceNumber);
+        Assert.Equal(settled.Data!.TotalAmount, detail.Settlement!.GrossAmount);
+        Assert.Equal(settled.Data.FeeAmount, detail.Settlement.FeeAmount);
+        Assert.Equal(settled.Data.NetPayableAmount, detail.Settlement.NetAmount);
+        Assert.Equal("SIM-FACTORY-001", detail.Settlement.PaymentReference);
+
+        var followUp = Input(40); followUp.TargetFactoryId = factory.Id;
+        Assert.Equal("TRANSPORT_READY", (await Batches(db).CreateAsync(ownerId, depotId, followUp)).Status);
     }
 
     [Fact]
