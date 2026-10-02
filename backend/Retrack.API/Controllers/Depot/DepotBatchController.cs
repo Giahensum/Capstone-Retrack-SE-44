@@ -25,7 +25,7 @@ public class DepotBatchController(IBatchService service) : ControllerBase
     [HttpPost, Consumes("application/json")]
     public async Task<IActionResult> Create([FromQuery] Guid depotId, CreateDepotBatchDto dto) =>
         Ok(ApiResponse<DepotBatchDto>.Ok(await service.CreateAsync(OwnerId, depotId, dto)));
-    [HttpPost, Consumes("multipart/form-data")]
+    [HttpPost("with-images"), Consumes("multipart/form-data")]
     public async Task<IActionResult> CreateWithImages([FromQuery] Guid depotId, [FromForm] CreateDepotBatchDto dto, [FromForm] List<IFormFile> images) =>
         Ok(ApiResponse<DepotBatchDto>.Ok(await service.CreateAsync(OwnerId, depotId, dto, images)));
     [HttpPatch("{id:guid}/cancel")]
