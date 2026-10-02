@@ -1,9 +1,11 @@
-import { forwardRef } from 'react';
+import { forwardRef, useId } from 'react';
 import { cn } from '@/lib/cn';
-export const Input = forwardRef(({ label, error, className, ...props }, ref) => {
+export const Input = forwardRef(({ label, error, className, id, ...props }, ref) => {
+    const generatedId = useId();
+    const inputId = id ?? generatedId;
     return (<div className="flex flex-col gap-1">
-        {label && (<label className="text-sm font-medium text-slate-300">{label}</label>)}
-        <input ref={ref} className={cn('bg-slate-900 border text-slate-100 rounded-lg px-3 py-2 text-sm transition-all outline-none', 'focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500', error ? 'border-red-500' : 'border-slate-600', className)} {...props}/>
+        {label && (<label htmlFor={inputId} className="text-sm font-medium text-slate-300">{label}</label>)}
+        <input id={inputId} ref={ref} className={cn('bg-slate-900 border text-slate-100 rounded-lg px-3 py-2 text-sm transition-all outline-none', 'focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500', error ? 'border-red-500' : 'border-slate-600', className)} {...props}/>
         {error && <span className="text-xs text-red-400">{error}</span>}
       </div>);
 });

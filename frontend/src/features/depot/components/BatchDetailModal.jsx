@@ -1,6 +1,7 @@
 import { useDepotQuery, number, money, batchLabels } from '../depotApi';
 import { Dialog, QueryState } from './DepotUI';
 import { materialLabel } from '../materialLabels';
+import { proofExtension } from '../proofDownload';
 const missing = 'Chưa cập nhật';
 const kg = (v) => v == null ? missing : `${number(v)} kg`;
 const percent = (v) => v == null ? missing : `${number(v)}%`;
@@ -10,6 +11,8 @@ function Rows({ title, items }) {
   return <section className="rounded-2xl border border-d-border-subtle bg-white p-4"><h3 className="font-semibold text-d-primary mb-3">{title}</h3><dl className="grid grid-cols-1 sm:grid-cols-2 gap-4">{items.map(([label, value]) => <div key={label}><dt className="text-sm text-d-on-surface-variant">{label}</dt><dd className="mt-1 font-medium break-words">{value ?? missing}</dd></div>)}</dl></section>;
 }
 function Proof({ title, url }) {
+  const extension = proofExtension(url);
+  if (extension) return <p className="text-sm">{title}: <a className="text-d-primary underline" href={url} download={`chung-tu.${extension}`}>Tải {title.toLocaleLowerCase('vi-VN')}</a></p>;
   let safe = false;
   try { safe = ['https:', 'http:'].includes(new URL(url).protocol); } catch { /* Không mở URL chứng từ không hợp lệ. */ }
   return <p className="text-sm">{title}: {safe ? <a className="text-d-primary underline" href={url} target="_blank" rel="noopener noreferrer">Mở chứng từ</a> : missing}</p>;
