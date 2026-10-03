@@ -111,3 +111,49 @@ test('popup hồ sơ, nhân sự và chi tiết lô mở được, cuộn đư�
   await detail.getByRole('button', { name: 'Đóng' }).click();
   await expect(detail).toHaveCount(0);
 });
+
+test('10 màn Depot dùng cùng chiều rộng và lề ở màn hình lớn', async ({ page }) => {
+  test.setTimeout(90_000);
+  await login(page);
+  await page.setViewportSize({ width: 1920, height: 900 });
+  for (const [route, name] of screens) {
+    await page.goto(`/depot/${route}`);
+    await page.getByLabel('Kho đang quản lý').selectOption(process.env.E2E_DEPOT_ID);
+    await page.waitForLoadState('networkidle');
+    const layout = await page.evaluate(() => {
+      const main = document.querySelector('main').getBoundingClientRect();
+      const content = document.querySelector('main .max-w-7xl').getBoundingClientRect();
+      return { width: content.width, offset: content.left - main.left, available: main.width };
+    });
+    expect(layout.width, `${name}: chiều rộng nội dung`).toBeLessThanOrEqual(1281);
+    expect(Math.abs(layout.offset - (layout.available - layout.width) / 2), `${name}: căn giữa nội dung`).toBeLessThanOrEqual(2);
+  }
+  await page.goto('/depot/staff/performance');
+  await page.getByLabel('Kho đang quản lý').selectOption(process.env.E2E_DEPOT_ID);
+  await page.waitForLoadState('networkidle');
+  const scroller = page.locator('main > div').last();
+  const scrollable = await scroller.evaluate(el => el.scrollHeight > el.clientHeight);
+  expect(scrollable, 'Bảng hiệu suất phải cuộn tới phân trang trong vùng nội dung chính').toBe(true);
+  await scroller.evaluate(el => { el.scrollTop = el.scrollHeight; });
+  await expect(page.getByRole('button', { name: 'Sau' })).toBeVisible();
+});
+
+test('phí, doanh thu và điểm nhà máy nêu rõ ý nghĩa dữ liệu', async ({ page }) => {
+  await login(page);
+  await page.goto('/depot/payments/fees');
+  await page.getByLabel('Kho đang quản lý').selectOption(process.env.E2E_DEPOT_ID);
+  await expect(page.getByText('Khoảng ngày chỉ lọc phí của kho đang chọn.')).toBeVisible();
+  await expect(page.getByText('Admin chưa xác nhận đã thanh toán.')).toBeVisible();
+  await expect(page.getByLabel('Nhóm theo')).toHaveCount(0);
+
+  await page.goto('/depot/reports');
+  await page.getByLabel('Kho đang quản lý').selectOption(process.env.E2E_DEPOT_ID);
+  await expect(page.getByText('Giá trị lô đã quyết toán', { exact: true })).toBeVisible();
+  await expect(page.getByText('Hai số liệu không phải lợi nhuận:')).toBeVisible();
+  await expect(page.getByLabel('Nhóm theo')).toBeVisible();
+
+  await page.goto('/depot/partners');
+  await page.getByLabel('Kho đang quản lý').selectOption(process.env.E2E_DEPOT_ID);
+  await expect(page.getByText('Điểm hồ sơ chỉ để tham khảo;')).toBeVisible();
+  await expect(page.getByRole('columnheader', { name: 'Điểm hồ sơ' })).toBeVisible();
+});

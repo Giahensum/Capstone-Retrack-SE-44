@@ -19,8 +19,13 @@ function SimulatePayment({invoice,onClose}){
 export default function PlatformFees(){
  const [period,setPeriod]=useState({}),[tab,setTab]=useState('fees'),[page,setPage]=useState(1),[invoice,setInvoice]=useState(null),[simulatedInvoice,setSimulatedInvoice]=useState(null);
  const summary=useDepotQuery('reports/fees/summary',period); const query=useDepotQuery(`reports/${tab}`,{...period,page});
- return <Page title="Phí nền tảng" description="Theo dõi phí tích lũy và hóa đơn phí hàng tháng."><PeriodFilter period={period} setPeriod={(p)=>{setPeriod(p);setPage(1);}}/>
-  <QueryState query={summary}><Cards items={[{label:'Phí phát sinh tại kho trong kỳ',value:money(summary.data?.accruedAmount),icon:'receipt'},{label:'Hóa đơn chưa trả — toàn bộ kho của bạn',value:money(summary.data?.unpaidInvoiceAmount)},{label:'Đã gửi chứng từ — chờ đối soát',value:money(summary.data?.submittedInvoiceAmount)}]}/></QueryState>
+ return <Page title="Phí nền tảng" description="Phí từ đơn thu gom và trạng thái hóa đơn do nền tảng phát hành."><PeriodFilter period={period} setPeriod={(p)=>{setPeriod(p);setPage(1);}} showGroupBy={false}/>
+  <p className="text-sm text-d-on-surface-variant">Khoảng ngày chỉ lọc phí của kho đang chọn. Hóa đơn và hai số dư hóa đơn bên dưới hiển thị tất cả kỳ, trên mọi kho của chủ tài khoản.</p>
+  <QueryState query={summary}><Cards items={[
+    {label:'Phí đơn thu gom tại kho trong kỳ',value:money(summary.data?.accruedAmount),icon:'receipt',description:'Chỉ tính kho đang chọn và khoảng ngày lọc; phát sinh khi ghi nhận chuyển tiền cho người bán.'},
+    {label:'Hóa đơn chưa gửi chứng từ',value:money(summary.data?.unpaidInvoiceAmount),icon:'hourglass_empty',description:'Tổng hóa đơn đang chờ thanh toán của mọi kho thuộc tài khoản; không theo khoảng ngày lọc.'},
+    {label:'Đã gửi chứng từ, chờ đối soát',value:money(summary.data?.submittedInvoiceAmount),icon:'fact_check',description:'Tổng hóa đơn đã gửi chứng từ của mọi kho; Admin chưa xác nhận đã thanh toán.'}
+  ]}/></QueryState>
   <nav aria-label="Nội dung phí nền tảng" className="flex flex-wrap gap-2 border-b border-d-border-subtle"><button type="button" aria-current={tab==='fees'?'page':undefined} className={`min-h-11 px-4 border-b-2 font-semibold ${tab==='fees'?'border-d-primary text-d-primary':'border-transparent text-d-on-surface-variant hover:text-d-primary'}`} onClick={()=>{setTab('fees');setPage(1);}}>Chi tiết phí</button><button type="button" aria-current={tab==='invoices'?'page':undefined} className={`min-h-11 px-4 border-b-2 font-semibold ${tab==='invoices'?'border-d-primary text-d-primary':'border-transparent text-d-on-surface-variant hover:text-d-primary'}`} onClick={()=>{setTab('invoices');setPage(1);}}>Hóa đơn hàng tháng</button></nav>
   {invoice&&<ConfirmInvoice invoice={invoice} onClose={()=>setInvoice(null)}/>}
   {simulatedInvoice&&<SimulatePayment invoice={simulatedInvoice} onClose={()=>setSimulatedInvoice(null)}/>}

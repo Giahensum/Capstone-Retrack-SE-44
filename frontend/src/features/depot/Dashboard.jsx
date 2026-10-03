@@ -25,7 +25,7 @@ const Dashboard = () => {
   });
 
   return (
-    <div className="flex flex-col p-4 md:p-6 gap-4 md:gap-5 w-full h-[calc(100vh-4rem)] overflow-hidden">
+    <div className="flex flex-col p-4 md:p-6 gap-4 md:gap-5 w-full max-w-7xl mx-auto h-[calc(100vh-4rem)] overflow-hidden">
       {/* Page Title */}
       <div className="flex flex-col md:flex-row md:items-end justify-between shrink-0">
         <div>
@@ -88,7 +88,7 @@ const Dashboard = () => {
               </div>
             </div>
             <div>
-              <p className="font-d-body-sm text-d-body-sm text-d-on-surface-variant mb-1">Doanh thu tháng (VNĐ)</p>
+              <p className="font-d-body-sm text-d-body-sm text-d-on-surface-variant mb-1">Giá trị lô đã quyết toán tháng này</p>
               <h3 className="font-d-headline-lg text-d-headline-lg text-d-on-surface">{money(d?.revenue)}</h3>
             </div>
           </div>

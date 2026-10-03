@@ -22,7 +22,7 @@ export default function Partners() {
   const update = useDepotMutation('put', (id) => `partnerships/${id}/status`, () => setDecision(null));
 
   return (
-    <div className="flex flex-col p-4 md:p-6 w-full h-[calc(100vh-4rem)] gap-6 overflow-hidden bg-d-surface">
+    <div className="flex flex-col p-4 md:p-6 w-full max-w-7xl mx-auto h-[calc(100vh-4rem)] gap-6 overflow-hidden bg-d-surface">
       <CreateBatchModal isOpen={!!createFor} onClose={() => setCreateFor(null)} initialMaterial={createFor?.materialType} initialFactoryId={createFor?.factoryId} />
       {decision && <Dialog title="Xác nhận quan hệ nhà máy" onClose={() => setDecision(null)} busy={update.isPending}>
         <p className="mb-4">{decision.status === 'APPROVED' ? 'Duyệt' : 'Chặn'} quan hệ với <strong>{decision.factoryName}</strong>?</p>
@@ -35,7 +35,7 @@ export default function Partners() {
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-6 shrink-0">
         <div>
           <h2 className="font-d-headline-lg text-d-headline-lg text-d-on-surface mb-2">Đối tác nhà máy</h2>
-          <p className="font-d-body-md text-d-body-md text-d-on-surface-variant max-w-2xl">Quản lý danh sách các nhà máy tái chế đã liên kết.</p>
+          <p className="font-d-body-md text-d-body-md text-d-on-surface-variant max-w-2xl">Tìm nhà máy tái chế và theo dõi quan hệ hợp tác.</p>
         </div>
         <button onClick={() => { setActiveTab('list'); setPage(1); setSearch(''); requestAnimationFrame(() => searchRef.current?.focus()); }} className="bg-transparent border border-d-primary text-d-primary hover:bg-d-surface-variant hover:border-d-primary-fixed px-6 py-2.5 rounded-full font-d-label-md text-d-label-md font-medium transition-all flex items-center justify-center gap-2 self-start sm:self-auto shrink-0">
           <MaterialIcon name="search" className="text-[18px]" /> Tìm đối tác mới
@@ -74,7 +74,7 @@ export default function Partners() {
                 <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
                   <MaterialIcon name="domain" className="text-6xl text-d-primary" />
                 </div>
-                <p className="font-d-label-sm text-d-label-sm text-d-on-surface-variant uppercase tracking-wider mb-2">Tổng đối tác</p>
+                <p className="font-d-label-sm text-d-label-sm text-d-on-surface-variant uppercase tracking-wider mb-2">Nhà máy trong danh sách</p>
                 <div className="flex items-end gap-3">
                   <h3 className="font-d-headline-xl text-d-headline-xl text-d-on-surface">{query.data?.totalCount ?? 0}</h3>
                 </div>
@@ -106,6 +106,7 @@ export default function Partners() {
             </div>
 
             {/* Data Table Section */}
+            <p className="text-sm text-d-on-surface-variant">Điểm hồ sơ chỉ để tham khảo; hiện chưa có luồng chủ kho đánh giá nhà máy sau giao dịch.</p>
             <div className="bg-d-surface-container-lowest border border-d-border-subtle rounded-[20px] overflow-hidden flex flex-col flex-1 shadow-sm shrink-0 min-h-[500px]">
               {/* Table Toolbar */}
               <div className="p-6 border-b border-d-border-subtle flex flex-col sm:flex-row justify-between items-center gap-4 bg-d-surface-container-lowest shrink-0">
@@ -134,7 +135,7 @@ export default function Partners() {
                       <tr className="border-b border-d-border-subtle shadow-sm">
                         <th className="py-4 px-6 font-d-label-sm text-d-label-sm text-d-on-surface-variant uppercase tracking-wider w-[35%]">Nhà máy</th>
                         <th className="py-4 px-6 font-d-label-sm text-d-label-sm text-d-on-surface-variant uppercase tracking-wider w-[25%]">Vật liệu thu mua</th>
-                        <th className="py-4 px-6 font-d-label-sm text-d-label-sm text-d-on-surface-variant uppercase tracking-wider text-center w-[15%]">Đánh giá</th>
+                        <th className="py-4 px-6 font-d-label-sm text-d-label-sm text-d-on-surface-variant uppercase tracking-wider text-center w-[15%]" title="Điểm lưu trong hồ sơ nhà máy; chưa tổng hợp từ đánh giá của chủ kho">Điểm hồ sơ</th>
                         <th className="py-4 px-6 font-d-label-sm text-d-label-sm text-d-on-surface-variant uppercase tracking-wider w-[15%]">Trạng thái</th>
                         <th className="py-4 px-6 font-d-label-sm text-d-label-sm text-d-on-surface-variant uppercase tracking-wider text-center w-[10%]">Hành động</th>
                       </tr>
@@ -159,7 +160,7 @@ export default function Partners() {
                             </div>
                           </td>
                           <td className="py-4 px-6">
-                            <div className="flex items-center justify-center gap-1 text-d-secondary">
+                            <div className="flex items-center justify-center gap-1 text-d-secondary" title="Điểm tham khảo trong hồ sơ nhà máy; chưa có luồng chủ kho đánh giá nhà máy">
                               <MaterialIcon name="star" className="text-[16px]" />
                               <span className="font-medium">{f.rating > 0 ? number(f.rating) : 'Chưa có'}</span>
                             </div>
