@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { MaterialIcon } from '@/components/ui/MaterialIcon';
+import { MaterialIcon } from './DepotIcon';
 import { depotError } from '../DepotContext';
 
 export const inputClass = 'block w-full rounded-xl border border-d-border-subtle bg-d-surface-container-lowest p-3 mt-1 text-d-on-surface';
@@ -13,7 +13,7 @@ export function Page({ title, description, action, children }) {
 export function Cards({ items }) {
   return <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">{items.map(({ label, value, icon = 'monitoring' }) =>
     <div key={label} className="bg-d-surface-container-lowest border border-d-border-subtle rounded-[20px] p-6 shadow-sm">
-      <MaterialIcon name={icon} className="text-d-primary bg-d-surface-accent rounded-xl p-2 mb-4" />
+      <span className="inline-flex text-d-primary bg-d-surface-accent rounded-xl p-2 mb-4"><MaterialIcon name={icon} className="text-xl" /></span>
       <p className="text-d-on-surface-variant text-sm">{label}</p><p className="text-2xl font-bold text-d-on-surface mt-2 break-words">{value}</p>
     </div>)}</div>;
 }
@@ -28,8 +28,9 @@ export function GridTable({ headers, children, empty }) {
     {empty && <p role="status" className="p-8 text-center">Chưa có dữ liệu phù hợp.</p>}</div>;
 }
 export function Pager({ page, setPage, total = 0, size = 20 }) {
-  const pagerBtn = "px-3 py-1.5 rounded-lg border border-d-border-subtle bg-d-surface hover:bg-d-surface-container-low disabled:opacity-40 disabled:hover:bg-d-surface transition-colors font-medium";
-  return <div className="flex justify-between items-center gap-4 text-sm text-d-on-surface-variant"><span>Trang {page} · {total} mục</span><div className="flex gap-2">
+  const pages = Math.max(1, Math.ceil(total / size));
+  const pagerBtn = "min-h-11 px-4 py-2 rounded-full border border-d-border-subtle bg-d-surface hover:bg-d-surface-container-low disabled:opacity-40 disabled:hover:bg-d-surface transition-colors font-medium";
+  return <div className="flex flex-wrap justify-between items-center gap-3 text-sm text-d-on-surface-variant w-full"><span>Trang {page}/{pages} · {total} mục</span><div className="flex gap-2">
     <button type="button" className={pagerBtn} disabled={page === 1} onClick={() => setPage(page - 1)}>Trước</button>
     <button type="button" className={pagerBtn} disabled={page * size >= total} onClick={() => setPage(page + 1)}>Sau</button></div></div>;
 }
@@ -37,8 +38,8 @@ export function Dialog({ title, onClose, busy, children }) {
   const ref = useRef(null);
   useEffect(() => { ref.current.showModal(); }, []);
   return <dialog ref={ref} aria-label={title} onCancel={(e) => { if (busy) e.preventDefault(); else onClose(); }}
-    className="m-auto w-[calc(100%-2rem)] max-w-xl max-h-[90vh] rounded-2xl p-6 border border-d-border-subtle bg-d-surface backdrop:bg-black/40">
-    <div className="flex justify-between gap-4 mb-6"><h2 className="text-xl font-bold">{title}</h2><button disabled={busy} aria-label="Đóng" onClick={onClose}>✕</button></div>{children}</dialog>;
+    className="m-auto w-[calc(100%-2rem)] max-w-xl max-h-[90dvh] overflow-y-auto rounded-[20px] p-4 sm:p-6 border border-d-border-subtle bg-d-surface shadow-xl backdrop:bg-black/40">
+    <div className="flex items-start justify-between gap-4 mb-6"><h2 className="text-xl font-bold text-d-on-surface">{title}</h2><button type="button" disabled={busy} aria-label="Đóng" onClick={onClose} className="shrink-0 -mt-2 -mr-2 flex h-11 w-11 items-center justify-center rounded-full text-d-on-surface-variant hover:bg-d-surface-container-high focus-visible:outline-2 focus-visible:outline-d-primary disabled:opacity-40">✕</button></div>{children}</dialog>;
 }
 export function MutationError({ mutation }) { return mutation.isError ? <p role="alert" className="text-d-error my-3">{depotError(mutation.error)}</p> : null; }
 export function PeriodFilter({ period, setPeriod }) {

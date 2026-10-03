@@ -4,11 +4,7 @@ import '../../features/depot/styles/depot-theme.css';
 import clsx from 'clsx';
 import { DepotSelector, useDepot } from '@/features/depot/DepotContext';
 import { useAuthStore } from '@/app/store/useAuthStore';
-
-// Because we're using Material Symbols, we just render a span with the icon name.
-const MaterialIcon = ({ name, className }) => (
-  <span className={clsx("material-symbols-outlined", className)}>{name}</span>
-);
+import { MaterialIcon } from '@/features/depot/components/DepotIcon';
 
 const SidebarItem = ({ iconName, label, to, active }) => (
   <Link

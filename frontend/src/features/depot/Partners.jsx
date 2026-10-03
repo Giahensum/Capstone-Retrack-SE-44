@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useDepotQuery, useDepotMutation, number, money, date } from './depotApi';
 import { QueryState, Pager, Dialog, MutationError, inputClass } from './components/DepotUI';
-import { MaterialIcon } from '@/components/ui/MaterialIcon';
+import { MaterialIcon } from './components/DepotIcon';
 import { materialLabel } from './materialLabels';
 import CreateBatchModal from './components/CreateBatchModal';
 
@@ -14,6 +14,7 @@ export default function Partners() {
   const [status, setStatus] = useState('');
   const [createFor, setCreateFor] = useState(null);
   const [decision, setDecision] = useState(null);
+  const searchRef = useRef(null);
 
   const query = useDepotQuery('partners', { page, search, status }, activeTab === 'list');
   const demands = useDepotQuery('partners/demands', { page, search }, activeTab === 'demand');
@@ -33,10 +34,10 @@ export default function Partners() {
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-6 shrink-0">
         <div>
-          <h2 className="font-d-headline-lg text-d-headline-lg text-d-on-surface mb-2">Đối Tác Nhà Máy</h2>
+          <h2 className="font-d-headline-lg text-d-headline-lg text-d-on-surface mb-2">Đối tác nhà máy</h2>
           <p className="font-d-body-md text-d-body-md text-d-on-surface-variant max-w-2xl">Quản lý danh sách các nhà máy tái chế đã liên kết.</p>
         </div>
-        <button onClick={() => { setActiveTab('list'); setPage(1); setSearch(''); }} className="bg-transparent border border-d-primary text-d-primary hover:bg-d-surface-variant hover:border-d-primary-fixed px-6 py-2.5 rounded-full font-d-label-md text-d-label-md font-medium transition-all flex items-center justify-center gap-2 self-start sm:self-auto shrink-0">
+        <button onClick={() => { setActiveTab('list'); setPage(1); setSearch(''); requestAnimationFrame(() => searchRef.current?.focus()); }} className="bg-transparent border border-d-primary text-d-primary hover:bg-d-surface-variant hover:border-d-primary-fixed px-6 py-2.5 rounded-full font-d-label-md text-d-label-md font-medium transition-all flex items-center justify-center gap-2 self-start sm:self-auto shrink-0">
           <MaterialIcon name="search" className="text-[18px]" /> Tìm đối tác mới
         </button>
       </div>
@@ -57,7 +58,7 @@ export default function Partners() {
             activeTab === 'demand' ? 'text-d-primary border-b-2 border-d-primary' : 'text-d-on-surface-variant hover:text-d-primary'
           }`}
         >
-          Bảng nhu cầu (Demand Board)
+          Nhu cầu thu mua
         </button>
         <button onClick={() => { setActiveTab('requests'); setPage(1); setSearch(''); }} className={`pb-3 px-1 font-d-body-md text-d-body-md font-bold whitespace-nowrap transition-colors ${activeTab === 'requests' ? 'text-d-primary border-b-2 border-d-primary' : 'text-d-on-surface-variant hover:text-d-primary'}`}>Yêu cầu hợp tác</button>
       </div>
@@ -111,6 +112,8 @@ export default function Partners() {
                 <div className="relative w-full sm:w-80">
                   <MaterialIcon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 text-d-outline text-[20px]" />
                   <input
+                    ref={searchRef}
+                    aria-label="Tìm tên nhà máy"
                     className="w-full bg-white border border-d-border-subtle rounded-full py-2 pl-10 pr-4 font-d-body-sm text-d-body-sm focus:border-d-primary focus:ring-1 focus:ring-d-primary transition-all text-d-on-surface outline-none"
                     placeholder="Tìm tên nhà máy..."
                     type="text"
@@ -205,6 +208,7 @@ export default function Partners() {
                 <input
                   className="bg-transparent border-none outline-none w-full font-d-body-md text-d-body-md text-d-on-surface placeholder-d-on-surface-variant/50 focus:ring-0"
                   placeholder="Tìm kiếm theo loại phế liệu..."
+                  aria-label="Tìm nhu cầu theo loại phế liệu"
                   type="text"
                   value={search}
                   onChange={(e) => { setSearch(e.target.value); setPage(1); }}

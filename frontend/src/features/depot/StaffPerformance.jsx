@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useDepotQuery, number, money } from './depotApi';
 import { QueryState, Pager } from './components/DepotUI';
-import { MaterialIcon } from '@/components/ui/MaterialIcon';
+import { MaterialIcon } from './components/DepotIcon';
 
 export default function StaffPerformance() {
   const [page, setPage] = useState(1);
@@ -28,8 +28,9 @@ export default function StaffPerformance() {
           <h1 className="font-d-headline-lg text-d-headline-lg text-d-on-surface">Hiệu Suất Nhân Sự</h1>
           <p className="font-d-body-md text-d-body-md text-d-on-surface-variant mt-1">Đánh giá năng suất và chất lượng công việc của nhân viên thu gom.</p>
         </div>
-        <label className="bg-d-surface-container-lowest border border-d-border-subtle px-4 py-2 rounded-lg flex items-center gap-2 font-d-label-md text-d-on-surface hover:border-d-primary transition-colors focus-within:border-d-primary cursor-pointer shrink-0">
+        <label className="bg-d-surface-container-lowest border border-d-border-subtle px-4 py-2 rounded-xl flex items-center gap-2 font-d-label-md text-d-on-surface hover:border-d-primary transition-colors focus-within:border-d-primary cursor-pointer shrink-0">
           <MaterialIcon name="calendar_today" className="text-d-on-surface-variant text-[18px]" />
+          <span>Tháng báo cáo</span>
           <input
             type="month"
             value={period}

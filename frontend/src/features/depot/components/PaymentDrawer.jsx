@@ -19,9 +19,9 @@ export default function PaymentDrawer({ payment, onClose }) {
     },
   });
   return <dialog ref={dialog} onCancel={(e) => { if (save.isPending || uploading) e.preventDefault(); else onClose(); }}
-    className="m-auto w-full max-w-xl max-h-[90vh] rounded-2xl border border-d-border-subtle bg-white p-6 backdrop:bg-black/40" aria-labelledby="payment-title">
+    className="m-auto w-[calc(100%-2rem)] max-w-xl max-h-[90dvh] overflow-y-auto rounded-[20px] border border-d-border-subtle bg-white p-4 sm:p-6 shadow-xl backdrop:bg-black/40" aria-labelledby="payment-title">
     <div className="flex justify-between gap-4"><h2 id="payment-title" className="text-xl font-bold">Chi tiết thanh toán</h2>
-      <button aria-label="Đóng chi tiết" disabled={save.isPending || uploading} onClick={onClose}>✕</button></div>
+      <button type="button" aria-label="Đóng chi tiết" disabled={save.isPending || uploading} onClick={onClose} className="shrink-0 -mt-2 -mr-2 flex h-11 w-11 items-center justify-center rounded-full text-d-on-surface-variant hover:bg-d-surface-container-high focus-visible:outline-2 focus-visible:outline-d-primary disabled:opacity-40">✕</button></div>
     <p className="my-4 break-words">{payment.sellerName} · {payment.sellerPhone}<br />{payment.address}</p>
     <p>Nhân viên: {payment.collectorName ?? 'Chưa có thông tin'}</p>
     <div className="overflow-x-auto my-4"><table className="w-full text-left"><thead><tr><th>Vật liệu</th><th>Kg</th><th>Đơn giá</th><th>Thành tiền</th></tr></thead>
