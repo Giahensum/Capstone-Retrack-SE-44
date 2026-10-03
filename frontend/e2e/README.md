@@ -71,7 +71,7 @@ Mỗi lần chạy thành công giữ lại một lô đã quyết toán 1 kg PE
 
 `e2e/depot-regression.spec.js` mở 10 màn Depot, chọn kho, đợi API thật trả 200 và tải lại trang; thử route guard khi chưa đăng nhập/Seller; kiểm tra dashboard ở viewport 390 px. Đặt thêm `E2E_SELLER_EMAIL` và `E2E_SELLER_PASSWORD` bằng tài khoản Seller thử nghiệm, rồi chạy `npm run test:e2e -- e2e/depot-regression.spec.js --reporter=line`. Ảnh chụp màn hình mobile nằm trong `test-results` local đã ignore.
 
-`e2e/depot-visual-audit.spec.js` mở 10 màn ở 1440×900 và 390×844, đợi API tải xong rồi kiểm tra font, nhãn ô nhập, tràn ngang và icon Depot. Bài này còn mở/đóng popup tạo lô, hồ sơ, nhân sự, chi tiết lô; đổi tab hóa đơn và kiểm tra nút tìm đối tác. Ảnh chụp nằm trong `test-results` local, không đưa lên Git. Chạy bằng cùng biến tài khoản Depot ở trên: `npm run test:e2e -- e2e/depot-visual-audit.spec.js --reporter=line`. Đây là kiểm tra bố cục và thao tác an toàn, không tạo dữ liệu hoặc xác nhận thanh toán.
+`e2e/depot-visual-audit.spec.js` mở 10 màn ở 1440×900 và 390×844, đợi API tải xong rồi kiểm tra font, nhãn ô nhập, tràn ngang và icon Depot; ở 1920×900 kiểm tra cùng chiều rộng/căn lề và khả năng cuộn tới phân trang hiệu suất. Bài này còn mở/đóng popup tạo lô, hồ sơ, nhân sự, chi tiết lô; đổi tab hóa đơn, kiểm tra nút tìm đối tác và nhãn giải thích số liệu. Ảnh chụp nằm trong `test-results` local, không đưa lên Git. Chạy bằng cùng biến tài khoản Depot ở trên: `npm run test:e2e -- e2e/depot-visual-audit.spec.js --reporter=line`. Đây là kiểm tra bố cục và thao tác an toàn, không tạo dữ liệu hoặc xác nhận thanh toán.
 
 ### PayOS giả lập
 

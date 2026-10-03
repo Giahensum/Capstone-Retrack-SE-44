@@ -15,7 +15,7 @@ const screens = [
   ['batches', 'Danh sách lô xuất hàng', 'batches'],
   ['partners', 'Đối tác nhà máy', 'partners'],
   ['staff', 'Quản Lý Nhân Sự', 'staff'],
-  ['staff/performance', 'Hiệu Suất Nhân Sự', 'reports/staff'],
+  ['staff/performance', 'Hiệu suất nhân sự', 'reports/staff'],
   ['payments', 'Thanh toán chờ duyệt', 'payments'],
   ['payments/fees', 'Phí nền tảng', 'reports/fees/summary'],
   ['reports', 'Báo cáo doanh thu', 'reports/revenue'],

@@ -18,7 +18,7 @@ const Inventory = () => {
   const sum = (key) => stock.data?.reduce((n, i) => n + i[key], 0) ?? 0;
 
   return (
-    <div className="flex flex-col p-4 md:p-6 w-full h-[calc(100vh-4rem)] gap-4 md:gap-6 overflow-hidden bg-d-surface">
+    <div className="flex flex-col p-4 md:p-6 w-full max-w-7xl mx-auto h-[calc(100vh-4rem)] gap-4 md:gap-6 overflow-hidden bg-d-surface">
       <CreateBatchModal isOpen={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} initialMaterial={batchMaterial} />
       {/* Page Header */}
       <div className="flex justify-between items-end shrink-0">

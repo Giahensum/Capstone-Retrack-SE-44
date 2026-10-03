@@ -28,7 +28,7 @@ export default function Payments() {
     ['schedule', 'Tổng đơn chờ', summary.data?.pendingCount ?? 0],
     ['check_circle', 'Đã chuyển hôm nay', money(summary.data?.sentTodayAmount)],
   ];
-  return <div className="flex-1 p-4 md:p-6 w-full flex flex-col gap-6 min-h-full bg-d-background">
+  return <div className="flex-1 p-4 md:p-6 w-full max-w-7xl mx-auto flex flex-col gap-6 min-h-full bg-d-background">
     {selected && <PaymentDrawer key={selected.id} payment={selected} onClose={() => setSelected(null)} />}
     <div><h1 className="font-d-headline-xl-mobile md:font-d-headline-xl text-d-headline-xl-mobile md:text-d-headline-xl text-d-on-surface mb-2">Thanh toán chờ duyệt</h1>
       <p className="font-d-body-md text-d-on-surface-variant">Quản lý và phê duyệt các khoản thanh toán cho người bán.</p></div>
