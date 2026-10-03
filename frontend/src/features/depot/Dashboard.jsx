@@ -3,7 +3,7 @@ import { materialLabel } from './materialLabels';
 import { Link } from 'react-router-dom';
 import { useDepotQuery, number, money } from './depotApi';
 import { QueryState } from './components/DepotUI';
-import { MaterialIcon } from '@/components/ui/MaterialIcon';
+import { MaterialIcon } from './components/DepotIcon';
 
 const Dashboard = () => {
   const query = useDepotQuery('dashboard');

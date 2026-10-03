@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { MaterialIcon } from '@/components/ui/MaterialIcon';
+import { MaterialIcon } from './components/DepotIcon';
 import CreateBatchModal from './components/CreateBatchModal';
 import { materialLabel } from './materialLabels';
 import { useDepotQuery, number, date } from './depotApi';
