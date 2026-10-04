@@ -5,6 +5,7 @@ import clsx from 'clsx';
 import { DepotSelector, useDepot } from '@/features/depot/DepotContext';
 import { useAuthStore } from '@/app/store/useAuthStore';
 import { MaterialIcon } from '@/features/depot/components/DepotIcon';
+import DepotBrandLogo from '@/features/depot/components/DepotBrandLogo';
 
 const SidebarItem = ({ iconName, label, to, active }) => (
   <Link
@@ -47,8 +48,8 @@ const DepotLayout = () => {
       {menuOpen && <button aria-label="Đóng menu" className="fixed inset-0 bg-black/30 z-40 lg:hidden" onClick={() => setMenuOpen(false)} />}
       <aside aria-label="Menu kho vựa" className={clsx("w-64 bg-d-surface-container-lowest border-r border-d-border-subtle h-screen fixed top-0 left-0 flex flex-col z-50 transition-transform lg:translate-x-0", menuOpen ? "translate-x-0" : "-translate-x-full")}>
         <div className="h-16 flex items-center px-6 border-b border-d-border-subtle">
-          <Link to="/depot/dashboard" className="font-d-headline-md text-d-headline-md font-bold tracking-tighter text-d-primary">
-            RETRACK
+          <Link to="/depot/dashboard" className="inline-flex items-center gap-2 font-d-headline-md text-d-headline-md font-bold tracking-tighter text-d-primary" aria-label="ReTrack — về tổng quan kho">
+            <DepotBrandLogo /> <span>RETRACK</span>
           </Link>
         </div>
         
@@ -82,6 +83,7 @@ const DepotLayout = () => {
         {/* TopAppBar */}
         <header className="d-glass-panel flex justify-between gap-3 items-center min-h-16 px-4 lg:px-8 shrink-0 z-30">
           <button aria-label="Mở menu" aria-expanded={menuOpen} className="lg:hidden" onClick={() => setMenuOpen(true)}><MaterialIcon name="menu" /></button>
+          <Link to="/depot/dashboard" className="lg:hidden" aria-label="ReTrack — về tổng quan kho"><DepotBrandLogo small /></Link>
           <div className="flex items-center text-d-on-surface-variant font-d-body-sm text-d-body-sm gap-2">
             <Link to="/depot/dashboard" className="hidden sm:inline hover:text-d-primary transition-colors">Trang chủ</Link>
             <MaterialIcon name="chevron_right" className="text-[16px]" />
