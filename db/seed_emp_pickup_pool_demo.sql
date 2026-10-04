@@ -1,4 +1,4 @@
--- CHẠY MỘT LẦN TOÀN BỘ FILE để tạo lại đủ 12 đơn demo tại ĐÀ NẴNG.
+-- CHẠY MỘT LẦN TOÀN BỘ FILE để tạo lại đủ 13 đơn demo tại ĐÀ NẴNG.
 -- Dùng được khi bảng pickup_requests đã bị xóa hết bản ghi.
 -- pgAdmin: chọn đúng database ReTrack -> Query Tool -> mở file này -> F5.
 -- Không bôi đen riêng một đoạn INSERT/VALUES; cần chạy từ BEGIN đến hết file.
@@ -6,12 +6,13 @@
 --   NHÓM A: 3 đơn chờ CŨ: Chợ Hàn, Bảo tàng Điêu khắc Chăm, Chợ Cồn.
 --   NHÓM B: 3 đơn thống kê: 1 SCHEDULED và 2 DONE.
 --   NHÓM C: 6 đơn chờ MỚI để test nhiều tuyến đường.
--- Kết quả trên bảng rỗng: 12 bản ghi = 9 PENDING + 1 SCHEDULED + 2 DONE.
--- App Đơn chờ hiển thị 9 đơn; 3 đơn SCHEDULED/DONE không thuộc danh sách này.
+--   NHÓM D: 1 đơn chờ tại vị trí người test cung cấp để test check-in + cân tại chỗ.
+-- Kết quả trên bảng rỗng: 13 bản ghi = 10 PENDING + 1 SCHEDULED + 2 DONE.
+-- App Đơn chờ hiển thị 10 đơn; 3 đơn SCHEDULED/DONE không thuộc danh sách này.
 -- Hoac: psql -v ON_ERROR_STOP=1 -f db/seed_emp_pickup_pool_demo.sql
 -- Dieu kien: da co schema, Employee/Seller va lien ket nhan vien-kho dang hoat dong.
 -- Chi INSERT vao pickup_requests; khong DELETE/TRUNCATE va khong tao lai tai khoan.
--- Ket qua khi chua co UUID demo: 9 PENDING, 1 SCHEDULED, 2 DONE (1 hom nay UTC).
+-- Ket qua khi chua co UUID demo: 10 PENDING, 1 SCHEDULED, 2 DONE (1 hom nay UTC).
 -- Nếu bảng đã có một phần dữ liệu demo, file bổ sung các UUID còn thiếu.
 -- Chay lap lai khong nhan doi UUID va khong reset trang thai don da test.
 -- Dia chi/toa do Da Nang da co san; khong can file chuyen dia diem rieng.
@@ -20,7 +21,7 @@
 -- BO SUNG 2026-10-01: dia chi/toa do lay tu Goong Geocode; da goi Direction
 -- voi alternatives=true cho ca car va bike tu mot diem xuat phat tai Ngu Hanh Son.
 -- Ca 6 diem moi deu tra ve 2 tuyen hop le cho moi phuong tien trong lan kiem tra.
--- Khong luu toa do GPS rieng cua nguoi test vao seed; app van dung GPS dien thoai.
+-- Nhóm C không lưu điểm xuất phát người test; app vẫn dùng GPS điện thoại.
 --
 -- NEN TEST TRUOC: [TUYEN-01] Ba Na Hills, chon O TO:
 --   Lan kiem tra: tuyen A = 30.540 m / 2.903 giay; B = 29.790 m / 2.947 giay.
@@ -30,7 +31,17 @@
 -- cho moi GPS. Goong co the thay doi so tuyen, quang duong va thoi gian tra ve.
 -- Nhieu tuyen khong bat buoc 3 tieu chi cho 3 ket qua khac nhau: mot tuyen co the
 -- vua ngan nhat vua nhanh nhat. Du lieu km/phut khong duoc seed vao database.
--- Tat ca dia diem la moc cong cong cho don GIA LAP, khong phai nguoi ban thuc te.
+-- Các đơn đều GIẢ LẬP, không phải yêu cầu thu gom của người bán thực tế.
+-- Nhóm D dùng đúng Plus Code người test yêu cầu: X7P4+XF9 Ngũ Hành Sơn, Đà Nẵng.
+-- Khôi phục mã đầy đủ theo khu vực Đà Nẵng: 7P7CX7P4+XF9.
+-- Tọa độ tâm ô Plus Code: 15.9874125, 108.256234375 (làm tròn theo cột DB).
+-- Nguồn thuật toán: https://github.com/google/open-location-code
+-- Đây là điểm giải mã Plus Code, không phải kết quả geocode tên đường/số nhà.
+-- Chọn đơn [CHECKIN-LOCAL-01] -> nhận đơn -> check-in -> phân loại/cân/định giá.
+-- Vẫn áp dụng GPS thật: cách điểm tối đa 200 m, sai số <= 50 m; không bỏ validation.
+-- Không cần xóa bảng để thêm đơn mới: chạy lại file sẽ chỉ bổ sung UUID thiếu.
+-- Nếu đã xóa pickup_requests, chạy cả file sẽ khôi phục đủ 13 đơn.
+-- Trước khi test UC-51/52/53, chạy db/emp_checkin_classify.sql nếu chưa bổ sung bảng check-in.
 BEGIN;
 DO $seed$
 DECLARE
@@ -125,14 +136,20 @@ BEGIN
          '[TUYEN-06] Đại học Đông Á - test nhiều tuyến ngắn hơn và thay đổi hình tuyến theo phương tiện. Đơn giả lập, không đến thu gom thực tế.',
          'Đại học Đông Á, 33 Xô Viết Nghệ Tĩnh, Đà Nẵng',
          16.0321559::numeric, 108.2213119::numeric,
-         CURRENT_TIMESTAMP + interval '105 minutes', 'PENDING', CURRENT_TIMESTAMP)
+         CURRENT_TIMESTAMP + interval '105 minutes', 'PENDING', CURRENT_TIMESTAMP),
+        -- NHÓM D — ĐƠN TẠI CHỖ, chưa nhận/chưa check-in/chưa có kết quả cân.
+        ('e0000000-0929-4000-8000-000000000013',
+         '[CHECKIN-LOCAL-01] Test tại chỗ: nhận đơn, chụp ảnh camera + GPS, phân loại, cân và định giá. Đơn giả lập do người test tạo, không phát sinh giao dịch thực tế.',
+         'X7P4+XF9 Ngũ Hành Sơn, Đà Nẵng',
+         15.9874125::numeric, 108.256234375::numeric,
+         CURRENT_TIMESTAMP + interval '5 minutes', 'PENDING', CURRENT_TIMESTAMP)
     ) AS v(id, description, address, latitude, longitude, preferred_datetime, status, updated_at)
     ON CONFLICT (id) DO NOTHING;
 END
 $seed$;
 COMMIT;
 
--- Kết quả kiểm tra sau khi chạy: trên bảng vừa xóa phải là 12 / 9 / 1 / 2.
+-- Kết quả kiểm tra sau khi chạy: trên bảng vừa xóa phải là 13 / 10 / 1 / 2.
 SELECT COUNT(*) AS tong_don_demo,
        COUNT(*) FILTER (WHERE status = 'PENDING') AS don_cho,
        COUNT(*) FILTER (WHERE status = 'SCHEDULED') AS don_da_nhan,

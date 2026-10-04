@@ -36,7 +36,7 @@ public class EmployeePickupController(AppDbContext db, INotificationService noti
         var depotPickups = db.PickupRequests.AsNoTracking().Where(p => p.TargetDepotId == depotId);
         var own = depotPickups.Where(p => p.AcceptedCollectorId == userId);
         var available = await depotPickups.CountAsync(p => p.Status == "PENDING" && p.AcceptedCollectorId == null, ct);
-        var active = await own.Where(p => p.Status == "SCHEDULED")
+        var active = await own.Where(p => p.Status == "SCHEDULED" || p.Status == "IN_PROGRESS")
             .OrderBy(p => p.PreferredDatetime == null).ThenBy(p => p.PreferredDatetime)
             .ThenBy(p => p.CreatedAt).ThenBy(p => p.Id)
             .Select(p => new ActivePickupSummaryDto(p.Id, p.Seller.FullName, p.Seller.Phone,
@@ -61,6 +61,20 @@ public class EmployeePickupController(AppDbContext db, INotificationService noti
                 p.Latitude, p.Longitude, p.PreferredDatetime, p.Description, p.RequestImageUrl, p.CreatedAt))
             .ToListAsync(ct);
         return Ok(ApiResponse<List<PickupPoolItemDto>>.Ok(list));
+    }
+
+    [HttpGet("/api/employee/pickups/active")]
+    public async Task<IActionResult> Active([FromQuery] int page = 1, CancellationToken ct = default)
+    {
+        if (page < 1 || page > 100000) return BadRequest(ApiResponse<object>.Fail("Trang không hợp lệ."));
+        var depotId = await GetDepotIdAsync(ct);
+        var userId = UserId;
+        var query = db.PickupRequests.AsNoTracking().Where(p => p.TargetDepotId == depotId
+            && p.AcceptedCollectorId == userId && (p.Status == "SCHEDULED" || p.Status == "IN_PROGRESS"));
+        var items = await query.OrderBy(p => p.CreatedAt).ThenBy(p => p.Id).Skip((page - 1) * 20).Take(20)
+            .Select(p => new ActivePickupSummaryDto(p.Id, p.Seller.FullName, p.Seller.Phone,
+                p.Address, p.Status, p.PreferredDatetime)).ToListAsync(ct);
+        return Ok(ApiResponse<object>.Ok(new { items, page, pageSize = 20, total = await query.CountAsync(ct) }));
     }
 
     [HttpGet("/api/employee/pickup/{pickupId:guid}")]
