@@ -12,7 +12,7 @@ public interface IDepotService
     Task<PaymentSummaryDto> GetPaymentSummaryAsync(Guid ownerId, Guid depotId);
     Task<DepotProfileDto> GetProfileAsync(Guid ownerId, Guid depotId);
     Task<DepotProfileDto> UpdateProfileAsync(Guid ownerId, Guid depotId, UpdateDepotProfileDto dto);
-    Task<PagedResult<FactoryPartnerDto>> GetFactoriesAsync(Guid ownerId, Guid depotId, DepotQuery query);
+    Task<PagedResult<FactoryPartnerDto>> GetFactoriesAsync(Guid ownerId, Guid depotId, FactorySearchQuery query);
     Task<PagedResult<DemandDto>> GetDemandsAsync(Guid ownerId, Guid depotId, DepotQuery query);
 }
 

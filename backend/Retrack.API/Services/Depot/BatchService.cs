@@ -49,6 +49,12 @@ public sealed class BatchService(IDepotBatchRepository batches, IDepotUnitOfWork
         {
             factory = await batches.FindActiveFactoryAsync(dto.TargetFactoryId.Value)
                 ?? throw new ArgumentException("Nhà máy không tồn tại hoặc đã ngừng hoạt động.");
+            var acceptedMaterials = factory.AcceptedMaterialsCsv.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .Select(Retrack.API.Services.Shared.MaterialCatalog.Normalize).ToArray();
+            if (acceptedMaterials.Length > 0 && !acceptedMaterials.Contains(dto.MaterialType))
+                throw new DepotConflictException("Nhà máy không tiếp nhận loại vật liệu này.");
+            if (factory.CapacityKgPerMonth > 0 && dto.WeightKg > factory.CapacityKgPerMonth)
+                throw new DepotConflictException("Khối lượng lô vượt mức nhà máy hiện có thể tiếp nhận.");
             var partner = await batches.FindPartnerAsync(depotId, dto.TargetFactoryId.Value);
             if (partner?.Status == "BLOCKED" || partner?.BlockedByDepot == true || partner?.BlockedByFactory == true) throw new DepotConflictException("Quan hệ đang bị chặn, không thể tạo lô mới cho nhà máy.");
             isApproved = partner?.Status == "APPROVED";

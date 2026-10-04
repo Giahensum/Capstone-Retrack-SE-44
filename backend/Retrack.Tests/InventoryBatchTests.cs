@@ -56,6 +56,65 @@ public sealed class InventoryBatchTests : IAsyncLifetime
     private static CreateDepotBatchDto Input(decimal kg = 60) => new() { OperationId = Guid.NewGuid(), MaterialType = "PET", WeightKg = kg };
 
     [Fact]
+    public async Task Factory_search_uses_distance_before_paging_and_keeps_unknown_location_visible_without_radius()
+    {
+        await using var db = Open();
+        var depot = await db.Depots.SingleAsync(d => d.Id == depotId);
+        depot.Latitude = 10; depot.Longitude = 106;
+        db.Users.Add(new User { Id = factoryOwnerId, Email = $"distance-{factoryOwnerId}@test.invalid", Role = "FACTORY", FullName = "Factory" });
+        var marker = $"Distance-{factoryOwnerId:N}";
+        db.Factories.AddRange(
+            new Factory { OwnerId = factoryOwnerId, Name = $"{marker}-near", Address = "Test", Latitude = 10.1m, Longitude = 106, AcceptedMaterialsCsv = "PET,PAPER" },
+            new Factory { OwnerId = factoryOwnerId, Name = $"{marker}-far", Address = "Test", Latitude = 11m, Longitude = 106, AcceptedMaterialsCsv = "PET" },
+            new Factory { OwnerId = factoryOwnerId, Name = $"{marker}-unknown", Address = "Test", AcceptedMaterialsCsv = "PET" });
+        await db.SaveChangesAsync();
+        var service = new DepotService(new Retrack.API.Repositories.DepotOwnerRepository(db), new Retrack.API.Repositories.DepotPaymentReadRepository(db));
+
+        var all = await service.GetFactoriesAsync(ownerId, depotId, new() { Search = marker, NearestFirst = true, PageSize = 2 });
+        Assert.Equal(3, all.TotalCount);
+        Assert.EndsWith("-near", all.Items[0].Name);
+        Assert.EndsWith("-far", all.Items[1].Name);
+        Assert.True(all.Items[0].DistanceKm is > 10 and < 12);
+        Assert.Equal("PET,PAPER", all.Items[0].AcceptedMaterialsCsv);
+        var lastPage = await service.GetFactoriesAsync(ownerId, depotId, new() { Search = marker, NearestFirst = true, Page = 2, PageSize = 2 });
+        Assert.EndsWith("-unknown", Assert.Single(lastPage.Items).Name);
+        Assert.Null(lastPage.Items[0].DistanceKm);
+
+        var nearby = await service.GetFactoriesAsync(ownerId, depotId, new() { Search = marker, MaxDistanceKm = 30 });
+        Assert.Equal(1, nearby.TotalCount);
+        Assert.EndsWith("-near", Assert.Single(nearby.Items).Name);
+        depot.Latitude = null; depot.Longitude = null;
+        await db.SaveChangesAsync();
+        var withoutGps = await service.GetFactoriesAsync(ownerId, depotId, new() { Search = marker });
+        Assert.Equal(3, withoutGps.TotalCount);
+        Assert.All(withoutGps.Items, item => Assert.Null(item.DistanceKm));
+        await Assert.ThrowsAsync<ArgumentException>(() => service.GetFactoriesAsync(ownerId, depotId, new() { Search = marker, NearestFirst = true }));
+    }
+
+    [Fact]
+    public async Task Approved_factory_direct_batch_checks_material_and_capacity_before_transport()
+    {
+        await using var db = Open();
+        db.Users.Add(new User { Id = factoryOwnerId, Email = $"capacity-{factoryOwnerId}@test.invalid", Role = "FACTORY", FullName = "Factory" });
+        var factory = new Factory { OwnerId = factoryOwnerId, Name = "Factory", Address = "Test", AcceptedMaterialsCsv = "PAPER", CapacityKgPerMonth = 5 };
+        db.Factories.Add(factory);
+        db.FactoryDepotPartnerships.Add(new FactoryDepotPartnership { DepotId = depotId, Factory = factory, Status = "APPROVED" });
+        await db.SaveChangesAsync();
+        var input = Input(10); input.TargetFactoryId = factory.Id;
+
+        await Assert.ThrowsAsync<DepotConflictException>(() => Batches(db).CreateAsync(ownerId, depotId, input));
+        factory.AcceptedMaterialsCsv = "PET";
+        await db.SaveChangesAsync();
+        await Assert.ThrowsAsync<DepotConflictException>(() => Batches(db).CreateAsync(ownerId, depotId, input));
+        factory.CapacityKgPerMonth = 100;
+        await db.SaveChangesAsync();
+        var created = await Batches(db).CreateAsync(ownerId, depotId, input);
+        Assert.Equal("TRANSPORT_READY", created.Status);
+        Assert.Single(await db.TransportJobs.Where(j => j.BatchId == created.Id).ToListAsync());
+        Assert.Single(await db.InventoryBatches.Where(b => b.DepotId == depotId).ToListAsync());
+    }
+
+    [Fact]
     public async Task Batch_photos_are_saved_and_visible_to_factory()
     {
         await using var db = Open();
