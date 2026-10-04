@@ -285,10 +285,12 @@ export default function Partners() {
                         </div>
                       </div>
 
-                      <button onClick={() => setCreateFor({ materialType: d.materialType, factoryId: d.factoryId })} className={urgent ?
+                      {d.isBlocked && <p className="mb-3 text-sm text-d-error" role="status">Quan hệ với nhà máy đang bị chặn; chưa thể tạo lô.</p>}
+                      <button disabled={d.isBlocked} title={d.isBlocked ? 'Quan hệ đang bị chặn' : 'Tạo lô cho nhu cầu này'}
+                        onClick={() => setCreateFor({ materialType: d.materialType, factoryId: d.factoryId })} className={`${urgent ?
                         "w-full bg-d-on-surface text-d-surface py-3 rounded-full font-d-body-md text-d-body-md font-bold hover:bg-d-secondary transition-colors flex justify-center items-center gap-2 group-hover:bg-d-primary" :
                         "w-full bg-transparent border border-d-on-surface text-d-on-surface py-3 rounded-full font-d-body-md text-d-body-md font-bold hover:bg-d-surface-container transition-colors flex justify-center items-center gap-2 group-hover:bg-d-surface-variant"
-                      }>
+                      } disabled:cursor-not-allowed disabled:opacity-50`}>
                         Tạo lô bán ngay
                         <MaterialIcon name="arrow_forward" className="text-[20px] group-hover:translate-x-1 transition-transform" />
                       </button>

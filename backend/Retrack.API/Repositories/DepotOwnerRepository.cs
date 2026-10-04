@@ -53,11 +53,13 @@ public sealed class DepotOwnerRepository(AppDbContext db) : IDepotOwnerRepositor
                 .Select(p => p.Status == "BLOCKED" || p.BlockedByDepot || p.BlockedByFactory ? "BLOCKED" : p.Status).FirstOrDefault(),
             x.Factory.AcceptedMaterialsCsv, x.DistanceKm)), query);
     }
-    public async Task<PagedResult<DemandDto>> DemandsAsync(DepotQuery query, DateTime now)
+    public async Task<PagedResult<DemandDto>> DemandsAsync(Guid depotId, DepotQuery query, DateTime now)
     {
         var source = db.FactoryDemands.AsNoTracking().Where(d => d.IsActive && d.Deadline >= now && d.Factory.Owner != null && d.Factory.Owner.IsActive);
         if (!string.IsNullOrWhiteSpace(query.Search)) source = source.Where(d => EF.Functions.ILike(d.MaterialType, $"%{query.Search}%") || EF.Functions.ILike(d.Factory.Name, $"%{query.Search}%"));
         return await DepotRepositoryPage.ReadAsync(source.OrderBy(d => d.Deadline).ThenBy(d => d.Id).Select(d => new DemandDto(d.Id,
-            d.FactoryId, d.Factory.Name, d.MaterialType, d.RequiredWeightKg, d.MinPricePerKg, d.MaxPricePerKg, d.Deadline)), query);
+            d.FactoryId, d.Factory.Name, d.MaterialType, d.RequiredWeightKg, d.MinPricePerKg, d.MaxPricePerKg, d.Deadline,
+            db.FactoryDepotPartnerships.Any(p => p.DepotId == depotId && p.FactoryId == d.FactoryId &&
+                (p.Status == "BLOCKED" || p.BlockedByDepot || p.BlockedByFactory)))), query);
     }
 }

@@ -31,6 +31,6 @@ public sealed partial class DepotService
     public async Task<PagedResult<DemandDto>> GetDemandsAsync(Guid ownerId, Guid depotId, DepotQuery query)
     {
         await RequireOwnerAsync(ownerId, depotId);
-        return await owners.DemandsAsync(query, DateTime.UtcNow);
+        return await owners.DemandsAsync(depotId, query, DateTime.UtcNow);
     }
 }
