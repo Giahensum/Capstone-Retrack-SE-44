@@ -43,6 +43,7 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         await db.TransportJobs.Where(t => t.Batch.DepotId == depotId).ExecuteDeleteAsync();
         await db.InventoryBatches.Where(b => b.DepotId == depotId).ExecuteDeleteAsync();
         await db.FactoryDepotPartnerships.Where(p => p.DepotId == depotId).ExecuteDeleteAsync();
+        await db.FactoryDemands.Where(d => d.Factory.OwnerId == factoryOwnerId).ExecuteDeleteAsync();
         await db.Factories.Where(f => f.OwnerId == factoryOwnerId).ExecuteDeleteAsync();
         await db.PickupRequests.Where(p => p.TargetDepotId == depotId).ExecuteDeleteAsync();
         var staffUsers = await db.DepotStaffs.Where(s => s.DepotId == depotId).Select(s => s.UserId).ToListAsync();
@@ -54,6 +55,37 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         await db.Users.Where(u => u.Id == ownerId || u.Id == sellerId || u.Id == factoryOwnerId).ExecuteDeleteAsync();
     }
     private static CreateDepotBatchDto Input(decimal kg = 60) => new() { OperationId = Guid.NewGuid(), MaterialType = "PET", WeightKg = kg };
+
+    [Fact]
+    public async Task Factory_demand_shows_block_status_for_the_selected_depot_only()
+    {
+        await using var db = Open();
+        var otherOwnerId = Guid.NewGuid();
+        var otherDepotId = Guid.NewGuid();
+        db.Users.Add(new User { Id = factoryOwnerId, Email = $"demand-{factoryOwnerId}@test.invalid", Role = "FACTORY", FullName = "Factory" });
+        var marker = $"Demand-{factoryOwnerId:N}";
+        var factory = new Factory { OwnerId = factoryOwnerId, Name = marker, Address = "Test", AcceptedMaterialsCsv = "PET" };
+        db.Factories.Add(factory);
+        var demand = new FactoryDemand { Factory = factory, MaterialType = "PET", RequiredWeightKg = 10, Deadline = DateTime.UtcNow.AddDays(3) };
+        db.FactoryDemands.Add(demand);
+        db.Users.Add(new User { Id = otherOwnerId, Email = $"demand-{otherOwnerId}@test.invalid", Role = "DEPOT_OWNER", FullName = "Other owner" });
+        db.Depots.Add(new Depot { Id = otherDepotId, OwnerId = otherOwnerId, Name = "Other depot", Address = "Test" });
+        db.FactoryDepotPartnerships.Add(new FactoryDepotPartnership { DepotId = depotId, Factory = factory, Status = "APPROVED", BlockedByFactory = true });
+        await db.SaveChangesAsync();
+        try
+        {
+            var service = new DepotService(new Retrack.API.Repositories.DepotOwnerRepository(db), new Retrack.API.Repositories.DepotPaymentReadRepository(db));
+            var blocked = await service.GetDemandsAsync(ownerId, depotId, new() { Search = marker });
+            Assert.True(Assert.Single(blocked.Items).IsBlocked);
+            var open = await service.GetDemandsAsync(otherOwnerId, otherDepotId, new() { Search = marker });
+            Assert.False(Assert.Single(open.Items).IsBlocked);
+        }
+        finally
+        {
+            await db.Depots.Where(d => d.Id == otherDepotId).ExecuteDeleteAsync();
+            await db.Users.Where(u => u.Id == otherOwnerId).ExecuteDeleteAsync();
+        }
+    }
 
     [Fact]
     public async Task Factory_search_uses_distance_before_paging_and_keeps_unknown_location_visible_without_radius()
