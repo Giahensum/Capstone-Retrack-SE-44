@@ -120,6 +120,21 @@ CREATE TABLE IF NOT EXISTS pickup_requests (
     updated_at               TIMESTAMPTZ  DEFAULT NOW()
 );
 
+-- Bằng chứng UC-51 và phiên bản bản nháp UC-52/53.
+CREATE TABLE IF NOT EXISTS pickup_checkins (
+    pickup_request_id UUID PRIMARY KEY REFERENCES pickup_requests(id) ON DELETE CASCADE,
+    employee_id UUID NOT NULL REFERENCES users(id),
+    latitude DOUBLE PRECISION NOT NULL CHECK (latitude BETWEEN -90 AND 90),
+    longitude DOUBLE PRECISION NOT NULL CHECK (longitude BETWEEN -180 AND 180),
+    accuracy_meters DOUBLE PRECISION NOT NULL CHECK (accuracy_meters BETWEEN 0 AND 50),
+    distance_meters DOUBLE PRECISION NOT NULL CHECK (distance_meters BETWEEN 0 AND 200),
+    location_recorded_at TIMESTAMPTZ NOT NULL,
+    photo_taken_at TIMESTAMPTZ NOT NULL,
+    checked_in_at TIMESTAMPTZ NOT NULL,
+    image_url TEXT NOT NULL,
+    revision INTEGER NOT NULL DEFAULT 0 CHECK (revision >= 0)
+);
+
 -- Chi tiết các loại phế liệu (NV cân và nhập)
 CREATE TABLE IF NOT EXISTS pickup_request_items (
     id                  UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),

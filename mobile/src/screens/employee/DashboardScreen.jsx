@@ -88,6 +88,7 @@ export default function DashboardScreen({ navigation }) {
         </>
       ) : null}
       <Text style={[s.title, { fontSize: 21 }]}>Thao tác nhanh</Text>
+      <Button title="Tất cả đơn tôi đang thực hiện" onPress={() => navigation.navigate("Pool", { screen: "ActivePickups", initial: false })} />
       <Button
         title="Xem đơn chờ →"
         onPress={() => navigation.navigate("Pool", { screen: "PickupPool" })}
