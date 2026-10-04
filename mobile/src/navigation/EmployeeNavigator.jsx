@@ -5,6 +5,9 @@ import ProfileNavigator from "./ProfileNavigator";
 import DashboardScreen from "../screens/employee/DashboardScreen";
 import PickupPoolScreen from "../screens/employee/PickupPoolScreen";
 import PickupDetailScreen from "../screens/employee/PickupDetailScreen";
+import CheckInScreen from "../screens/employee/CheckInScreen";
+import ClassifyWeighScreen from "../screens/employee/ClassifyWeighScreen";
+import ActivePickupsScreen from "../screens/employee/ActivePickupsScreen";
 import PlaceholderScreen from "../components/common/PlaceholderScreen";
 import Brand from "../components/common/Brand";
 const Tabs = createBottomTabNavigator();
@@ -19,6 +22,7 @@ function PickupStackNavigator() {
   return (
     <Stack.Navigator
       id="PickupStack"
+      initialRouteName="PickupPool"
       screenOptions={{
         headerStyle: { backgroundColor: "#f8f9ff" },
         headerTintColor: "#446900",
@@ -26,6 +30,9 @@ function PickupStackNavigator() {
         headerShadowVisible: false,
       }}
     >
+      <Stack.Screen name="ActivePickups" component={ActivePickupsScreen} options={{ title: "Đơn đang thực hiện" }} />
+      <Stack.Screen name="CheckIn" component={CheckInScreen} options={{ title: "Check-in điểm bán" }} />
+      <Stack.Screen name="ClassifyWeigh" component={ClassifyWeighScreen} options={{ title: "Phân loại và cân" }} />
       <Stack.Screen
         name="PickupPool"
         component={PickupPoolScreen}

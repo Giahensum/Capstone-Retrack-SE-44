@@ -15,6 +15,7 @@ namespace Retrack.API.Data
         public DbSet<DepotStaff> DepotStaffs { get; set; }
         public DbSet<PickupRequest> PickupRequests { get; set; }
         public DbSet<PickupRequestItem> PickupRequestItems { get; set; }
+        public DbSet<PickupCheckIn> PickupCheckIns { get; set; }
         public DbSet<SellerDepotReview> SellerDepotReviews { get; set; }
         public DbSet<FactoryDemand> FactoryDemands { get; set; }
         public DbSet<FactoryDepotPartnership> FactoryDepotPartnerships { get; set; }
@@ -33,6 +34,10 @@ namespace Retrack.API.Data
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+            modelBuilder.Entity<PickupCheckIn>().HasOne(c => c.PickupRequest).WithOne()
+                .HasForeignKey<PickupCheckIn>(c => c.PickupRequestId).OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<PickupCheckIn>().HasOne(c => c.Employee).WithMany()
+                .HasForeignKey(c => c.EmployeeId).OnDelete(DeleteBehavior.Restrict);
             if (Database.ProviderName == "Npgsql.EntityFrameworkCore.PostgreSQL")
                 modelBuilder.HasSequence<long>("depot_batch_number");
             modelBuilder.Entity<InventoryBatch>().HasIndex(b => b.Code).IsUnique();
