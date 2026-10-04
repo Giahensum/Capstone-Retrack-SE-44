@@ -1,22 +1,33 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useDepotQuery, useDepotMutation, number, money, date } from './depotApi';
+import { useDepot } from './DepotContext';
 import { QueryState, Pager, Dialog, MutationError, inputClass } from './components/DepotUI';
 import { MaterialIcon } from './components/DepotIcon';
 import { materialLabel } from './materialLabels';
 import CreateBatchModal from './components/CreateBatchModal';
 
-const labels = { APPROVED: 'Đang hợp tác', PENDING: 'Chờ duyệt', BLOCKED: 'Đã chặn' };
+const labels = { APPROVED: 'Đang hợp tác', PENDING: 'Chưa hợp tác', DECLINED: 'Không hợp tác', BLOCKED: 'Đã chặn' };
 
 export default function Partners() {
+  const { depotId } = useDepot();
   const [activeTab, setActiveTab] = useState('list');
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
+  const [maxDistanceKm, setMaxDistanceKm] = useState('');
+  const [nearestFirst, setNearestFirst] = useState(false);
   const [createFor, setCreateFor] = useState(null);
   const [decision, setDecision] = useState(null);
   const searchRef = useRef(null);
+  useEffect(() => { setMaxDistanceKm(''); setNearestFirst(false); setPage(1); }, [depotId]);
 
-  const query = useDepotQuery('partners', { page, search, status }, activeTab === 'list');
+  const profile = useDepotQuery('profile');
+  const hasCoordinates = profile.data?.latitude != null && profile.data?.longitude != null;
+  const radius = Number(maxDistanceKm);
+  const validRadius = maxDistanceKm !== '' && Number.isFinite(radius) && radius >= 1 && radius <= 2000;
+  const query = useDepotQuery('partners', { page, search, status,
+    maxDistanceKm: hasCoordinates && validRadius ? radius : undefined,
+    nearestFirst: hasCoordinates && nearestFirst }, activeTab === 'list');
   const demands = useDepotQuery('partners/demands', { page, search }, activeTab === 'demand');
   const requests = useDepotQuery('partnerships', { page }, activeTab === 'requests');
   const update = useDepotMutation('put', (id) => `partnerships/${id}/status`, () => setDecision(null));
@@ -24,8 +35,8 @@ export default function Partners() {
   return (
     <div className="flex flex-col p-4 md:p-6 w-full max-w-7xl mx-auto h-[calc(100vh-4rem)] gap-6 overflow-hidden bg-d-surface">
       <CreateBatchModal isOpen={!!createFor} onClose={() => setCreateFor(null)} initialMaterial={createFor?.materialType} initialFactoryId={createFor?.factoryId} />
-      {decision && <Dialog title="Xác nhận quan hệ nhà máy" onClose={() => setDecision(null)} busy={update.isPending}>
-        <p className="mb-4">{decision.status === 'APPROVED' ? 'Duyệt' : 'Chặn'} quan hệ với <strong>{decision.factoryName}</strong>?</p>
+      {decision && <Dialog title={decision.status === 'BLOCKED' ? 'Chặn giao dịch với nhà máy' : 'Bỏ chặn phía kho'} onClose={() => setDecision(null)} busy={update.isPending}>
+        <p className="mb-4">{decision.status === 'BLOCKED' ? 'Chặn' : 'Bỏ chặn phía kho đối với'} <strong>{decision.factoryName}</strong>? {decision.status === 'UNBLOCKED' && 'Nếu nhà máy cũng đang chặn, quan hệ vẫn bị chặn.'}</p>
         <MutationError mutation={update} />
         <div className="flex justify-end gap-3"><button onClick={() => setDecision(null)} disabled={update.isPending}>Đóng</button>
           <button className="bg-d-primary text-white px-4 py-2 rounded-full" disabled={update.isPending} onClick={() => update.mutate({ id: decision.factoryId, body: { status: decision.status } })}>{update.isPending ? 'Đang lưu…' : 'Xác nhận'}</button></div>
@@ -97,7 +108,7 @@ export default function Partners() {
                 <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
                   <MaterialIcon name="hourglass_empty" className="text-6xl text-d-outline" />
                 </div>
-                <p className="font-d-label-sm text-d-label-sm text-d-on-surface-variant uppercase tracking-wider mb-2">Chờ nhà máy duyệt</p>
+                <p className="font-d-label-sm text-d-label-sm text-d-on-surface-variant uppercase tracking-wider mb-2">Chưa hợp tác</p>
                 <div className="flex items-end gap-3">
                   <h3 className="font-d-headline-xl text-d-headline-xl text-d-on-surface">{query.data?.items.filter((f) => f.partnershipStatus === 'PENDING').length ?? 0}</h3>
                   <span className="font-d-body-sm text-d-body-sm text-d-on-surface-variant opacity-80 mb-2 font-medium">trong trang này</span>
@@ -127,14 +138,26 @@ export default function Partners() {
                 </div>
               </div>
 
+              <div className="px-6 pb-5 flex flex-wrap items-end gap-4 border-b border-d-border-subtle">
+                <label className="text-sm text-d-on-surface-variant">Trong bán kính ước tính (km)
+                  <input aria-label="Bán kính ước tính theo đường chim bay" type="number" min="1" max="2000" step="1" value={maxDistanceKm}
+                    disabled={!hasCoordinates} onChange={(e) => { setMaxDistanceKm(e.target.value); setPage(1); }}
+                    placeholder="Không giới hạn" className={`${inputClass} mt-1 w-44`} /></label>
+                <label className="flex items-center gap-2 min-h-11 text-sm text-d-on-surface"><input type="checkbox" checked={nearestFirst}
+                  disabled={!hasCoordinates} onChange={(e) => { setNearestFirst(e.target.checked); setPage(1); }} />Gần trước</label>
+                <p className="text-sm text-d-on-surface-variant">Khoảng cách đường chim bay để tham khảo, không phải quãng đường xe chạy. {hasCoordinates ? 'Nhà máy thiếu tọa độ sẽ không xuất hiện khi lọc bán kính.' : 'Cập nhật GPS trong hồ sơ kho để dùng bộ lọc.'}</p>
+                {maxDistanceKm !== '' && !validRadius && <p role="alert" className="text-sm text-d-error">Nhập bán kính từ 1 đến 2.000 km; bộ lọc chưa được áp dụng.</p>}
+              </div>
+
               {/* Table Container */}
               <QueryState query={query}>
                 <div className="overflow-x-auto flex-1">
-                  <table className="w-full text-left border-collapse min-w-[1000px]">
+                  <table className="w-full text-left border-collapse min-w-[1120px]">
                     <thead className="sticky top-0 bg-d-surface-container-low z-10">
                       <tr className="border-b border-d-border-subtle shadow-sm">
                         <th className="py-4 px-6 font-d-label-sm text-d-label-sm text-d-on-surface-variant uppercase tracking-wider w-[35%]">Nhà máy</th>
                         <th className="py-4 px-6 font-d-label-sm text-d-label-sm text-d-on-surface-variant uppercase tracking-wider w-[25%]">Vật liệu thu mua</th>
+                        <th className="py-4 px-6 font-d-label-sm text-d-label-sm text-d-on-surface-variant uppercase tracking-wider">Khoảng cách ước tính</th>
                         <th className="py-4 px-6 font-d-label-sm text-d-label-sm text-d-on-surface-variant uppercase tracking-wider text-center w-[15%]" title="Điểm lưu trong hồ sơ nhà máy; chưa tổng hợp từ đánh giá của chủ kho">Điểm hồ sơ</th>
                         <th className="py-4 px-6 font-d-label-sm text-d-label-sm text-d-on-surface-variant uppercase tracking-wider w-[15%]">Trạng thái</th>
                         <th className="py-4 px-6 font-d-label-sm text-d-label-sm text-d-on-surface-variant uppercase tracking-wider text-center w-[10%]">Hành động</th>
@@ -156,9 +179,11 @@ export default function Partners() {
                           </td>
                           <td className="py-4 px-6">
                             <div className="flex flex-wrap gap-1">
-                              <span className="text-d-on-surface-variant italic text-sm">Xem bảng nhu cầu thu mua</span>
+                              {f.acceptedMaterialsCsv?.split(',').map((code) => code.trim()).filter(Boolean).map((code) => <span key={code} className="rounded-full bg-d-surface-accent px-2.5 py-1 text-sm text-d-on-surface">{materialLabel(code)}</span>)}
+                              {!f.acceptedMaterialsCsv?.trim() && <span className="text-d-on-surface-variant italic text-sm">Chưa công bố</span>}
                             </div>
                           </td>
+                          <td className="py-4 px-6 whitespace-nowrap text-sm text-d-on-surface-variant">{f.distanceKm == null ? 'Chưa có tọa độ' : `${number(Math.round(f.distanceKm * 10) / 10)} km`}</td>
                           <td className="py-4 px-6">
                             <div className="flex items-center justify-center gap-1 text-d-secondary" title="Điểm tham khảo trong hồ sơ nhà máy; chưa có luồng chủ kho đánh giá nhà máy">
                               <MaterialIcon name="star" className="text-[16px]" />
@@ -177,12 +202,14 @@ export default function Partners() {
                             )}
                           </td>
                           <td className="py-4 px-6 text-center">
-                            <button aria-label={`Tạo lô chỉ định cho ${f.name}`} onClick={() => setCreateFor({ factoryId: f.id })} className="text-d-primary underline">Tạo lô</button>
+                            <button aria-label={`Tạo lô chỉ định cho ${f.name}`} disabled={f.partnershipStatus === 'BLOCKED'}
+                              title={f.partnershipStatus === 'BLOCKED' ? 'Quan hệ đang bị chặn' : 'Tạo lô chỉ định'}
+                              onClick={() => setCreateFor({ factoryId: f.id })} className="text-d-primary underline disabled:text-d-on-surface-variant disabled:no-underline">Tạo lô</button>
                           </td>
                         </tr>
                       ))}
                       {!query.data?.items.length && (
-                        <tr><td colSpan="5" className="py-8 text-center text-d-on-surface-variant">Không tìm thấy đối tác.</td></tr>
+                        <tr><td colSpan="6" className="py-8 text-center text-d-on-surface-variant">Không tìm thấy nhà máy phù hợp.</td></tr>
                       )}
                     </tbody>
                   </table>
@@ -197,7 +224,7 @@ export default function Partners() {
           </>
         ) : activeTab === 'requests' ? (
           <QueryState query={requests}><div className="bg-white rounded-[20px] border border-d-border-subtle overflow-x-auto"><table className="w-full min-w-[650px] text-left"><thead><tr className="border-b border-d-border-subtle"><th className="p-4">Nhà máy</th><th className="p-4">Liên hệ</th><th className="p-4">Ngày gửi</th><th className="p-4">Trạng thái</th><th className="p-4">Thao tác</th></tr></thead><tbody>
-            {requests.data?.items.map((p) => <tr key={p.id} className="border-b border-d-border-subtle"><td className="p-4">{p.factoryName}</td><td className="p-4">{p.contactPhone || 'Chưa cập nhật'}</td><td className="p-4">{date(p.createdAt)}</td><td className="p-4">{labels[p.status] ?? p.status}</td><td className="p-4">{p.status === 'PENDING' && <div className="flex gap-3"><button className="text-d-primary underline" onClick={() => setDecision({ factoryId: p.factoryId, factoryName: p.factoryName, status: 'APPROVED' })}>Duyệt</button><button className="text-d-error underline" onClick={() => setDecision({ factoryId: p.factoryId, factoryName: p.factoryName, status: 'BLOCKED' })}>Chặn</button></div>}</td></tr>)}
+            {requests.data?.items.map((p) => <tr key={p.id} className="border-b border-d-border-subtle"><td className="p-4">{p.factoryName}</td><td className="p-4">{p.contactPhone || 'Chưa cập nhật'}</td><td className="p-4">{date(p.createdAt)}</td><td className="p-4">{labels[p.status] ?? p.status}{p.blockedByFactory && <span className="block text-sm text-d-on-surface-variant">Nhà máy đã chặn</span>}{p.legacyBlocked && <span className="block text-sm text-d-on-surface-variant">Trạng thái chặn cũ cần đối chiếu</span>}</td><td className="p-4">{p.blockedByDepot ? <button className="text-d-primary underline" onClick={() => setDecision({ factoryId: p.factoryId, factoryName: p.factoryName, status: 'UNBLOCKED' })}>Bỏ chặn phía kho</button> : !p.blockedByFactory && !p.legacyBlocked ? <button className="text-d-error underline" onClick={() => setDecision({ factoryId: p.factoryId, factoryName: p.factoryName, status: 'BLOCKED' })}>Chặn</button> : <span className="text-sm text-d-on-surface-variant">—</span>}</td></tr>)}
             {!requests.data?.items.length && <tr><td colSpan="5" className="p-6 text-center">Chưa có yêu cầu hợp tác.</td></tr>}
           </tbody></table><Pager page={page} setPage={setPage} total={requests.data?.totalCount} /></div></QueryState>
         ) : (

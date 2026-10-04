@@ -157,3 +157,25 @@ test('phí, doanh thu và điểm nhà máy nêu rõ ý nghĩa dữ liệu', asy
   await expect(page.getByText('Điểm hồ sơ chỉ để tham khảo;')).toBeVisible();
   await expect(page.getByRole('columnheader', { name: 'Điểm hồ sơ' })).toBeVisible();
 });
+
+test('lọc nhà máy theo khoảng cách ước tính và không cho Depot tự duyệt hợp tác', async ({ page }) => {
+  await login(page);
+  await page.goto('/depot/partners');
+  await page.getByLabel('Kho đang quản lý').selectOption(process.env.E2E_DEPOT_ID);
+  await page.getByRole('button', { name: 'Yêu cầu hợp tác' }).click();
+  await expect(page.getByRole('button', { name: 'Duyệt', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Danh sách nhà máy' }).click();
+  const radius = page.getByLabel('Bán kính ước tính theo đường chim bay');
+  await expect(radius).toBeEnabled();
+  const filtered = page.waitForResponse((response) => response.url().includes('/api/depot/partners?') && response.url().includes('maxDistanceKm=5'));
+  await radius.fill('5');
+  const result = await filtered;
+  expect(result.ok()).toBe(true);
+  const body = await result.json();
+  expect(body.data.items.every((factory) => factory.distanceKm != null && factory.distanceKm <= 5)).toBe(true);
+  const sorted = page.waitForResponse((response) => response.url().includes('/api/depot/partners?') && response.url().includes('nearestFirst=true'));
+  await page.getByRole('checkbox', { name: 'Gần trước' }).check();
+  expect((await sorted).ok()).toBe(true);
+  await radius.fill('0');
+  await expect(page.getByRole('alert')).toContainText('bộ lọc chưa được áp dụng');
+});

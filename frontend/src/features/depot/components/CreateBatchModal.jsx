@@ -43,7 +43,7 @@ function CreateBatchForm({ onClose, initialMaterial, initialFactoryId }) {
         <QueryState query={factories}><label className="block">Nhà máy<select required value={form.targetFactoryId} onChange={(e) => field('targetFactoryId', e.target.value)} className={inputClass}>
           <option value="">Chọn nhà máy</option>
           {initialFactoryId && !factories.data?.items.some((f) => f.id === initialFactoryId) && <option value={initialFactoryId}>Nhà máy đã chọn từ danh sách</option>}
-          {factories.data?.items.map((f) => <option key={f.id} value={f.id} disabled={f.partnershipStatus === 'BLOCKED'}>{f.name}{f.partnershipStatus === 'BLOCKED' ? ' — Đã chặn' : ''}</option>)}</select></label>
+          {factories.data?.items.map((f) => <option key={f.id} value={f.id} disabled={f.partnershipStatus === 'BLOCKED'}>{f.name}{f.distanceKm == null ? '' : ` — khoảng ${number(Math.round(f.distanceKm))} km đường chim bay`}{f.partnershipStatus === 'BLOCKED' ? ' — Đã chặn' : ''}</option>)}</select></label>
           <Pager page={page} setPage={setPage} total={factories.data?.totalCount} /></QueryState>
         <p className="text-sm">Chưa hợp tác: chờ nhà máy nhận lô trước khi vận chuyển. Đã hợp tác: lô được gửi thẳng. Nhà máy quyết định hợp tác lâu dài sau khi kiểm tra hàng.</p></>}
       <label className="block">Mô tả / ghi chú<textarea className={inputClass} value={form.description} onChange={(e) => field('description', e.target.value)} /></label>
