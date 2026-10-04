@@ -12,7 +12,7 @@ public sealed class DepotPartnerController(IDepotService service) : ControllerBa
 {
     private Guid OwnerId => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
     [HttpGet]
-    public async Task<IActionResult> List([FromQuery] Guid depotId, [FromQuery] DepotQuery query) =>
+    public async Task<IActionResult> List([FromQuery] Guid depotId, [FromQuery] FactorySearchQuery query) =>
         Ok(ApiResponse<PagedResult<FactoryPartnerDto>>.Ok(await service.GetFactoriesAsync(OwnerId, depotId, query)));
     [HttpGet("demands")]
     public async Task<IActionResult> Demands([FromQuery] Guid depotId, [FromQuery] DepotQuery query) =>

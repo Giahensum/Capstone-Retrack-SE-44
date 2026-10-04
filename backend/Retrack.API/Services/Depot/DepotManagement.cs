@@ -21,7 +21,7 @@ public sealed partial class DepotService
         await owners.SaveAsync();
         return await GetProfileAsync(ownerId, depotId);
     }
-    public async Task<PagedResult<FactoryPartnerDto>> GetFactoriesAsync(Guid ownerId, Guid depotId, DepotQuery query)
+    public async Task<PagedResult<FactoryPartnerDto>> GetFactoriesAsync(Guid ownerId, Guid depotId, FactorySearchQuery query)
     {
         await RequireOwnerAsync(ownerId, depotId);
         if (!string.IsNullOrEmpty(query.Status) && query.Status is not ("APPROVED" or "PENDING" or "BLOCKED" or "DECLINED"))

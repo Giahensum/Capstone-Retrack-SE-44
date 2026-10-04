@@ -33,6 +33,7 @@ public sealed class UpdateStaffDto
     [Required, Phone, StringLength(20)] public string Phone { get; set; } = string.Empty;
     public bool IsActive { get; set; }
 }
-public record FactoryPartnerDto(Guid Id, string Name, string Address, decimal Rating, string? PartnershipStatus);
+public record FactoryPartnerDto(Guid Id, string Name, string Address, decimal Rating, string? PartnershipStatus,
+    string AcceptedMaterialsCsv, double? DistanceKm);
 public record DemandDto(Guid Id, Guid FactoryId, string FactoryName, string MaterialType, decimal RequiredWeightKg,
     decimal? MinPricePerKg, decimal? MaxPricePerKg, DateTime Deadline);
