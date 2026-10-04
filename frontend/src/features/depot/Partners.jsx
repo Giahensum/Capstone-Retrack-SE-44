@@ -33,7 +33,7 @@ export default function Partners() {
   const update = useDepotMutation('put', (id) => `partnerships/${id}/status`, () => setDecision(null));
 
   return (
-    <div className="flex flex-col p-4 md:p-6 w-full max-w-7xl mx-auto h-[calc(100vh-4rem)] gap-6 overflow-hidden bg-d-surface">
+    <div className="flex flex-col p-4 md:p-6 w-full max-w-7xl mx-auto min-h-full gap-6 bg-d-surface">
       <CreateBatchModal isOpen={!!createFor} onClose={() => setCreateFor(null)} initialMaterial={createFor?.materialType} initialFactoryId={createFor?.factoryId} />
       {decision && <Dialog title={decision.status === 'BLOCKED' ? 'Chặn giao dịch với nhà máy' : 'Bỏ chặn phía kho'} onClose={() => setDecision(null)} busy={update.isPending}>
         <p className="mb-4">{decision.status === 'BLOCKED' ? 'Chặn' : 'Bỏ chặn phía kho đối với'} <strong>{decision.factoryName}</strong>? {decision.status === 'UNBLOCKED' && 'Nếu nhà máy cũng đang chặn, quan hệ vẫn bị chặn.'}</p>
@@ -75,7 +75,7 @@ export default function Partners() {
       </div>
 
       {/* Scrollable Content */}
-      <div className="flex-1 overflow-y-auto min-h-0 flex flex-col gap-6 pr-2">
+      <div className="flex flex-col gap-6">
         {activeTab === 'list' ? (
           <>
             {/* KPI Cards (Bento style grid) */}
@@ -118,7 +118,7 @@ export default function Partners() {
 
             {/* Data Table Section */}
             <p className="text-sm text-d-on-surface-variant">Điểm hồ sơ chỉ để tham khảo; hiện chưa có luồng chủ kho đánh giá nhà máy sau giao dịch.</p>
-            <div className="bg-d-surface-container-lowest border border-d-border-subtle rounded-[20px] overflow-hidden flex flex-col flex-1 shadow-sm shrink-0 min-h-[500px]">
+            <div className="bg-d-surface-container-lowest border border-d-border-subtle rounded-[20px] overflow-hidden flex flex-col shadow-sm">
               {/* Table Toolbar */}
               <div className="p-6 border-b border-d-border-subtle flex flex-col sm:flex-row justify-between items-center gap-4 bg-d-surface-container-lowest shrink-0">
                 <div className="relative w-full sm:w-80">

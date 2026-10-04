@@ -36,11 +36,11 @@ export function Pager({ page, setPage, total = 0, size = 20 }) {
     <button type="button" className={pagerBtn} disabled={page === 1} onClick={() => setPage(page - 1)}>Trước</button>
     <button type="button" className={pagerBtn} disabled={page * size >= total} onClick={() => setPage(page + 1)}>Sau</button></div></div>;
 }
-export function Dialog({ title, onClose, busy, children }) {
+export function Dialog({ title, onClose, busy, children, wide = false }) {
   const ref = useRef(null);
   useEffect(() => { ref.current.showModal(); }, []);
   return <dialog ref={ref} aria-label={title} onCancel={(e) => { if (busy) e.preventDefault(); else onClose(); }}
-    className="m-auto w-[calc(100%-2rem)] max-w-xl max-h-[90dvh] overflow-y-auto rounded-[20px] p-4 sm:p-6 border border-d-border-subtle bg-d-surface shadow-xl backdrop:bg-black/40">
+    className={`m-auto w-[calc(100%-2rem)] ${wide ? 'max-w-3xl' : 'max-w-xl'} max-h-[90dvh] overflow-y-auto rounded-[20px] p-4 sm:p-6 border border-d-border-subtle bg-d-surface shadow-xl backdrop:bg-black/40`}>
     <div className="flex items-start justify-between gap-4 mb-6"><h2 className="text-xl font-bold text-d-on-surface">{title}</h2><button type="button" disabled={busy} aria-label="Đóng" onClick={onClose} className="shrink-0 -mt-2 -mr-2 flex h-11 w-11 items-center justify-center rounded-full text-d-on-surface-variant hover:bg-d-surface-container-high focus-visible:outline-2 focus-visible:outline-d-primary disabled:opacity-40">✕</button></div>{children}</dialog>;
 }
 export function MutationError({ mutation }) { return mutation.isError ? <p role="alert" className="text-d-error my-3">{depotError(mutation.error)}</p> : null; }
