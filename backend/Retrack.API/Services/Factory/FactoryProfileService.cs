@@ -20,8 +20,8 @@ public class FactoryProfileService(AppDbContext db) : FactoryServiceBase(db), IF
             .Select(x => x.ConfigValue)
             .FirstOrDefaultAsync(ct);
         var feePercentage = decimal.TryParse(feeText, System.Globalization.NumberStyles.Number,
-            System.Globalization.CultureInfo.InvariantCulture, out var configuredFee) ? configuredFee : 1m;
-        if (feePercentage is < 0 or > 100) feePercentage = 1m;
+            System.Globalization.CultureInfo.InvariantCulture, out var configuredFee) ? configuredFee : 5m;
+        if (feePercentage is < 0 or > 100) feePercentage = 5m;
         return ServiceResult<ProfileResponse>.Success(data: new ProfileResponse
         {
             Id = factory.Id,

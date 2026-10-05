@@ -1,6 +1,14 @@
 import apiClient, { unwrap } from "./client";
 
 export const pickupApi = {
+  getHistory: async (page = 1, status = undefined, signal = undefined) =>
+    unwrap(await apiClient.get("/employee/pickup-history", { params: { page, pageSize: 20, status }, signal })),
+  getStats: async (signal = undefined) => unwrap(await apiClient.get("/employee/stats", { signal })),
+  getNotifications: async (page = 1, signal = undefined) =>
+    unwrap(await apiClient.get("/employee/notifications", { params: { page, pageSize: 20 }, signal })),
+  readNotification: async id => unwrap(await apiClient.patch(`/employee/notifications/${encodeURIComponent(id)}/read`)),
+  transition: async (id, action, expectedRevision) =>
+    unwrap(await apiClient.post(`/employee/pickup/${encodeURIComponent(id)}/${action}`, { expectedRevision })),
   getActive: async (page = 1, signal = undefined) =>
     unwrap(await apiClient.get("/employee/pickups/active", { params: { page }, signal })),
   getCollection: async (id, signal = undefined) =>

@@ -72,6 +72,21 @@ public sealed class EmployeeCollectionPostgresTests
             Assert.Equal(1, (await verify.PickupCheckIns.SingleAsync()).Revision);
             Assert.Single(await verify.PickupRequestItems.ToListAsync());
             Assert.Equal("IN_PROGRESS", (await verify.PickupRequests.SingleAsync()).Status);
+            async Task Submit()
+            {
+                await using var context = Open();
+                await new EmployeeCollectionService(context, images).TransitionAsync(employee.Id, pickup.Id, "SUBMITTED", 1, default);
+            }
+            await Task.WhenAll(Submit(), Submit());
+            Assert.Single(await verify.EmployeeCollectionEvents.AsNoTracking().ToListAsync());
+            Assert.Equal("WEIGHED", (await verify.PickupRequests.AsNoTracking().SingleAsync()).Status);
+            var reports = new EmployeeReportingService(verify);
+            Assert.Equal(0, (await reports.StatsAsync(employee.Id, default)).AllTime.Pickups);
+            // Fixture xác nhận hoàn tất để kiểm chứng SUM PostgreSQL; không gọi API tài chính role khác.
+            await verify.PickupRequests.ExecuteUpdateAsync(s => s.SetProperty(p => p.Status, "DONE"));
+            var totals = (await reports.StatsAsync(employee.Id, default)).AllTime;
+            Assert.Equal(1, totals.Pickups);
+            Assert.True(totals.WeightKg > 0); Assert.Equal(totals.WeightKg * 5000, totals.GrossAmount);
         }
         finally
         {

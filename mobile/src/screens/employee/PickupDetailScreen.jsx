@@ -141,6 +141,7 @@ export default function PickupDetailScreen({ route, navigation }) {
             ) : null}
           </View>
           {pickup.isAcceptedByMe ? <View style={s.card}>
+            <Button title="Kết quả cân và bàn giao" onPress={() => navigation.navigate("SubmitResult", { pickupId: id })} />
             <Button title={pickup.status === "SCHEDULED" ? "Check-in tại địa điểm" : "Xem bằng chứng check-in"}
               onPress={() => navigation.navigate("CheckIn", { pickupId: id })} />
             {pickup.status !== "SCHEDULED" ? <Button title={pickup.status === "IN_PROGRESS" ? "Phân loại, cân và định giá" : "Xem kết quả cân"}

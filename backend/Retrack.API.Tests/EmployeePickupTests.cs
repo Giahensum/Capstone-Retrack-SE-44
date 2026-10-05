@@ -68,18 +68,19 @@ public sealed class EmployeePickupTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task DashboardUsesOwnOrdersAndUtcDayBoundaries()
+    public async Task DashboardUsesOwnDepotScopeAndVietnamDayBoundaries()
     {
         Add(); Add(target: otherDepot);
         var active = Add("SCHEDULED", employee);
-        var midnight = Add("DONE", employee); midnight.UpdatedAt = DateTime.UtcNow.Date;
-        var yesterday = Add("DONE", employee); yesterday.UpdatedAt = DateTime.UtcNow.Date.AddTicks(-1);
-        var tomorrow = Add("DONE", employee); tomorrow.UpdatedAt = DateTime.UtcNow.Date.AddDays(1);
+        var start = Retrack.API.Services.Employee.EmployeeReportingService.VietnamDayStart(DateTime.UtcNow);
+        var midnight = Add("DONE", employee); midnight.UpdatedAt = start;
+        var yesterday = Add("DONE", employee); yesterday.UpdatedAt = start.AddTicks(-1);
+        var tomorrow = Add("DONE", employee); tomorrow.UpdatedAt = start.AddDays(1);
         Add("DONE", colleague); Add("DONE", employee, otherDepot);
         await db.SaveChangesAsync();
         var result = Data<EmployeeDashboardDto>(await Controller().Dashboard(default));
         Assert.Equal(1, result.AvailableCount); Assert.Equal(active.Id, result.ActivePickup?.Id);
-        Assert.Equal(2, result.CompletedToday); Assert.Equal(4, result.TotalPickupsCompleted);
+        Assert.Equal(1, result.CompletedToday); Assert.Equal(3, result.TotalPickupsCompleted);
     }
 
     [Fact]
