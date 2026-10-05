@@ -14,9 +14,10 @@ public interface IEmployeeCollectionService
     Task<EmployeeCollectionDto> CheckInAsync(Guid userId, Guid pickupId, EmployeeCheckInRequest input, CancellationToken ct);
     Task<EmployeeCollectionDto> SaveAsync(Guid userId, Guid pickupId, SaveClassificationRequest input, CancellationToken ct);
     Task<IReadOnlyList<MaterialReferenceDto>> MaterialsAsync(Guid userId, CancellationToken ct);
+    Task<EmployeeCollectionDto> TransitionAsync(Guid userId, Guid pickupId, string action, int revision, CancellationToken ct);
 }
 
-public sealed class EmployeeCollectionService(AppDbContext db, ICloudinaryService images) : IEmployeeCollectionService
+public sealed partial class EmployeeCollectionService(AppDbContext db, ICloudinaryService images) : IEmployeeCollectionService
 {
     private IQueryable<DepotStaff> Staff(Guid userId) => db.DepotStaffs.Where(s => s.UserId == userId
         && s.IsActive && s.StaffType == "DEPOT_EMPLOYEE" && s.User.IsActive && s.User.Role == "DEPOT_EMPLOYEE"
@@ -133,7 +134,9 @@ public sealed class EmployeeCollectionService(AppDbContext db, ICloudinaryServic
             checkIn == null ? null : new(checkIn.ImageUrl, checkIn.Latitude, checkIn.Longitude,
                 checkIn.AccuracyMeters, checkIn.DistanceMeters, checkIn.CheckedInAt), checkIn?.Revision ?? 0,
             pickup.Status == "IN_PROGRESS" && checkIn != null, items, items.Sum(i => i.WeightKg), items.Sum(i => i.SubTotal),
-            new(CollectionValidation.RadiusMeters, CollectionValidation.MaxAccuracyMeters, CollectionValidation.MaxLocationAgeSeconds));
+            new(CollectionValidation.RadiusMeters, CollectionValidation.MaxAccuracyMeters, CollectionValidation.MaxLocationAgeSeconds),
+            pickup.PlatformFeePercentage, decimal.Round(items.Sum(i => i.SubTotal) * pickup.PlatformFeePercentage / 100, 2),
+            items.Sum(i => i.SubTotal) - decimal.Round(items.Sum(i => i.SubTotal) * pickup.PlatformFeePercentage / 100, 2));
     }
 
     public async Task<IReadOnlyList<MaterialReferenceDto>> MaterialsAsync(Guid userId, CancellationToken ct)

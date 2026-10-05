@@ -9,9 +9,9 @@
 --   NHÓM D: 1 đơn chờ tại vị trí người test cung cấp để test check-in + cân tại chỗ.
 -- Kết quả trên bảng rỗng: 13 bản ghi = 10 PENDING + 1 SCHEDULED + 2 DONE.
 -- App Đơn chờ hiển thị 10 đơn; 3 đơn SCHEDULED/DONE không thuộc danh sách này.
--- Hoac: psql -v ON_ERROR_STOP=1 -f db/seed_emp_pickup_pool_demo.sql
+-- Hoac: psql -v ON_ERROR_STOP=1 -f db/employee/02_employee_demo.sql
 -- Dieu kien: da co schema, Employee/Seller va lien ket nhan vien-kho dang hoat dong.
--- Chi INSERT vao pickup_requests; khong DELETE/TRUNCATE va khong tao lai tai khoan.
+-- Mặc định chỉ INSERT; bật reset_employee_demo=true để reset riêng đơn demo, không xóa tài khoản.
 -- Ket qua khi chua co UUID demo: 10 PENDING, 1 SCHEDULED, 2 DONE (1 hom nay UTC).
 -- Nếu bảng đã có một phần dữ liệu demo, file bổ sung các UUID còn thiếu.
 -- Chay lap lai khong nhan doi UUID va khong reset trang thai don da test.
@@ -41,8 +41,48 @@
 -- Vẫn áp dụng GPS thật: cách điểm tối đa 200 m, sai số <= 50 m; không bỏ validation.
 -- Không cần xóa bảng để thêm đơn mới: chạy lại file sẽ chỉ bổ sung UUID thiếu.
 -- Nếu đã xóa pickup_requests, chạy cả file sẽ khôi phục đủ 13 đơn.
--- Trước khi test UC-51/52/53, chạy db/emp_checkin_classify.sql nếu chưa bổ sung bảng check-in.
+-- Trước khi test UC-51/52/53, chạy db/employee/01_employee_setup.sql nếu chưa bổ sung bảng check-in.
 BEGIN;
+-- false: chỉ bổ sung UUID thiếu; true: xóa riêng 13 đơn demo rồi tạo lại trong cùng transaction.
+-- Chỉ bật true trên database test cá nhân; dừng backend trước khi reset.
+SET LOCAL retrack.reset_employee_demo = 'false';
+DO $reset$
+BEGIN
+IF current_setting('retrack.reset_employee_demo') = 'true' THEN
+CREATE TEMP TABLE reset_employee_demo_ids ON COMMIT DROP AS
+SELECT id FROM pickup_requests
+WHERE id BETWEEN 'e0000000-0929-4000-8000-000000000001'::uuid
+             AND 'e0000000-0929-4000-8000-000000000013'::uuid
+  AND description LIKE '[DEMO-PICKUP-POOL-20260929]%';
+
+-- Không tự xóa lịch sử tài chính hoặc nguồn tồn kho đã phát sinh.
+    IF EXISTS (
+        SELECT 1 FROM pickup_requests p JOIN reset_employee_demo_ids d ON d.id = p.id
+        WHERE p.payment_proof_url IS NOT NULL OR p.status = 'PAYMENT_SENT'
+           OR (p.status = 'DONE' AND (p.gross_amount <> 0 OR EXISTS (
+               SELECT 1 FROM pickup_request_items i WHERE i.pickup_request_id = p.id)))
+    ) OR EXISTS (
+        SELECT 1 FROM platform_transactions t JOIN reset_employee_demo_ids d ON d.id = t.source_id
+        WHERE t.source_type = 'PICKUP_REQUEST'
+    ) THEN
+        RAISE EXCEPTION 'Có đơn demo đã phát sinh thanh toán/tồn kho. Không reset các đơn này bằng script này.';
+    END IF;
+
+
+DELETE FROM seller_depot_reviews WHERE pickup_request_id IN (SELECT id FROM reset_employee_demo_ids);
+-- Chỉ xóa thông báo có UUID rõ ràng của các đơn demo; giữ thông báo không xác định được đơn.
+DELETE FROM notifications n WHERE EXISTS (
+    SELECT 1 FROM reset_employee_demo_ids d WHERE strpos(COALESCE(n.message, ''), d.id::text) > 0
+);
+-- Các bảng con tự xóa theo FK ON DELETE CASCADE:
+-- pickup_request_items, pickup_checkins, employee_collection_events (nếu đã tạo).
+DELETE FROM pickup_requests WHERE id IN (SELECT id FROM reset_employee_demo_ids);
+
+
+END IF;
+END
+$reset$;
+
 DO $seed$
 DECLARE
     employee_email text := 'employee@retrack.vn';
@@ -71,7 +111,7 @@ BEGIN
         CASE WHEN v.status = 'PENDING' THEN NULL ELSE employee_id END,
         '[DEMO-PICKUP-POOL-20260929] ' || v.description,
         v.address, v.latitude, v.longitude, v.preferred_datetime,
-        v.status, 0, 1, 0, 0, CURRENT_TIMESTAMP - interval '2 days', v.updated_at
+        v.status, 0, 5, 0, 0, CURRENT_TIMESTAMP - interval '2 days', v.updated_at
     FROM (VALUES
         -- NHÓM A — 3 ĐƠN CHỜ CŨ (giữ nguyên địa chỉ và UUID).
         ('e0000000-0929-4000-8000-000000000001',

@@ -122,6 +122,9 @@ export default function ClassifyWeighScreen({ route, navigation }) {
         else void save();
       }} />
       <Button title="Tải lại dữ liệu máy chủ" variant="secondary" disabled={saving} onPress={reload} />
+      <Button title="Xem kết quả và gửi người bán" disabled={saving || dirty}
+        onPress={() => navigation.navigate("SubmitResult", { pickupId: id })} />
+      {dirty ? <Text style={s.muted}>Lưu bản nháp trước khi chuyển sang xác nhận kết quả cân.</Text> : null}
     </> : null}
   </Screen>;
 }
