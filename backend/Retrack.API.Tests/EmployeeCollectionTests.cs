@@ -12,7 +12,7 @@ using Xunit;
 
 namespace Retrack.API.Tests;
 
-public sealed class EmployeeCollectionTests : IAsyncLifetime
+public sealed partial class EmployeeCollectionTests : IAsyncLifetime
 {
     private readonly SqliteConnection connection = new("Data Source=:memory:");
     private AppDbContext db = null!;

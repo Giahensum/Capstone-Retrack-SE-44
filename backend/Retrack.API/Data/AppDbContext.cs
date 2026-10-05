@@ -16,6 +16,7 @@ namespace Retrack.API.Data
         public DbSet<PickupRequest> PickupRequests { get; set; }
         public DbSet<PickupRequestItem> PickupRequestItems { get; set; }
         public DbSet<PickupCheckIn> PickupCheckIns { get; set; }
+        public DbSet<EmployeeCollectionEvent> EmployeeCollectionEvents { get; set; }
         public DbSet<SellerDepotReview> SellerDepotReviews { get; set; }
         public DbSet<FactoryDemand> FactoryDemands { get; set; }
         public DbSet<FactoryDepotPartnership> FactoryDepotPartnerships { get; set; }
@@ -34,6 +35,8 @@ namespace Retrack.API.Data
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+            modelBuilder.Entity<EmployeeCollectionEvent>().HasOne(e => e.Employee).WithMany()
+                .HasForeignKey(e => e.EmployeeId).OnDelete(DeleteBehavior.Restrict);
             modelBuilder.Entity<PickupCheckIn>().HasOne(c => c.PickupRequest).WithOne()
                 .HasForeignKey<PickupCheckIn>(c => c.PickupRequestId).OnDelete(DeleteBehavior.Cascade);
             modelBuilder.Entity<PickupCheckIn>().HasOne(c => c.Employee).WithMany()

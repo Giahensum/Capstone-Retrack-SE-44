@@ -312,7 +312,7 @@ namespace Retrack.API.Services
             var config = await _db.SystemConfigs.FindAsync(FeeConfigKey);
             return new FeeConfigDto
             {
-                PlatformFeePercentage = decimal.Parse(config?.ConfigValue ?? "1.00", CultureInfo.InvariantCulture),
+                PlatformFeePercentage = decimal.Parse(config?.ConfigValue ?? "5.00", CultureInfo.InvariantCulture),
                 UpdatedAt = config?.UpdatedAt ?? DateTime.UtcNow
             };
         }

@@ -265,7 +265,7 @@ public class AdminServiceTests
     {
         await using var db = NewDb();
 
-        Assert.Equal(1.00m, (await NewService(db).GetFeeConfigAsync()).PlatformFeePercentage);
+        Assert.Equal(5.00m, (await NewService(db).GetFeeConfigAsync()).PlatformFeePercentage);
     }
 
     // ── Hóa đơn phí nền tảng ──────────────────────────────────────
