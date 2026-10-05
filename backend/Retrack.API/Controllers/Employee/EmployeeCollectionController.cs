@@ -30,4 +30,18 @@ public sealed class EmployeeCollectionController(IEmployeeCollectionService serv
     [HttpGet("material-prices")]
     public async Task<IActionResult> Materials(CancellationToken ct) =>
         Ok(ApiResponse<IReadOnlyList<MaterialReferenceDto>>.Ok(await service.MaterialsAsync(UserId, ct)));
+
+    [HttpPost("pickup/{pickupId:guid}/submit-weigh")]
+    public async Task<IActionResult> Submit(Guid pickupId, RevisionRequest request, CancellationToken ct) =>
+        Ok(ApiResponse<EmployeeCollectionDto>.Ok(await service.TransitionAsync(UserId, pickupId, "SUBMITTED", request.ExpectedRevision, ct)));
+
+    [HttpPost("pickup/{pickupId:guid}/finalize")]
+    public async Task<IActionResult> FinalizeCollection(Guid pickupId, RevisionRequest request, CancellationToken ct) =>
+        Ok(ApiResponse<EmployeeCollectionDto>.Ok(await service.TransitionAsync(UserId, pickupId, "HANDED_OVER", request.ExpectedRevision, ct)));
+
+    [HttpPost("pickup/{pickupId:guid}/reopen-weigh")]
+    public async Task<IActionResult> Reopen(Guid pickupId, RevisionRequest request, CancellationToken ct) =>
+        Ok(ApiResponse<EmployeeCollectionDto>.Ok(await service.TransitionAsync(UserId, pickupId, "REOPENED", request.ExpectedRevision, ct)));
+
+    public sealed record RevisionRequest(int ExpectedRevision);
 }

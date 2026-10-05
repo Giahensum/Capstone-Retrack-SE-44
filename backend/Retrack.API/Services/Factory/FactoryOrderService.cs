@@ -76,8 +76,8 @@ public class FactoryOrderService(AppDbContext db) : FactoryServiceBase(db), IFac
         var feeText = await Db.SystemConfigs.AsNoTracking().Where(x => x.ConfigKey == "PLATFORM_FEE_PERCENTAGE")
             .Select(x => x.ConfigValue).FirstOrDefaultAsync(ct);
         var feePercent = decimal.TryParse(feeText, System.Globalization.NumberStyles.Number,
-            System.Globalization.CultureInfo.InvariantCulture, out var configuredFee) ? configuredFee : 1m;
-        if (feePercent is < 0 or > 100) feePercent = 1m;
+            System.Globalization.CultureInfo.InvariantCulture, out var configuredFee) ? configuredFee : 5m;
+        if (feePercent is < 0 or > 100) feePercent = 5m;
         var total = decimal.Round(qc.ActualWeightKg * request.AgreedPricePerKg, 0, MidpointRounding.AwayFromZero);
         var fee = decimal.Round(total * feePercent / 100m, 0, MidpointRounding.AwayFromZero);
         qc.AgreedPricePerKg = request.AgreedPricePerKg;
