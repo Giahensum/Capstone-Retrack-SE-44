@@ -64,12 +64,18 @@ test("maps motorbike UI preference to Goong bike without a car request", async (
 });
 
 test("unsupported and inherited property names cannot select a vehicle", async () => {
-  for (const vehicle of ["truck", "bike", "toString", "__proto__", "", null])
+  for (const vehicle of ["plane", "bike", "toString", "__proto__", "", null])
     await assert.rejects(
       getRoutes(16.01, 108.24, 16.06836, 108.22443, { vehicle }),
       /Phương tiện chỉ đường không hợp lệ/,
     );
   assert.equal(requests.length, 0);
+});
+
+test("driver requests truck directions without forwarding ReTrack credentials", async () => {
+  await getRoutes(16.01, 108.24, 16.06836, 108.22443, { vehicle: "truck" });
+  assert.equal(requests[0].params.vehicle, "truck");
+  assert.equal(requests[0].headers.get("Authorization"), undefined);
 });
 
 test("missing or placeholder keys fail before any transport request", async () => {
