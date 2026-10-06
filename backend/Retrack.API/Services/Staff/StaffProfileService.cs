@@ -28,6 +28,11 @@ public sealed class StaffProfileService(IStaffProfileRepository repository, IClo
     public async Task<StaffProfileResponse> UpdateAsync(Guid userId, string role, UpdateStaffProfileRequest request, CancellationToken ct)
     {
         var staff = await RequireStaff(userId, role, ct);
+        // Kiểm tra cả khi service được gọi ngoài MVC; không phụ thuộc riêng model binding.
+        var errors = new List<System.ComponentModel.DataAnnotations.ValidationResult>();
+        if (!System.ComponentModel.DataAnnotations.Validator.TryValidateObject(request,
+            new System.ComponentModel.DataAnnotations.ValidationContext(request), errors, true))
+            throw new ArgumentException(string.Join(" ", errors.Select(e => e.ErrorMessage)));
         staff.User.Phone = request.Phone;
         staff.User.UpdatedAt = DateTime.UtcNow;
         await repository.SaveAsync(ct);
@@ -41,7 +46,7 @@ public sealed class StaffProfileService(IStaffProfileRepository repository, IClo
             throw new ArgumentException("Ảnh phải có dung lượng từ 1 byte đến 5 MB.");
         await using var stream = file.OpenReadStream();
         var header = new byte[8];
-        var read = await stream.ReadAsync(header, ct);
+        var read = await stream.ReadAtLeastAsync(header, 8, throwOnEndOfStream: false, cancellationToken: ct);
         var png = read == 8 && header.SequenceEqual(new byte[] {137,80,78,71,13,10,26,10});
         var jpeg = read >= 3 && header[0] == 255 && header[1] == 216 && header[2] == 255;
         if (!png && !jpeg)
