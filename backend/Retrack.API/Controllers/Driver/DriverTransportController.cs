@@ -15,10 +15,11 @@ public class DriverTransportController(AppDbContext db) : ControllerBase
     public async Task<IActionResult> List(CancellationToken ct)
     {
         var userId = GetUserId();
+        await new Retrack.API.Services.Driver.DriverJobService(db).RequireAsync(userId, ct);
         var items = await db.TransportJobs.AsNoTracking()
             .Where(x => x.DriverId == userId || (x.DriverId == null && db.DepotStaffs.Any(s => s.UserId == userId && s.IsActive && s.DepotId == x.Batch.DepotId && s.StaffType == "DRIVER")))
             .Include(x => x.Batch).ThenInclude(x => x.Depot)
-            .OrderByDescending(x => x.CreatedAt)
+            .OrderByDescending(x => x.CreatedAt).ThenBy(x => x.Id).Take(100)
             .Select(x => new { x.Id, batchId = x.BatchId, x.Status, x.DriverId, materialType = x.Batch.MaterialType, weightKg = x.Batch.DeclaredWeightKg, depotName = x.Batch.Depot.Name, depotAddress = x.Batch.Depot.Address, x.Batch.TargetFactoryId, x.CheckinDepotImageUrl, x.CheckoutFactoryImageUrl, x.CreatedAt, x.UpdatedAt })
             .ToListAsync(ct);
         return Ok(new { success = true, data = items });
@@ -27,21 +28,9 @@ public class DriverTransportController(AppDbContext db) : ControllerBase
     [HttpPost("{jobId:guid}/accept")]
     public async Task<IActionResult> Accept(Guid jobId, CancellationToken ct)
     {
-        var userId = GetUserId();
-        var job = await db.TransportJobs.Include(x => x.Batch).SingleOrDefaultAsync(x => x.Id == jobId, ct);
-        if (job is null) return NotFound(new { success = false, message = "Không tìm thấy chuyến vận chuyển." });
-        var assignedToDepot = await db.DepotStaffs.AnyAsync(s => s.UserId == userId && s.DepotId == job.Batch.DepotId && s.IsActive && s.StaffType == "DRIVER", ct);
-        if (!assignedToDepot) return Forbid();
-        if (job.Status != "PENDING") return Conflict(new { success = false, message = "Chuyến xe không còn ở trạng thái chờ nhận." });
-        if (job.DriverId is not null && job.DriverId != userId) return Conflict(new { success = false, message = "Chuyến xe đã được tài xế khác nhận." });
-        job.DriverId = userId;
-        job.Status = "ACCEPTED";
-        job.UpdatedAt = DateTime.UtcNow;
-        job.Batch.UpdatedAt = DateTime.UtcNow;
-        await db.SaveChangesAsync(ct);
-        return Ok(new { success = true, data = new { job.Id, job.BatchId, job.DriverId, job.Status } });
+        var result = await new Retrack.API.Services.Driver.DriverJobService(db).AcceptAsync(GetUserId(), jobId, ct);
+        return Ok(Retrack.API.DTOs.ApiResponse<Retrack.API.Services.Driver.DriverJobDto>.Ok(result));
     }
-
     [HttpPost("{jobId:guid}/pickup")]
     public async Task<IActionResult> Pickup(Guid jobId, [FromBody] TransportEvidenceRequest request, CancellationToken ct)
     {

@@ -20,7 +20,8 @@ export default function DashboardScreen({ navigation }) {
     <Button title="Xem và cập nhật hồ sơ" onPress={() => navigation.navigate("Profile")} />
     <View style={s.card}>
       <Text style={s.label}>Chuyến vận chuyển</Text>
-      <Text style={s.muted}>Chức năng nhận chuyến, bản đồ, giao hàng và thống kê đang được phát triển. Bạn có thể cập nhật hồ sơ và ảnh đại diện ngay bây giờ.</Text>
+      <Text style={s.muted}>Xem chuyến chờ, nhận chuyến và tra cứu tuyến đường từ kho đến nhà máy.</Text>
+      <Button title="Xem chuyến vận chuyển" onPress={() => navigation.navigate("Jobs")} />
     </View>
   </Screen>;
 }
