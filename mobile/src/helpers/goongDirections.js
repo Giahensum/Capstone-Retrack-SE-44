@@ -4,7 +4,7 @@ import { normalizeRoutes } from "./routeSelection.js";
 
 // The official maps.goong.io motorcycle option uses the legacy Direction API's
 // "bike" profile. "motorbike" is our UI value, not a Goong API parameter.
-const GOONG_VEHICLES = { car: "car", motorbike: "bike" };
+const GOONG_VEHICLES = { car: "car", motorbike: "bike", truck: "truck" };
 
 export async function getRoutes(
   originLat,

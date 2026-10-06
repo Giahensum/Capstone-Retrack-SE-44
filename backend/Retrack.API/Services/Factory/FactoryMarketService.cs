@@ -116,7 +116,11 @@ public class FactoryMarketService(AppDbContext db) : FactoryServiceBase(db), IFa
         batch.TargetFactoryId = factory.Id;
         batch.Status = "ACCEPTED";
         if (batch.TransportJob is null)
-            Db.TransportJobs.Add(new TransportJob { BatchId = batch.Id, Status = "PENDING" });
+        {
+            var job = new TransportJob { BatchId = batch.Id, Status = "PENDING" };
+            Db.TransportJobs.Add(job);
+            await Retrack.API.Services.Driver.DriverJobNotices.QueueAsync(Db, batch.DepotId, job.Id, ct);
+        }
         await Db.SaveChangesAsync(ct);
         if (transaction != null) await transaction.CommitAsync(ct);
         return ServiceResult<BatchAcceptedResponse>.Success(data: new BatchAcceptedResponse

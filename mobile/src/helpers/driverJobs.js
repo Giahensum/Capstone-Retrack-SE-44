@@ -1,0 +1,1 @@
+export const jobStatus = status => ({ PENDING: "Chờ tài xế", ACCEPTED: "Đã nhận chuyến", PICKED_UP: "Đã lấy hàng", IN_TRANSIT: "Đang vận chuyển", ON_THE_WAY: "Đang vận chuyển", DELIVERED: "Đã báo giao hàng", CANCELLED: "Đã hủy" }[status] || status);
