@@ -105,7 +105,7 @@ public sealed class BatchService(IDepotBatchRepository batches, IDepotUnitOfWork
             Status = status, ImageUrls = imageUrls.ToArray()
         };
         batches.AddBatch(batch);
-        if (status == "TRANSPORT_READY") batches.AddTransport(new TransportJob { BatchId = batch.Id });
+        if (status == "TRANSPORT_READY") await batches.AddTransportAsync(new TransportJob { BatchId = batch.Id }, depotId);
         await work.SaveAsync();
         await tx.CommitAsync();
         batch.TargetFactory = factory;
