@@ -15,7 +15,8 @@ public sealed class StaffProfileRepository(AppDbContext db) : IStaffProfileRepos
     public Task<DepotStaff?> FindActiveAsync(Guid userId, string role, CancellationToken ct) =>
         db.DepotStaffs.Include(s => s.User).Include(s => s.Depot)
             .Where(s => s.UserId == userId && s.StaffType == role && s.IsActive
-                && s.User.IsActive && s.User.Role == role)
+                && s.User.IsActive && s.User.Role == role
+                && s.Depot.Owner.IsActive && s.Depot.Owner.Role == "DEPOT_OWNER")
             .OrderBy(s => s.Id).FirstOrDefaultAsync(ct);
 
     public Task SaveAsync(CancellationToken ct) => db.SaveChangesAsync(ct);

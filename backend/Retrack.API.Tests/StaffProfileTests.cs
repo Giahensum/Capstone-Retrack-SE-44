@@ -102,4 +102,44 @@ public class StaffProfileTests
         await Assert.ThrowsAsync<ArgumentException>(() => auth.RegisterAsync(new RegisterDto { Role = role }));
         Assert.Empty(db.Users);
     }
+
+    [Theory]
+    [InlineData("DRIVER")]
+    [InlineData("DEPOT_EMPLOYEE")]
+    public async Task LockedDepotOwnerCannotSupplyActiveStaffProfile(string role)
+    {
+        await using var db = NewDb();
+        var staff = await Seed(db, role);
+        staff.Depot.Owner.IsActive = false;
+        await db.SaveChangesAsync();
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => Service(db).GetAsync(staff.UserId, role, default));
+    }
+
+    [Fact]
+    public async Task DriverProfileUsesDriverCodeAndRejectsEmployeeRoleAndInvalidPhone()
+    {
+        await using var db = NewDb();
+        var staff = await Seed(db, "DRIVER");
+        var service = Service(db);
+        var profile = await service.GetAsync(staff.UserId, "DRIVER", default);
+        Assert.StartsWith("DRV-", profile.EmployeeCode);
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => service.GetAsync(staff.UserId, "DEPOT_EMPLOYEE", default));
+        await Assert.ThrowsAsync<ArgumentException>(() => service.UpdateAsync(staff.UserId, "DRIVER", new() { Phone = "123" }, default));
+        Assert.Equal("0933333333", staff.User.Phone);
+    }
+
+    [Fact]
+    public async Task DriverAvatarPersistsWithoutChangingOtherStaff()
+    {
+        await using var db = NewDb();
+        var driver = await Seed(db, "DRIVER");
+        var employee = await Seed(db);
+        using var stream = new MemoryStream(new byte[] { 255, 216, 255, 0, 0, 0, 0, 0 });
+        var file = new FormFile(stream, 0, stream.Length, "file", "avatar.jpg");
+        var profile = await Service(db).UploadAvatarAsync(driver.UserId, "DRIVER", file, default);
+        Assert.Equal("https://example.com/avatar.jpg", profile.AvatarUrl);
+        db.ChangeTracker.Clear();
+        Assert.Equal(profile.AvatarUrl, (await db.Users.FindAsync(driver.UserId))!.AvatarUrl);
+        Assert.Null((await db.Users.FindAsync(employee.UserId))!.AvatarUrl);
+    }
 }
