@@ -4,7 +4,7 @@ import BatchDetailModal from './components/BatchDetailModal';
 import { materialLabel } from './materialLabels';
 import { useDepotQuery, useDepotMutation, number, batchLabels } from './depotApi';
 import { QueryState, Pager, Dialog, MutationError, inputClass, buttonClass } from './components/DepotUI';
-import { MaterialIcon } from '@/components/ui/MaterialIcon';
+import { MaterialIcon } from './components/DepotIcon';
 
 export default function Batches() {
   const [create, setCreate] = useState(false);
@@ -19,11 +19,11 @@ export default function Batches() {
   const remove = useDepotMutation('patch', (id) => `batches/${id}/cancel`, () => setCancel(null));
 
   return (
-    <div className="p-4 sm:p-8 max-w-7xl mx-auto space-y-6">
+    <div className="w-full max-w-7xl mx-auto p-4 md:p-6 space-y-6">
       {/* Page Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h2 className="text-3xl font-bold font-d-display-sm text-d-on-surface mb-2">Danh sách Lô Xuất Hàng</h2>
+          <h2 className="text-3xl font-bold font-d-headline-lg text-d-on-surface mb-2">Danh sách lô xuất hàng</h2>
           <p className="text-d-on-surface-variant font-d-body-lg">Quản lý và theo dõi trạng thái các lô vật liệu tái chế đang xuất kho.</p>
         </div>
         <button
@@ -108,6 +108,7 @@ export default function Batches() {
           <div className="relative flex-1 w-full max-w-sm">
             <MaterialIcon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 text-d-on-surface-variant" />
             <input
+              aria-label="Tìm mã lô hoặc vật liệu"
               className={`${inputClass} pl-10 w-full bg-white`}
               placeholder="Tìm mã lô hoặc vật liệu..."
               value={search}
@@ -116,7 +117,7 @@ export default function Batches() {
           </div>
           <div className="flex items-center gap-3 w-full sm:w-auto">
             <MaterialIcon name="filter_list" className="text-d-on-surface-variant" />
-            <select className={`${inputClass} bg-white min-w-[200px]`} value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
+            <select aria-label="Lọc trạng thái lô xuất" className={`${inputClass} bg-white min-w-[200px]`} value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
               <option value="">Tất cả trạng thái</option>
               {Object.entries(batchLabels).map(([s, label]) => <option key={s} value={s}>{label}</option>)}
             </select>
@@ -174,11 +175,11 @@ export default function Batches() {
                       </td>
                       <td className="p-4 text-right">
                         <div className="flex justify-end gap-2">
-                          <button className="text-d-primary hover:bg-blue-50 p-2 rounded-full transition-colors" onClick={() => setDetail(b.id)} title="Chi tiết lô hàng">
+                          <button className="text-d-primary hover:bg-blue-50 h-11 w-11 inline-flex items-center justify-center rounded-full transition-colors" onClick={() => setDetail(b.id)} title="Chi tiết lô hàng" aria-label={`Xem chi tiết lô ${b.code ?? b.id.slice(0, 8)}`}>
                             <MaterialIcon name="visibility" className="text-[20px]" />
                           </button>
                           {isCancelable && (
-                            <button className="text-red-500 hover:bg-red-50 p-2 rounded-full transition-colors" onClick={() => { remove.reset(); setCancel(b); }} title={isPending ? 'Rút đề nghị' : 'Hủy lô'}>
+                            <button className="text-red-500 hover:bg-red-50 h-11 w-11 inline-flex items-center justify-center rounded-full transition-colors" onClick={() => { remove.reset(); setCancel(b); }} title={isPending ? 'Rút đề nghị' : 'Hủy lô'} aria-label={`${isPending ? 'Rút đề nghị' : 'Hủy'} lô ${b.code ?? b.id.slice(0, 8)}`}>
                               <MaterialIcon name={isPending ? 'undo' : 'cancel'} className="text-[20px]" />
                             </button>
                           )}

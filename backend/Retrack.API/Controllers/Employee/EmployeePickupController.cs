@@ -17,11 +17,15 @@ public class EmployeePickupController(AppDbContext db, INotificationService noti
     private Guid UserId => Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id)
         ? id : throw new UnauthorizedAccessException("Phiên đăng nhập không hợp lệ.");
 
+    private IQueryable<Guid> ActiveDepotIds() => db.DepotStaffs.Where(s => s.UserId == UserId
+        && s.IsActive && s.StaffType == "DEPOT_EMPLOYEE" && s.User.IsActive
+        && s.User.Role == "DEPOT_EMPLOYEE" && s.Depot.Owner.IsActive).Select(s => s.DepotId);
+
     private async Task<Guid> GetDepotIdAsync(CancellationToken ct)
     {
         var depotId = await db.DepotStaffs.AsNoTracking()
             .Where(s => s.UserId == UserId && s.StaffType == "DEPOT_EMPLOYEE" && s.IsActive
-                && s.User.IsActive && s.User.Role == "DEPOT_EMPLOYEE")
+                && s.User.IsActive && s.User.Role == "DEPOT_EMPLOYEE" && s.Depot.Owner.IsActive)
             .OrderBy(s => s.Id).Select(s => (Guid?)s.DepotId).FirstOrDefaultAsync(ct);
         return depotId ?? throw new UnauthorizedAccessException("Tài khoản không liên kết với kho đang hoạt động.");
     }
@@ -29,24 +33,9 @@ public class EmployeePickupController(AppDbContext db, INotificationService noti
     [HttpGet("/api/employee/dashboard")]
     public async Task<IActionResult> Dashboard(CancellationToken ct)
     {
-        var depotId = await GetDepotIdAsync(ct);
-        var userId = UserId;
-        var today = DateTime.UtcNow.Date;
-        var tomorrow = today.AddDays(1);
-        var depotPickups = db.PickupRequests.AsNoTracking().Where(p => p.TargetDepotId == depotId);
-        var own = depotPickups.Where(p => p.AcceptedCollectorId == userId);
-        var available = await depotPickups.CountAsync(p => p.Status == "PENDING" && p.AcceptedCollectorId == null, ct);
-        var active = await own.Where(p => p.Status == "SCHEDULED")
-            .OrderBy(p => p.PreferredDatetime == null).ThenBy(p => p.PreferredDatetime)
-            .ThenBy(p => p.CreatedAt).ThenBy(p => p.Id)
-            .Select(p => new ActivePickupSummaryDto(p.Id, p.Seller.FullName, p.Seller.Phone,
-                p.Address, p.Status, p.PreferredDatetime)).FirstOrDefaultAsync(ct);
-        // Completion totals belong to the employee, including past depot assignments.
-        var completed = db.PickupRequests.AsNoTracking()
-            .Where(p => p.AcceptedCollectorId == userId && p.Status == "DONE");
-        var todayCount = await completed.CountAsync(p => p.UpdatedAt >= today && p.UpdatedAt < tomorrow, ct);
-        var total = await completed.CountAsync(ct);
-        return Ok(ApiResponse<EmployeeDashboardDto>.Ok(new(available, active, todayCount, total)));
+        await GetDepotIdAsync(ct);
+        var result = await new Retrack.API.Services.Employee.EmployeeReportingService(db).DashboardAsync(UserId, ct);
+        return Ok(ApiResponse<EmployeeDashboardDto>.Ok(result));
     }
 
     [HttpGet("/api/employee/pickup-pool")]
@@ -63,13 +52,29 @@ public class EmployeePickupController(AppDbContext db, INotificationService noti
         return Ok(ApiResponse<List<PickupPoolItemDto>>.Ok(list));
     }
 
+    [HttpGet("/api/employee/pickups/active")]
+    public async Task<IActionResult> Active([FromQuery] int page = 1, CancellationToken ct = default)
+    {
+        if (page < 1 || page > 100000) return BadRequest(ApiResponse<object>.Fail("Trang không hợp lệ."));
+        await GetDepotIdAsync(ct);
+        var userId = UserId;
+        var depots = ActiveDepotIds();
+        var query = db.PickupRequests.AsNoTracking().Where(p => p.TargetDepotId != null && depots.Contains(p.TargetDepotId.Value)
+            && p.AcceptedCollectorId == userId && (p.Status == "SCHEDULED" || p.Status == "IN_PROGRESS" || p.Status == "SELLER_CONFIRMED"));
+        var items = await query.OrderBy(p => p.CreatedAt).ThenBy(p => p.Id).Skip((page - 1) * 20).Take(20)
+            .Select(p => new ActivePickupSummaryDto(p.Id, p.Seller.FullName, p.Seller.Phone,
+                p.Address, p.Status, p.PreferredDatetime)).ToListAsync(ct);
+        return Ok(ApiResponse<object>.Ok(new { items, page, pageSize = 20, total = await query.CountAsync(ct) }));
+    }
+
     [HttpGet("/api/employee/pickup/{pickupId:guid}")]
     public async Task<IActionResult> Detail(Guid pickupId, CancellationToken ct)
     {
-        var depotId = await GetDepotIdAsync(ct);
+        await GetDepotIdAsync(ct);
         var userId = UserId;
+        var depots = ActiveDepotIds();
         var item = await db.PickupRequests.AsNoTracking()
-            .Where(p => p.Id == pickupId && p.TargetDepotId == depotId
+            .Where(p => p.Id == pickupId && p.TargetDepotId != null && depots.Contains(p.TargetDepotId.Value)
                 && ((p.Status == "PENDING" && p.AcceptedCollectorId == null) || p.AcceptedCollectorId == userId))
             .Select(p => new EmployeePickupDetailDto(p.Id, p.Seller.FullName, p.Seller.Phone, p.Address,
                 p.Latitude, p.Longitude, p.PreferredDatetime, p.Description, p.RequestImageUrl, p.CreatedAt,

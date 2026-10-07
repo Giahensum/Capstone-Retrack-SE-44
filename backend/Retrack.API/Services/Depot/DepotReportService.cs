@@ -79,4 +79,12 @@ public sealed class DepotReportService(IDepotUnitOfWork work, IDepotReportReposi
         invoice.Status = "SUBMITTED"; invoice.PaymentProofUrl = dto.PaymentProofUrl; invoice.SubmittedAt = DateTime.UtcNow;
         await work.SaveAsync(); await tx.CommitAsync();
     }
+
+    public Task SimulatePaymentAsync(Guid ownerId, Guid depotId, Guid id)
+    {
+        // Tên miền .invalid đánh dấu chứng từ giả; controller chỉ mở endpoint trong Development.
+        var reference = $"SIM-PAYOS-{id:N}".ToUpperInvariant();
+        var receiptUrl = $"https://payos-mock.invalid/receipts/{id:D}?reference={reference}";
+        return ConfirmInvoiceAsync(ownerId, depotId, id, new PaymentProofDto { PaymentProofUrl = receiptUrl });
+    }
 }

@@ -103,7 +103,11 @@ Capstone/
 ### 2. Cấu hình Database
 Tạo database local riêng, ví dụ `Retrack_TV2_dev`. Với máy mới, sao chép `backend/Retrack.API/appsettings.example.json` thành `appsettings.json`, rồi sao chép `.env.example` thành `.env` cùng thư mục và điền thông tin riêng. Nếu đã có cấu hình local, giữ nguyên file hiện có. Cả `appsettings.json` và `.env` đều được Git bỏ qua; chỉ đưa các bản mẫu không có thông tin mật vào commit.
 
-Ở Development, đặt `Database__Initialize=true` để áp dụng EF migrations và seed dữ liệu demo khi khởi động. Không chạy đồng thời script tạo schema thủ công với EF. Không bật tùy chọn này trên database dùng chung/production. Biến môi trường có sẵn được ưu tiên hơn `.env`.
+Nguồn schema đang dùng là [`db/depot ower/retrack-system.sql`](db/depot%20ower/retrack-system.sql). Với **database local mới, rỗng**, tạo database rồi chạy file này một lần bằng `psql` hoặc pgAdmin; kiểm tra lại câu lệnh SQL trước khi áp dụng cho database đã có dữ liệu. Ứng dụng hiện **không tự chạy EF migration**. `Database__Initialize=true` chỉ seed dữ liệu demo khi chạy ở Development và schema đã tồn tại; mặc định để `false`. Không bật trên database dùng chung/production. Biến môi trường tiến trình được ưu tiên hơn `.env`.
+
+**Thành viên đã có database cũ:** `git pull` chỉ cập nhật code, không cập nhật bảng PostgreSQL trên máy đó. Trước khi chạy backend, kiểm tra `current_database()` trong pgAdmin/psql có đúng database backend đang kết nối. Với lỗi Employee/Driver `42703: column d0.contact_phone does not exist`, chạy [bản vá ba cột hồ sơ kho](db/patch_depots_profile_columns.sql) trên **đúng database đang dùng**; file chỉ `ADD COLUMN IF NOT EXISTS`, không xóa dữ liệu. Khi dùng màn check-in/cân mới của TV3 trên database đã có, chạy thêm [bản vá pickup_checkins](db/emp_checkin_classify.sql). Cả hai phần đã có trong SQL tổng hợp cho **database rỗng**; các bản vá chỉ phục vụ nâng cấp database cũ. Nếu lỗi báo cột/bảng khác, ghi lại nguyên văn lỗi và đối chiếu schema trước khi sửa; không chạy migration EF và SQL tổng hợp chồng lên nhau để thử vận may.
+
+Các file EF migration cũ vẫn còn trong source để đối chiếu lịch sử, chưa được hợp nhất/xóa. Nhóm sẽ chốt lại DB-first về sau; không tự áp dụng song song migration và script schema lên cùng database.
 
 ### 3. Cấu hình Frontend
 Mở thư mục `frontend/`, sao chép `.env.example` thành `.env` nếu cần cấu hình riêng.
@@ -116,7 +120,7 @@ dotnet run --project backend/Retrack.API --launch-profile http
 # API Endpoint: http://localhost:5000
 # Swagger UI: http://localhost:5000/swagger
 ```
-> Migrate/seed chỉ chạy ở Development khi `Database__Initialize=true`.
+> API dùng schema đã chuẩn bị trước; `Database__Initialize=true` chỉ seed dữ liệu Development.
 
 ### 5. Chạy Frontend (React + Vite)
 ```bash
@@ -127,17 +131,11 @@ npm run dev
 ```
 
 ### 6. Tài Khoản Mẫu (Seed Data)
-Hệ thống đã tạo sẵn 6 tài khoản để test cho 6 role. **Mật khẩu chung cho tất cả là**: `<TênRole>@123`
-- **Admin**: `admin@retrack.vn` / `Admin@123`
-- **Seller**: `seller@retrack.vn` / `Seller@123`
-- **Depot Owner**: `depot@retrack.vn` / `Depot@123`
-- **Depot Employee**: `employee@retrack.vn` / `Employee@123`
-- **Driver**: `driver@retrack.vn` / `Driver@123`
-- **Factory**: `factory@retrack.vn` / `Factory@123`
+Khi seed dữ liệu demo ở Development, có tài khoản thử nghiệm cho các role: `admin@retrack.vn`, `seller@retrack.vn`, `depot@retrack.vn`, `employee@retrack.vn`, `driver@retrack.vn` và `factory@retrack.vn`. Người phụ trách chia sẻ mật khẩu thử nghiệm qua kênh riêng; không ghi mật khẩu trong README hoặc commit.
 
 ## 📝 Git Workflow
 ```bash
-git checkout -b feature/ngo-sy-gia-depot-dashboard    # Ví dụ nhánh của Ngô Sỹ Giá
+git checkout -b feature/TV2-ngo-sy-gia-depot-dashboard
 # ... code ...
 git add <cac-file-cua-task>
 git commit -m "feat(depot): implement dashboard API"
@@ -147,7 +145,7 @@ git commit -m "feat(depot): implement dashboard API"
 ## Kiểm thử và bàn giao Depot
 
 - `dotnet build backend/Retrack.sln --no-restore`
-- Tạo riêng `Retrack_TV2_test`, đặt biến môi trường `RETRACK_TEST_CONNECTION`, chạy `dotnet test backend/Retrack.sln --no-restore`. Tests dùng PostgreSQL thật, tự migrate và chỉ dọn fixture của chúng; không dùng database ứng dụng.
+- Tạo riêng `Retrack_TV2_test`, đặt cả `RETRACK_TEST_CONNECTION` và `RETRACK_TEST_POSTGRES` tới database đó, chạy `dotnet test backend/Retrack.sln --no-restore`. Tests PostgreSQL dùng database riêng và chỉ dọn fixture của chúng; không trỏ vào database ứng dụng.
 - Trong `frontend`: `npm run lint` và `npm run build`.
-- Quy tắc chung: [AGENTS.md](AGENTS.md). API, state mapping, bằng chứng và phần chưa hoàn thành: [.ai-context/depot-owner/tien-do/depot-integration.md](.ai-context/depot-owner/tien-do/depot-integration.md).
-- Schema PostgreSQL DB-first duy nhất cho toàn hệ thống ở `db/depot ower/retrack-system.sql`; đã gộp schema cơ sở, phần mở rộng Factory và các trường Depot mới. Dùng file này cho database rỗng hoặc để bổ sung cột/index còn thiếu; không chạy thêm file schema nối tiếp. Các file `seed_*.sql` chỉ nạp dữ liệu kiểm thử, không tạo schema. Kiểm thử backend nằm ở `backend/Retrack.Tests` và `backend/Retrack.API.Tests`.
+- Quy tắc chung: [AGENTS.md](AGENTS.md). Cách chạy kiểm thử trình duyệt Depot–Factory và PayOS giả lập: [frontend/e2e/README.md](frontend/e2e/README.md). Hồ sơ tiến độ cá nhân ở `.ai-context/depot-owner` chỉ tồn tại local, không nằm trong Git.
+- Schema PostgreSQL DB-first tổng hợp cho **database mới** ở `db/depot ower/retrack-system.sql`; đã gồm Depot, Factory và Employee check-in. Database cũ có dữ liệu cần bản vá tương ứng đã review như hướng dẫn ở mục Cấu hình Database, vì `CREATE TABLE IF NOT EXISTS` không tự bổ sung mọi cột của bảng cũ. Các file `seed_*.sql` chỉ nạp dữ liệu kiểm thử, không tạo schema. Kiểm thử backend nằm ở `backend/Retrack.Tests` và `backend/Retrack.API.Tests`.

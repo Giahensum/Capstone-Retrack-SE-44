@@ -92,7 +92,7 @@ CREATE TABLE IF NOT EXISTS depot_staffs (
 );
 
 -- ==========================================
--- MODULE 2: GIAI ĐOẠN 1 - THU GOM PHẾ LIỆU & PHÍ 1%
+-- MODULE 2: GIAI ĐOẠN 1 - THU GOM PHẾ LIỆU & PHÍ MẶC ĐỊNH 5%
 -- ==========================================
 
 -- Yêu cầu thu gom của Seller
@@ -108,7 +108,7 @@ CREATE TABLE IF NOT EXISTS pickup_requests (
     longitude                DECIMAL(10, 7),
     preferred_datetime       TIMESTAMPTZ,
     checkin_image_url        TEXT,
-    -- Hạch toán tài chính (có phí 1%)
+    -- Hạch toán tài chính (mức phí mặc định 5%, lưu riêng theo từng giao dịch)
     gross_amount             DECIMAL(18, 2) DEFAULT 0,
     platform_fee_percentage  DECIMAL(5, 2)  DEFAULT 0,
     platform_fee_amount      DECIMAL(18, 2) DEFAULT 0,
@@ -118,6 +118,21 @@ CREATE TABLE IF NOT EXISTS pickup_requests (
     -- PENDING, SCHEDULED, WEIGHED, SELLER_CONFIRMED, AWAITING_PAYMENT, PAYMENT_SENT, DONE
     created_at               TIMESTAMPTZ  DEFAULT NOW(),
     updated_at               TIMESTAMPTZ  DEFAULT NOW()
+);
+
+-- Bằng chứng UC-51 và phiên bản bản nháp UC-52/53.
+CREATE TABLE IF NOT EXISTS pickup_checkins (
+    pickup_request_id UUID PRIMARY KEY REFERENCES pickup_requests(id) ON DELETE CASCADE,
+    employee_id UUID NOT NULL REFERENCES users(id),
+    latitude DOUBLE PRECISION NOT NULL CHECK (latitude BETWEEN -90 AND 90),
+    longitude DOUBLE PRECISION NOT NULL CHECK (longitude BETWEEN -180 AND 180),
+    accuracy_meters DOUBLE PRECISION NOT NULL CHECK (accuracy_meters BETWEEN 0 AND 50),
+    distance_meters DOUBLE PRECISION NOT NULL CHECK (distance_meters BETWEEN 0 AND 200),
+    location_recorded_at TIMESTAMPTZ NOT NULL,
+    photo_taken_at TIMESTAMPTZ NOT NULL,
+    checked_in_at TIMESTAMPTZ NOT NULL,
+    image_url TEXT NOT NULL,
+    revision INTEGER NOT NULL DEFAULT 0 CHECK (revision >= 0)
 );
 
 -- Chi tiết các loại phế liệu (NV cân và nhập)
@@ -239,7 +254,7 @@ CREATE TABLE IF NOT EXISTS batch_quality_checks (
     actual_weight_kg        DECIMAL(18, 2) NOT NULL,
     grade                   VARCHAR(10)  NOT NULL,
     agreed_price_per_kg     DECIMAL(18, 2) NOT NULL,
-    -- Hạch toán tài chính (có phí 1%)
+    -- Hạch toán tài chính (mức phí mặc định 5%, lưu riêng theo từng giao dịch)
     gross_amount            DECIMAL(18, 2) NOT NULL,
     platform_fee_percentage DECIMAL(5, 2)  DEFAULT 0,
     platform_fee_amount     DECIMAL(18, 2) DEFAULT 0,
@@ -320,6 +335,9 @@ CREATE TABLE IF NOT EXISTS notifications (
 );
 
 -- Hóa đơn phí nền tảng hàng tháng, gộp theo từng Depot Owner / Factory có phát sinh giao dịch
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS transport_job_id UUID;
+CREATE INDEX IF NOT EXISTS ix_notifications_user_created ON notifications(user_id, created_at DESC, id);
+
 CREATE TABLE IF NOT EXISTS platform_invoices (
     id               UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
     payer_id         UUID         NOT NULL REFERENCES users(id),
@@ -402,3 +420,19 @@ CREATE INDEX IF NOT EXISTS idx_audit_logs_entity   ON audit_logs(entity_name);
 CREATE INDEX IF NOT EXISTS idx_notifications_user  ON notifications(user_id);
 CREATE INDEX IF NOT EXISTS idx_pi_payer            ON platform_invoices(payer_id);
 CREATE INDEX IF NOT EXISTS idx_pi_status           ON platform_invoices(status);
+
+-- Employee: lịch sử gửi kết quả cân và bàn giao chủ kho.
+CREATE TABLE IF NOT EXISTS employee_collection_events (
+    id UUID PRIMARY KEY,
+    pickup_request_id UUID NOT NULL REFERENCES pickup_requests(id) ON DELETE CASCADE,
+    employee_id UUID NOT NULL REFERENCES users(id),
+    kind VARCHAR(30) NOT NULL CHECK (kind IN ('SUBMITTED', 'HANDED_OVER', 'REOPENED')),
+    revision INTEGER NOT NULL CHECK (revision >= 0),
+    from_status VARCHAR(30) NOT NULL,
+    to_status VARCHAR(30) NOT NULL,
+    snapshot_json TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL,
+    UNIQUE (pickup_request_id, kind, revision)
+);
+CREATE INDEX IF NOT EXISTS ix_employee_collection_events_employee_time
+    ON employee_collection_events(employee_id, created_at DESC);

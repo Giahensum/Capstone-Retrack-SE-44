@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useDepotQuery, number, money } from './depotApi';
 import { QueryState, Pager } from './components/DepotUI';
-import { MaterialIcon } from '@/components/ui/MaterialIcon';
+import { MaterialIcon } from './components/DepotIcon';
 
 export default function StaffPerformance() {
   const [page, setPage] = useState(1);
@@ -11,7 +11,7 @@ export default function StaffPerformance() {
   const totalCompleted = query.data?.items.reduce((sum, s) => sum + s.completedCount, 0) ?? 0;
   const totalWeight = query.data?.items.reduce((sum, s) => sum + s.weightKg, 0) ?? 0;
   const purchaseAmount = query.data?.items.reduce((sum, s) => sum + s.purchaseAmount, 0) ?? 0;
-  const topStaff = [...(query.data?.items ?? [])].sort((a, b) => b.weightKg - a.weightKg).slice(0, 5);
+  const topStaff = [...(query.data?.items ?? [])].filter((s) => s.weightKg > 0).sort((a, b) => b.weightKg - a.weightKg).slice(0, 5);
 
   const kpiCards = [
     { label: 'Đơn hoàn thành (trang này)', value: number(totalCompleted), icon: 'check_circle', iconColor: 'text-d-secondary', badge: null },
@@ -21,15 +21,16 @@ export default function StaffPerformance() {
   ];
 
   return (
-    <div className="flex-1 p-4 md:p-6 w-full flex flex-col gap-6 h-[calc(100vh-4rem)] overflow-y-auto bg-d-surface">
+    <div className="w-full max-w-7xl mx-auto min-h-full p-4 md:p-6 flex flex-col gap-6 bg-d-surface">
       {/* Page Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 shrink-0">
         <div>
-          <h1 className="font-d-headline-lg text-d-headline-lg text-d-on-surface">Hiệu Suất Nhân Sự</h1>
-          <p className="font-d-body-md text-d-body-md text-d-on-surface-variant mt-1">Đánh giá năng suất và chất lượng công việc của nhân viên thu gom.</p>
+          <h1 className="font-d-headline-lg text-d-headline-lg text-d-on-surface">Hiệu suất nhân sự</h1>
+          <p className="font-d-body-md text-d-body-md text-d-on-surface-variant mt-1">Theo dõi số đơn hoặc chuyến hoàn thành, khối lượng và giá trị thu mua theo tháng.</p>
         </div>
-        <label className="bg-d-surface-container-lowest border border-d-border-subtle px-4 py-2 rounded-lg flex items-center gap-2 font-d-label-md text-d-on-surface hover:border-d-primary transition-colors focus-within:border-d-primary cursor-pointer shrink-0">
+        <label className="bg-d-surface-container-lowest border border-d-border-subtle px-4 py-2 rounded-xl flex items-center gap-2 font-d-label-md text-d-on-surface hover:border-d-primary transition-colors focus-within:border-d-primary cursor-pointer shrink-0">
           <MaterialIcon name="calendar_today" className="text-d-on-surface-variant text-[18px]" />
+          <span>Tháng báo cáo</span>
           <input
             type="month"
             value={period}
@@ -41,9 +42,9 @@ export default function StaffPerformance() {
 
       <QueryState query={query}>
         {/* KPI Row — 4 cards ngang hàng, cân đối như các trang khác */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 shrink-0">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 shrink-0">
           {kpiCards.map((k, i) => (
-            <div key={i} className="d-glass-panel rounded-xl p-4 md:p-5 relative overflow-hidden group">
+            <div key={i} className="d-glass-panel rounded-[20px] p-4 md:p-5 relative overflow-hidden group">
               <div className="absolute top-0 right-0 w-20 h-20 bg-d-primary/5 rounded-bl-full -mr-3 -mt-3 transition-transform group-hover:scale-110" />
               <div className="flex justify-between items-start mb-3">
                 <div className="w-9 h-9 rounded-lg bg-d-surface-container flex items-center justify-center">
@@ -85,10 +86,10 @@ export default function StaffPerformance() {
                 </div>
               );
             })}
-            {(!query.data?.items || query.data.items.length === 0) && (
+            {topStaff.length === 0 && (
               <div className="py-8 flex items-center justify-center text-d-on-surface-variant italic text-sm">
                 <MaterialIcon name="bar_chart" className="mr-2 text-d-on-surface-variant/50" />
-                Chưa có dữ liệu tháng này.
+                Chưa có nhân viên ghi nhận khối lượng trong tháng này.
               </div>
             )}
           </div>

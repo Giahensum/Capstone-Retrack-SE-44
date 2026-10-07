@@ -36,7 +36,7 @@
 - Thanh toán phải nguyên tử, kiểm tra state và xử lý retry. Một nguồn giao dịch chỉ có một platform transaction. Khóa dòng PostgreSQL khi cần chống race.
 - Tồn kho chỉ nhận đơn `DONE`; phân biệt hàng giữ cho lô, hàng xuất và tồn khả dụng. Mọi service phân bổ/hủy lô cùng kho phải dùng cùng khóa dòng depot. Factory/Driver cần tuân thủ giao thức này khi thay đổi phân bổ.
 - Giữ nguyên mức phí đã chốt trên đơn cũ. Không tự tạo công thức lương/lợi nhuận hoặc coi QC bị từ chối là hàng đã trả về kho.
-- Dùng migration EF bổ sung, review SQL trước áp dụng. Không sửa migration đã áp dụng/chia sẻ; không tạo schema song song hoặc dùng EnsureCreated trên DB có migration. Không reset/drop DB để sửa lỗi kiểm thử.
+- Hiện tại ứng dụng không tự chạy EF migration; schema triển khai cho máy mới nằm trong `db/depot ower/retrack-system.sql`. Giữ cơ chế này tới khi nhóm chốt việc chuyển DB-first. Review SQL trước khi áp dụng; không sửa migration đã áp dụng/chia sẻ, không tạo schema song song hoặc dùng EnsureCreated trên DB có migration. Không reset/drop DB để sửa lỗi kiểm thử.
 - Model map thực tế có nhiều trạng thái string và entity ở `Models/OtherModels.cs`; enum/model scaffold chưa chắc là contract hiện hành. Ghi rõ state mapping khi liên kết role.
 
 ## Frontend
@@ -51,9 +51,9 @@
 
 - Secret chỉ dùng biến môi trường hoặc `backend/Retrack.API/.env` local đã ignore; mẫu dùng `.env.example`. Không ghi mật khẩu DB, token hay key vào code, frontend, log hoặc tài liệu.
 - Giữ nguyên tài khoản/mật khẩu PostgreSQL local của Ngô Sỹ Giá khi đồng bộ nhánh. `appsettings.json` là cấu hình riêng, không theo dõi bằng Git; dùng `appsettings.example.json` làm bản mẫu chia sẻ. Không thay file local bằng cấu hình từ develop.
-- `.env` chỉ nạp ở Development; biến môi trường có sẵn được ưu tiên. Tự migrate/seed chỉ khi `Database__Initialize=true`. Không bật seed tài khoản demo ở production.
+- `.env` chỉ nạp ở Development; biến môi trường có sẵn được ưu tiên. `Database__Initialize=true` chỉ seed dữ liệu demo khi schema đã tồn tại; ứng dụng không tự migrate. Không bật seed tài khoản demo ở production.
 - Backend: `dotnet restore backend/Retrack.sln`, `dotnet build backend/Retrack.sln --no-restore`.
-- PostgreSQL tests: đặt `RETRACK_TEST_CONNECTION` tới đúng `Retrack_TV2_test`, rồi `dotnet test backend/Retrack.sln --no-restore`. Tests chỉ dọn dữ liệu fixture của mình và từ chối database khác.
+- PostgreSQL tests: đặt cả `RETRACK_TEST_CONNECTION` và `RETRACK_TEST_POSTGRES` tới đúng `Retrack_TV2_test`, rồi `dotnet test backend/Retrack.sln --no-restore`. Tests chỉ dọn dữ liệu fixture của mình; xác minh tên database trước khi chạy.
 - Frontend: trong `frontend`, chạy `npm ci`, `npm run lint`, `npm run build`. Lint dùng Oxlint đã khai báo; các file scaffold rỗng hiện có cảnh báo.
 - Luồng tài chính/tồn kho cần thử validation, sai role/owner, retry, race, rollback, persistence. Kiểm thử trình duyệt cần thao tác thật và tải lại; build hoặc HTTP 200 chưa đủ để kết luận E2E.
 - Hồ sơ kiểm chứng và các phụ thuộc hiện tại: `.ai-context/depot-owner/tien-do/depot-integration.md`.

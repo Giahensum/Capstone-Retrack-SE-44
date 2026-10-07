@@ -105,6 +105,8 @@ builder.Services.AddScoped<IStaffProfileRepository, StaffProfileRepository>();
 builder.Services.AddScoped<Retrack.API.Services.Staff.IStaffProfileService, Retrack.API.Services.Staff.StaffProfileService>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.ICloudinaryService, Retrack.API.Services.Shared.CloudinaryService>();
 builder.Services.AddScoped<IPickupService, PickupService>();
+builder.Services.AddScoped<Retrack.API.Services.Employee.IEmployeeCollectionService, Retrack.API.Services.Employee.EmployeeCollectionService>();
+builder.Services.AddScoped<Retrack.API.Services.Employee.EmployeeReportingService>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IDepotService, Retrack.API.Services.Depot.DepotService>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IInventoryService, Retrack.API.Services.Depot.InventoryService>();
 builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IDepotInventoryRepository, DepotInventoryRepository>();
@@ -115,6 +117,7 @@ builder.Services.AddScoped<Retrack.API.Services.Interfaces.IStaffService, Retrac
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IDepotReportService, Retrack.API.Services.Depot.DepotReportService>();
 builder.Services.AddScoped<IAdminService, AdminService>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.INotificationService, Retrack.API.Services.Shared.NotificationService>();
+builder.Services.AddScoped<Retrack.API.Services.Driver.DriverJobService>();
 
 
 // Services - Factory

@@ -15,7 +15,7 @@ public interface IDepotBatchRepository
     void AddPartner(FactoryDepotPartnership partner);
     Task<long> NextNumberAsync();
     void AddBatch(InventoryBatch batch);
-    void AddTransport(TransportJob job);
+    Task AddTransportAsync(TransportJob job, Guid depotId);
     Task<InventoryBatch?> LockBatchAsync(Guid id);
     Task<bool> HasTransportAsync(Guid batchId);
 }
