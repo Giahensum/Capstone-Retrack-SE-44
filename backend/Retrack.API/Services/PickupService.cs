@@ -112,26 +112,29 @@ namespace Retrack.API.Services
 
         public async Task<PickupRequestDto> WeighAndUpdateAsync(Guid requestId, Guid collectorId, List<WeighItemDto> items, string? checkinImageUrl)
         {
-            if (items == null || items.Count == 0 || items.Any(i => string.IsNullOrWhiteSpace(i.MaterialType) ||
-                i.MaterialType.Length > 100 || i.WeightKg <= 0 || i.PricePerKg < 0))
-                throw new ArgumentException("Cần ít nhất một vật liệu, khối lượng dương và đơn giá không âm.");
+            if (items == null || items.Count == 0 || items.Any(i => i == null))
+                throw new ArgumentException("Cần ít nhất một loại phế liệu hợp lệ trước khi gửi kết quả.");
+            var validated = Employee.CollectionValidation.Items(items.Select(i =>
+                new DTOs.Employee.ClassificationItemInput(i.MaterialType, i.WeightKg, i.PricePerKg)).ToList());
             await using var transaction = await _db.Database.BeginTransactionAsync();
             await _db.PickupRequests.FromSqlInterpolated($"SELECT * FROM pickup_requests WHERE id = {requestId} FOR UPDATE").LoadAsync();
             var req = await _repo.GetByIdAsync(requestId)
                 ?? throw new KeyNotFoundException("Không tìm thấy yêu cầu.");
             if (req.AcceptedCollectorId != collectorId || !await _db.DepotStaffs.AnyAsync(s =>
                 s.UserId == collectorId && s.DepotId == req.TargetDepotId && s.IsActive && s.User.IsActive &&
-                s.StaffType == "DEPOT_EMPLOYEE" && s.User.Role == "DEPOT_EMPLOYEE")) throw new DepotForbiddenException();
+                s.StaffType == "DEPOT_EMPLOYEE" && s.User.Role == "DEPOT_EMPLOYEE" && s.Depot.Owner.IsActive)) throw new DepotForbiddenException();
             if (req.Status != "IN_PROGRESS") throw new DepotConflictException("Đơn phải được check-in trước khi cân.");
+            if (string.IsNullOrWhiteSpace(req.CheckinImageUrl) || !await _db.PickupCheckIns.AnyAsync(c => c.PickupRequestId == requestId))
+                throw new DepotConflictException("Đơn chưa có bằng chứng check-in camera và GPS hợp lệ.");
 
             // Remove old items
             _db.PickupRequestItems.RemoveRange(req.Items);
 
             // Add new items
             decimal gross = 0;
-            foreach (var item in items)
+            foreach (var item in validated)
             {
-                var subTotal = item.WeightKg * item.PricePerKg;
+                var subTotal = Employee.CollectionValidation.SubTotal(item.WeightKg, item.PricePerKg);
                 gross += subTotal;
                 _db.PickupRequestItems.Add(new PickupRequestItem
                 {
@@ -146,8 +149,9 @@ namespace Retrack.API.Services
             req.GrossAmount = gross;
             req.PlatformFeeAmount = Math.Round(gross * req.PlatformFeePercentage / 100, 2);
             req.NetAmount = gross - req.PlatformFeeAmount;
-            req.CheckinImageUrl = checkinImageUrl;
+            // Bằng chứng check-in chỉ được ghi bởi luồng camera + GPS, không lấy URL từ request cân.
             req.Status = "WEIGHED";
+            req.UpdatedAt = DateTime.UtcNow;
 
             await _db.SaveChangesAsync();
             await transaction.CommitAsync();

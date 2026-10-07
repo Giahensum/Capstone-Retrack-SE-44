@@ -11,6 +11,6 @@ public interface IDepotOwnerRepository
     Task<DepotProfileDto> ProfileAsync(Guid depotId);
     Task<Models.Depot> FindAsync(Guid depotId);
     Task SaveAsync();
-    Task<PagedResult<FactoryPartnerDto>> FactoriesAsync(Guid depotId, DepotQuery query);
-    Task<PagedResult<DemandDto>> DemandsAsync(DepotQuery query, DateTime now);
+    Task<PagedResult<FactoryPartnerDto>> FactoriesAsync(Guid depotId, FactorySearchQuery query);
+    Task<PagedResult<DemandDto>> DemandsAsync(Guid depotId, DepotQuery query, DateTime now);
 }

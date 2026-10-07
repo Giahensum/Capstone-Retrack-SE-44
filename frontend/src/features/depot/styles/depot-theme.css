@@ -32,11 +32,11 @@
   --color-d-primary-fixed: #b2f746;
   --color-d-on-primary-fixed: #121f00;
 
-  --font-d-label-sm: "JetBrains Mono", monospace;
-  --font-d-label-md: "JetBrains Mono", monospace;
-  --font-d-headline-md: "Geist", sans-serif;
-  --font-d-headline-lg: "Geist", sans-serif;
-  --font-d-headline-xl: "Geist", sans-serif;
+  --font-d-label-sm: "Inter", sans-serif;
+  --font-d-label-md: "Inter", sans-serif;
+  --font-d-headline-md: "Inter", sans-serif;
+  --font-d-headline-lg: "Inter", sans-serif;
+  --font-d-headline-xl: "Inter", sans-serif;
   --font-d-body-sm: "Inter", sans-serif;
   --font-d-body-md: "Inter", sans-serif;
   --font-d-body-lg: "Inter", sans-serif;
@@ -136,7 +136,7 @@
 }
 
 .d-pattern-overlay {
-  background-image: radial-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px);
+  background-image: radial-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px), linear-gradient(90deg, #1b3b22, var(--color-d-primary));
   background-size: 20px 20px;
 }
 

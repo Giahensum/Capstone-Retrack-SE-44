@@ -22,8 +22,9 @@ import {
 } from "../../helpers/routePreferences";
 import { callSeller, openSellerMaps } from "../../helpers/pickupLinks";
 import { colors, styles as s } from "../../theme";
+import { pickupStatus } from "../../helpers/collection";
 
-export default function PickupDetailScreen({ route }) {
+export default function PickupDetailScreen({ route, navigation }) {
   const id = route.params?.pickupId || route.params?.pickup?.id;
   const loader = useCallback((signal) => pickupApi.getPickup(id, signal), [id]);
   const {
@@ -128,7 +129,7 @@ export default function PickupDetailScreen({ route }) {
             </Text>
             <Text style={s.text}>{pickup.description || "Chưa có mô tả."}</Text>
             <Text style={[s.label, { color: colors.primary }]}>
-              {pickup.isAcceptedByMe ? "Bạn đã nhận đơn này" : "Đang chờ nhận"}
+              {pickupStatus(pickup.status)}
             </Text>
             {pickup.requestImageUrl ? (
               <Image
@@ -139,6 +140,13 @@ export default function PickupDetailScreen({ route }) {
               />
             ) : null}
           </View>
+          {pickup.isAcceptedByMe ? <View style={s.card}>
+            <Button title="Kết quả cân và bàn giao" onPress={() => navigation.navigate("SubmitResult", { pickupId: id })} />
+            <Button title={pickup.status === "SCHEDULED" ? "Check-in tại địa điểm" : "Xem bằng chứng check-in"}
+              onPress={() => navigation.navigate("CheckIn", { pickupId: id })} />
+            {pickup.status !== "SCHEDULED" ? <Button title={pickup.status === "IN_PROGRESS" ? "Phân loại, cân và định giá" : "Xem kết quả cân"}
+              onPress={() => navigation.navigate("ClassifyWeigh", { pickupId: id })} /> : null}
+          </View> : null}
           <Text style={[s.title, { fontSize: 21 }]}>Bản đồ và tuyến đường</Text>
           <RouteOptions
             vehicle={vehicle}
