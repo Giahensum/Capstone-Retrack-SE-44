@@ -23,7 +23,7 @@ namespace Retrack.API.Data
         public DbSet<BatchQualityCheck> BatchQualityChecks { get; set; }
         public DbSet<FactoryDepotReview> FactoryDepotReviews { get; set; }
         public DbSet<PlatformTransaction> PlatformTransactions { get; set; }
-        public DbSet<PlatformFeeInvoice> PlatformFeeInvoices { get; set; }
+        // Admin quản lý bảng giá dùng chung; Factory chỉ đọc để tham khảo khi giao dịch.
         public DbSet<MarketPrice> MarketPrices { get; set; }
         // Admin DbSets
         public DbSet<AuditLog> AuditLogs { get; set; }
@@ -33,6 +33,22 @@ namespace Retrack.API.Data
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+
+            // Các model scaffold của kiến trúc cũ không thuộc schema dùng chung.
+            // Khai báo tập trung để EF không tự sinh lại các bảng PascalCase.
+            modelBuilder.Ignore<Seller>();
+            modelBuilder.Ignore<DepotEmployee>();
+            modelBuilder.Ignore<Driver>();
+            modelBuilder.Ignore<PickupRequestImage>();
+            modelBuilder.Ignore<BatchImage>();
+            modelBuilder.Ignore<BatchOrder>();
+            modelBuilder.Ignore<TransportTrackingLog>();
+            modelBuilder.Ignore<WeightVerification>();
+            modelBuilder.Ignore<WeightTicket>();
+            modelBuilder.Ignore<Partnership>();
+            modelBuilder.Ignore<PlatformFeeLog>();
+            modelBuilder.Ignore<EprCertificate>();
+
             if (Database.ProviderName == "Npgsql.EntityFrameworkCore.PostgreSQL")
                 modelBuilder.HasSequence<long>("depot_batch_number");
             modelBuilder.Entity<InventoryBatch>().HasIndex(b => b.Code).IsUnique();
@@ -43,14 +59,6 @@ namespace Retrack.API.Data
 
             modelBuilder.Entity<PlatformTransaction>()
                 .HasIndex(t => new { t.SourceType, t.SourceId }).IsUnique();
-            modelBuilder.Entity<PlatformFeeInvoice>().HasIndex(i => new { i.OwnerId, i.PeriodStart }).IsUnique();
-            modelBuilder.Entity<PlatformFeeInvoice>().HasOne(i => i.Owner).WithMany().HasForeignKey(i => i.OwnerId).OnDelete(DeleteBehavior.Restrict);
-            modelBuilder.Entity<PlatformFeeInvoice>().ToTable(t =>
-            {
-                t.HasCheckConstraint("CK_fee_invoice_amount", "amount >= 0");
-                t.HasCheckConstraint("CK_fee_invoice_status", "status IN ('UNPAID', 'SUBMITTED', 'PAID')");
-            });
-
             // PickupRequest - multiple FK to User
             modelBuilder.Entity<PickupRequest>()
                 .HasOne(p => p.Seller)
@@ -124,6 +132,24 @@ namespace Retrack.API.Data
                 .WithMany()
                 .HasForeignKey(n => n.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            // Schema chính thức dùng snake_case. Chặn entity mới vô tình sinh bảng PascalCase
+            // (ví dụ Users, BatchOrders) như DbContext scaffold đời đầu.
+            if (Database.ProviderName == "Npgsql.EntityFrameworkCore.PostgreSQL")
+            {
+                var invalidTableNames = modelBuilder.Model.GetEntityTypes()
+                    .Select(entity => entity.GetTableName())
+                    .Where(tableName => tableName is not null && tableName != tableName.ToLowerInvariant())
+                    .Distinct()
+                    .OrderBy(tableName => tableName)
+                    .ToArray();
+
+                if (invalidTableNames.Length > 0)
+                {
+                    throw new InvalidOperationException(
+                        $"Tên bảng EF phải dùng snake_case. Bảng không hợp lệ: {string.Join(", ", invalidTableNames)}");
+                }
+            }
 
             // Seed data
             modelBuilder.Entity<SystemConfig>().HasData(new SystemConfig

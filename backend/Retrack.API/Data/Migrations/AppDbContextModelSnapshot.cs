@@ -819,55 +819,6 @@ namespace Retrack.API.Data.Migrations
                     b.ToTable("pickup_request_items");
                 });
 
-            modelBuilder.Entity("Retrack.API.Models.PlatformFeeInvoice", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<decimal>("Amount")
-                        .HasColumnType("numeric")
-                        .HasColumnName("amount");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<Guid>("OwnerId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("owner_id");
-
-                    b.Property<string>("PaymentProofUrl")
-                        .HasColumnType("text")
-                        .HasColumnName("payment_proof_url");
-
-                    b.Property<DateOnly>("PeriodStart")
-                        .HasColumnType("date")
-                        .HasColumnName("period_start");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("status");
-
-                    b.Property<DateTime?>("SubmittedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("submitted_at");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("OwnerId", "PeriodStart")
-                        .IsUnique();
-
-                    b.ToTable("platform_fee_invoices", t =>
-                        {
-                            t.HasCheckConstraint("CK_fee_invoice_amount", "amount >= 0");
-
-                            t.HasCheckConstraint("CK_fee_invoice_status", "status IN ('UNPAID', 'SUBMITTED', 'PAID')");
-                        });
-                });
-
             modelBuilder.Entity("Retrack.API.Models.PlatformInvoice", b =>
                 {
                     b.Property<Guid>("Id")
@@ -940,6 +891,14 @@ namespace Retrack.API.Data.Migrations
                         .HasColumnType("numeric")
                         .HasColumnName("fee_amount");
 
+                    b.Property<decimal?>("FeePercentage")
+                        .HasColumnType("numeric")
+                        .HasColumnName("fee_percentage");
+
+                    b.Property<Guid?>("PayerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("payer_id");
+
                     b.Property<Guid>("SourceId")
                         .HasColumnType("uuid")
                         .HasColumnName("source_id");
@@ -949,6 +908,10 @@ namespace Retrack.API.Data.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)")
                         .HasColumnName("source_type");
+
+                    b.Property<decimal?>("TransactionAmount")
+                        .HasColumnType("numeric")
+                        .HasColumnName("transaction_amount");
 
                     b.HasKey("Id");
 
@@ -1331,17 +1294,6 @@ namespace Retrack.API.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("PickupRequest");
-                });
-
-            modelBuilder.Entity("Retrack.API.Models.PlatformFeeInvoice", b =>
-                {
-                    b.HasOne("Retrack.API.Models.User", "Owner")
-                        .WithMany()
-                        .HasForeignKey("OwnerId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Owner");
                 });
 
             modelBuilder.Entity("Retrack.API.Models.PlatformInvoice", b =>

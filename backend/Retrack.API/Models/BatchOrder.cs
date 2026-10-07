@@ -1,6 +1,11 @@
 using Retrack.API.Models.Enums;
+using System.ComponentModel.DataAnnotations.Schema;
+
 namespace Retrack.API.Models;
 
+// Model scaffold cũ, hiện chưa được ánh xạ thành bảng trong AppDbContext.
+// Luồng Factory đang dùng InventoryBatch và BatchQualityCheck làm nguồn dữ liệu chính.
+[NotMapped]
 public class BatchOrder
 {
     public Guid Id { get; set; }
@@ -13,5 +18,3 @@ public class BatchOrder
     public InventoryBatch Batch { get; set; } = null!;
     public Factory Factory { get; set; } = null!;
 }
-
-

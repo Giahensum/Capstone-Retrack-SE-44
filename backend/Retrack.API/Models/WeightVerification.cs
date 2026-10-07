@@ -1,5 +1,8 @@
+using System.ComponentModel.DataAnnotations.Schema;
+
 namespace Retrack.API.Models;
 
+[NotMapped]
 public class WeightVerification
 {
     public Guid Id { get; set; }
