@@ -283,9 +283,15 @@ CREATE TABLE IF NOT EXISTS platform_transactions (
     source_type VARCHAR(50) NOT NULL,  -- 'PICKUP_REQUEST' hoặc 'BATCH_ORDER'
     source_id   UUID        NOT NULL,  -- ID của pickup_requests hoặc inventory_batches
     fee_amount  DECIMAL(18, 2) NOT NULL,
+    payer_id    UUID,                  -- Người trả phí, nếu giao dịch cũ có thông tin này
+    transaction_amount DECIMAL(18, 2), -- Giá trị giao dịch gốc, nếu có
+    fee_percentage DECIMAL(5, 2),      -- Tỷ lệ phí đã áp dụng, nếu có
     description TEXT,
     created_at  TIMESTAMPTZ DEFAULT NOW()
 );
+ALTER TABLE platform_transactions ADD COLUMN IF NOT EXISTS payer_id UUID;
+ALTER TABLE platform_transactions ADD COLUMN IF NOT EXISTS transaction_amount DECIMAL(18, 2);
+ALTER TABLE platform_transactions ADD COLUMN IF NOT EXISTS fee_percentage DECIMAL(5, 2);
 
 -- ==========================================
 -- MODULE 6: ADMIN - AUDIT LOG, HÓA ĐƠN PHÍ, THÔNG BÁO
@@ -329,18 +335,6 @@ CREATE TABLE IF NOT EXISTS platform_invoices (
 );
 ALTER TABLE platform_invoices ADD COLUMN IF NOT EXISTS payment_proof_url TEXT;
 ALTER TABLE platform_invoices ADD COLUMN IF NOT EXISTS submitted_at TIMESTAMPTZ;
-
-CREATE TABLE IF NOT EXISTS platform_fee_invoices (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    owner_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
-    period_start DATE NOT NULL,
-    amount DECIMAL(18, 2) NOT NULL CHECK (amount >= 0),
-    status VARCHAR(20) NOT NULL DEFAULT 'UNPAID' CHECK (status IN ('UNPAID', 'SUBMITTED', 'PAID')),
-    payment_proof_url TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    submitted_at TIMESTAMPTZ
-);
-CREATE UNIQUE INDEX IF NOT EXISTS ix_platform_fee_invoices_owner_period ON platform_fee_invoices(owner_id, period_start);
 
 -- ==========================================
 -- FUNCTIONS & TRIGGERS (updated_at tự động)

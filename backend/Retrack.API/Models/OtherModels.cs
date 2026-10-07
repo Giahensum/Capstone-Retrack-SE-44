@@ -371,6 +371,16 @@ namespace Retrack.API.Models
         [Column("fee_amount")]
         public decimal FeeAmount { get; set; }
 
+        // Thông tin chi tiết để giữ nguyên giao dịch phí đã phát sinh từ schema legacy.
+        [Column("payer_id")]
+        public Guid? PayerId { get; set; }
+
+        [Column("transaction_amount")]
+        public decimal? TransactionAmount { get; set; }
+
+        [Column("fee_percentage")]
+        public decimal? FeePercentage { get; set; }
+
         [Column("description")]
         public string? Description { get; set; }
 

@@ -1,6 +1,9 @@
 using Retrack.API.Models.Enums;
+using System.ComponentModel.DataAnnotations.Schema;
+
 namespace Retrack.API.Models;
 
+[NotMapped]
 public class EprCertificate
 {
     public Guid Id { get; set; }

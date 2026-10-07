@@ -45,7 +45,6 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         var staffUsers = await db.DepotStaffs.Where(s => s.DepotId == depotId).Select(s => s.UserId).ToListAsync();
         await db.DepotStaffs.Where(s => s.DepotId == depotId).ExecuteDeleteAsync();
         await db.Users.Where(u => staffUsers.Contains(u.Id)).ExecuteDeleteAsync();
-        await db.PlatformFeeInvoices.Where(i => i.OwnerId == ownerId).ExecuteDeleteAsync();
         await db.PlatformInvoices.Where(i => i.PayerId == ownerId).ExecuteDeleteAsync();
         await db.Depots.Where(d => d.Id == depotId).ExecuteDeleteAsync();
         await db.Users.Where(u => u.Id == ownerId || u.Id == sellerId || u.Id == factoryOwnerId).ExecuteDeleteAsync();
