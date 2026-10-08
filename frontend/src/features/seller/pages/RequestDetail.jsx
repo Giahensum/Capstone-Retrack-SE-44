@@ -60,7 +60,7 @@ export default function RequestDetail() {
     </div>
   );
 
-  if (!req) return <div className="p-8 text-center text-slate-500">Không tìm thấy đơn</div>;
+  if (!req) return <div className="p-8 text-center text-gray-500">Không tìm thấy đơn</div>;
 
   const currentStep = STATUS_STEPS.indexOf(req.status);
   const requestImages = req.requestImageUrl ? req.requestImageUrl.split(',').filter(Boolean) : [];
@@ -68,12 +68,12 @@ export default function RequestDetail() {
   return (
     <div className="p-4 lg:p-8 max-w-2xl mx-auto space-y-5">
       {/* Header */}
-      <button onClick={() => navigate('/seller/requests')} className="flex items-center gap-2 text-slate-400 hover:text-slate-200 text-sm font-medium transition-colors">
+      <button onClick={() => navigate('/seller/requests')} className="flex items-center gap-2 text-gray-600 hover:text-gray-800 text-sm font-medium transition-colors">
         <ArrowLeft size={16} /> Đơn của tôi
       </button>
 
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-black text-white">Chi tiết đơn</h1>
+        <h1 className="text-xl font-black text-gray-900">Chi tiết đơn</h1>
         <span className={`text-[10px] font-bold px-3 py-1.5 rounded-full border ${getStatusStyle(req.status)}`}>
           {PICKUP_STATUS_LABEL[req.status] ?? req.status}
         </span>
@@ -81,24 +81,24 @@ export default function RequestDetail() {
 
       {/* Progress bar */}
       {req.status !== 'CANCELLED' && (
-        <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-5">
+        <div className="bg-gray-100/50 border border-gray-300/50 rounded-2xl p-5">
           <div className="flex items-center justify-between mb-3">
             {STATUS_STEPS.map((s, i) => (
               <div key={s} className="flex items-center flex-1 last:flex-initial">
                 <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 transition-all ${
-                  i <= currentStep ? 'bg-emerald-500 text-white' : 'bg-slate-700 text-slate-500'
+                  i <= currentStep ? 'bg-green-200 text-gray-900' : 'bg-slate-700 text-gray-500'
                 }`}>
                   {i <= currentStep ? <CheckCircle size={14} /> : i + 1}
                 </div>
                 {i < STATUS_STEPS.length - 1 && (
-                  <div className={`flex-1 h-0.5 mx-1 rounded-full ${i < currentStep ? 'bg-emerald-500' : 'bg-slate-700'}`} />
+                  <div className={`flex-1 h-0.5 mx-1 rounded-full ${i < currentStep ? 'bg-green-200' : 'bg-slate-700'}`} />
                 )}
               </div>
             ))}
           </div>
           <div className="flex justify-between">
             {STATUS_STEPS.map(s => (
-              <span key={s} className="text-[9px] text-slate-500 font-medium text-center" style={{ width: '18%' }}>
+              <span key={s} className="text-[9px] text-gray-500 font-medium text-center" style={{ width: '18%' }}>
                 {PICKUP_STATUS_LABEL[s] ?? s}
               </span>
             ))}
@@ -108,18 +108,18 @@ export default function RequestDetail() {
 
       {/* Images */}
       {requestImages.length > 0 && (
-        <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl overflow-hidden">
-          <button onClick={() => setShowImages(!showImages)} className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-slate-800/50 transition-colors">
+        <div className="bg-gray-100/50 border border-gray-300/50 rounded-2xl overflow-hidden">
+          <button onClick={() => setShowImages(!showImages)} className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-gray-100/50 transition-colors">
             <div className="flex items-center gap-2">
               <ImageIcon size={14} className="text-purple-400" />
-              <span className="text-sm font-semibold text-slate-200">Hình ảnh phế liệu ({requestImages.length})</span>
+              <span className="text-sm font-semibold text-gray-800">Hình ảnh phế liệu ({requestImages.length})</span>
             </div>
-            <span className="text-xs text-emerald-400">{showImages ? 'Ẩn' : 'Xem'}</span>
+            <span className="text-xs text-green-700">{showImages ? 'Ẩn' : 'Xem'}</span>
           </button>
           {showImages && (
             <div className="grid grid-cols-3 gap-2 p-4 pt-0">
               {requestImages.map((url, i) => (
-                <img key={i} src={url.trim()} alt={`Ảnh ${i + 1}`} className="w-full aspect-square object-cover rounded-xl border border-slate-700" />
+                <img key={i} src={url.trim()} alt={`Ảnh ${i + 1}`} className="w-full aspect-square object-cover rounded-xl border border-gray-300" />
               ))}
             </div>
           )}
@@ -127,35 +127,35 @@ export default function RequestDetail() {
       )}
 
       {/* Info */}
-      <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl divide-y divide-slate-700/50">
+      <div className="bg-gray-100/50 border border-gray-300/50 rounded-2xl divide-y divide-slate-700/50">
         <InfoRow icon={<Package size={14} className="text-blue-400" />} label="Mô tả" value={req.description || '(không có)'} />
-        <InfoRow icon={<MapPin size={14} className="text-emerald-400" />} label="Địa chỉ" value={req.address} />
+        <InfoRow icon={<MapPin size={14} className="text-green-700" />} label="Địa chỉ" value={req.address} />
         <InfoRow icon={<Calendar size={14} className="text-purple-400" />} label="Ngày giờ" value={req.preferredDatetime ? formatDate(req.preferredDatetime) : 'Linh hoạt'} />
         {req.depotName && <InfoRow icon={<Clock size={14} className="text-orange-400" />} label="Kho vựa" value={req.depotName} />}
-        <InfoRow icon={<Clock size={14} className="text-slate-400" />} label="Ngày tạo" value={formatDate(req.createdAt)} />
+        <InfoRow icon={<Clock size={14} className="text-gray-600" />} label="Ngày tạo" value={formatDate(req.createdAt)} />
       </div>
 
       {/* Weigh Items */}
       {req.items && req.items.length > 0 && (
-        <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl overflow-hidden">
-          <div className="px-5 py-4 border-b border-slate-700/50">
-            <h3 className="text-sm font-bold text-slate-200">⚖️ Kết quả phân loại & cân</h3>
+        <div className="bg-gray-100/50 border border-gray-300/50 rounded-2xl overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-300/50">
+            <h3 className="text-sm font-bold text-gray-800">⚖️ Kết quả phân loại & cân</h3>
           </div>
           <div className="divide-y divide-slate-700/30">
             {req.items.map((item, idx) => (
               <div key={idx} className="flex items-center justify-between px-5 py-3">
                 <div>
-                  <p className="text-sm font-medium text-slate-200">{MATERIAL_TYPE_LABEL[item.materialType] ?? item.materialType}</p>
-                  <p className="text-xs text-slate-500">{item.weightKg} kg × {formatCurrency(item.pricePerKg)}/kg</p>
+                  <p className="text-sm font-medium text-gray-800">{MATERIAL_TYPE_LABEL[item.materialType] ?? item.materialType}</p>
+                  <p className="text-xs text-gray-500">{item.weightKg} kg × {formatCurrency(item.pricePerKg)}/kg</p>
                 </div>
-                <span className="text-sm font-bold text-emerald-400">{formatCurrency(item.subTotal)}</span>
+                <span className="text-sm font-bold text-green-700">{formatCurrency(item.subTotal)}</span>
               </div>
             ))}
           </div>
-          <div className="px-5 py-4 bg-emerald-500/5 border-t border-emerald-500/20">
+          <div className="px-5 py-4 bg-green-200/5 border-t border-emerald-500/20">
             <div className="flex justify-between items-center">
-              <span className="text-sm font-bold text-slate-300">Tổng cộng</span>
-              <span className="text-lg font-black text-emerald-400">{formatCurrency(req.grossAmount)}</span>
+              <span className="text-sm font-bold text-gray-700">Tổng cộng</span>
+              <span className="text-lg font-black text-green-700">{formatCurrency(req.grossAmount)}</span>
             </div>
           </div>
         </div>
@@ -165,21 +165,21 @@ export default function RequestDetail() {
       {req.status === 'WEIGHED' && (
         <div className="bg-gradient-to-br from-purple-500/10 to-purple-600/5 border border-purple-500/30 rounded-2xl p-5 space-y-4">
           <div>
-            <h3 className="text-base font-bold text-white">⚖️ Xác nhận kết quả cân</h3>
-            <p className="text-xs text-slate-400 mt-1">Nhân viên đã cân xong. Bạn có đồng ý với giá trên không?</p>
+            <h3 className="text-base font-bold text-gray-900">⚖️ Xác nhận kết quả cân</h3>
+            <p className="text-xs text-gray-600 mt-1">Nhân viên đã cân xong. Bạn có đồng ý với giá trên không?</p>
           </div>
           <div className="flex gap-3">
             <button
               onClick={() => confirmMutation.mutate()}
               disabled={confirmMutation.isPending}
-              className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-60"
+              className="flex-1 bg-green-200 hover:bg-green-300 text-gray-900 font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-60"
             >
               <CheckCircle size={16} /> Đồng ý
             </button>
             <button
               onClick={() => rejectMutation.mutate()}
               disabled={rejectMutation.isPending}
-              className="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-60"
+              className="flex-1 bg-slate-700 hover:bg-slate-600 text-gray-900 font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-60"
             >
               <XCircle size={16} /> Từ chối
             </button>
@@ -191,15 +191,15 @@ export default function RequestDetail() {
       {req.status === 'PAYMENT_SENT' && (
         <div className="bg-gradient-to-br from-teal-500/10 to-teal-600/5 border border-teal-500/30 rounded-2xl p-5 space-y-4">
           <div>
-            <h3 className="text-base font-bold text-white">💰 Chủ kho đã chuyển tiền</h3>
-            <p className="text-xs text-slate-400 mt-1">
-              Vui lòng kiểm tra tài khoản ngân hàng. Nếu đã nhận được <span className="text-emerald-400 font-bold">{formatCurrency(req.netAmount)}</span>, hãy bấm xác nhận.
+            <h3 className="text-base font-bold text-gray-900">💰 Chủ kho đã chuyển tiền</h3>
+            <p className="text-xs text-gray-600 mt-1">
+              Vui lòng kiểm tra tài khoản ngân hàng. Nếu đã nhận được <span className="text-green-700 font-bold">{formatCurrency(req.netAmount)}</span>, hãy bấm xác nhận.
             </p>
           </div>
           <button
             onClick={() => confirmPaymentMutation.mutate()}
             disabled={confirmPaymentMutation.isPending}
-            className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-60 shadow-lg shadow-emerald-500/20"
+            className="w-full bg-green-200 hover:bg-green-300 text-gray-900 font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-60 shadow-lg shadow-emerald-500/20"
           >
             <Banknote size={18} /> Xác nhận đã nhận tiền
           </button>
@@ -225,8 +225,8 @@ export default function RequestDetail() {
               <Star size={16} /> Đánh giá kho vựa
             </button>
           ) : (
-            <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-5 space-y-4">
-              <h3 className="text-sm font-bold text-white">⭐ Đánh giá dịch vụ</h3>
+            <div className="bg-gray-100/50 border border-gray-300/50 rounded-2xl p-5 space-y-4">
+              <h3 className="text-sm font-bold text-gray-900">⭐ Đánh giá dịch vụ</h3>
               <div className="flex gap-2 justify-center">
                 {[1, 2, 3, 4, 5].map(n => (
                   <button key={n} onClick={() => setReview({ ...review, rating: n })} className="transition-transform hover:scale-110">
@@ -239,13 +239,13 @@ export default function RequestDetail() {
                 onChange={e => setReview({ ...review, comment: e.target.value })}
                 placeholder="Nhận xét của bạn (tùy chọn)..."
                 rows={3}
-                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm text-slate-200 placeholder-slate-600 focus:border-emerald-500 outline-none resize-none"
+                className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-sm text-gray-800 placeholder-slate-600 focus:border-emerald-500 outline-none resize-none"
               />
               <div className="flex gap-3">
-                <button onClick={() => reviewMutation.mutate()} disabled={reviewMutation.isPending} className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3 rounded-xl transition-all active:scale-95 disabled:opacity-60">
+                <button onClick={() => reviewMutation.mutate()} disabled={reviewMutation.isPending} className="flex-1 bg-green-200 hover:bg-green-300 text-gray-900 font-bold py-3 rounded-xl transition-all active:scale-95 disabled:opacity-60">
                   Gửi đánh giá
                 </button>
-                <button onClick={() => setReviewOpen(false)} className="px-5 py-3 bg-slate-700 text-white font-bold rounded-xl hover:bg-slate-600 transition-all">
+                <button onClick={() => setReviewOpen(false)} className="px-5 py-3 bg-slate-700 text-gray-900 font-bold rounded-xl hover:bg-slate-600 transition-all">
                   Hủy
                 </button>
               </div>
@@ -262,9 +262,9 @@ function InfoRow({ icon, label, value }) {
     <div className="flex items-center justify-between px-5 py-3.5">
       <div className="flex items-center gap-2">
         {icon}
-        <span className="text-xs text-slate-500 font-medium">{label}</span>
+        <span className="text-xs text-gray-500 font-medium">{label}</span>
       </div>
-      <span className="text-sm text-slate-200 font-medium text-right max-w-[60%] truncate">{value}</span>
+      <span className="text-sm text-gray-800 font-medium text-right max-w-[60%] truncate">{value}</span>
     </div>
   );
 }
@@ -277,8 +277,9 @@ function getStatusStyle(status) {
     SELLER_CONFIRMED: 'bg-cyan-500/15 text-cyan-400 border-cyan-500/30',
     AWAITING_PAYMENT: 'bg-orange-500/15 text-orange-400 border-orange-500/30',
     PAYMENT_SENT: 'bg-teal-500/15 text-teal-400 border-teal-500/30',
-    DONE: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
+    DONE: 'bg-green-200/15 text-green-700 border-emerald-500/30',
     CANCELLED: 'bg-red-500/15 text-red-400 border-red-500/30',
   };
-  return map[status] ?? 'bg-slate-500/15 text-slate-400 border-slate-500/30';
+  return map[status] ?? 'bg-slate-500/15 text-gray-600 border-slate-500/30';
 }
+

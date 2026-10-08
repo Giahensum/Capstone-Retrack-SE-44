@@ -6,6 +6,7 @@ import { getProfile } from "../api/authApi";
 import LoginScreen from "../screens/auth/LoginScreen";
 import EmployeeNavigator from "./EmployeeNavigator";
 import DriverNavigator from "./DriverNavigator";
+import SellerNavigator from "./SellerNavigator";
 import LoadingSpinner from "../components/common/LoadingSpinner";
 import Screen from "../components/common/Screen";
 import Button from "../components/common/Button";
@@ -69,6 +70,7 @@ export default function AppNavigator() {
   // Remount the entire navigator when the account changes so Back cannot cross sessions.
   if (role === "DEPOT_EMPLOYEE") return <EmployeeNavigator key={token} />;
   if (role === "DRIVER") return <DriverNavigator key={token} />;
+  if (role === "SELLER") return <SellerNavigator key={token} />;
   return (
     <Screen>
       <Text style={styles.title}>
