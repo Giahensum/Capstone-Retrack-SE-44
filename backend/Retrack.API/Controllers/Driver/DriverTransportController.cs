@@ -31,39 +31,11 @@ public class DriverTransportController(AppDbContext db) : ControllerBase
         var result = await new Retrack.API.Services.Driver.DriverJobService(db).AcceptAsync(GetUserId(), jobId, ct);
         return Ok(Retrack.API.DTOs.ApiResponse<Retrack.API.Services.Driver.DriverJobDto>.Ok(result));
     }
+    // API URL ảnh cũ không còn đủ bằng chứng camera/GPS; chặn đường đi tắt.
     [HttpPost("{jobId:guid}/pickup")]
-    public async Task<IActionResult> Pickup(Guid jobId, [FromBody] TransportEvidenceRequest request, CancellationToken ct)
-    {
-        var job = await AssignedJob(jobId, ct);
-        if (job is null) return NotFound(new { success = false, message = "Không tìm thấy chuyến xe được giao cho tài khoản này." });
-        if (job.Status != "ACCEPTED") return Conflict(new { success = false, message = "Chỉ xác nhận lấy hàng sau khi nhận chuyến." });
-        job.Status = "PICKED_UP";
-        job.CheckinDepotImageUrl = request.ImageUrl?.Trim();
-        job.UpdatedAt = DateTime.UtcNow;
-        job.Batch.UpdatedAt = DateTime.UtcNow;
-        await db.SaveChangesAsync(ct);
-        return Ok(new { success = true, data = new { job.Id, job.Status, job.CheckinDepotImageUrl } });
-    }
-
     [HttpPost("{jobId:guid}/deliver")]
-    public async Task<IActionResult> Deliver(Guid jobId, [FromBody] TransportEvidenceRequest request, CancellationToken ct)
-    {
-        var job = await AssignedJob(jobId, ct);
-        if (job is null) return NotFound(new { success = false, message = "Không tìm thấy chuyến xe được giao cho tài khoản này." });
-        if (job.Status is not ("PICKED_UP" or "IN_TRANSIT" or "ON_THE_WAY"))
-            return Conflict(new { success = false, message = "Chỉ xác nhận giao hàng sau khi đã lấy hàng." });
-        job.Status = "DELIVERED";
-        job.CheckoutFactoryImageUrl = request.ImageUrl?.Trim();
-        job.UpdatedAt = DateTime.UtcNow;
-        job.Batch.Status = "DELIVERED";
-        job.Batch.UpdatedAt = DateTime.UtcNow;
-        await db.SaveChangesAsync(ct);
-        return Ok(new { success = true, data = new { job.Id, job.BatchId, job.Status, job.CheckoutFactoryImageUrl, deliveredAt = job.UpdatedAt } });
-    }
-
-    private Task<Models.TransportJob?> AssignedJob(Guid id, CancellationToken ct) =>
-        db.TransportJobs.Include(x => x.Batch).SingleOrDefaultAsync(x => x.Id == id && x.DriverId == GetUserId(), ct);
-
+    public IActionResult LegacyEvidence(Guid jobId) => StatusCode(410,
+        Retrack.API.DTOs.ApiResponse<object>.Fail("Cập nhật ứng dụng và dùng /api/driver/job/{id}/checkin hoặc /checkout với ảnh camera và GPS."));
     private Guid GetUserId()
     {
         var raw = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");

@@ -30,7 +30,8 @@ export default function JobDetailScreen({ route, navigation }) {
       <View style={s.card}><Text style={s.label}>LẤY HÀNG TẠI KHO</Text><Text style={s.text}>{data.depot.name}</Text><Text style={s.muted}>{data.depot.address}</Text></View>
       <View style={s.card}><Text style={s.label}>GIAO ĐẾN NHÀ MÁY</Text><Text style={s.text}>{data.factory.name}</Text><Text style={s.muted}>{data.factory.address}</Text></View>
       <Button title="Bản đồ Kho → Nhà máy" disabled={busy} onPress={() => navigation.navigate("JobMap", { jobId: id })} />
-      {!data.isMine && data.status === "PENDING" ? <Button title="Nhận chuyến" loading={busy} onPress={() => Alert.alert("Nhận chuyến này?", "Xác nhận bạn có thể vận chuyển lô hàng tới nhà máy đã chọn.", [{ text: "Hủy", style: "cancel" }, { text: "Nhận chuyến", onPress: accept }])} /> : <Text style={s.muted}>Chuyến của bạn. Check-in lấy hàng và giao hàng sẽ được bổ sung ở bước tiếp theo.</Text>}
+      {!data.isMine && data.status === "PENDING" ? <Button title="Nhận chuyến" loading={busy} onPress={() => Alert.alert("Nhận chuyến này?", "Xác nhận bạn có thể vận chuyển lô hàng tới nhà máy đã chọn.", [{ text: "Hủy", style: "cancel" }, { text: "Nhận chuyến", onPress: accept }])} /> : null}
+      <Button title={data.isMine ? "Lấy hàng / Giao hàng / Bằng chứng" : "Từ chối chuyến"} variant="secondary" disabled={busy} onPress={() => navigation.navigate("DriverDelivery", { jobId: id })} />
     </> : null}
     {failure ? <Text style={s.error}>{failure}</Text> : null}
   </Screen>;
