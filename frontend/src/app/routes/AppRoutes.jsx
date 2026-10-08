@@ -78,7 +78,7 @@ export function AppRoutes() {
               </PrivateRoute>}/>
 
           {/* Factory */}
-          <Route path="/factory/*" element={<FactoryDashboard />}/>
+          <Route path="/factory/*" element={<PrivateRoute allowedRoles={[ROLES.FACTORY]}><FactoryDashboard /></PrivateRoute>}/>
 
           {/* Admin */}
           <Route path="/admin/*" element={<PrivateRoute allowedRoles={[ROLES.ADMIN]}>

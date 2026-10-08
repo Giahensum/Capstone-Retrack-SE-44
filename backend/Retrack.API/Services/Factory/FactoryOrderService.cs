@@ -8,29 +8,48 @@ using Retrack.API.Services.Shared;
 
 namespace Retrack.API.Services.Factory;
 
-public class FactoryOrderService(AppDbContext db) : FactoryServiceBase(db), IFactoryOrderService
+public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? attachments = null) : FactoryServiceBase(db), IFactoryOrderService
 {
     public async Task<ServiceResult<PageResponse<OrderResponse>>> ListAsync(Guid userId, OrderQuery query, CancellationToken ct)
     {
         var factory = await CurrentFactory(userId, ct);
-        var source = FactoryOrderQueries.ForFactory(Db, factory.Id);
-        if (query.Status == Retrack.API.Models.Enums.BatchStatus.ACCEPTED)
-            source = source.Where(x => x.Status == "ACCEPTED" || x.Status == "PENDING_APPROVAL" || x.Status == "PENDING_FACTORY" || x.Status == "READY_FOR_PICKUP" || x.Status == "TRANSPORT_READY");
-        else if (query.Status == Retrack.API.Models.Enums.BatchStatus.IN_PROGRESS)
-            source = source.Where(x => x.Status == "IN_PROGRESS" || x.Status == "IN_TRANSIT" || x.Status == "TRANSPORT_READY" || x.Status == "ACCEPTED" || x.Status == "READY_FOR_PICKUP");
-        else if (query.Status == Retrack.API.Models.Enums.BatchStatus.DELIVERED)
-            source = source.Where(x => x.Status == "DELIVERED" || x.Status == "IN_PROGRESS");
-        var all = await source.OrderByDescending(x => x.CreatedAt).ToListAsync(ct);
-        var mappedStatus = query.Status == Retrack.API.Models.Enums.BatchStatus.IN_PROGRESS ? "IN_TRANSIT" : query.Status?.ToString();
-        var matches = mappedStatus is not null ? all.Where(x => FactoryOrderMapper.Status(x) == mappedStatus).ToList() : all;
-        var items = matches.Skip((query.Page - 1) * query.PageSize).Take(query.PageSize).Select(FactoryOrderMapper.Map);
+        IQueryable<InventoryBatch> source = FactoryOrderQueries.ForFactory(Db, factory.Id);
+        var status = query.DisplayStatus ?? (query.Status == BatchStatus.IN_PROGRESS ? "IN_TRANSIT" : query.Status?.ToString());
+        if (query.Stage == "qc")
+            source = source.Where(x => x.Status == "RECEIVED" || x.Status == "WEIGHED" || x.Status == "VERIFIED" || x.Status == "REJECTED" ||
+                x.Status == "DELIVERED" || ((x.Status == "ACCEPTED" || x.Status == "TRANSPORT_READY" || x.Status == "READY_FOR_PICKUP" || x.Status == "IN_PROGRESS" || x.Status == "IN_TRANSIT") && x.TransportJob != null && x.TransportJob.Status == "DELIVERED"));
+        else if (query.Stage == "settlements")
+            source = source.Where(x => x.Status == "VERIFIED" || x.Status == "COMPLETED" || x.Status == "PAID");
+        if (!string.IsNullOrWhiteSpace(query.Search))
+        {
+            var search = query.Search.Trim();
+            source = source.Where(x => x.Id.ToString().Contains(search) || (x.Code != null && x.Code.Contains(search)) || x.Depot.Name.Contains(search));
+        }
+        source = status switch
+        {
+            "ACCEPTED" => source.Where(x => x.Status == "PENDING_APPROVAL" || x.Status == "PENDING_FACTORY" ||
+                ((x.Status == "ACCEPTED" || x.Status == "TRANSPORT_READY" || x.Status == "READY_FOR_PICKUP") &&
+                 (x.TransportJob == null || (x.TransportJob.Status != "PICKED_UP" && x.TransportJob.Status != "IN_TRANSIT" && x.TransportJob.Status != "ON_THE_WAY" && x.TransportJob.Status != "IN_PROGRESS" && x.TransportJob.Status != "DELIVERED")))),
+            "IN_TRANSIT" => source.Where(x => ((x.Status == "IN_PROGRESS" || x.Status == "IN_TRANSIT") && (x.TransportJob == null || x.TransportJob.Status != "DELIVERED")) ||
+                ((x.Status == "ACCEPTED" || x.Status == "TRANSPORT_READY" || x.Status == "READY_FOR_PICKUP") && x.TransportJob != null &&
+                 (x.TransportJob.Status == "PICKED_UP" || x.TransportJob.Status == "IN_TRANSIT" || x.TransportJob.Status == "ON_THE_WAY" || x.TransportJob.Status == "IN_PROGRESS"))),
+            "DELIVERED" => source.Where(x => x.Status == "DELIVERED" ||
+                ((x.Status == "ACCEPTED" || x.Status == "TRANSPORT_READY" || x.Status == "READY_FOR_PICKUP" || x.Status == "IN_PROGRESS" || x.Status == "IN_TRANSIT") && x.TransportJob != null && x.TransportJob.Status == "DELIVERED")),
+            "PAID" => source.Where(x => x.Status == "PAID" || x.Status == "COMPLETED"),
+            "REJECTED" => source.Where(x => x.Status == "REJECTED" || x.Status == "CANCELLED"),
+            "RECEIVED" or "WEIGHED" or "VERIFIED" => source.Where(x => x.Status == status),
+            _ => source
+        };
+        var total = await source.CountAsync(ct);
+        var rows = await source.OrderByDescending(x => x.CreatedAt).ThenBy(x => x.Id)
+            .Skip((query.Page - 1) * query.PageSize).Take(query.PageSize).ToListAsync(ct);
         return ServiceResult<PageResponse<OrderResponse>>.Success(data: new PageResponse<OrderResponse>
         {
-            Items = items.ToList(),
-            TotalCount = matches.Count,
+            Items = rows.Select(FactoryOrderMapper.Map).ToList(),
+            TotalCount = total,
             Page = query.Page,
             PageSize = query.PageSize,
-            TotalPages = (int)Math.Ceiling((double)matches.Count / query.PageSize)
+            TotalPages = (int)Math.Ceiling((double)total / query.PageSize)
         });
     }
 
@@ -123,6 +142,8 @@ public class FactoryOrderService(AppDbContext db) : FactoryServiceBase(db), IFac
             return ServiceResult<InvoiceUpdatedResponse>.Conflict("Chỉ đính kèm hóa đơn sau khi chốt KCS.");
         if (string.IsNullOrWhiteSpace(request.InvoiceFileUrl))
             return ServiceResult<InvoiceUpdatedResponse>.Invalid("Chọn tệp hóa đơn trước khi lưu.");
+        if (attachments is not null && request.InvoiceFileUrl != batch.QualityCheck.InvoiceFileUrl && !attachments.IsOwnedUrl(request.InvoiceFileUrl, userId))
+            return ServiceResult<InvoiceUpdatedResponse>.Invalid("Hóa đơn phải được tải lên qua chức năng đính kèm của nhà máy.");
         batch.QualityCheck.InvoiceNumber = request.InvoiceNumber?.Trim();
         batch.QualityCheck.InvoiceFileUrl = request.InvoiceFileUrl.Trim();
         batch.QualityCheck.InvoiceStatus = "UPLOADED";

@@ -48,6 +48,14 @@ async function useFactoryApi(page, fixture) {
     if (path === "/api/auth/login" && method === "POST") {
       data = { token: "test-factory-token", userId: factoryId, role: "FACTORY", fullName: "Factory Test", email: "factory@test.invalid" };
     } else if (path === "/api/factory/profile" && method === "GET") data = state.profile;
+    else if (path === "/api/factory/dashboard" && method === "GET") data = {
+      orderCount: state.orders.length, activeDemandCount: state.demands.length,
+      partnerCount: state.partners.length, pendingQcCount: state.orders.filter((x) => ["DELIVERED", "RECEIVED", "WEIGHED"].includes(x.status)).length,
+      pendingSettlementCount: state.orders.filter((x) => x.status === "VERIFIED").length,
+      monthlyPurchasedKg: 0, monthlyNetPayment: 0, periodPurchasedKg: 0,
+      periodGrossAmount: 0, periodNetPayment: 0, periodFeeAmount: 0,
+      materialVolumes: [], sixMonthPayments: [], priorityOrders: state.orders.slice(0, 10), recentOrders: state.orders.slice(0, 5),
+    };
     else if (path === "/api/factory/profile" && method === "PUT") { state.profile = { ...state.profile, ...body }; data = state.profile; }
     else if (path === "/api/factory/demands" && method === "GET") data = paged(state.demands);
     else if (path === "/api/factory/demands" && method === "POST") {
@@ -57,6 +65,7 @@ async function useFactoryApi(page, fixture) {
     } else if (path.endsWith("/status") && method === "PATCH") {
       const id = path.split("/").at(-2); state.demands = state.demands.map((d) => d.id === id ? { ...d, ...body } : d); data = true;
     } else if (path === "/api/factory/orders" && method === "GET") data = paged(state.orders);
+    else if (path === `/api/factory/orders/${orderId}` && method === "GET") data = state.orders[0];
     else if (path === `/api/factory/orders/${orderId}/receive` && method === "POST") {
       state.orders[0] = { ...state.orders[0], status: "RECEIVED", receivedAt: new Date().toISOString() }; data = state.orders[0];
     } else if (path === `/api/factory/qc/orders/${orderId}/weigh` && method === "POST") {

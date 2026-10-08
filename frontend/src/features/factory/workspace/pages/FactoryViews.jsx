@@ -7,11 +7,14 @@ import {
   Empty,
   Field,
   Modal,
+  Pagination,
   PageHead,
   Status,
   useFactory,
 } from "../components/FactoryUI";
 import { materials, money, number, today } from "../data/factoryState";
+import { mapOrder } from "../data/factoryApi";
+import { useFactoryDashboard, useFactoryPage } from "../data/useFactoryData";
 
 const MaterialSelect = ({ value, onChange, all = false }) => (
   <select value={value} onChange={onChange}>
@@ -26,45 +29,23 @@ const MaterialSelect = ({ value, onChange, all = false }) => (
 export function Dashboard({ navigate }) {
   const { state } = useFactory();
   const [period, setPeriod] = useState("month");
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  if (period === "month") start.setDate(1);
-  else if (period === "year") {
-    start.setMonth(0, 1);
-  }
-  const paid = state.orders.filter(
-    (o) => o.status === "PAID" && new Date(o.payment.at) >= start,
-  );
-  const weight = paid.reduce((n, o) => n + o.weight.net, 0);
-  const spend = paid.reduce((n, o) => n + o.payment.payable, 0);
-  const fees = paid.reduce((n, o) => n + o.payment.fee, 0);
-  const feePercentage = paid[0]?.payment?.feePercentage ?? state.profile?.platformFeePercentage ?? 1;
-  const pending = state.orders.filter((o) =>
-    ["DELIVERED", "RECEIVED", "WEIGHED"].includes(o.status),
-  );
-  const ready = state.orders.filter((o) => o.status === "VERIFIED");
-  const volume = Object.keys(materials)
-    .map((material) => ({
-      material,
-      kg: paid
-        .filter((o) => o.material === material)
-        .reduce((n, o) => n + o.weight.net, 0),
-    }))
-    .filter((x) => x.kg);
+  const { data, isPending, error } = useFactoryDashboard(period);
+  const dashboard = data || (period === "month" ? state.dashboard : null);
+  const weight = dashboard?.periodPurchasedKg ?? 0;
+  const spend = dashboard?.periodNetPayment ?? 0;
+  const fees = dashboard?.periodFeeAmount ?? 0;
+  const feePercentage = state.profile?.platformFeePercentage ?? 1;
+  const pending = (dashboard?.priorityOrders || []).map(mapOrder).filter((o) => ["DELIVERED", "RECEIVED", "WEIGHED"].includes(o.status));
+  const ready = (dashboard?.priorityOrders || []).map(mapOrder).filter((o) => o.status === "VERIFIED");
+  const volume = (dashboard?.materialVolumes || []).map((item) => ({ material: item.materialType, kg: item.weightKg }));
   const max = Math.max(1, ...volume.map((x) => x.kg));
   const trend = Array.from({ length: 6 }, (_, i) => {
     const date = new Date();
     date.setDate(1);
     date.setMonth(date.getMonth() - 5 + i);
-    const items = state.orders.filter(
-      (o) =>
-        o.status === "PAID" &&
-        new Date(o.payment.at).getMonth() === date.getMonth() &&
-        new Date(o.payment.at).getFullYear() === date.getFullYear(),
-    );
     return {
       label: `T${date.getMonth() + 1}`,
-      value: items.reduce((n, o) => n + o.payment.payable, 0),
+      value: dashboard?.sixMonthPayments?.find((item) => item.year === date.getFullYear() && item.month === date.getMonth() + 1)?.netPayment || 0,
     };
   });
   return (
@@ -81,7 +62,7 @@ export function Dashboard({ navigate }) {
       <div className="overview-banner">
         <div>
           <span className="eyebrow">VIỆC CẦN XỬ LÝ</span>
-          <h2>{pending.length} lô hàng đang chờ nhận hoặc KCS</h2>
+          <h2>{dashboard?.pendingQcCount ?? 0} lô hàng đang chờ nhận hoặc KCS</h2>
           <p>Hoàn tất kiểm tra chất lượng để chuyển sang quyết toán.</p>
         </div>
         <Button secondary onClick={() => navigate("qc")}>
@@ -100,6 +81,8 @@ export function Dashboard({ navigate }) {
           <option value="year">Năm nay</option>
         </select>
       </div>
+      {isPending && <p role="status">Đang tải số liệu…</p>}
+      {error && <p role="alert">{error.message}</p>}
       <div className="kpi-grid">
         {[
           [
@@ -111,9 +94,9 @@ export function Dashboard({ navigate }) {
           [
             "Phí nền tảng tích lũy",
             money(fees),
-            `${feePercentage}% tiền hàng • Chưa đối soát`,
+            `Tỷ lệ tham khảo ${feePercentage}% • Chưa đối soát`,
           ],
-          ["Chờ quyết toán", `${ready.length} đơn`, "Đã nghiệm thu chất lượng"],
+          ["Chờ quyết toán", `${dashboard?.pendingSettlementCount ?? 0} đơn`, "Đã nghiệm thu chất lượng"],
         ].map(([label, value, hint], i) => (
           <div className="kpi" key={label}>
             <div className="kpi-label">
@@ -149,9 +132,7 @@ export function Dashboard({ navigate }) {
             Giá mua trung bình trước phí{" "}
             <strong>
               {money(
-                weight
-                  ? paid.reduce((n, o) => n + o.payment.total, 0) / weight
-                  : 0,
+                weight ? (dashboard?.periodGrossAmount ?? 0) / weight : 0,
               )}
               /kg
             </strong>
@@ -204,7 +185,7 @@ export function Dashboard({ navigate }) {
                     <strong>{o.id}</strong>
                     <small>{materials[o.material]}</small>
                   </td>
-                  <td>{state.depots.find((d) => d.id === o.depotId)?.name}</td>
+                  <td>{o.depotName}</td>
                   <td>{number(o.kg)} kg</td>
                   <td>
                     <Status value={o.status} />
@@ -235,7 +216,7 @@ export function Dashboard({ navigate }) {
   );
 }
 export function Marketplace({ navigate }) {
-  const { state, act } = useFactory();
+  const { act } = useFactory();
   const [filters, setFilters] = useState({
     search: "",
     material: "",
@@ -246,22 +227,14 @@ export function Marketplace({ navigate }) {
   const [selected, setSelected] = useState(null);
   const [reason, setReason] = useState("");
   const [rejecting, setRejecting] = useState(false);
-  const set = (key, value) => setFilters((f) => ({ ...f, [key]: value }));
-  const batches = state.batches.filter((b) => {
-    const d = state.depots.find((d) => d.id === b.depotId);
-    return (
-      b.status === "LISTED" &&
-      b.direct === filters.direct &&
-      d.status !== "BLOCKED" &&
-      (!filters.material || b.material === filters.material) &&
-      `${b.id} ${materials[b.material]} ${d.name}`
-        .toLowerCase()
-        .includes(filters.search.toLowerCase()) &&
-      (!filters.min || b.kg >= Number(filters.min)) &&
-      (!filters.max || b.kg <= Number(filters.max))
-    );
+  const [page, setPage] = useState(1);
+  const set = (key, value) => { setPage(1); setFilters((f) => ({ ...f, [key]: value })); };
+  const { data, isPending, error } = useFactoryPage("marketplace", {
+    page, search: filters.search, material: filters.material,
+    minWeightKg: filters.min, maxWeightKg: filters.max, directOnly: filters.direct,
   });
-  const depot = selected && state.depots.find((d) => d.id === selected.depotId);
+  const batches = data?.items || [];
+  const depot = selected && { name: selected.depotName, address: selected.depotAddress, phone: selected.depotPhone };
   return (
     <>
       <PageHead
@@ -319,26 +292,27 @@ export function Marketplace({ navigate }) {
       </div>
       <div className="section-toolbar">
         <span className="muted">
-          {batches.length} lô khả dụng · Chưa có dữ liệu khoảng cách vận chuyển
+          {data?.totalCount ?? 0} lô khả dụng · Chưa có dữ liệu khoảng cách vận chuyển
         </span>
         <Button
           secondary
-          onClick={() =>
+          onClick={() => {
+            setPage(1);
             setFilters({
               search: "",
               material: "",
               min: "",
               max: "",
               direct: filters.direct,
-            })
-          }
+            });
+          }}
         >
           Xóa bộ lọc
         </Button>
       </div>
       <div className="batch-grid">
         {batches.map((b) => {
-          const d = state.depots.find((d) => d.id === b.depotId);
+          const d = { name: b.depotName, distance: null };
           return (
             <article className="batch-card" key={b.id}>
               <div className={`material-cover material-${b.material}`} style={b.imageUrl ? { backgroundImage: `linear-gradient(#0005, #0008), url("${b.imageUrl}")`, backgroundSize: "cover", backgroundPosition: "center", color: "white" } : undefined}>
@@ -385,11 +359,14 @@ export function Marketplace({ navigate }) {
           );
         })}
       </div>
-      {!batches.length && (
+      {isPending && <p role="status">Đang tải lô hàng…</p>}
+      {error && <p role="alert">{error.message}</p>}
+      {!batches.length && !isPending && !error && (
         <Card>
           <Empty text="Không có lô phù hợp" />
         </Card>
       )}
+      <Pagination page={page} totalPages={data?.totalPages} totalCount={data?.totalCount} onChange={setPage} />
       {selected && (
         <Modal
           title={`Chi tiết ${selected.batchCode || selected.id}`}
@@ -468,10 +445,13 @@ export function Marketplace({ navigate }) {
   );
 }
 export function Demands() {
-  const { state, act } = useFactory();
+  const { act } = useFactory();
   const [editing, setEditing] = useState(null);
   const [remove, setRemove] = useState(null);
   const [filter, setFilter] = useState("");
+  const [page, setPage] = useState(1);
+  const { data, isPending, error } = useFactoryPage("demands", { page, material: filter });
+  const demands = data?.items || [];
   return (
     <>
       <PageHead
@@ -499,7 +479,7 @@ export function Demands() {
           <MaterialSelect
             all
             value={filter}
-            onChange={(e) => setFilter(e.target.value)}
+            onChange={(e) => { setFilter(e.target.value); setPage(1); }}
           />
         </Field>
       </div>
@@ -517,9 +497,7 @@ export function Demands() {
               </tr>
             </thead>
             <tbody>
-              {state.demands
-                .filter((d) => !filter || d.material === filter)
-                .map((d) => (
+              {demands.map((d) => (
                   <tr key={d.id}>
                     <td>
                       <strong>{materials[d.material]}</strong>
@@ -547,7 +525,7 @@ export function Demands() {
                         </Button>
                         <Button
                           secondary
-                          onClick={() => void act("TOGGLE_DEMAND", { id: d.id })}
+                          onClick={() => void act("TOGGLE_DEMAND", { id: d.id, isActive: !d.active })}
                         >
                           {d.active ? "Tạm dừng" : "Mở lại"}
                         </Button>
@@ -560,11 +538,14 @@ export function Demands() {
                 ))}
             </tbody>
           </table>
-          {!state.demands.some((d) => !filter || d.material === filter) && (
+          {!demands.length && !isPending && !error && (
             <Empty />
           )}
         </div>
       </Card>
+      {isPending && <p role="status">Đang tải nhu cầu…</p>}
+      {error && <p role="alert">{error.message}</p>}
+      <Pagination page={page} totalPages={data?.totalPages} totalCount={data?.totalCount} onChange={setPage} />
       {editing && (
         <Modal
           title={editing.id ? "Chỉnh sửa nhu cầu" : "Đăng nhu cầu thu mua"}
@@ -637,9 +618,12 @@ export function Demands() {
   );
 }
 export function Partners({ navigate }) {
-  const { state, act } = useFactory();
+  const { act } = useFactory();
   const [filter, setFilter] = useState("");
   const [change, setChange] = useState(null);
+  const [page, setPage] = useState(1);
+  const { data, isPending, error } = useFactoryPage("partners", { page, partnerStatus: filter });
+  const depots = data?.items || [];
   return (
     <>
       <PageHead
@@ -648,7 +632,7 @@ export function Partners({ navigate }) {
       />
       <div className="filter-bar">
         <Field label="Trạng thái">
-          <select value={filter} onChange={(e) => setFilter(e.target.value)}>
+          <select value={filter} onChange={(e) => { setFilter(e.target.value); setPage(1); }}>
             <option value="">Tất cả</option>
             {["PENDING", "APPROVED", "DECLINED", "BLOCKED"].map((s) => (
               <option key={s} value={s}>
@@ -665,13 +649,7 @@ export function Partners({ navigate }) {
         </Field>
       </div>
       <div className="partner-grid">
-        {state.depots
-          .filter((d) => !filter || d.status === filter)
-          .map((d) => {
-            const orders = state.orders.filter(
-              (o) => o.depotId === d.id && o.status === "PAID",
-            );
-            const ratings = orders.filter((o) => o.rating);
+        {depots.map((d) => {
             return (
               <Card
                 key={d.id}
@@ -686,13 +664,13 @@ export function Partners({ navigate }) {
                 <div className="batch-facts">
                   <div>
                     <small>Đã quyết toán</small>
-                    <strong>{orders.length} lô</strong>
+                    <strong>{d.completedOrderCount} lô</strong>
                   </div>
                   <div>
-                    <small>Đánh giá theo đơn</small>
+                    <small>Đánh giá gần nhất</small>
                     <strong>
-                      {ratings.length
-                        ? `★ ${number(ratings.reduce((n, o) => n + o.rating.stars, 0) / ratings.length)}/5`
+                      {d.reviewCount
+                        ? `★ ${number(d.rating)}/5`
                         : "Chưa có"}
                     </strong>
                   </div>
@@ -700,12 +678,7 @@ export function Partners({ navigate }) {
                 <div className="actions">
                   <Button
                     secondary
-                    onClick={() =>
-                      navigate(
-                        "settlements",
-                        orders.find((o) => !o.rating)?.id || orders[0]?.id,
-                      )
-                    }
+                    onClick={() => navigate("settlements")}
                   >
                     Xem đơn & đánh giá
                   </Button>
@@ -714,20 +687,15 @@ export function Partners({ navigate }) {
                   <Button danger={!d.blockedByFactory} onClick={() => setChange({...d, action:d.blockedByFactory?'UNBLOCKED':'BLOCKED', title:d.blockedByFactory?'Bỏ chặn của nhà máy?':'Chặn vựa?', message:d.blockedByFactory?'Chỉ bỏ chặn của nhà máy. Kho còn chặn hoặc trạng thái chặn cũ chưa đối chiếu thì vẫn không giao dịch mới.':'Ngừng nhận lô mới; không tự hủy các lô đang xử lý.'})}>{d.blockedByFactory?'Bỏ chặn của nhà máy':'Chặn vựa'}</Button>
                   {d.blockedByDepot && <p>Kho đang chặn giao dịch.</p>}{d.legacyBlocked && <p>Trạng thái chặn cũ cần đối chiếu với quản trị viên.</p>}
                 </div>
-                {ratings.map((o) => (
-                  <p className="review" key={o.id}>
-                    <strong>
-                      {o.id} · {o.rating.stars}/5
-                    </strong>
-                    <br />
-                    {o.rating.comment || "Không có nhận xét."}
-                  </p>
-                ))}
+                {d.comment && <p className="review">Đánh giá gần nhất: {d.comment}</p>}
               </Card>
             );
           })}
       </div>
-      {!state.depots.some((d) => !filter || d.status === filter) && <Empty />}
+      {isPending && <p role="status">Đang tải đối tác…</p>}
+      {error && <p role="alert">{error.message}</p>}
+      {!depots.length && !isPending && !error && <Empty />}
+      <Pagination page={page} totalPages={data?.totalPages} totalCount={data?.totalCount} onChange={setPage} />
       {change && (
         <Confirm
           title={change.title}
