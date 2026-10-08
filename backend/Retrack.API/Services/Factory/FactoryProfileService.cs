@@ -35,6 +35,8 @@ public class FactoryProfileService(AppDbContext db, FactoryAttachmentService? at
             CapacityKgPerMonth = factory.CapacityKgPerMonth,
             MinimumPurityPercent = factory.MinimumPurityPercent,
             PlatformFeePercentage = feePercentage,
+            Rating = factory.Rating,
+            CreatedAt = factory.CreatedAt,
             AcceptedMaterials = factory.AcceptedMaterialsCsv.Split(',', StringSplitOptions.RemoveEmptyEntries),
             Latitude = factory.Latitude,
             Longitude = factory.Longitude,
