@@ -1230,8 +1230,6 @@
   --green: #0f7656;
   --green-dark: #0a523d;
   --green-soft: #e7f5ee;
-  --blue: #2878a8;
-  --amber: #b87513;
   --red: #bd4638;
   background: linear-gradient(180deg, #f5faf7 0, #f8faf8 260px, #f6f8f6 100%);
 }
@@ -1284,12 +1282,12 @@
   bottom: -45px;
   background: #0f765612;
 }
-.kpi:nth-child(2) { border-top-color: var(--blue); background: linear-gradient(145deg, #fff 50%, #eef7fc 100%); }
-.kpi:nth-child(2) .kpi-icon { color: var(--blue); background: #e5f3fb; }
-.kpi:nth-child(3) { border-top-color: #7b5aae; background: linear-gradient(145deg, #fff 50%, #f5f0fb 100%); }
-.kpi:nth-child(3) .kpi-icon { color: #6d4d9c; background: #f0e9f8; }
-.kpi:nth-child(4) { border-top-color: var(--amber); background: linear-gradient(145deg, #fff 50%, #fff7e8 100%); }
-.kpi:nth-child(4) .kpi-icon { color: #9c630d; background: #ffefcc; }
+.kpi:nth-child(2) { border-top-color: #2f9570; background: linear-gradient(145deg, #fff 50%, #edf8f3 100%); }
+.kpi:nth-child(2) .kpi-icon { color: #24795a; background: #ddf1e8; }
+.kpi:nth-child(3) { border-top-color: #5b9b62; background: linear-gradient(145deg, #fff 50%, #f0f8ee 100%); }
+.kpi:nth-child(3) .kpi-icon { color: #467d4d; background: #e3f1e1; }
+.kpi:nth-child(4) { border-top-color: #87a94d; background: linear-gradient(145deg, #fff 50%, #f5f8e9 100%); }
+.kpi:nth-child(4) .kpi-icon { color: #637f32; background: #ebf2d9; }
 .kpi > strong { color: #102f25; }
 .kpi-label { color: #4d695d; font-weight: 650; }
 .kpi-icon { background: #dff2e9; color: var(--green); padding: 5px 9px; }
@@ -1363,12 +1361,12 @@
 }
 .detail-grid > div:nth-child(4),
 .detail-grid > div:nth-child(6) {
-  background: linear-gradient(145deg, #fff 55%, #eef6fb 100%);
-  border-color: #d7e7f0;
+  background: linear-gradient(145deg, #fff 55%, #edf8f3 100%);
+  border-color: #d2e8dc;
 }
 .detail-grid > div:nth-child(7) {
-  background: linear-gradient(145deg, #fff 55%, #fff5df 100%);
-  border-color: #efdfbd;
+  background: linear-gradient(145deg, #fff 55%, #f2f8e9 100%);
+  border-color: #dbe7c7;
 }
 .detail-grid span {
   display: block;
@@ -1387,7 +1385,7 @@
   overflow-wrap: anywhere;
 }
 .detail-grid > div:nth-child(4) strong {
-  color: #35677f;
+  color: #2c6f54;
   font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
   font-size: 11px;
 }
