@@ -4,6 +4,8 @@ Chạy bằng pgAdmin trên đúng database backend. Đây là script bổ sung 
 
 ## Thứ tự chạy
 
+**Cập nhật chuông thông báo:** DB đã dùng từ trước cần chạy thêm `03_notification_pickup_link.sql` trước khi khởi động backend mới. Chỉ thêm liên kết thông báo → đơn, không cần chạy lại seed. Áp dụng cả máy dùng Driver vì Notification là model chung.
+
 1. `01_employee_setup.sql`: bổ sung cột hồ sơ kho cần cho đăng nhập, bảng check-in, bảng nhật ký gửi cân/bàn giao; đặt cấu hình phí chung thành 5%. Không đổi phí đơn cũ. Chỉ cần chạy một lần sau khi cập nhật code; có thể chạy lại.
 2. `02_employee_demo.sql`: tạo đủ 13 đơn demo Đà Nẵng, gồm điểm check-in tại chỗ; mỗi đơn mới có phí 5%. Cần sẵn tài khoản `employee@retrack.vn`, `seller@retrack.vn` và liên kết nhân viên–kho đang hoạt động.
 

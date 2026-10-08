@@ -11,11 +11,8 @@ export default function JobPoolScreen({ navigation }) {
   const [mine, setMine] = useState(false), [page, setPage] = useState(1);
   const loader = useCallback(signal => driverApi.list(mine, page, signal), [mine, page]);
   const { data, loading, error, refreshing, reload } = usePickupResource(loader);
-  const noticeLoader = useCallback(signal => driverApi.notices(1, signal), []);
-  const notices = usePickupResource(noticeLoader);
-  return <Screen refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { void reload(true); void notices.reload(true); }} />}>
+  return <Screen refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { void reload(true); }} />}>
     <Text style={s.title}>Chuyến vận chuyển</Text>
-    <Button title={`Thông báo${notices.data ? ` (${notices.data.unreadCount} chưa đọc)` : ""}`} variant="secondary" onPress={() => navigation.navigate("DriverNotices")} />
     <Button title={mine ? "Xem chuyến chờ nhận" : "Xem chuyến của tôi"} variant="secondary" onPress={() => { setMine(!mine); setPage(1); }} />
     <Text style={s.label}>{mine ? "CHUYẾN CỦA TÔI" : "CHUYẾN CHỜ NHẬN"}</Text>
     <ResourceState loading={loading} error={error} retry={() => reload()} />

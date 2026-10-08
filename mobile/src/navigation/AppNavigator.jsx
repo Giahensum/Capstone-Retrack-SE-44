@@ -10,6 +10,7 @@ import SellerNavigator from "./SellerNavigator";
 import LoadingSpinner from "../components/common/LoadingSpinner";
 import Screen from "../components/common/Screen";
 import Button from "../components/common/Button";
+import NotificationProvider from "../components/common/NotificationProvider";
 import { styles } from "../theme";
 
 const LoginStack = createStackNavigator();
@@ -68,8 +69,8 @@ export default function AppNavigator() {
       </LoginStack.Navigator>
     );
   // Remount the entire navigator when the account changes so Back cannot cross sessions.
-  if (role === "DEPOT_EMPLOYEE") return <EmployeeNavigator key={token} />;
-  if (role === "DRIVER") return <DriverNavigator key={token} />;
+  if (role === "DEPOT_EMPLOYEE") return <NotificationProvider key={token} role={role}><EmployeeNavigator /></NotificationProvider>;
+  if (role === "DRIVER") return <NotificationProvider key={token} role={role}><DriverNavigator /></NotificationProvider>;
   if (role === "SELLER") return <SellerNavigator key={token} />;
   return (
     <Screen>

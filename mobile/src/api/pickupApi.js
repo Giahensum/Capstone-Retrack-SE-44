@@ -6,7 +6,7 @@ export const pickupApi = {
   getStats: async (signal = undefined) => unwrap(await apiClient.get("/employee/stats", { signal })),
   getNotifications: async (page = 1, signal = undefined) =>
     unwrap(await apiClient.get("/employee/notifications", { params: { page, pageSize: 20 }, signal })),
-  readNotification: async id => unwrap(await apiClient.patch(`/employee/notifications/${encodeURIComponent(id)}/read`)),
+  readNotification: async (id, signal = undefined) => unwrap(await apiClient.patch(`/employee/notifications/${encodeURIComponent(id)}/read`, undefined, { signal })),
   transition: async (id, action, expectedRevision) =>
     unwrap(await apiClient.post(`/employee/pickup/${encodeURIComponent(id)}/${action}`, { expectedRevision })),
   getActive: async (page = 1, signal = undefined) =>
