@@ -25,7 +25,9 @@ test.describe("Factory UI with the local API and PostgreSQL test database", () =
     await page.getByLabel("Hạn nhận hàng").fill("2027-12-31");
     await page.locator("dialog textarea").fill(fixtureNote);
     await page.getByRole("button", { name: "Lưu nhu cầu" }).click();
-    await expect(page.getByText(fixtureNote)).toBeVisible();
+    await expect(page.getByRole("status").filter({ hasText: "Đã lưu thay đổi trên máy chủ." })).toBeVisible();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(page.getByRole("row").filter({ hasText: fixtureNote })).toBeVisible();
 
     await page.reload();
     await page.getByRole("button", { name: "Nhu cầu thu mua" }).click();

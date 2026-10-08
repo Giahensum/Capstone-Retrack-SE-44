@@ -8,7 +8,7 @@ using Retrack.API.Services.Shared;
 
 namespace Retrack.API.Services.Factory;
 
-public class FactoryProfileService(AppDbContext db) : FactoryServiceBase(db), IFactoryProfileService
+public class FactoryProfileService(AppDbContext db, FactoryAttachmentService? attachments = null) : FactoryServiceBase(db), IFactoryProfileService
 {
     public async Task<ServiceResult<ProfileResponse>> GetAsync(Guid userId, CancellationToken ct)
     {
@@ -55,6 +55,10 @@ public class FactoryProfileService(AppDbContext db) : FactoryServiceBase(db), IF
             factory = new Retrack.API.Models.Factory { OwnerId = userId, Name = request.CompanyName.Trim(), Address = request.Address.Trim() };
             Db.Factories.Add(factory);
         }
+        if (attachments is not null &&
+            ((request.BusinessLicenseUrl != factory.BusinessLicenseUrl && !attachments.IsOwnedUrl(request.BusinessLicenseUrl, userId)) ||
+             (request.EnvironmentalLicenseUrl != factory.EnvironmentalLicenseUrl && !attachments.IsOwnedUrl(request.EnvironmentalLicenseUrl, userId))))
+            return ServiceResult<ProfileUpdatedResponse>.Invalid("Tệp hồ sơ phải được tải lên qua chức năng đính kèm của nhà máy.");
         factory.Name = request.CompanyName.Trim();
         factory.TaxCode = request.TaxCode?.Trim();
         factory.Address = request.Address.Trim();

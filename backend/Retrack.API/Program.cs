@@ -130,6 +130,7 @@ builder.Services.AddScoped<Retrack.API.Services.Interfaces.IFactoryOrderService,
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IFactoryPartnerService, Retrack.API.Services.Factory.FactoryPartnerService>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IFactoryProfileService, Retrack.API.Services.Factory.FactoryProfileService>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IQCService, Retrack.API.Services.Factory.FactoryQCService>();
+builder.Services.AddScoped<Retrack.API.Services.Factory.FactoryAttachmentService>();
 
 // ===== CONTROLLERS & SWAGGER =====
 builder.Services.AddControllers().AddJsonOptions(options =>

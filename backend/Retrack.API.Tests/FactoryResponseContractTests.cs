@@ -1,4 +1,7 @@
 using System.Text.Json;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.FileProviders;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Retrack.API.Controllers.Shared;
@@ -123,8 +126,50 @@ public class FactoryResponseContractTests
         Assert.Equal("Missing", json.GetProperty("message").GetString());
     }
 
+    [Fact]
+    public async Task AttachmentUploadChecksFileSignatureAndKeepsOnlyAUrlInTheContract()
+    {
+        var temporaryRoot = Path.Combine(Path.GetTempPath(), $"retrack-factory-attachment-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(temporaryRoot);
+        try
+        {
+            await using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
+            var service = new FactoryAttachmentService(db, new TestEnvironment(temporaryRoot));
+            var ownerId = Guid.NewGuid();
+            var pngBytes = new byte[] { 137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3 };
+            var upload = new FormFile(new MemoryStream(pngBytes), 0, pngBytes.Length, "file", "evidence.png");
+
+            var url = await service.UploadAsync(ownerId, upload, default);
+
+            Assert.StartsWith($"/api/factory/attachments/{ownerId:N}/", url);
+            Assert.True(service.IsOwnedUrl(url, ownerId));
+            var id = Guid.ParseExact(url.Split('/').Last(), "N");
+            var opened = await service.OpenAsync(ownerId, "FACTORY", ownerId, id, default);
+            Assert.Equal("image/png", opened.ContentType);
+            Assert.True(File.Exists(opened.Path));
+
+            var fake = new FormFile(new MemoryStream("not an image"u8.ToArray()), 0, 12, "file", "fake.png");
+            await Assert.ThrowsAsync<ArgumentException>(() => service.UploadAsync(ownerId, fake, default));
+        }
+        finally
+        {
+            if (Directory.Exists(temporaryRoot)) Directory.Delete(temporaryRoot, true);
+        }
+    }
+
     private static void AssertFields(JsonElement json, params string[] names)
         => Assert.Equal(names.OrderBy(x => x), json.EnumerateObject().Select(x => x.Name).OrderBy(x => x));
 
     private sealed class TestController : ControllerBase;
+
+    private sealed class TestEnvironment(string contentRootPath) : IWebHostEnvironment
+    {
+        public string ApplicationName { get; set; } = "Retrack.API.Tests";
+        public IFileProvider WebRootFileProvider { get; set; } = new NullFileProvider();
+        public string WebRootPath { get; set; } = contentRootPath;
+        public string EnvironmentName { get; set; } = "Development";
+        public string ContentRootPath { get; set; } = contentRootPath;
+        public IFileProvider ContentRootFileProvider { get; set; } = new PhysicalFileProvider(contentRootPath);
+    }
 }

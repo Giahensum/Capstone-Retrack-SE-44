@@ -10,6 +10,6 @@ namespace Retrack.API.Controllers.Factory;
 public class FactoryDashboardController(IFactoryDashboardService service) : FactoryControllerBase
 {
     [HttpGet]
-    public async Task<IActionResult> Get(CancellationToken ct)
-        => this.ToActionResult(await service.GetAsync(CurrentUserId, ct));
+    public async Task<IActionResult> Get([FromQuery] string? period, CancellationToken ct)
+        => this.ToActionResult(await service.GetAsync(CurrentUserId, ct, period ?? "month"));
 }
