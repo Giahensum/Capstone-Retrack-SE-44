@@ -38,6 +38,7 @@ public sealed class DriverJobService(AppDbContext db)
         await RequireAsync(userId, ct);
         var source = Scoped(userId).AsNoTracking();
         source = mine ? source.Where(j => j.DriverId == userId) : Ready(source).Where(j => j.DriverId == null && j.Status == "PENDING");
+        if (!mine) source = source.Where(j => !db.DriverDeliveryEvents.Any(e => e.JobId == j.Id && e.DriverId == userId && e.Action == "reject"));
         return new() { Page = page, PageSize = 20, TotalCount = await source.CountAsync(ct),
             Items = await Project(source.OrderByDescending(j => j.CreatedAt).ThenBy(j => j.Id).Skip((page - 1) * 20).Take(20), userId).ToListAsync(ct) };
     }

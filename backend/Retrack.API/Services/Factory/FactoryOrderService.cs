@@ -17,7 +17,7 @@ public class FactoryOrderService(AppDbContext db) : FactoryServiceBase(db), IFac
         if (query.Status == Retrack.API.Models.Enums.BatchStatus.ACCEPTED)
             source = source.Where(x => x.Status == "ACCEPTED" || x.Status == "PENDING_APPROVAL" || x.Status == "PENDING_FACTORY" || x.Status == "READY_FOR_PICKUP" || x.Status == "TRANSPORT_READY");
         else if (query.Status == Retrack.API.Models.Enums.BatchStatus.IN_PROGRESS)
-            source = source.Where(x => x.Status == "IN_PROGRESS" || x.Status == "TRANSPORT_READY" || x.Status == "ACCEPTED" || x.Status == "READY_FOR_PICKUP");
+            source = source.Where(x => x.Status == "IN_PROGRESS" || x.Status == "IN_TRANSIT" || x.Status == "TRANSPORT_READY" || x.Status == "ACCEPTED" || x.Status == "READY_FOR_PICKUP");
         else if (query.Status == Retrack.API.Models.Enums.BatchStatus.DELIVERED)
             source = source.Where(x => x.Status == "DELIVERED" || x.Status == "IN_PROGRESS");
         var all = await source.OrderByDescending(x => x.CreatedAt).ToListAsync(ct);

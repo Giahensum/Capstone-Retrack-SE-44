@@ -22,6 +22,7 @@ namespace Retrack.API.Data
         public DbSet<FactoryDepotPartnership> FactoryDepotPartnerships { get; set; }
         public DbSet<InventoryBatch> InventoryBatches { get; set; }
         public DbSet<TransportJob> TransportJobs { get; set; }
+        public DbSet<DriverDeliveryEvent> DriverDeliveryEvents { get; set; }
         public DbSet<BatchQualityCheck> BatchQualityChecks { get; set; }
         public DbSet<FactoryDepotReview> FactoryDepotReviews { get; set; }
         public DbSet<PlatformTransaction> PlatformTransactions { get; set; }
@@ -35,6 +36,11 @@ namespace Retrack.API.Data
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+            modelBuilder.Entity<DriverDeliveryEvent>().HasOne(e => e.Job).WithMany()
+                .HasForeignKey(e => e.JobId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<DriverDeliveryEvent>().HasOne(e => e.Driver).WithMany()
+                .HasForeignKey(e => e.DriverId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<DriverDeliveryEvent>().HasIndex(e => new { e.JobId, e.DriverId, e.OperationId }).IsUnique();
             // Các model scaffold của kiến trúc cũ không thuộc schema dùng chung.
             // Khai báo tập trung để EF không tự sinh lại các bảng PascalCase.
             modelBuilder.Ignore<Seller>();
