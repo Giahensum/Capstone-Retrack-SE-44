@@ -26,6 +26,8 @@ public sealed partial class EmployeeCollectionTests
         var audit = await db.EmployeeCollectionEvents.SingleAsync();
         Assert.Contains("PET", audit.SnapshotJson); Assert.Equal(employee.Id, audit.EmployeeId);
         var count = await db.Notifications.CountAsync();
+        var notice = Assert.Single((await new EmployeeReportingService(db).NotificationsAsync(employee.Id, 1, 20, default)).Items);
+        Assert.Equal(pickup.Id, notice.PickupRequestId);
         await Transition("SUBMITTED");
         Assert.Equal(count, await db.Notifications.CountAsync());
         Assert.Single(await db.EmployeeCollectionEvents.ToListAsync());

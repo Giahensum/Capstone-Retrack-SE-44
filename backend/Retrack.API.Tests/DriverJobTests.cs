@@ -29,6 +29,36 @@ public sealed class DriverJobTests : IAsyncLifetime
     }
     public async Task DisposeAsync() { await db.DisposeAsync(); await connection.DisposeAsync(); }
     [Fact]
+    public async Task NoticesArePrivateAndCannotMarkAnotherDriversNoticeRead()
+    {
+        var mine = new Notification { UserId = driver.Id, TransportJobId = job.Id, Title = "Của tôi" };
+        var foreign = new Notification { UserId = other.Id, TransportJobId = job.Id, Title = "Người khác" };
+        db.Notifications.AddRange(mine, foreign); await db.SaveChangesAsync();
+        var controller = new Retrack.API.Controllers.Driver.DriverNoticeController(db, new(db))
+        {
+            ControllerContext = new Microsoft.AspNetCore.Mvc.ControllerContext
+            {
+                HttpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext
+                {
+                    User = new System.Security.Claims.ClaimsPrincipal(new System.Security.Claims.ClaimsIdentity(
+                        new[] { new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.NameIdentifier, driver.Id.ToString()) }, "test"))
+                }
+            }
+        };
+        var result = Assert.IsType<Microsoft.AspNetCore.Mvc.OkObjectResult>(await controller.List(1));
+        var response = Assert.IsType<Retrack.API.DTOs.ApiResponse<object>>(result.Value);
+        var json = System.Text.Json.JsonSerializer.SerializeToElement(response.Data);
+        Assert.Equal(1, json.GetProperty("unreadCount").GetInt32());
+        Assert.Equal(mine.Id, json.GetProperty("items")[0].GetProperty("Id").GetGuid());
+        Assert.Equal(job.Id, json.GetProperty("items")[0].GetProperty("jobId").GetGuid());
+        Assert.IsType<Microsoft.AspNetCore.Mvc.NotFoundObjectResult>(await controller.Read(foreign.Id, default));
+        await controller.Read(mine.Id, default); await controller.Read(mine.Id, default);
+        Assert.False((await db.Notifications.AsNoTracking().SingleAsync(n => n.Id == foreign.Id)).IsRead);
+        Assert.True((await db.Notifications.AsNoTracking().SingleAsync(n => n.Id == mine.Id)).IsRead);
+        driver.IsActive = false; await db.SaveChangesAsync();
+        await Assert.ThrowsAsync<DepotForbiddenException>(() => controller.List(1));
+    }
+    [Fact]
     public async Task PoolAcceptRetryAndCompetingDriver()
     {
         var service = new DriverJobService(db);
