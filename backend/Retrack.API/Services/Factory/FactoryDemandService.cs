@@ -13,9 +13,15 @@ public class FactoryDemandService(AppDbContext db) : FactoryServiceBase(db), IFa
     public async Task<ServiceResult<PageResponse<DemandResponse>>> ListAsync(Guid userId, PageQuery query, CancellationToken ct)
     {
         var factory = await CurrentFactory(userId, ct);
-        var source = Db.FactoryDemands.AsNoTracking().Where(x => x.FactoryId == factory.Id).OrderByDescending(x => x.CreatedAt);
+        var source = Db.FactoryDemands.AsNoTracking().Where(x => x.FactoryId == factory.Id);
+        if (query.Material.HasValue)
+        {
+            var materials = MaterialCatalog.Values(query.Material.Value.ToString());
+            source = source.Where(x => materials.Contains(x.MaterialType));
+        }
         var count = await source.CountAsync(ct);
-        var items = await source.Skip((query.Page - 1) * query.PageSize).Take(query.PageSize).ToListAsync(ct);
+        var items = await source.OrderByDescending(x => x.CreatedAt).ThenBy(x => x.Id)
+            .Skip((query.Page - 1) * query.PageSize).Take(query.PageSize).ToListAsync(ct);
         return ServiceResult<PageResponse<DemandResponse>>.Success(data: new PageResponse<DemandResponse>
         {
             Items = items.Select(DemandView).ToList(),

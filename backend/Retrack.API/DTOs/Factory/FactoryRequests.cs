@@ -7,11 +7,12 @@ public class PageQuery
 {
     [Range(1, int.MaxValue)] public int Page { get; set; } = 1;
     [Range(1, 100)] public int PageSize { get; set; } = 20;
+    [EnumDataType(typeof(MaterialType))] public MaterialType? Material { get; set; }
+    [RegularExpression("^(PENDING|APPROVED|DECLINED|BLOCKED)$")] public string? PartnerStatus { get; set; }
 }
 
 public class MarketQuery : PageQuery
 {
-    [EnumDataType(typeof(MaterialType))] public MaterialType? Material { get; set; }
     [StringLength(200)] public string? Search { get; set; }
     [Range(0, 1000000000)] public decimal? MinWeightKg { get; set; }
     [Range(0, 1000000000)] public decimal? MaxWeightKg { get; set; }
@@ -22,6 +23,9 @@ public class MarketQuery : PageQuery
 public class OrderQuery : PageQuery
 {
     [EnumDataType(typeof(BatchStatus))] public BatchStatus? Status { get; set; }
+    [RegularExpression("^(orders|qc|settlements)$")] public string? Stage { get; set; }
+    [RegularExpression("^(ACCEPTED|IN_TRANSIT|DELIVERED|RECEIVED|WEIGHED|VERIFIED|PAID|REJECTED)$")] public string? DisplayStatus { get; set; }
+    [StringLength(200)] public string? Search { get; set; }
 }
 
 public class ProfileRequest

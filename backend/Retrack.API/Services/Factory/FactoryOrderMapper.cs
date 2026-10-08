@@ -20,6 +20,7 @@ public static class FactoryOrderMapper
             "DELIVERED" => "DELIVERED",
             _ => "ACCEPTED"
         },
+        "IN_PROGRESS" or "IN_TRANSIT" => batch.TransportJob?.Status == "DELIVERED" ? "DELIVERED" : "IN_TRANSIT",
         "RECEIVED" => "RECEIVED",
         "WEIGHED" => "WEIGHED",
         "VERIFIED" => "VERIFIED",

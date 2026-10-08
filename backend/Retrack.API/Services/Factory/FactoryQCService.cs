@@ -8,7 +8,7 @@ using Retrack.API.Services.Shared;
 
 namespace Retrack.API.Services.Factory;
 
-public class FactoryQCService(AppDbContext db, IConfiguration configuration) : FactoryServiceBase(db), IQCService
+public class FactoryQCService(AppDbContext db, IConfiguration configuration, FactoryAttachmentService? attachments = null) : FactoryServiceBase(db), IQCService
 {
     public async Task<ServiceResult<WeighResponse>> WeighAsync(Guid userId, Guid id, WeighRequest request, CancellationToken ct)
     {
@@ -20,6 +20,8 @@ public class FactoryQCService(AppDbContext db, IConfiguration configuration) : F
         if (batch is null) return ServiceResult<WeighResponse>.NotFound("Không tìm thấy đơn hàng.");
         if (batch.Status is not ("RECEIVED" or "WEIGHED"))
             return ServiceResult<WeighResponse>.Conflict("Chỉ cân sau khi nhận hàng và trước khi chốt KCS.");
+        if (attachments is not null && request.TicketImageUrl != batch.QualityCheck?.TicketImageUrl && !attachments.IsOwnedUrl(request.TicketImageUrl, userId))
+            return ServiceResult<WeighResponse>.Invalid("Phiếu cân phải được tải lên qua chức năng đính kèm của nhà máy.");
         var net = request.GrossWeightKg - request.TareWeightKg;
         var difference = batch.DeclaredWeightKg == 0 ? 0 : (net - batch.DeclaredWeightKg) / batch.DeclaredWeightKg * 100m;
         var threshold = configuration.GetValue<decimal?>("Factory:WeightDiscrepancyPercentage") ?? 5m;

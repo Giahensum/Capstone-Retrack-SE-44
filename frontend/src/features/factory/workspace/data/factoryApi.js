@@ -1,58 +1,49 @@
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
-export const TOKEN_KEY = "retrack.accessToken";
+import api from "@/lib/axios";
 
-export function getSharedSession() {
+export async function request(path, { method = "GET", body } = {}) {
   try {
-    const persisted = JSON.parse(localStorage.getItem("retrack-auth") || "null");
-    return persisted?.state || null;
-  } catch {
-    return null;
+    const response = await api.request({
+      url: path.replace(/^\/api/, ""),
+      method,
+      ...(body !== undefined ? { data: body } : {}),
+    });
+    if (response.data?.success === false) throw new Error(response.data.message);
+    return response.data?.data;
+  } catch (error) {
+    throw new Error(error.response?.data?.message || error.message || "Không kết nối được máy chủ.");
   }
 }
 
-export function getStoredToken() {
-  return getSharedSession()?.token || localStorage.getItem(TOKEN_KEY);
-}
-
-export async function request(path, { method = "GET", body, token = getStoredToken() } = {}) {
-  const response = await fetch(`${API_BASE}${path}`, {
-    method,
-    headers: {
-      ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-  });
-  const payload = await response.json().catch(() => null);
-  if (!response.ok || payload?.success === false) {
-    if (response.status === 401) {
-      localStorage.removeItem(TOKEN_KEY);
-      window.dispatchEvent(new Event("retrack:unauthorized"));
-    }
-    throw new Error(payload?.message || `Yêu cầu thất bại (${response.status}).`);
+async function attachmentUrl(attachment) {
+  if (!attachment) return null;
+  if (!attachment.file) return attachment.data || null;
+  const form = new FormData();
+  form.append("file", attachment.file);
+  try {
+    const response = await api.post("/factory/attachments", form, { headers: { "Content-Type": "multipart/form-data" } });
+    return response.data.data.url;
+  } catch (error) {
+    throw new Error(error.response?.data?.message || "Không tải được tệp đính kèm.");
   }
-  return payload?.data;
 }
 
-export async function login(email, password) {
-  const result = await request("/api/auth/login", { method: "POST", body: { email, password }, token: null });
-  return {
-    accessToken: result.accessToken || result.token,
-    user: result.user || {
-      id: result.userId,
-      role: result.role,
-      fullName: result.fullName,
-      email: result.email,
-    },
-  };
-}
-
-export async function register({ email, password, fullName, phone }) {
-  return request("/api/auth/register", {
-    method: "POST",
-    body: { email, password, fullName, phone, role: "FACTORY" },
-    token: null,
-  });
+export async function downloadFactoryAttachment(url, name = "chung-tu") {
+  if (!url) return;
+  if (!url.startsWith("/api/factory/attachments/")) {
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = name;
+    anchor.rel = "noopener noreferrer";
+    anchor.click();
+    return;
+  }
+  const response = await api.get(url.replace(/^\/api/, ""), { responseType: "blob" });
+  const objectUrl = URL.createObjectURL(response.data);
+  const anchor = document.createElement("a");
+  anchor.href = objectUrl;
+  anchor.download = name;
+  anchor.click();
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
 }
 
 const dateOnly = (value) => value?.slice(0, 10) || "";
@@ -81,7 +72,7 @@ function mapProfile(profile) {
   };
 }
 
-function mapDemand(demand) {
+export function mapDemand(demand) {
   return {
     id: demand.id,
     material: demand.materialType,
@@ -94,7 +85,7 @@ function mapDemand(demand) {
   };
 }
 
-function mapOrder(order) {
+export function mapOrder(order) {
   const ticket = order.weightTicket;
   const verification = order.weightVerification;
   const net = verification?.factoryWeightKg || ticket?.netWeightKg || 0;
@@ -167,53 +158,12 @@ function mapOrder(order) {
   };
 }
 
-export async function loadFactoryState(token) {
-  const [profileResult, demandsResult, ordersResult, marketplaceResult, directOffersResult, pricesResult, partnersResult] = await Promise.all([
-    request("/api/factory/profile", { token }),
-    request("/api/factory/demands?page=1&pageSize=100", { token }),
-    request("/api/factory/orders?page=1&pageSize=100", { token }),
-    request("/api/factory/marketplace/batches?page=1&pageSize=100", { token }),
-    request("/api/factory/marketplace/batches?page=1&pageSize=100&directOnly=true", { token }),
-    request("/api/factory/marketplace/prices", { token }),
-    request("/api/factory/partners?page=1&pageSize=100", { token }),
+export async function loadFactoryState() {
+  const [profileResult, dashboard, pricesResult] = await Promise.all([
+    request("/api/factory/profile"),
+    request("/api/factory/dashboard"),
+    request("/api/factory/marketplace/prices"),
   ]);
-  const partners = partnersResult.items || [];
-  const batches = [...(marketplaceResult.items || []), ...(directOffersResult.items || [])].map((batch) => ({
-    id: batch.id,
-    batchCode: batch.batchCode,
-    depotId: batch.depot.id,
-    material: batch.materialType,
-    kg: batch.estimatedWeightKg,
-    direct: batch.isDirectOffer,
-    status: batch.status || "LISTED",
-    createdAt: batch.createdAt,
-    note: batch.description || "",
-    imageUrl: batch.thumbnailImageUrl,
-    imageUrls: batch.imageUrls || [],
-  }));
-  const depotsById = new Map();
-  for (const partner of partners) depotsById.set(partner.depotId, {
-    id: partner.depotId,
-    name: partner.name,
-    address: partner.address || "",
-    phone: partner.contactPhone || "",
-    status: partner.status, blockedByFactory: partner.blockedByFactory, blockedByDepot: partner.blockedByDepot, legacyBlocked: partner.legacyBlocked,
-    distance: null,
-    rating: partner.latestRating || partner.rating,
-    comment: partner.latestComment || "",
-    orderCount: partner.orderCount,
-  });
-  for (const batch of [...(marketplaceResult.items || []), ...(directOffersResult.items || [])]) {
-    if (!depotsById.has(batch.depot.id)) depotsById.set(batch.depot.id, {
-      id: batch.depot.id,
-      name: batch.depot.companyName,
-      address: batch.depot.address || "",
-      phone: batch.depot.contactPhone || "",
-      status: "PENDING",
-      distance: null,
-    });
-  }
-  const orders = (ordersResult.items || []).map(mapOrder);
   const prices = pricesResult.map((price) => ({
     material: price.materialType,
     price: price.pricePerKg,
@@ -221,12 +171,9 @@ export async function loadFactoryState(token) {
     source: price.source || "",
   }));
   return {
-    version: 2,
+    version: 3,
     profile: mapProfile(profileResult),
-    depots: [...depotsById.values()],
-    batches,
-    orders,
-    demands: (demandsResult.items || []).map(mapDemand),
+    dashboard,
     prices,
   };
 }
@@ -235,6 +182,9 @@ export async function performFactoryAction(type, payload) {
   const id = encodeURIComponent(payload.id || "");
   switch (type) {
     case "PROFILE":
+      {
+      const businessLicenseUrl = await attachmentUrl(payload.businessLicense);
+      const environmentalLicenseUrl = await attachmentUrl(payload.environmentLicense);
       return request("/api/factory/profile", { method: "PUT", body: {
         companyName: payload.companyName,
         taxCode: payload.taxCode,
@@ -246,9 +196,10 @@ export async function performFactoryAction(type, payload) {
         capacityKgPerMonth: Number(payload.capacity),
         minimumPurityPercent: Number(payload.purity),
         acceptedMaterials: payload.materials,
-        businessLicenseUrl: payload.businessLicense?.data || null,
-        environmentalLicenseUrl: payload.environmentLicense?.data || null,
+        businessLicenseUrl,
+        environmentalLicenseUrl,
       } });
+      }
     case "SAVE_DEMAND":
       return request(`/api/factory/demands${payload.id ? `/${id}` : ""}`, {
         method: payload.id ? "PUT" : "POST",
@@ -273,13 +224,16 @@ export async function performFactoryAction(type, payload) {
     case "RECEIVE":
       return request(`/api/factory/orders/${id}/receive`, { method: "POST", body: {} });
     case "WEIGH":
+      {
+      const ticketImageUrl = await attachmentUrl(payload.attachment);
       return request(`/api/factory/qc/orders/${id}/weigh`, { method: "POST", body: {
         grossWeightKg: Number(payload.gross),
         tareWeightKg: Number(payload.tare),
         ticketNumber: payload.ticketNumber || null,
-        ticketImageUrl: payload.attachment?.data || null,
+        ticketImageUrl,
         note: payload.note,
       } });
+      }
     case "QC":
       return request(`/api/factory/qc/orders/${id}/quality`, { method: "POST", body: {
         accept: payload.decision === "accept",
@@ -296,11 +250,14 @@ export async function performFactoryAction(type, payload) {
         paymentReference: payload.reference,
       } });
     case "INVOICE":
+      {
+      const invoiceFileUrl = await attachmentUrl(payload.file);
       return request(`/api/factory/orders/${id}/invoice`, { method: "PUT", body: {
         invoiceNumber: payload.file.invoiceNumber || payload.file.name,
-        invoiceFileUrl: payload.file.data,
+        invoiceFileUrl,
         vatAmount: 0,
       } });
+      }
     case "RATE":
       return request(`/api/factory/partners/orders/${id}/rating`, { method: "POST", body: {
         rating: Number(payload.stars),

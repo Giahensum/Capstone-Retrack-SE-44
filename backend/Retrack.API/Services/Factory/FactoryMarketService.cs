@@ -22,7 +22,12 @@ public class FactoryMarketService(AppDbContext db) : FactoryServiceBase(db), IFa
         if (query.Material.HasValue) { var values = MaterialCatalog.Values(query.Material.Value.ToString()); source = source.Where(x => values.Contains(x.MaterialType)); }
         if (query.MinWeightKg.HasValue) source = source.Where(x => x.DeclaredWeightKg >= query.MinWeightKg.Value);
         if (query.MaxWeightKg.HasValue) source = source.Where(x => x.DeclaredWeightKg <= query.MaxWeightKg.Value);
-        if (!string.IsNullOrWhiteSpace(query.Search)) source = source.Where(x => x.Description != null && x.Description.Contains(query.Search));
+        if (!string.IsNullOrWhiteSpace(query.Search))
+        {
+            var search = query.Search.Trim();
+            source = source.Where(x => (x.Code != null && x.Code.Contains(search)) || x.Depot.Name.Contains(search) ||
+                (x.Description != null && x.Description.Contains(search)));
+        }
         if (query.DirectOnly) source = source.Where(x => x.DirectOfferFactoryId == factory.Id || (x.TargetFactoryId == factory.Id && x.Status == "PENDING_APPROVAL"));
         else source = source.Where(x => x.TargetFactoryId == null && x.DirectOfferFactoryId == null);
         if (accepted.Length > 0)
@@ -31,6 +36,8 @@ public class FactoryMarketService(AppDbContext db) : FactoryServiceBase(db), IFa
             source = source.Where(x => materialValues.Contains(x.MaterialType));
         }
         if (factory.CapacityKgPerMonth > 0) source = source.Where(x => x.DeclaredWeightKg <= factory.CapacityKgPerMonth);
+        source = source.Where(x => !Db.FactoryDepotPartnerships.Any(p => p.FactoryId == factory.Id && p.DepotId == x.DepotId &&
+            (p.Status == "BLOCKED" || p.BlockedByDepot || p.BlockedByFactory)));
         var total = await source.CountAsync(ct);
         var rows = await source.OrderByDescending(x => x.CreatedAt).ThenBy(x => x.Id)
             .Skip((query.Page - 1) * query.PageSize).Take(query.PageSize).ToListAsync(ct);

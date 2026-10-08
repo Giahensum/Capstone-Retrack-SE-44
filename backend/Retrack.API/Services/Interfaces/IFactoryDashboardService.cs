@@ -5,5 +5,5 @@ namespace Retrack.API.Services.Interfaces;
 
 public interface IFactoryDashboardService
 {
-    Task<ServiceResult<DashboardResponse>> GetAsync(Guid userId, CancellationToken ct);
+    Task<ServiceResult<DashboardResponse>> GetAsync(Guid userId, CancellationToken ct, string period = "month");
 }

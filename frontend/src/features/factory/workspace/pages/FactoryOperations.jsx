@@ -6,6 +6,7 @@ import {
   Empty,
   Field,
   Modal,
+  Pagination,
   PageHead,
   Status,
   useFactory,
@@ -18,6 +19,8 @@ import {
   settlement,
   weigh,
 } from "../data/factoryState";
+import { useFactoryOrder, useFactoryPage } from "../data/useFactoryData";
+import { downloadFactoryAttachment } from "../data/factoryApi";
 
 const modes = {
   orders: {
@@ -39,31 +42,23 @@ const modes = {
   },
 };
 export function Operations({ mode, focusId, navigate }) {
-  const { state, act } = useFactory();
+  const { state, act, notify } = useFactory();
   const config = modes[mode];
   const [selectedId, setSelectedId] = useState(focusId || null);
   const [filter, setFilter] = useState("");
   const [search, setSearch] = useState("");
   const [action, setAction] = useState(null);
-  const orders = state.orders.filter(
-    (o) =>
-      config.states.includes(o.status) &&
-      (!filter || o.status === filter) &&
-      `${o.id} ${o.batchId} ${state.depots.find((d) => d.id === o.depotId)?.name}`
-        .toLowerCase()
-        .includes(search.toLowerCase()),
-  );
-  const order = state.orders.find((o) => o.id === selectedId);
-  const depot = order && state.depots.find((d) => d.id === order.depotId);
+  const [page, setPage] = useState(1);
+  const { data, isPending, error } = useFactoryPage("orders", { page, stage: mode, displayStatus: filter, search });
+  const orders = data?.items || [];
+  const { data: order } = useFactoryOrder(selectedId);
+  const depot = order && { name: order.depotName, address: order.depotAddress, phone: order.depotPhone };
   return (
     <>
       <PageHead title={config.title} text={config.text} />
       {mode === "settlements" && (
         <div className="info-box">
-          <strong>
-            Phí nền tảng tích lũy:{" "}
-            {money(state.orders.reduce((n, o) => n + (o.payment?.fee || 0), 0))}
-          </strong>
+          <strong>Phí nền tảng được tính trên từng đơn đã quyết toán.</strong>
           <span>
             Phí được giữ lại từ tiền hàng và chờ đối soát công nợ. Bản demo chưa
             có hóa đơn thu phí từ Admin.
@@ -75,10 +70,10 @@ export function Operations({ mode, focusId, navigate }) {
           label="Tìm đơn / vựa"
           value={search}
           placeholder="Nhập mã đơn, mã lô hoặc tên vựa"
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => { setSearch(e.target.value); setPage(1); }}
         />
         <Field label="Trạng thái">
-          <select value={filter} onChange={(e) => setFilter(e.target.value)}>
+          <select value={filter} onChange={(e) => { setFilter(e.target.value); setPage(1); }}>
             <option value="">Tất cả trạng thái</option>
             {config.states.map((s) => (
               <option key={s} value={s}>
@@ -88,7 +83,7 @@ export function Operations({ mode, focusId, navigate }) {
           </select>
         </Field>
       </div>
-      <Card title={`${orders.length} đơn hàng`}>
+      <Card title={`${data?.totalCount ?? 0} đơn hàng`}>
         <div className="table-wrap">
           <table>
             <thead>
@@ -111,7 +106,7 @@ export function Operations({ mode, focusId, navigate }) {
                     <small>{o.batchId}</small>
                   </td>
                   <td>
-                    {state.depots.find((d) => d.id === o.depotId)?.name}
+                    {o.depotName}
                     <small>{materials[o.material]}</small>
                   </td>
                   <td>
@@ -134,9 +129,12 @@ export function Operations({ mode, focusId, navigate }) {
               ))}
             </tbody>
           </table>
-          {!orders.length && <Empty text="Chưa có đơn phù hợp" />}
+          {!orders.length && !isPending && !error && <Empty text="Chưa có đơn phù hợp" />}
         </div>
       </Card>
+      {isPending && <p role="status">Đang tải đơn hàng…</p>}
+      {error && <p role="alert">{error.message}</p>}
+      <Pagination page={page} totalPages={data?.totalPages} totalCount={data?.totalCount} onChange={setPage} />
       {order && (
         <section className="order-detail">
           <div className="section-toolbar">
@@ -205,12 +203,9 @@ export function Operations({ mode, focusId, navigate }) {
                 <p className="info-box">Biên bản cân: {order.weight.note}</p>
               )}
               {order.weight?.attachment && (
-                <a
-                  href={order.weight.attachment.data}
-                  download={order.weight.attachment.name}
-                >
+                <button type="button" onClick={() => void downloadFactoryAttachment(order.weight.attachment.data, order.weight.attachment.name).catch((error) => notify(error.message, true))}>
                   ↓ Phiếu cân: {order.weight.attachment.name}
-                </a>
+                </button>
               )}
               {order.qc && (
                 <div className="quality-summary">

@@ -13,10 +13,15 @@ public class FactoryPartnerService(AppDbContext db) : FactoryServiceBase(db), IF
     public async Task<ServiceResult<PageResponse<PartnerResponse>>> ListAsync(Guid userId, PageQuery query, CancellationToken ct)
     {
         var factory = await CurrentFactory(userId, ct);
-        var source = Db.FactoryDepotPartnerships.AsNoTracking().Where(x => x.FactoryId == factory.Id)
-            .Include(x => x.Depot).ThenInclude(x => x.Owner).OrderByDescending(x => x.CreatedAt);
+        IQueryable<FactoryDepotPartnership> source = Db.FactoryDepotPartnerships.AsNoTracking().Where(x => x.FactoryId == factory.Id)
+            .Include(x => x.Depot).ThenInclude(x => x.Owner);
+        if (!string.IsNullOrWhiteSpace(query.PartnerStatus))
+            source = query.PartnerStatus == "BLOCKED"
+                ? source.Where(x => x.Status == "BLOCKED" || x.BlockedByDepot || x.BlockedByFactory)
+                : source.Where(x => x.Status == query.PartnerStatus && !x.BlockedByDepot && !x.BlockedByFactory);
         var total = await source.CountAsync(ct);
-        var partnerships = await source.Skip((query.Page - 1) * query.PageSize).Take(query.PageSize).ToListAsync(ct);
+        var partnerships = await source.OrderByDescending(x => x.CreatedAt).ThenBy(x => x.Id)
+            .Skip((query.Page - 1) * query.PageSize).Take(query.PageSize).ToListAsync(ct);
         var depotIds = partnerships.Select(x => x.DepotId).ToArray();
         var reviews = await Db.FactoryDepotReviews.AsNoTracking().Where(x => x.FactoryId == factory.Id && depotIds.Contains(x.DepotId))
             .OrderByDescending(x => x.CreatedAt).ToListAsync(ct);
