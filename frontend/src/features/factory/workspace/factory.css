@@ -1348,3 +1348,57 @@
   cursor: pointer;
 }
 .factory-shell input[type="file"]::file-selector-button:hover { background: #cce9dc; }
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.detail-grid > div {
+  min-width: 0;
+  padding: 14px 15px;
+  border: 1px solid #dce9e2;
+  border-radius: 9px;
+  background: linear-gradient(145deg, #fff 55%, #f1f8f4 100%);
+}
+.detail-grid > div:nth-child(4),
+.detail-grid > div:nth-child(6) {
+  background: linear-gradient(145deg, #fff 55%, #eef6fb 100%);
+  border-color: #d7e7f0;
+}
+.detail-grid > div:nth-child(7) {
+  background: linear-gradient(145deg, #fff 55%, #fff5df 100%);
+  border-color: #efdfbd;
+}
+.detail-grid span {
+  display: block;
+  margin-bottom: 6px;
+  color: #71847a;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .35px;
+  text-transform: uppercase;
+}
+.detail-grid strong {
+  display: block;
+  color: #173f32;
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.detail-grid > div:nth-child(4) strong {
+  color: #35677f;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 11px;
+}
+.detail-grid + .muted {
+  margin: 14px 2px 0;
+  padding-top: 12px;
+  border-top: 1px solid #e5eee9;
+}
+@media (max-width: 1000px) {
+  .detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 560px) {
+  .detail-grid { grid-template-columns: 1fr; }
+}
