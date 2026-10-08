@@ -4,20 +4,19 @@ import ProfileNavigator from "./ProfileNavigator";
 import DashboardScreen from "../screens/driver/DashboardScreen";
 import JobPoolScreen from "../screens/driver/JobPoolScreen";
 import Brand from "../components/common/Brand";
-import PlaceholderScreen from "../components/common/PlaceholderScreen";
+import HistoryScreen from "../screens/driver/HistoryScreen";
 import { createStackNavigator } from "@react-navigation/stack";
 import JobDetailScreen from "../screens/driver/JobDetailScreen";
 import MapScreen from "../screens/driver/MapScreen";
-import NotificationsScreen from "../screens/driver/NotificationsScreen";
+import NotificationBell from "../components/common/NotificationBell";
 import CheckInDeliveryScreen from "../screens/driver/CheckInDeliveryScreen";
 const Stack = createStackNavigator();
 function JobNavigator() {
-  return <Stack.Navigator id="DriverJobs" screenOptions={{ headerTintColor: "#446900", headerStyle: { backgroundColor: "#f8f9ff" }, headerShadowVisible: false }}>
+  return <Stack.Navigator id="DriverJobs" screenOptions={{ headerRight: () => <NotificationBell />, headerTintColor: "#446900", headerStyle: { backgroundColor: "#f8f9ff" }, headerShadowVisible: false }}>
     <Stack.Screen name="JobPool" component={JobPoolScreen} options={{ title: "Chuyến vận chuyển" }} />
     <Stack.Screen name="JobDetail" component={JobDetailScreen} options={{ title: "Chi tiết chuyến" }} />
     <Stack.Screen name="JobMap" component={MapScreen} options={{ title: "Bản đồ chuyến" }} />
     <Stack.Screen name="DriverDelivery" component={CheckInDeliveryScreen} options={{ title: "Lấy hàng / Giao hàng" }} />
-    <Stack.Screen name="DriverNotices" component={NotificationsScreen} options={{ title: "Thông báo" }} />
   </Stack.Navigator>;
 }
 const Tabs = createBottomTabNavigator();
@@ -32,6 +31,7 @@ export default function DriverNavigator() {
     <Tabs.Navigator
       id="DriverTabs"
       screenOptions={({ route }) => ({
+        headerRight: () => <NotificationBell />,
         tabBarActiveTintColor: "#446900",
         tabBarInactiveTintColor: "#9ca3af",
         tabBarStyle: { backgroundColor: "#ffffff", borderTopColor: "#e5e7eb" },
@@ -54,9 +54,7 @@ export default function DriverNavigator() {
         component={JobNavigator}
         options={{ title: "Chuyến xe", headerShown: false }}
       />
-      <Tabs.Screen name="History" options={{ title: "Lịch sử" }}>
-        {() => <PlaceholderScreen title="Lịch sử chuyến" useCase="UC-68/69" icon="clock" />}
-      </Tabs.Screen>
+      <Tabs.Screen name="History" component={HistoryScreen} options={{ title: "Lịch sử" }} />
       <Tabs.Screen
         name="Profile"
         component={ProfileNavigator}

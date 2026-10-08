@@ -10,18 +10,14 @@ import ClassifyWeighScreen from "../screens/employee/ClassifyWeighScreen";
 import ActivePickupsScreen from "../screens/employee/ActivePickupsScreen";
 import SubmitResultScreen from "../screens/employee/SubmitResultScreen";
 import HistoryStatsScreen from "../screens/employee/HistoryStatsScreen";
-import NotificationsScreen from "../screens/employee/NotificationsScreen";
+import NotificationBell from "../components/common/NotificationBell";
 import Brand from "../components/common/Brand";
-import { useEffect, useRef } from "react";
-import { pickupApi } from "../api/pickupApi";
-import useEmployeeNoticeStore from "../store/employeeNoticeStore";
 const Tabs = createBottomTabNavigator();
 const Stack = createStackNavigator();
 const icons = {
   Dashboard: "home",
   Pool: "list",
   History: "clock",
-  Notifications: "bell",
   Profile: "user",
 };
 function PickupStackNavigator() {
@@ -30,6 +26,7 @@ function PickupStackNavigator() {
       id="PickupStack"
       initialRouteName="PickupPool"
       screenOptions={{
+        headerRight: () => <NotificationBell />,
         headerStyle: { backgroundColor: "#f8f9ff" },
         headerTintColor: "#446900",
         headerTitleStyle: { fontFamily: "Inter_700Bold" },
@@ -54,25 +51,11 @@ function PickupStackNavigator() {
   );
 }
 export default function EmployeeNavigator() {
-  const unread = useEmployeeNoticeStore(state => state.unread);
-  const pendingBadge = useRef(null);
-  useEffect(() => {
-    useEmployeeNoticeStore.getState().setUnread(null);
-    return () => pendingBadge.current?.abort();
-  }, []);
-  async function refreshBadge() {
-    pendingBadge.current?.abort();
-    const controller = new AbortController(); pendingBadge.current = controller;
-    try {
-      const data = await pickupApi.getNotifications(1, controller.signal);
-      if (!controller.signal.aborted) useEmployeeNoticeStore.getState().setUnread(data.unreadCount);
-    } catch { /* Màn hình thông báo có lỗi/thử lại riêng; không chặn chuyển tab. */ }
-  }
   return (
     <Tabs.Navigator
       id="EmployeeTabs"
-      screenListeners={{ focus: refreshBadge }}
       screenOptions={({ route }) => ({
+        headerRight: () => <NotificationBell />,
         tabBarActiveTintColor: "#446900",
         tabBarInactiveTintColor: "#9ca3af",
         tabBarStyle: { backgroundColor: "#ffffff", borderTopColor: "#e5e7eb" },
@@ -96,7 +79,6 @@ export default function EmployeeNavigator() {
         options={{ title: "Đơn chờ", headerShown: false }}
       />
       <Tabs.Screen name="History" component={HistoryStatsScreen} options={{ title: "Lịch sử" }} />
-      <Tabs.Screen name="Notifications" component={NotificationsScreen} options={{ title: "Thông báo", tabBarBadge: unread || undefined }} />
       <Tabs.Screen
         name="Profile"
         component={ProfileNavigator}

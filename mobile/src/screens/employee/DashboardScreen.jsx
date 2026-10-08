@@ -73,7 +73,6 @@ export default function DashboardScreen({ navigation }) {
             <Text style={s.text}>Chờ người bán xác nhận: {data.waitingSellerCount}</Text>
             <Text style={s.text}>Cần bàn giao chủ kho: {data.readyToHandoverCount}</Text>
             <Text style={s.text}>Đang chờ thanh toán/nhận tiền: {data.waitingPaymentCount}</Text>
-            <Button title={`Thông báo (${data.unreadCount} chưa đọc)`} variant="secondary" onPress={() => navigation.navigate("Notifications")} />
           </View>
           <Text style={[s.title, { fontSize: 21 }]}>Đơn đang xử lý</Text>
           {data.activePickup ? (

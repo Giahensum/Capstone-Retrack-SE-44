@@ -1,5 +1,8 @@
 import client, { unwrap } from "./client";
 export const driverApi = {
+  dashboard: async signal => unwrap(await client.get("/driver/dashboard", { signal })),
+  stats: async signal => unwrap(await client.get("/driver/stats", { signal })),
+  history: async (page, period, receipt, signal) => unwrap(await client.get("/driver/trip-history", { params: { page, pageSize: 20, period, receipt }, signal })),
   list: async (mine, page, signal) => unwrap(await client.get(mine ? "/driver/jobs/mine" : "/driver/job-pool", { params: { page }, signal })),
   detail: async (id, signal) => unwrap(await client.get(`/driver/job/${encodeURIComponent(id)}`, { signal })),
   accept: async id => unwrap(await client.post(`/driver/job/${encodeURIComponent(id)}/accept`)),
@@ -16,5 +19,5 @@ export const driverApi = {
     }));
   },
   notices: async (page, signal) => unwrap(await client.get("/driver/notifications", { params: { page }, signal })),
-  read: async id => unwrap(await client.put(`/driver/notifications/${encodeURIComponent(id)}/read`)),
+  read: async (id, signal = undefined) => unwrap(await client.put(`/driver/notifications/${encodeURIComponent(id)}/read`, undefined, { signal })),
 };

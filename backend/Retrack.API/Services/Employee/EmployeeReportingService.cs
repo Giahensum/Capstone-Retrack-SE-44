@@ -75,7 +75,7 @@ public sealed class EmployeeReportingService(AppDbContext db)
         await RequireAsync(id, ct); Page(page, size);
         var query = db.Notifications.AsNoTracking().Where(n => n.UserId == id);
         return new(await query.OrderByDescending(n => n.CreatedAt).ThenBy(n => n.Id).Skip((page - 1) * size).Take(size)
-            .Select(n => new EmployeeNotificationDto(n.Id, n.Title, n.Message, n.IsRead, n.CreatedAt)).ToListAsync(ct),
+            .Select(n => new EmployeeNotificationDto(n.Id, n.Title, n.Message, n.IsRead, n.CreatedAt, n.PickupRequestId)).ToListAsync(ct),
             await query.CountAsync(ct), await query.CountAsync(n => !n.IsRead, ct), page, size);
     }
     public async Task MarkReadAsync(Guid userId, Guid notificationId, CancellationToken ct)
@@ -90,5 +90,5 @@ public sealed class EmployeeReportingService(AppDbContext db)
 public sealed record EmployeeHistoryRow(Guid Id, string SellerName, string Address, string Status, DateTime UpdatedAt, decimal GrossAmount);
 public sealed record EmployeeTotals(int Pickups, decimal WeightKg, decimal GrossAmount);
 public sealed record EmployeeStatsDto(EmployeeTotals AllTime, EmployeeTotals ThisMonth, string Timezone, string DateBasis);
-public sealed record EmployeeNotificationDto(Guid Id, string Title, string? Message, bool IsRead, DateTime CreatedAt);
+public sealed record EmployeeNotificationDto(Guid Id, string Title, string? Message, bool IsRead, DateTime CreatedAt, Guid? PickupRequestId);
 public sealed record EmployeeNotificationPage(List<EmployeeNotificationDto> Items, int TotalCount, int UnreadCount, int Page, int PageSize);
