@@ -43,7 +43,7 @@ public class EmployeePickupController(AppDbContext db, INotificationService noti
     {
         var depotId = await GetDepotIdAsync(ct);
         var list = await db.PickupRequests.AsNoTracking()
-            .Where(p => p.TargetDepotId == depotId && p.Status == "PENDING" && p.AcceptedCollectorId == null)
+            .Where(p => (p.TargetDepotId == depotId || p.TargetDepotId == null) && p.Status == "PENDING" && p.AcceptedCollectorId == null)
             .OrderBy(p => p.PreferredDatetime == null).ThenBy(p => p.PreferredDatetime)
             .ThenBy(p => p.CreatedAt).ThenBy(p => p.Id)
             .Select(p => new PickupPoolItemDto(p.Id, p.Seller.FullName, p.Seller.Phone, p.Address,
@@ -74,7 +74,7 @@ public class EmployeePickupController(AppDbContext db, INotificationService noti
         var userId = UserId;
         var depots = ActiveDepotIds();
         var item = await db.PickupRequests.AsNoTracking()
-            .Where(p => p.Id == pickupId && p.TargetDepotId != null && depots.Contains(p.TargetDepotId.Value)
+            .Where(p => p.Id == pickupId && ((p.TargetDepotId != null && depots.Contains(p.TargetDepotId.Value)) || p.TargetDepotId == null)
                 && ((p.Status == "PENDING" && p.AcceptedCollectorId == null) || p.AcceptedCollectorId == userId))
             .Select(p => new EmployeePickupDetailDto(p.Id, p.Seller.FullName, p.Seller.Phone, p.Address,
                 p.Latitude, p.Longitude, p.PreferredDatetime, p.Description, p.RequestImageUrl, p.CreatedAt,
@@ -90,7 +90,7 @@ public class EmployeePickupController(AppDbContext db, INotificationService noti
         var depotId = await GetDepotIdAsync(ct);
         var userId = UserId;
         var pickup = await db.PickupRequests.AsNoTracking().Include(p => p.Seller)
-            .SingleOrDefaultAsync(p => p.Id == pickupId && p.TargetDepotId == depotId, ct);
+            .SingleOrDefaultAsync(p => p.Id == pickupId && (p.TargetDepotId == depotId || p.TargetDepotId == null), ct);
         // Do not reveal another depot's orders, even if the caller knows their UUID.
         if (pickup == null) return NotFound(ApiResponse<object>.Fail("Không tìm thấy đơn thu gom."));
 
@@ -98,10 +98,11 @@ public class EmployeePickupController(AppDbContext db, INotificationService noti
         var now = DateTime.UtcNow;
         // Exactly one concurrent claimant can win this conditional SQL UPDATE.
         var changed = await db.PickupRequests
-            .Where(p => p.Id == pickupId && p.TargetDepotId == depotId
+            .Where(p => p.Id == pickupId && (p.TargetDepotId == depotId || p.TargetDepotId == null)
                 && p.Status == "PENDING" && p.AcceptedCollectorId == null)
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(p => p.AcceptedCollectorId, (Guid?)userId)
+                .SetProperty(p => p.TargetDepotId, depotId)
                 .SetProperty(p => p.Status, "SCHEDULED")
                 .SetProperty(p => p.UpdatedAt, now), ct);
         if (changed == 0)
