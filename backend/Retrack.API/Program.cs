@@ -118,6 +118,7 @@ builder.Services.AddScoped<Retrack.API.Services.Interfaces.IDepotReportService, 
 builder.Services.AddScoped<IAdminService, AdminService>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.INotificationService, Retrack.API.Services.Shared.NotificationService>();
 builder.Services.AddScoped<Retrack.API.Services.Driver.DriverJobService>();
+builder.Services.AddScoped<Retrack.API.Services.Driver.DriverDeliveryService>();
 
 
 // Services - Factory

@@ -12,4 +12,7 @@ ALTER TABLE factory_depot_partnerships
     ADD COLUMN IF NOT EXISTS blocked_by_factory BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE inventory_batches
     ADD COLUMN IF NOT EXISTS code VARCHAR(40);
+-- Đồng bộ cột ảnh với schema dùng chung và model InventoryBatch.
+ALTER TABLE inventory_batches
+    ADD COLUMN IF NOT EXISTS image_urls TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];
 COMMIT;

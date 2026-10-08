@@ -9,12 +9,14 @@ import { createStackNavigator } from "@react-navigation/stack";
 import JobDetailScreen from "../screens/driver/JobDetailScreen";
 import MapScreen from "../screens/driver/MapScreen";
 import NotificationsScreen from "../screens/driver/NotificationsScreen";
+import CheckInDeliveryScreen from "../screens/driver/CheckInDeliveryScreen";
 const Stack = createStackNavigator();
 function JobNavigator() {
   return <Stack.Navigator id="DriverJobs" screenOptions={{ headerTintColor: "#446900", headerStyle: { backgroundColor: "#f8f9ff" }, headerShadowVisible: false }}>
     <Stack.Screen name="JobPool" component={JobPoolScreen} options={{ title: "Chuyến vận chuyển" }} />
     <Stack.Screen name="JobDetail" component={JobDetailScreen} options={{ title: "Chi tiết chuyến" }} />
     <Stack.Screen name="JobMap" component={MapScreen} options={{ title: "Bản đồ chuyến" }} />
+    <Stack.Screen name="DriverDelivery" component={CheckInDeliveryScreen} options={{ title: "Lấy hàng / Giao hàng" }} />
     <Stack.Screen name="DriverNotices" component={NotificationsScreen} options={{ title: "Thông báo" }} />
   </Stack.Navigator>;
 }

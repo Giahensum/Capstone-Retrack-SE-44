@@ -12,10 +12,14 @@ public static class CollectionValidation
     public const int MaxLocationAgeSeconds = 120;
 
     public static double ValidateCheckIn(PickupRequest pickup, EmployeeCheckInRequest input, DateTimeOffset now)
+        => ValidateCheckIn(pickup.Latitude, pickup.Longitude, input, now);
+
+    // Dùng chung chính sách bằng chứng cho Employee và Driver; không tạo đơn pickup giả.
+    public static double ValidateCheckIn(decimal? latitude, decimal? longitude, EmployeeCheckInRequest input, DateTimeOffset now)
     {
         if (input.IsMocked) throw new ArgumentException("Không chấp nhận vị trí GPS giả lập để check-in.");
         if (!Coordinate(input.Latitude, 90) || !Coordinate(input.Longitude, 180)
-            || !Coordinate((double?)pickup.Latitude, 90) || !Coordinate((double?)pickup.Longitude, 180))
+            || !Coordinate((double?)latitude, 90) || !Coordinate((double?)longitude, 180))
             throw new ArgumentException("Địa điểm đơn hoặc vị trí hiện tại chưa có tọa độ hợp lệ.");
         if (input.AccuracyMeters is not double accuracy || !double.IsFinite(accuracy) || accuracy < 0 || accuracy > MaxAccuracyMeters)
             throw new ArgumentException($"GPS chưa đủ chính xác. Cần sai số không quá {MaxAccuracyMeters} m; hãy ra nơi thoáng và lấy lại vị trí.");
@@ -25,7 +29,7 @@ public static class CollectionValidation
         if (input.PhotoTakenAt == null || now - input.PhotoTakenAt > TimeSpan.FromMinutes(10)
             || input.PhotoTakenAt - now > TimeSpan.FromSeconds(30))
             throw new ArgumentException("Ảnh phải được chụp trong vòng 10 phút. Hãy chụp lại tại địa điểm.");
-        var distance = Distance(input.Latitude!.Value, input.Longitude!.Value, (double)pickup.Latitude!.Value, (double)pickup.Longitude!.Value);
+        var distance = Distance(input.Latitude!.Value, input.Longitude!.Value, (double)latitude!.Value, (double)longitude!.Value);
         if (distance > RadiusMeters)
             throw new ArgumentException($"Bạn đang cách địa điểm khoảng {Math.Round(distance)} m. Cần ở trong bán kính {RadiusMeters} m để check-in.");
         return distance;
