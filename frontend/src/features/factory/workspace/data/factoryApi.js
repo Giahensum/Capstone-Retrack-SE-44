@@ -51,6 +51,7 @@ const dateOnly = (value) => value?.slice(0, 10) || "";
 function mapProfile(profile) {
   const accepted = profile.acceptedMaterials || [];
   return {
+    id: profile.id,
     companyName: profile.companyName || "",
     taxCode: profile.taxCode || "",
     address: profile.address || "",
@@ -59,6 +60,11 @@ function mapProfile(profile) {
     capacity: profile.capacityKgPerMonth || 0,
     purity: profile.minimumPurityPercent || 0,
     platformFeePercentage: profile.platformFeePercentage ?? 1,
+    rating: profile.rating ?? 0,
+    createdAt: dateOnly(profile.createdAt),
+    ownerName: profile.user?.fullName || "",
+    ownerEmail: profile.user?.email || "",
+    ownerPhone: profile.user?.phone || "",
     latitude: profile.latitude ?? "",
     longitude: profile.longitude ?? "",
     materials: accepted,
@@ -185,6 +191,8 @@ export async function performFactoryAction(type, payload) {
       {
       const businessLicenseUrl = await attachmentUrl(payload.businessLicense);
       const environmentalLicenseUrl = await attachmentUrl(payload.environmentLicense);
+      const acceptedMaterials = [payload.primaryMaterial, ...payload.materials]
+        .filter((material, index, values) => material && values.indexOf(material) === index);
       return request("/api/factory/profile", { method: "PUT", body: {
         companyName: payload.companyName,
         taxCode: payload.taxCode,
@@ -195,7 +203,7 @@ export async function performFactoryAction(type, payload) {
         longitude: payload.longitude === "" ? null : Number(payload.longitude),
         capacityKgPerMonth: Number(payload.capacity),
         minimumPurityPercent: Number(payload.purity),
-        acceptedMaterials: payload.materials,
+        acceptedMaterials,
         businessLicenseUrl,
         environmentalLicenseUrl,
       } });
