@@ -33,12 +33,12 @@ export default function SellerLayout({ children }) {
     <>
       {/* Logo */}
       <div className="h-16 flex items-center px-5 border-b border-emerald-500/10 gap-3">
-        <div className="w-9 h-9 bg-emerald-500 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/30">
-          <Recycle size={20} className="text-white" />
+        <div className="w-9 h-9 bg-green-200 rounded-xl flex items-center justify-center shadow-lg shadow-green-200/50">
+          <Recycle size={20} className="text-gray-900" />
         </div>
         <div>
-          <span className="text-lg font-black text-white tracking-tight">RETRACK</span>
-          <span className="ml-2 text-[9px] font-bold text-emerald-400 bg-emerald-500/15 px-2 py-0.5 rounded-full uppercase tracking-wider">Seller</span>
+          <span className="text-lg font-black text-gray-900 tracking-tight">RETRACK</span>
+          <span className="ml-2 text-[9px] font-bold text-green-700 bg-green-200/15 px-2 py-0.5 rounded-full uppercase tracking-wider">Seller</span>
         </div>
       </div>
 
@@ -52,8 +52,8 @@ export default function SellerLayout({ children }) {
             className={clsx(
               'flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200',
               isActive(to)
-                ? 'bg-emerald-500/15 text-emerald-400 shadow-sm'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                ? 'bg-green-200/15 text-green-700 shadow-sm'
+                : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100/60'
             )}
           >
             <Icon size={18} />
@@ -63,14 +63,14 @@ export default function SellerLayout({ children }) {
       </nav>
 
       {/* User card */}
-      <div className="p-3 border-t border-slate-800">
+      <div className="p-3 border-t border-gray-200">
         <div className="flex items-center gap-3 px-3 py-2">
-          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-sm font-bold text-white shadow-lg">
+          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-sm font-bold text-gray-900 shadow-lg">
             {initials}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-slate-200 truncate">{user?.fullName ?? 'Seller'}</p>
-            <p className="text-xs text-slate-500 truncate">{user?.email}</p>
+            <p className="text-sm font-semibold text-gray-800 truncate">{user?.fullName ?? 'Seller'}</p>
+            <p className="text-xs text-gray-500 truncate">{user?.email}</p>
           </div>
         </div>
         <button
@@ -85,9 +85,9 @@ export default function SellerLayout({ children }) {
   );
 
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-950">
+    <div className="flex h-screen overflow-hidden bg-gray-50">
       {/* Desktop Sidebar */}
-      <aside className="hidden lg:flex w-64 flex-col bg-slate-900/80 backdrop-blur-xl border-r border-slate-800/60 h-screen fixed top-0 left-0 z-40">
+      <aside className="hidden lg:flex w-64 flex-col bg-white/80 backdrop-blur-xl border-r border-gray-200/60 h-screen fixed top-0 left-0 z-40">
         {sidebarContent}
       </aside>
 
@@ -95,7 +95,7 @@ export default function SellerLayout({ children }) {
       {mobileOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setMobileOpen(false)} />
-          <aside className="absolute left-0 top-0 w-72 h-full bg-slate-900 flex flex-col shadow-2xl">
+          <aside className="absolute left-0 top-0 w-72 h-full bg-white flex flex-col shadow-2xl">
             {sidebarContent}
           </aside>
         </div>
@@ -104,15 +104,15 @@ export default function SellerLayout({ children }) {
       {/* Main */}
       <main className="flex-1 lg:ml-64 flex flex-col h-screen overflow-hidden">
         {/* Mobile top bar */}
-        <header className="lg:hidden flex items-center justify-between px-4 py-3 border-b border-slate-800 bg-slate-900/90 backdrop-blur-lg">
-          <button onClick={() => setMobileOpen(true)} className="text-slate-400 p-1">
+        <header className="lg:hidden flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-white/90 backdrop-blur-lg">
+          <button onClick={() => setMobileOpen(true)} className="text-gray-600 p-1">
             <Menu size={24} />
           </button>
           <div className="flex items-center gap-2">
-            <Recycle size={18} className="text-emerald-400" />
-            <span className="font-bold text-white">RETRACK</span>
+            <Recycle size={18} className="text-green-700" />
+            <span className="font-bold text-gray-900">RETRACK</span>
           </div>
-          <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center text-xs font-bold text-emerald-400">
+          <div className="w-8 h-8 rounded-full bg-green-200/20 flex items-center justify-center text-xs font-bold text-green-700">
             {initials}
           </div>
         </header>
@@ -123,3 +123,4 @@ export default function SellerLayout({ children }) {
     </div>
   );
 }
+
