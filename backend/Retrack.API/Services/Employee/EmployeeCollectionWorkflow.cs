@@ -41,7 +41,7 @@ public sealed partial class EmployeeCollectionService
             pickup.PlatformFeeAmount = decimal.Round(pickup.GrossAmount * pickup.PlatformFeePercentage / 100, 2);
             pickup.NetAmount = pickup.GrossAmount - pickup.PlatformFeeAmount;
             pickup.Status = "WEIGHED";
-            Notify(pickup.SellerId, "Kết quả cân chờ xác nhận", $"Đơn {pickup.Id}: nhân viên đã gửi kết quả cân phiên bản {revision}. Vui lòng xem và xác nhận giá.");
+            Notify(pickup.SellerId, "Kết quả cân chờ xác nhận", $"Đơn {pickup.Id}: nhân viên đã gửi kết quả cân phiên bản {revision}. Vui lòng xem và xác nhận giá.", pickup.Id);
         }
         else if (action == "REOPENED")
         {
@@ -63,8 +63,8 @@ public sealed partial class EmployeeCollectionService
                 throw new DepotConflictException("Kết quả cân không còn khớp bản đã gửi. Liên hệ chủ kho để kiểm tra.");
             pickup.Status = "AWAITING_PAYMENT";
             var ownerId = await db.Depots.Where(d => d.Id == pickup.TargetDepotId).Select(d => d.OwnerId).SingleAsync(ct);
-            Notify(ownerId, "Đơn thu gom chờ thanh toán", $"Đơn {pickup.Id}: người bán đã đồng ý kết quả cân. Nhân viên đã bàn giao; chủ kho kiểm tra và thanh toán.");
-            Notify(pickup.SellerId, "Đang chờ chủ kho thanh toán", $"Đơn {pickup.Id} đã được bàn giao cho chủ kho. Nhân viên không thu hoặc chi tiền.");
+            Notify(ownerId, "Đơn thu gom chờ thanh toán", $"Đơn {pickup.Id}: người bán đã đồng ý kết quả cân. Nhân viên đã bàn giao; chủ kho kiểm tra và thanh toán.", pickup.Id);
+            Notify(pickup.SellerId, "Đang chờ chủ kho thanh toán", $"Đơn {pickup.Id} đã được bàn giao cho chủ kho. Nhân viên không thu hoặc chi tiền.", pickup.Id);
         }
         pickup.UpdatedAt = DateTime.UtcNow;
         db.EmployeeCollectionEvents.Add(new EmployeeCollectionEvent
@@ -75,15 +75,15 @@ public sealed partial class EmployeeCollectionService
                 pickup.GrossAmount, pickup.PlatformFeePercentage, pickup.PlatformFeeAmount, pickup.NetAmount))
         });
         Notify(userId, action == "SUBMITTED" ? "Đã gửi kết quả cân" : action == "REOPENED" ? "Đã mở lại kết quả cân" : "Đã bàn giao cho chủ kho",
-            $"Đơn {pickup.Id} · phiên bản {revision} · {pickup.Status}. Bạn không thực hiện thanh toán cho người bán.");
+            $"Đơn {pickup.Id} · phiên bản {revision} · {pickup.Status}. Bạn không thực hiện thanh toán cho người bán.", pickup.Id);
         await db.SaveChangesAsync(ct);
         var result = await Snapshot(pickup, ct);
         await transaction.CommitAsync(ct);
         return result;
     }
 
-    private void Notify(Guid userId, string title, string message) => db.Notifications.Add(new Notification
-        { UserId = userId, Title = title, Message = message });
+    private void Notify(Guid userId, string title, string message, Guid pickupId) => db.Notifications.Add(new Notification
+        { UserId = userId, Title = title, Message = message, PickupRequestId = pickupId });
 }
 
 public sealed record CollectionSubmissionSnapshot(IReadOnlyList<ClassificationItemDto> Items,

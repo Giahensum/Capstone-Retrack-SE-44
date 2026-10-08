@@ -19,7 +19,7 @@ public sealed class DriverJobService(AppDbContext db)
     {
         if (!await Staff(userId).AnyAsync(ct)) throw new DepotForbiddenException();
     }
-    private IQueryable<TransportJob> Scoped(Guid userId)
+    internal IQueryable<TransportJob> Scoped(Guid userId)
     {
         var staff = Staff(userId);
         return db.TransportJobs.Where(j => staff.Any(s => s.DepotId == j.Batch.DepotId));
@@ -28,6 +28,8 @@ public sealed class DriverJobService(AppDbContext db)
         (j.Batch.Status == "TRANSPORT_READY" || j.Batch.Status == "ACCEPTED" || j.Batch.Status == "READY_FOR_PICKUP")
         && j.Batch.DeclaredWeightKg > 0 && j.Batch.FactoryReceivedAt == null
         && j.Batch.TargetFactory != null && j.Batch.TargetFactory.Owner != null && j.Batch.TargetFactory.Owner.IsActive);
+    internal IQueryable<TransportJob> Pool(Guid userId) => Ready(Scoped(userId)).Where(j => j.DriverId == null && j.Status == "PENDING"
+        && !db.DriverDeliveryEvents.Any(e => e.JobId == j.Id && e.DriverId == userId && e.Action == "reject"));
     private static IQueryable<DriverJobDto> Project(IQueryable<TransportJob> jobs, Guid userId) => jobs.Select(j => new DriverJobDto(
         j.Id, j.BatchId, j.Batch.Code, j.Batch.MaterialType, j.Batch.DeclaredWeightKg, j.Status, j.DriverId == userId,
         new(j.Batch.Depot.Name, j.Batch.Depot.Address, j.Batch.Depot.Latitude, j.Batch.Depot.Longitude),
@@ -37,8 +39,7 @@ public sealed class DriverJobService(AppDbContext db)
         if (page is < 1 or > 100000) throw new ArgumentException("Trang không hợp lệ.");
         await RequireAsync(userId, ct);
         var source = Scoped(userId).AsNoTracking();
-        source = mine ? source.Where(j => j.DriverId == userId) : Ready(source).Where(j => j.DriverId == null && j.Status == "PENDING");
-        if (!mine) source = source.Where(j => !db.DriverDeliveryEvents.Any(e => e.JobId == j.Id && e.DriverId == userId && e.Action == "reject"));
+        source = mine ? source.Where(j => j.DriverId == userId) : Pool(userId).AsNoTracking();
         return new() { Page = page, PageSize = 20, TotalCount = await source.CountAsync(ct),
             Items = await Project(source.OrderByDescending(j => j.CreatedAt).ThenBy(j => j.Id).Skip((page - 1) * 20).Take(20), userId).ToListAsync(ct) };
     }

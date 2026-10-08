@@ -336,6 +336,7 @@ CREATE TABLE IF NOT EXISTS notifications (
 
 -- Hóa đơn phí nền tảng hàng tháng, gộp theo từng Depot Owner / Factory có phát sinh giao dịch
 ALTER TABLE notifications ADD COLUMN IF NOT EXISTS transport_job_id UUID;
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS pickup_request_id UUID;
 CREATE INDEX IF NOT EXISTS ix_notifications_user_created ON notifications(user_id, created_at DESC, id);
 
 CREATE TABLE IF NOT EXISTS platform_invoices (

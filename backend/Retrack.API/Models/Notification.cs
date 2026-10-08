@@ -17,6 +17,9 @@ namespace Retrack.API.Models
         [Column("transport_job_id")]
         public Guid? TransportJobId { get; set; }
 
+        [Column("pickup_request_id")]
+        public Guid? PickupRequestId { get; set; }
+
         [Required]
         [Column("title")]
         [MaxLength(255)]
