@@ -1196,3 +1196,6 @@
     scroll-behavior: auto !important;
   }
 }
+/* Phân trang dữ liệu Factory từ API. */
+.factory-pagination { display: flex; align-items: center; justify-content: center; gap: 1rem; padding: 1rem 0; flex-wrap: wrap; }
+.factory-pagination span { color: #526047; font-size: .875rem; }

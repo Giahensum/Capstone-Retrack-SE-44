@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FactoryProvider, useFactory } from "./components/FactoryUI";
-import FactoryAuth from "./components/FactoryAuth";
 import {
   Dashboard,
   Marketplace,
@@ -25,7 +24,7 @@ const tabs = [
   ["profile", "Hồ sơ nhà máy", "⚙"],
 ];
 function Workspace() {
-  const { state, user, logout, loading } = useFactory();
+  const { state, user, logout, loading, retry } = useFactory();
   const navigateRoute = useNavigate();
   const [tab, setTab] = useState("dashboard");
   const [focusId, setFocusId] = useState(null);
@@ -34,10 +33,9 @@ function Workspace() {
     setTab(next);
     window.scrollTo({ top: 0 });
   }
-  if (loading || !state) return <FactoryAuth />;
-  const pending = state.orders.filter((o) =>
-    ["DELIVERED", "RECEIVED", "WEIGHED"].includes(o.status),
-  ).length;
+  if (loading) return <main className="factory-auth-page" role="status">Đang tải dữ liệu nhà máy…</main>;
+  if (!state) return <main className="factory-auth-page"><section className="factory-auth-card"><h1>Không tải được dữ liệu nhà máy</h1><p>Kiểm tra kết nối máy chủ rồi thử lại bằng phiên đăng nhập hiện tại.</p><button className="btn" onClick={retry}>Thử kết nối lại</button></section></main>;
+  const pending = state.dashboard?.pendingQcCount ?? 0;
   return (
     <div className="factory-shell">
       <aside className="factory-sidebar">
