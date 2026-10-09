@@ -1,7 +1,6 @@
-
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 17
-VisualStudioVersion = 17.13.35931.197
+# Visual Studio Version 18
+VisualStudioVersion = 18.8.12023.21 stable
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Retrack.API", "Retrack.API\Retrack.API.csproj", "{9582BF9C-8D57-43FB-BDBC-2F91054C6638}"
 EndProject
@@ -45,8 +44,16 @@ Global
 		{F85DF8D5-4A58-4E57-8723-67BA8B478EB9}.Release|x86.Build.0 = Release|Any CPU
 		{61DC7671-03F1-4FE6-A612-F276EB4DDC0A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{61DC7671-03F1-4FE6-A612-F276EB4DDC0A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{61DC7671-03F1-4FE6-A612-F276EB4DDC0A}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{61DC7671-03F1-4FE6-A612-F276EB4DDC0A}.Debug|x64.Build.0 = Debug|Any CPU
+		{61DC7671-03F1-4FE6-A612-F276EB4DDC0A}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{61DC7671-03F1-4FE6-A612-F276EB4DDC0A}.Debug|x86.Build.0 = Debug|Any CPU
 		{61DC7671-03F1-4FE6-A612-F276EB4DDC0A}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{61DC7671-03F1-4FE6-A612-F276EB4DDC0A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{61DC7671-03F1-4FE6-A612-F276EB4DDC0A}.Release|x64.ActiveCfg = Release|Any CPU
+		{61DC7671-03F1-4FE6-A612-F276EB4DDC0A}.Release|x64.Build.0 = Release|Any CPU
+		{61DC7671-03F1-4FE6-A612-F276EB4DDC0A}.Release|x86.ActiveCfg = Release|Any CPU
+		{61DC7671-03F1-4FE6-A612-F276EB4DDC0A}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
