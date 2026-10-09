@@ -1,6 +1,8 @@
 # SQL cho Depot Employee
 
-Chạy bằng pgAdmin trên đúng database backend. Đây là script bổ sung trên schema ReTrack có sẵn, không phải schema song song. Máy mới cần tạo schema bằng `db/depot ower/retrack-system.sql` trước.
+Máy mới chỉ cần chạy `db/bootstrap.psql` một lần; schema Employee và các bảng chung đã nằm trong nguồn DB-first `db/depot ower/retrack-system.sql`. Các script bên dưới là fixture kiểm thử mở rộng hoặc bản vá cho database cũ, không chạy lại trên máy mới nếu không có nhu cầu cụ thể.
+
+Khi cần chạy fixture bằng pgAdmin, chọn đúng database backend. Đây là script bổ sung trên schema ReTrack hiện có, không phải schema song song.
 
 ## Thứ tự chạy
 
