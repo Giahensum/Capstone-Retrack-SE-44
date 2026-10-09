@@ -7,11 +7,13 @@ namespace Retrack.API.Services.Shared;
 public class CloudinaryService : ICloudinaryService
 {
     private readonly IConfiguration _config;
+    private readonly ILogger<CloudinaryService> _logger;
     private Cloudinary? _cloudinary;
 
-    public CloudinaryService(IConfiguration config)
+    public CloudinaryService(IConfiguration config, ILogger<CloudinaryService> logger)
     {
         _config = config;
+        _logger = logger;
     }
 
     private Cloudinary Client
@@ -47,12 +49,14 @@ public class CloudinaryService : ICloudinaryService
 
             if (result.Error == null && result.StatusCode == System.Net.HttpStatusCode.OK && result.SecureUrl != null)
                 return result.SecureUrl.ToString();
+            _logger.LogError("Cloudinary image upload returned failure for file {FileName}: {Error}", Path.GetFileName(fileName), result.Error?.Message ?? $"HTTP {(int)result.StatusCode}");
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            throw new InvalidOperationException("Không thể tải ảnh lên. Vui lòng thử lại sau.");
+            _logger.LogError(ex, "Cloudinary image upload failed for file {FileName}", Path.GetFileName(fileName));
+            throw new InvalidOperationException("Không thể tải ảnh lên. Vui lòng kiểm tra cấu hình dịch vụ ảnh hoặc thử lại sau.", ex);
         }
-        throw new InvalidOperationException("Không thể tải ảnh lên. Vui lòng thử lại sau.");
+        throw new InvalidOperationException("Không thể tải ảnh lên. Vui lòng kiểm tra cấu hình dịch vụ ảnh hoặc thử lại sau.");
     }
 
     public async Task<string> UploadAvatarAsync(Stream fileStream, string fileName)
