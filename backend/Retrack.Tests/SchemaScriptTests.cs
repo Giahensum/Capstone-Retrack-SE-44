@@ -48,10 +48,11 @@ public sealed class SchemaScriptTests
             SELECT count(*) FROM information_schema.columns
             WHERE table_schema = @schema AND
               ((table_name = 'depots' AND column_name IN ('contact_phone', 'tax_code', 'description'))
+                OR (table_name = 'users' AND column_name IN ('bank_name', 'bank_account_number', 'bank_account_name', 'bank_qr_url'))
                 OR (table_name = 'inventory_batches' AND column_name = 'image_urls')
                 OR (table_name = 'pickup_checkins' AND column_name = 'revision'))
             """, db, tx);
         columns.Parameters.AddWithValue("schema", schema);
-        Assert.Equal(5L, (long)(await columns.ExecuteScalarAsync())!);
+        Assert.Equal(9L, (long)(await columns.ExecuteScalarAsync())!);
     }
 }
