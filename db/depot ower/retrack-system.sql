@@ -38,11 +38,19 @@ CREATE TABLE IF NOT EXISTS users (
     role            VARCHAR(50)  NOT NULL,   -- SELLER, DEPOT_OWNER, DEPOT_EMPLOYEE, DRIVER, FACTORY, ADMIN
     full_name       VARCHAR(255) NOT NULL,
     phone           VARCHAR(20)  NOT NULL,
+    bank_name       VARCHAR(255),
+    bank_account_number VARCHAR(100),
+    bank_account_name VARCHAR(255),
+    bank_qr_url     VARCHAR(2048),
     avatar_url      VARCHAR(2048),
     is_active       BOOLEAN      DEFAULT TRUE,
     created_at      TIMESTAMPTZ  DEFAULT NOW(),
     updated_at      TIMESTAMPTZ  DEFAULT NOW()
 );
+ALTER TABLE users ADD COLUMN IF NOT EXISTS bank_name VARCHAR(255);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS bank_account_number VARCHAR(100);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS bank_account_name VARCHAR(255);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS bank_qr_url VARCHAR(2048);
 
 -- Bảng kho/depot
 CREATE TABLE IF NOT EXISTS depots (
