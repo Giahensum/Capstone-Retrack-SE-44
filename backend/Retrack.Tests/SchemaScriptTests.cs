@@ -17,10 +17,10 @@ public sealed class SchemaScriptTests
             throw new InvalidOperationException("Chỉ chạy trên Retrack_TV2_test.");
 
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory != null && !File.Exists(Path.Combine(directory.FullName, "db", "depot ower", "retrack-system.sql")))
+        while (directory != null && !File.Exists(Path.Combine(directory.FullName, "db", "bootstrap", "01-retrack-system.sql")))
             directory = directory.Parent;
         if (directory == null) throw new FileNotFoundException("Không tìm thấy SQL tổng hợp.");
-        var sql = await File.ReadAllTextAsync(Path.Combine(directory.FullName, "db", "depot ower", "retrack-system.sql"));
+        var sql = await File.ReadAllTextAsync(Path.Combine(directory.FullName, "db", "bootstrap", "01-retrack-system.sql"));
 
         await using var db = new NpgsqlConnection(connection);
         await db.OpenAsync();
@@ -54,11 +54,11 @@ public sealed class SchemaScriptTests
             throw new InvalidOperationException("Chỉ chạy trên Retrack_TV2_test.");
 
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory != null && !File.Exists(Path.Combine(directory.FullName, "db", "depot ower", "retrack-system.sql")))
+        while (directory != null && !File.Exists(Path.Combine(directory.FullName, "db", "bootstrap", "01-retrack-system.sql")))
             directory = directory.Parent;
         if (directory == null) throw new FileNotFoundException("Không tìm thấy SQL tổng hợp.");
-        var schemaSql = await File.ReadAllTextAsync(Path.Combine(directory.FullName, "db", "depot ower", "retrack-system.sql"));
-        var seedSql = await File.ReadAllTextAsync(Path.Combine(directory.FullName, "db", "depot ower", "seed-data.sql"));
+        var schemaSql = await File.ReadAllTextAsync(Path.Combine(directory.FullName, "db", "bootstrap", "01-retrack-system.sql"));
+        var seedSql = await File.ReadAllTextAsync(Path.Combine(directory.FullName, "db", "bootstrap", "02-seed-data.sql"));
 
         await using var db = new NpgsqlConnection(connection);
         await db.OpenAsync();
