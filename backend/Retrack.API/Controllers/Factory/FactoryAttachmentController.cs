@@ -14,9 +14,9 @@ public sealed class FactoryAttachmentController(FactoryAttachmentService attachm
     [Authorize(Roles = "FACTORY")]
     [Consumes("multipart/form-data")]
     [RequestSizeLimit(1024 * 1024)]
-    public async Task<IActionResult> Upload([FromForm] IFormFile file, CancellationToken ct)
+    public async Task<IActionResult> Upload([FromForm] FactoryAttachmentUploadDto upload, CancellationToken ct)
     {
-        var url = await attachments.UploadAsync(CurrentUserId, file, ct);
+        var url = await attachments.UploadAsync(CurrentUserId, upload.File, ct);
         return Ok(ApiResponse<object>.Ok(new { url }, "Đã tải tệp lên."));
     }
 
@@ -28,4 +28,9 @@ public sealed class FactoryAttachmentController(FactoryAttachmentService attachm
         var (path, contentType) = await attachments.OpenAsync(CurrentUserId, role, ownerId, id, ct);
         return PhysicalFile(path, contentType, $"retrack-factory-{id:N}{Path.GetExtension(path)}");
     }
+}
+
+public sealed class FactoryAttachmentUploadDto
+{
+    public IFormFile File { get; set; } = default!;
 }
