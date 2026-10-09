@@ -18,10 +18,12 @@ export default function Payments() {
   const query = useQuery({
     queryKey: ['depot', userId, depotId, 'payments', page, search, status, sort],
     queryFn: async () => (await api.get('/depot/payments', { params: { depotId, page, pageSize: 20, search, status, sort } })).data.data,
+    enabled: !!depotId,
   });
   const summary = useQuery({
     queryKey: ['depot', userId, depotId, 'payment-summary'],
     queryFn: async () => (await api.get('/depot/payments/summary', { params: { depotId } })).data.data,
+    enabled: !!depotId,
   });
   const cards = [
     ['account_balance_wallet', 'Tổng nợ cần trả', money(summary.data?.pendingAmount)],
@@ -49,7 +51,7 @@ export default function Payments() {
       </select></label>
     </div>
     <div className="bg-white rounded-[20px] border border-d-border-subtle overflow-hidden shadow-sm">
-      {query.isPending ? <p role="status" className="p-8">Đang tải thanh toán…</p> : query.isError ? <div role="alert" className="p-8 text-d-error">{depotError(query.error)} <button onClick={() => query.refetch()}>Thử lại</button></div> : <>
+      {query.isPending ? <p role="status" className="p-8">Đang tải thanh toán…</p> : query.isError ? <div role="alert" className="p-8 text-d-error">{depotError(query.error)} <button onClick={() => query.refetch()} className="ml-2 rounded-full border border-d-error px-4 py-2 font-semibold hover:bg-d-surface-container-low">Thử lại</button></div> : <>
         <div className="overflow-x-auto"><table className="w-full text-left border-collapse">
           <thead><tr className="bg-d-surface-container/50 border-b border-d-border-subtle">{['Mã đơn', 'Người bán & SĐT', 'Tiền gốc', 'Phí nền tảng', 'Thực trả', 'Trạng thái', 'Hành động'].map((h) => <th key={h} className="py-4 px-6 font-d-label-sm text-d-on-surface-variant whitespace-nowrap">{h}</th>)}</tr></thead>
           <tbody className="divide-y divide-d-border-subtle">{query.data.items.map((p) => <tr key={p.id} className="hover:bg-d-surface-container-low">
@@ -59,7 +61,7 @@ export default function Payments() {
             <td className="py-4 px-6 whitespace-nowrap">{money(p.platformFeeAmount)} ({p.platformFeePercentage}%)</td>
             <td className="py-4 px-6 font-bold text-d-primary bg-d-surface-accent/10 whitespace-nowrap">{money(p.netAmount)}</td>
             <td className="py-4 px-6">{labels[p.status]}</td>
-            <td className="py-4 px-6"><button onClick={() => setSelected(p)} className="rounded-full px-4 py-2 bg-d-on-surface text-white whitespace-nowrap">{p.status === 'AWAITING_PAYMENT' ? 'Duyệt' : 'Chi tiết'}</button></td>
+            <td className="py-4 px-6"><button type="button" onClick={() => setSelected(p)} className="min-h-11 rounded-full px-4 py-2 bg-d-primary-container text-d-on-primary-container font-semibold whitespace-nowrap hover:opacity-90 focus-visible:outline-2 focus-visible:outline-d-primary">{p.status === 'AWAITING_PAYMENT' ? 'Đối soát' : 'Chi tiết'}</button></td>
           </tr>)}</tbody>
         </table></div>
         {query.data.items.length === 0 && <p role="status" className="p-8 text-center">Không có thanh toán phù hợp.</p>}

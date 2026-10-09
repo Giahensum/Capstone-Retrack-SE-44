@@ -6,7 +6,7 @@ import { sellerApi } from '../api';
 import { formatCurrency, formatDate, PICKUP_STATUS_LABEL, MATERIAL_TYPE_LABEL } from '@/lib/utils';
 import { ArrowLeft, MapPin, Calendar, Clock, CheckCircle, XCircle, Star, Package, Ban, Banknote, Image as ImageIcon } from 'lucide-react';
 
-const STATUS_STEPS = ['PENDING', 'SCHEDULED', 'WEIGHED', 'SELLER_CONFIRMED', 'DONE'];
+const STATUS_STEPS = ['PENDING', 'SCHEDULED', 'WEIGHED', 'SELLER_CONFIRMED', 'AWAITING_PAYMENT', 'PAYMENT_SENT', 'DONE'];
 
 export default function RequestDetail() {
   const { id } = useParams();
@@ -98,7 +98,7 @@ export default function RequestDetail() {
           </div>
           <div className="flex justify-between">
             {STATUS_STEPS.map(s => (
-              <span key={s} className="text-[9px] text-gray-500 font-medium text-center" style={{ width: '18%' }}>
+              <span key={s} className="text-[9px] text-gray-500 font-medium text-center" style={{ width: `${100 / STATUS_STEPS.length}%` }}>
                 {PICKUP_STATUS_LABEL[s] ?? s}
               </span>
             ))}
@@ -196,6 +196,10 @@ export default function RequestDetail() {
               Vui lòng kiểm tra tài khoản ngân hàng. Nếu đã nhận được <span className="text-green-700 font-bold">{formatCurrency(req.netAmount)}</span>, hãy bấm xác nhận.
             </p>
           </div>
+          {/^https?:\/\/\S+$/i.test(req.paymentProofUrl ?? '') && <a href={req.paymentProofUrl} target="_blank" rel="noreferrer"
+            className="inline-flex items-center gap-2 rounded-xl border border-teal-500/30 px-4 py-2.5 text-sm font-semibold text-teal-700 hover:bg-teal-500/10">
+            <ImageIcon size={16} /> Xem chứng từ chuyển khoản
+          </a>}
           <button
             onClick={() => confirmPaymentMutation.mutate()}
             disabled={confirmPaymentMutation.isPending}

@@ -62,6 +62,7 @@ namespace Retrack.API.DTOs
         public string Status { get; set; } = string.Empty;
         public decimal GrossAmount { get; set; }
         public decimal NetAmount { get; set; }
+        public string? PaymentProofUrl { get; set; }
         public DateTime CreatedAt { get; set; }
         public List<PickupRequestItemDto> Items { get; set; } = new();
     }
