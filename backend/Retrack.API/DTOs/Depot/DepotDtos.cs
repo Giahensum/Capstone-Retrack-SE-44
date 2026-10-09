@@ -15,6 +15,7 @@ public sealed class FactorySearchQuery : DepotQuery
 {
     [Range(1, 2000)] public double? MaxDistanceKm { get; set; }
     public bool NearestFirst { get; set; }
+    [StringLength(100)] public string? MaterialType { get; set; }
 }
 
 public record DepotSummaryDto(Guid Id, string Name);
