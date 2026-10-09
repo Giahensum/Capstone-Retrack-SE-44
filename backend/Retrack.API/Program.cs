@@ -189,7 +189,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
-// ===== DB-FIRST: app KHÔNG tự migrate; schema nằm ở db/depot ower/retrack-system.sql =====
+// ===== DB-FIRST: app KHÔNG tự migrate; schema nằm ở db/bootstrap/01-retrack-system.sql =====
 // Tạo/cập nhật schema bằng script SQL đã review trước khi khởi động ứng dụng.
 // Chỉ seed dữ liệu khi chủ động bật Database__Initialize trong Development.
 if (app.Environment.IsDevelopment() && builder.Configuration.GetValue<bool>("Database:Initialize"))

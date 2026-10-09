@@ -36,7 +36,7 @@
 - Thanh toán phải nguyên tử, kiểm tra state và xử lý retry. Một nguồn giao dịch chỉ có một platform transaction. Khóa dòng PostgreSQL khi cần chống race.
 - Tồn kho chỉ nhận đơn `DONE`; phân biệt hàng giữ cho lô, hàng xuất và tồn khả dụng. Mọi service phân bổ/hủy lô cùng kho phải dùng cùng khóa dòng depot. Factory/Driver cần tuân thủ giao thức này khi thay đổi phân bổ.
 - Giữ nguyên mức phí đã chốt trên đơn cũ. Không tự tạo công thức lương/lợi nhuận hoặc coi QC bị từ chối là hàng đã trả về kho.
-- Hiện tại ứng dụng không tự chạy EF migration; schema triển khai cho máy mới nằm trong `db/depot ower/retrack-system.sql`. Giữ cơ chế này tới khi nhóm chốt việc chuyển DB-first. Review SQL trước khi áp dụng; không sửa migration đã áp dụng/chia sẻ, không tạo schema song song hoặc dùng EnsureCreated trên DB có migration. Không reset/drop DB để sửa lỗi kiểm thử.
+- Hiện tại ứng dụng không tự chạy EF migration; schema triển khai cho máy mới nằm trong `db/bootstrap/01-retrack-system.sql`, seed chung ở `db/bootstrap/02-seed-data.sql`. Giữ cơ chế này tới khi nhóm chốt việc chuyển DB-first. Review SQL trước khi áp dụng; không sửa migration đã áp dụng/chia sẻ, không tạo schema song song hoặc dùng EnsureCreated trên DB có migration. Không reset/drop DB để sửa lỗi kiểm thử.
 - Model map thực tế có nhiều trạng thái string và entity ở `Models/OtherModels.cs`; enum/model scaffold chưa chắc là contract hiện hành. Ghi rõ state mapping khi liên kết role.
 
 ## Frontend
