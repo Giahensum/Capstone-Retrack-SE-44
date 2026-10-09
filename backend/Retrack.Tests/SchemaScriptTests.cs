@@ -58,7 +58,7 @@ public sealed class SchemaScriptTests
             directory = directory.Parent;
         if (directory == null) throw new FileNotFoundException("Không tìm thấy SQL tổng hợp.");
         var schemaSql = await File.ReadAllTextAsync(Path.Combine(directory.FullName, "db", "depot ower", "retrack-system.sql"));
-        var seedSql = await File.ReadAllTextAsync(Path.Combine(directory.FullName, "db", "retrack-demo-seed.sql"));
+        var seedSql = await File.ReadAllTextAsync(Path.Combine(directory.FullName, "db", "depot ower", "seed-data.sql"));
 
         await using var db = new NpgsqlConnection(connection);
         await db.OpenAsync();
@@ -92,24 +92,30 @@ public sealed class SchemaScriptTests
                 (SELECT COUNT(*) FROM factory_depot_partnerships WHERE status = 'PENDING'),
                 (SELECT COUNT(*) FROM market_prices),
                 (SELECT COUNT(*) FROM users WHERE email = 'depot@retrack.vn' AND full_name = 'Ngô Sỹ Giá'),
-                (SELECT password_hash FROM users WHERE email = 'depot@retrack.vn')
+                (SELECT password_hash FROM users WHERE email = 'depot@retrack.vn'),
+                (SELECT COUNT(*) FROM inventory_batches WHERE status = 'MARKETPLACE'),
+                (SELECT COUNT(*) FROM transport_jobs),
+                (SELECT COUNT(*) FROM notifications WHERE transport_job_id IS NOT NULL)
             """, db, tx))
         {
             await using var reader = await verify.ExecuteReaderAsync();
             Assert.True(await reader.ReadAsync());
-            Assert.Equal(8L, reader.GetInt64(0));
-            Assert.Equal(1L, reader.GetInt64(1));
+            Assert.Equal(10L, reader.GetInt64(0));
+            Assert.Equal(3L, reader.GetInt64(1));
             Assert.Equal(3L, reader.GetInt64(2));
-            Assert.Equal(2L, reader.GetInt64(3));
-            Assert.Equal(4L, reader.GetInt64(4));
-            Assert.Equal(2L, reader.GetInt64(5));
-            Assert.Equal(1L, reader.GetInt64(6));
-            Assert.Equal(1L, reader.GetInt64(7));
+            Assert.Equal(6L, reader.GetInt64(3));
+            Assert.Equal(9L, reader.GetInt64(4));
+            Assert.Equal(4L, reader.GetInt64(5));
+            Assert.Equal(2L, reader.GetInt64(6));
+            Assert.Equal(2L, reader.GetInt64(7));
             Assert.Equal(8L, reader.GetInt64(8));
             Assert.Equal(1L, reader.GetInt64(9));
             var depotHash = reader.GetString(10);
             Assert.StartsWith("$2a$", depotHash);
             Assert.True(BCrypt.Net.BCrypt.Verify("Depot@123", depotHash));
+            Assert.Equal(2L, reader.GetInt64(11));
+            Assert.Equal(1L, reader.GetInt64(12));
+            Assert.Equal(1L, reader.GetInt64(13));
         }
 
         await tx.RollbackAsync();

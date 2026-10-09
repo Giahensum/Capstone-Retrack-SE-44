@@ -1,6 +1,6 @@
 # SQL Driver
 
-Máy mới chỉ cần chạy `db/bootstrap.psql` một lần; schema Driver và các bảng chung đã nằm trong nguồn DB-first `db/depot ower/retrack-system.sql`. File bên dưới là fixture kiểm thử mở rộng hoặc bản vá cho database cũ, không chạy lại trên máy mới nếu không có nhu cầu cụ thể.
+Máy mới chạy hai file `db/depot ower/retrack-system.sql` rồi `db/depot ower/seed-data.sql` trong pgAdmin. Schema Driver và bảng chung đã có trong hai file đó. File bên dưới là fixture kiểm thử mở rộng hoặc bản vá cho database cũ, không chạy lại trên máy mới nếu không có nhu cầu cụ thể.
 
 Khi cần chạy fixture bằng pgAdmin trên **database phát triển cá nhân** đang kết nối backend, dùng theo thứ tự:
 
