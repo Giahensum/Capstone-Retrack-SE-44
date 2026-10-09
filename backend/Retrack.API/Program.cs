@@ -165,6 +165,9 @@ builder.Services.AddSwaggerGen(c =>
             Array.Empty<string>()
         }
     });
+    // Resolve duplicate action conflicts (e.g. same route registered twice)
+    c.ResolveConflictingActions(apiDescriptions => apiDescriptions.First());
+    c.CustomOperationIds(e => $"{e.ActionDescriptor.RouteValues["controller"]}_{e.ActionDescriptor.RouteValues["action"]}_{e.HttpMethod}");
 });
 
 // ===== BUILD =====

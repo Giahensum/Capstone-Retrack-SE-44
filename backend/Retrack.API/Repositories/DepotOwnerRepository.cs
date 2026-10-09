@@ -22,6 +22,18 @@ public sealed class DepotOwnerRepository(AppDbContext db) : IDepotOwnerRepositor
     {
         var source = db.Factories.AsNoTracking().Where(f => f.Owner != null && f.Owner.IsActive);
         if (!string.IsNullOrWhiteSpace(query.Search)) source = source.Where(f => EF.Functions.ILike(f.Name, $"%{query.Search}%"));
+        if (!string.IsNullOrWhiteSpace(query.MaterialType))
+        {
+            var materialCode = Retrack.API.Services.Shared.MaterialCatalog.RequireCode(query.MaterialType);
+            var acceptedValues = Retrack.API.Services.Shared.MaterialCatalog.Values(materialCode);
+            var matchingSources = acceptedValues.Select(value =>
+            {
+                var normalizedValue = value.Replace(" ", "");
+                return source.Where(f => f.AcceptedMaterialsCsv != "" &&
+                    EF.Functions.ILike("," + f.AcceptedMaterialsCsv.Replace(" ", "") + ",", $"%,{normalizedValue},%"));
+            });
+            source = matchingSources.Aggregate(Queryable.Union);
+        }
         if (!string.IsNullOrEmpty(query.Status))
         {
             source = source.Where(f => db.FactoryDepotPartnerships.Any(p => p.DepotId == depotId && p.FactoryId == f.Id && (p.Status == "BLOCKED" || p.BlockedByDepot || p.BlockedByFactory ? "BLOCKED" : p.Status) == query.Status));
