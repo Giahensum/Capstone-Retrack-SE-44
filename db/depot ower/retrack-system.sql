@@ -1,7 +1,8 @@
 -- ============================================================
 -- ReTrack — schema PostgreSQL đầy đủ cho toàn hệ thống
 -- Nguồn cấu trúc cơ sở dữ liệu duy nhất (DB-first)
--- Chạy: psql -U postgres -d <database> -f "db/depot ower/retrack-system.sql"
+-- Máy mới: mở Query Tool pgAdmin trên DB trống, chạy toàn bộ file bằng F5.
+-- Chạy tiếp db/depot ower/seed-data.sql để nạp dữ liệu demo cho các role.
 -- ============================================================
 
 -- Tạo database (chạy riêng nếu cần)
