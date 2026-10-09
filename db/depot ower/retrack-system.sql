@@ -440,7 +440,7 @@ CREATE INDEX IF NOT EXISTS ix_employee_collection_events_employee_time
 
 -- UC-64..67: chạy trên DB phát triển trước khi chạy backend mới.
 -- Không tạo pickup, không thay đổi lô/chuyến hiện có. Có thể chạy lại.
-BEGIN;
+-- Không mở/đóng transaction giữa file: bên gọi có thể chạy toàn bộ schema trong một transaction.
 CREATE TABLE IF NOT EXISTS driver_delivery_events (
     id UUID PRIMARY KEY,
     job_id UUID NOT NULL REFERENCES transport_jobs(id) ON DELETE RESTRICT,
@@ -469,4 +469,3 @@ CREATE UNIQUE INDEX IF NOT EXISTS ix_driver_delivery_operation
     ON driver_delivery_events(job_id, driver_id, operation_id);
 CREATE INDEX IF NOT EXISTS ix_driver_delivery_history
     ON driver_delivery_events(job_id, driver_id, created_at DESC);
-COMMIT;
