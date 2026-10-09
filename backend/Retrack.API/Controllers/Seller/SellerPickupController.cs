@@ -137,6 +137,13 @@ public class SellerPickupController : ControllerBase
                     .Count(r => r.TargetDepotId == d.Id && r.Status == "DONE"),
             }).ToListAsync();
 
+        var prices = await _db.MarketPrices
+            .GroupBy(p => p.MaterialType)
+            .Select(g => g.OrderByDescending(p => p.EffectiveDate).FirstOrDefault())
+            .ToListAsync();
+
+        var priceDict = prices.Where(p => p != null).ToDictionary(p => p.MaterialType.ToString(), p => p.PricePerKg);
+
         // If seller has location, calculate distance and sort
         if (lat.HasValue && lng.HasValue)
         {
@@ -145,6 +152,7 @@ public class SellerPickupController : ControllerBase
                 {
                     d.Id, d.Name, d.Address, d.Latitude, d.Longitude,
                     d.OwnerName, d.AvgRating, d.TotalDone,
+                    Prices = priceDict,
                     DistanceKm = d.Latitude.HasValue && d.Longitude.HasValue
                         ? CalculateDistanceKm((double)lat.Value, (double)lng.Value,
                             (double)d.Latitude.Value, (double)d.Longitude.Value)
@@ -155,7 +163,14 @@ public class SellerPickupController : ControllerBase
             return Ok(ApiResponse<object>.Ok(sorted));
         }
 
-        return Ok(ApiResponse<object>.Ok(depots));
+        var resultWithoutLocation = depots.Select(d => new
+        {
+            d.Id, d.Name, d.Address, d.Latitude, d.Longitude,
+            d.OwnerName, d.AvgRating, d.TotalDone,
+            Prices = priceDict,
+        }).ToList();
+
+        return Ok(ApiResponse<object>.Ok(resultWithoutLocation));
     }
 
     /// <summary>Seller đánh giá kho sau khi đơn DONE</summary>
