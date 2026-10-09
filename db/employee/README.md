@@ -27,7 +27,7 @@ Reset chỉ xóa 13 UUID demo có đúng nhãn: pickup_requests và các dòng c
 
 - Các script check-in, dashboard, bổ sung cột depot và cấu hình phí đã hợp nhất vào `01_employee_setup.sql`.
 - Script seed và reset demo đã hợp nhất vào `02_employee_demo.sql`, với reset mặc định tắt.
-- `db/seed_more_depots.sql` là dữ liệu kho dùng chung, giữ nguyên ngoài thư mục Employee.
+- Các kho demo dùng chung được tạo bằng `DataSeeder` và `Program.cs` khi bật `Database__Initialize` ở Development. Bản SQL kho TP.HCM cũ đã chuyển sang lưu trữ local trong `.ai-context` và không còn dùng để seed.
 - Schema đầy đủ của hệ thống vẫn nằm ở `db/depot ower/retrack-system.sql`.
 
 Các script đã được rà soát cấu trúc và đường dẫn; chưa thực thi trên database của bạn.

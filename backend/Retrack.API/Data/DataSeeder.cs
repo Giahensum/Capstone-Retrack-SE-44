@@ -100,9 +100,9 @@ namespace Retrack.API.Data
                 Id = Guid.Parse("00000000-0000-0000-0000-000000000010"),
                 OwnerId = depotOwnerUser.Id,
                 Name = "Kho Vựa Phế Liệu Minh Bình",
-                Address = "123 Đường Lý Thường Kiệt, Phường 7, Quận Tân Bình, TP.HCM",
-                Latitude = 10.8005m,
-                Longitude = 106.6637m,
+                Address = "Khu vực X7P4+XF9, phường Ngũ Hành Sơn, Đà Nẵng (địa điểm demo)",
+                Latitude = 15.9874125m,
+                Longitude = 108.2562344m,
                 Rating = 4.5m
             };
             db.Depots.Add(depot);
@@ -133,9 +133,9 @@ namespace Retrack.API.Data
                 Id = Guid.Parse("00000000-0000-0000-0000-000000000020"),
                 OwnerId = factoryUser.Id,
                 Name = "Eco Plastics Vietnam",
-                Address = "45 Khu Công Nghiệp Tân Bình, TP.HCM",
-                Latitude = 10.8234m,
-                Longitude = 106.6501m,
+                Address = "Khu đô thị FPT, phường Ngũ Hành Sơn, Đà Nẵng (địa điểm demo)",
+                Latitude = 15.9832468m,
+                Longitude = 108.2520905m,
                 Rating = 4.2m
             };
             db.Factories.Add(factory);
