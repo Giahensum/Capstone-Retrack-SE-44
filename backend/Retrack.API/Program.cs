@@ -204,18 +204,22 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     try {
-        var existingCount = await db.Depots.CountAsync(d => d.Name == "Vựa Phế Liệu Bình Thạnh");
-        if (existingCount == 0)
+        var ownerId = Guid.Parse("00000000-0000-0000-0000-000000000003");
+        var additionalDepots = new[]
         {
-            var ownerId = Guid.Parse("00000000-0000-0000-0000-000000000003");
-            db.Depots.AddRange(
-                new Retrack.API.Models.Depot { Id = Guid.Parse("00000000-0000-0000-0000-000000000101"), OwnerId = ownerId, Name = "Vựa Phế Liệu Bình Thạnh", Address = "150 Điện Biên Phủ, Phường 25, Bình Thạnh, TP.HCM", Latitude = 10.8037m, Longitude = 106.7119m, Rating = 4.8m },
-                new Retrack.API.Models.Depot { Id = Guid.Parse("00000000-0000-0000-0000-000000000102"), OwnerId = ownerId, Name = "Kho Thu Mua Phế Liệu Quận 10", Address = "212 Lý Thái Tổ, Phường 1, Quận 10, TP.HCM", Latitude = 10.7675m, Longitude = 106.6781m, Rating = 4.2m },
-                new Retrack.API.Models.Depot { Id = Guid.Parse("00000000-0000-0000-0000-000000000103"), OwnerId = ownerId, Name = "Điểm Thu Gom Tân Bình", Address = "78 Cộng Hòa, Phường 4, Tân Bình, TP.HCM", Latitude = 10.8023m, Longitude = 106.6575m, Rating = 4.5m },
-                new Retrack.API.Models.Depot { Id = Guid.Parse("00000000-0000-0000-0000-000000000104"), OwnerId = ownerId, Name = "Kho Phế Liệu Lớn Gò Vấp", Address = "152 Quang Trung, Phường 10, Gò Vấp, TP.HCM", Latitude = 10.8329m, Longitude = 106.6713m, Rating = 4.9m }
-            );
+            new Retrack.API.Models.Depot { Id = Guid.Parse("00000000-0000-0000-0000-000000000101"), OwnerId = ownerId, Name = "Vựa Phế Liệu FPT City", Address = "Khu vực quảng trường FPT City, phường Ngũ Hành Sơn, Đà Nẵng (địa điểm demo)", Latitude = 15.98144m, Longitude = 108.26106m, Rating = 4.8m },
+            new Retrack.API.Models.Depot { Id = Guid.Parse("00000000-0000-0000-0000-000000000102"), OwnerId = ownerId, Name = "Kho Thu Mua Hòa Hải", Address = "Khu đô thị FPT, phường Ngũ Hành Sơn, Đà Nẵng (địa điểm demo)", Latitude = 15.9832468m, Longitude = 108.2520905m, Rating = 4.2m },
+            new Retrack.API.Models.Depot { Id = Guid.Parse("00000000-0000-0000-0000-000000000103"), OwnerId = ownerId, Name = "Điểm Thu Gom Ngũ Hành Sơn", Address = "Khu vực đường Huyền Trân Công Chúa, phường Ngũ Hành Sơn, Đà Nẵng (địa điểm demo)", Latitude = 16.0043044m, Longitude = 108.2635270m, Rating = 4.5m },
+            new Retrack.API.Models.Depot { Id = Guid.Parse("00000000-0000-0000-0000-000000000104"), OwnerId = ownerId, Name = "Kho Phế Liệu Mỹ An", Address = "Khu vực Mỹ An, phường Ngũ Hành Sơn, Đà Nẵng (địa điểm demo)", Latitude = 16.0250950m, Longitude = 108.2595335m, Rating = 4.9m }
+        };
+        var demoIds = additionalDepots.Select(d => d.Id).ToArray();
+        var existingIds = await db.Depots.Where(d => demoIds.Contains(d.Id)).Select(d => d.Id).ToListAsync();
+        var missingDepots = additionalDepots.Where(d => !existingIds.Contains(d.Id)).ToArray();
+        if (missingDepots.Length > 0)
+        {
+            db.Depots.AddRange(missingDepots);
             await db.SaveChangesAsync();
-            app.Logger.LogInformation("SEED MORE DEPOTS SUCCESS");
+            app.Logger.LogInformation("Đã thêm {Count} kho demo tại Đà Nẵng", missingDepots.Length);
         }
     }
     catch (Exception ex) {
