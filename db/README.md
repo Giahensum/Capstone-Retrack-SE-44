@@ -22,8 +22,8 @@ Không sửa `appsettings.json` riêng của thành viên để khớp máy ngư
 - `bootstrap/01-retrack-system.sql` là **nguồn schema DB-first duy nhất** cho Auth, Seller, Depot Owner, Employee, Driver, Factory và Admin.
 - `bootstrap/02-seed-data.sql` là seed chung: tài khoản các role, 3 điểm kho, 3 nhà máy, nhu cầu theo vật liệu, 9 yêu cầu thu gom ở nhiều trạng thái, lượng tồn PET/nhôm/carton, các lô công khai và chỉ định, một chuyến chờ tài xế, thông báo và bảng giá demo. Tọa độ/địa chỉ mẫu trải từ Ngũ Hành Sơn, Hải Châu tới Cẩm Lệ. Dữ liệu có nhãn `[DEMO]`, không phải nghiệp vụ thật.
 - Seed chạy lại không nhân đôi các bản ghi fixture; không sửa tài khoản có sẵn khi ID/email trùng và có kiểm tra dừng nếu dữ liệu tài khoản xung đột.
-- Các file SQL trong `employee/`, `driver/`, `factory/`, `seller/` là bản nâng cấp DB cũ hoặc fixture chuyên biệt; không phải file cần chạy khi setup database mới. Đọc README theo role trước khi dùng chúng.
-- Script bảo trì dữ liệu Đà Nẵng trên database demo cũ nằm riêng ở `db/legacy/`; không dùng trong quy trình khởi tạo mới. Thư mục `depot ower/` giữ README riêng cho Depot Owner; hai file SQL bootstrap toàn hệ thống nằm trong `db/bootstrap/`.
+- Các file SQL trong `employee/`, `driver/` và `factory/` là bản nâng cấp DB cũ hoặc fixture chuyên biệt; không phải file cần chạy khi setup database mới. Đọc README theo role trước khi dùng chúng. Hai script `cleanup_legacy_pascalcase_tables.sql` và `inspect_legacy_pascalcase_tables.sql` chỉ phục vụ kiểm tra/chuyển dữ liệu từ schema PascalCase đời đầu.
+- SQL chuyển địa chỉ demo cá nhân sang Đà Nẵng không còn trong repo vì seed dùng chung đã có địa chỉ Đà Nẵng; bản theo dõi cục bộ được lưu trong `.ai-context` và không dùng khi tạo database mới. Thư mục `depot ower/` giữ README riêng cho Depot Owner; hai file SQL bootstrap toàn hệ thống nằm trong `db/bootstrap/`.
 
 ## Quy tắc khi thành viên thêm cột/bảng
 
