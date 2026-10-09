@@ -10,7 +10,7 @@ namespace Retrack.API.Controllers.Factory;
 [Authorize]
 public sealed class FactoryAttachmentController(FactoryAttachmentService attachments) : FactoryControllerBase
 {
-    [HttpPost]
+    [HttpPost("upload")]
     [Authorize(Roles = "FACTORY")]
     [Consumes("multipart/form-data")]
     [RequestSizeLimit(1024 * 1024)]
