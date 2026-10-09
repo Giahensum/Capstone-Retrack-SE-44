@@ -85,7 +85,8 @@ public sealed class PaymentTests : IAsyncLifetime
     public async Task Owner_payment_persists_proof_status_and_exactly_one_fee()
     {
         var seed = await Seed();
-        await using (var db = Open()) await Pay(db, seed.Request, seed.Owner);
+        await using (var db = Open())
+            Assert.Equal(Proof, (await Pay(db, seed.Request, seed.Owner)).PaymentProofUrl);
         await using var verify = Open();
         var request = await verify.PickupRequests.FindAsync(seed.Request);
         Assert.Equal("PAYMENT_SENT", request!.Status);
@@ -93,6 +94,43 @@ public sealed class PaymentTests : IAsyncLifetime
         var fee = Assert.Single(await verify.PlatformTransactions.Where(t => t.SourceId == seed.Request).ToListAsync());
         Assert.Equal("PICKUP_REQUEST", fee.SourceType);
         Assert.Equal(10m, fee.FeeAmount);
+    }
+
+    [Fact]
+    public async Task Seller_confirms_received_payment_before_inventory_increases()
+    {
+        var seed = await Seed();
+        Guid sellerId;
+        Guid depotId;
+        await using (var db = Open())
+        {
+            var request = (await db.PickupRequests.FindAsync(seed.Request))!;
+            sellerId = request.SellerId;
+            depotId = request.TargetDepotId!.Value;
+            db.PickupRequestItems.Add(new PickupRequestItem
+            {
+                PickupRequestId = seed.Request, MaterialType = "PAPER", WeightKg = 10,
+                PricePerKg = 100, SubTotal = 1000
+            });
+            await db.SaveChangesAsync();
+            await Pay(db, seed.Request, seed.Owner);
+        }
+
+        await using (var db = Open())
+        {
+            var service = new PickupService(new PickupRequestRepository(db), db,
+                new DepotPaymentService(new DepotOwnerRepository(db), new DepotPaymentRepository(db), new DepotUnitOfWork(db)));
+            Assert.Equal(Proof, (await service.GetByIdAsync(seed.Request, sellerId))!.PaymentProofUrl);
+            await Assert.ThrowsAsync<DepotForbiddenException>(() => service.MarkDoneAsync(seed.Request, Guid.NewGuid()));
+            Assert.Equal("DONE", (await service.MarkDoneAsync(seed.Request, sellerId)).Status);
+            Assert.Equal("DONE", (await service.MarkDoneAsync(seed.Request, sellerId)).Status);
+        }
+
+        await using var verify = Open();
+        Assert.Equal(1, await verify.PlatformTransactions.CountAsync(t => t.SourceId == seed.Request));
+        var inventory = new InventoryService(new DepotInventoryRepository(verify),
+            new DepotService(new DepotOwnerRepository(verify), new DepotPaymentReadRepository(verify)));
+        Assert.Equal(10m, Assert.Single(await inventory.GetAsync(seed.Owner, depotId)).ReceivedKg);
     }
 
     [Theory]

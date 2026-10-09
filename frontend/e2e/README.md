@@ -75,6 +75,8 @@ Mỗi lần chạy thành công giữ lại một lô đã quyết toán 1 kg PE
 
 ### PayOS giả lập
 
+`e2e/depot-seller-payment.spec.js` kiểm tra popup đối soát Depot và màn chi tiết Seller trong trình duyệt bằng API giả lập có kiểm soát, không sửa database hoặc chuyển tiền. Chạy `npm run test:e2e -- e2e/depot-seller-payment.spec.js --reporter=line`; ảnh popup nằm trong `test-results` local. Bài này cần đi cùng `PaymentTests.cs` trên PostgreSQL để xác nhận quyền, trạng thái, phí ghi một lần và tồn kho sau Seller xác nhận; nó không thay thế E2E đầy đủ Employee bàn giao → Depot chuyển tiền → Seller nhận tiền trên backend đang chạy.
+
 Chuẩn bị một hóa đơn phí riêng có trạng thái `UNPAID` ở trang đầu danh sách; đặt `E2E_PAYOS_INVOICE_ID` bằng UUID hóa đơn. Với frontend/backend Development, chạy `npm run test:e2e -- e2e/depot-payos.spec.js --reporter=line`. Bài này thay hóa đơn thành `SUBMITTED` (chờ Admin đối soát), kiểm tra sau reload và không gọi PayOS/chuyển tiền thật. Không dùng hóa đơn thật và không tự đổi lại trạng thái hóa đơn. PayOS production cần tích hợp riêng sau khi có cấu hình nhà cung cấp.
 
 - `node --test src/features/depot/proofDownload.test.js`: kiểm tra định dạng/chữ ký chứng từ, chặn HTML/SVG, dữ liệu lỗi và quá cỡ.

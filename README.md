@@ -109,6 +109,8 @@ Nguồn schema đang dùng là [`db/depot ower/retrack-system.sql`](db/depot%20o
 
 Các file EF migration cũ vẫn còn trong source để đối chiếu lịch sử, chưa được hợp nhất/xóa. Nhóm sẽ chốt lại DB-first về sau; không tự áp dụng song song migration và script schema lên cùng database.
 
+Luồng thanh toán Seller ↔ Depot dùng các cột và bảng đã có (`pickup_requests.payment_proof_url`, `platform_transactions`); bản cập nhật giao diện/DTO thanh toán không thêm schema. Thành viên đã có database đúng cấu trúc không cần chạy SQL mới chỉ vì cập nhật này. Nếu máy cũ thiếu cột/bảng, đối chiếu với SQL tổng hợp và các bản vá ở trên trên **đúng database local** trước khi sửa; không chạy lại toàn bộ SQL tổng hợp trên database có dữ liệu. Đơn chỉ thành `DONE` sau khi Seller xác nhận đã nhận tiền; khi đó tồn kho mới ghi nhận hàng.
+
 ### 3. Cấu hình Frontend
 Mở thư mục `frontend/`, sao chép `.env.example` thành `.env` nếu cần cấu hình riêng.
 (Nếu có Client ID của Google để đăng nhập, bạn có thể điền vào `VITE_GOOGLE_CLIENT_ID`).

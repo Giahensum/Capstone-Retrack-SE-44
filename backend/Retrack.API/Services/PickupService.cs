@@ -217,6 +217,7 @@ namespace Retrack.API.Services
                 Status = r.Status,
                 GrossAmount = r.GrossAmount,
                 NetAmount = r.NetAmount,
+                PaymentProofUrl = r.PaymentProofUrl,
                 CreatedAt = r.CreatedAt,
                 Items = r.Items.Select(i => new PickupRequestItemDto
                 {
