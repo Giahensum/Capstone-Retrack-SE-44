@@ -32,9 +32,11 @@ public class CloudinaryService : ICloudinaryService
 
     public async Task<string> UploadImageAsync(Stream fileStream, string fileName)
     {
+        // Không coi ảnh mẫu của nhà cung cấp là chứng từ/ảnh vật liệu của người dùng.
+        var client = Client;
         try
         {
-            var result = await Client.UploadAsync(new ImageUploadParams
+            var result = await client.UploadAsync(new ImageUploadParams
             {
                 File = new FileDescription(fileName, fileStream),
                 Folder = "retrack",
@@ -43,16 +45,14 @@ public class CloudinaryService : ICloudinaryService
                     .Quality("auto").FetchFormat("auto")
             });
 
-            if (result.StatusCode == System.Net.HttpStatusCode.OK && result.SecureUrl != null)
+            if (result.Error == null && result.StatusCode == System.Net.HttpStatusCode.OK && result.SecureUrl != null)
                 return result.SecureUrl.ToString();
         }
-        catch (Exception)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // Ignore exception to fallback to dummy image
+            throw new InvalidOperationException("Không thể tải ảnh lên. Vui lòng thử lại sau.");
         }
-
-        // Return a dummy image if Cloudinary upload fails due to bad config / quota
-        return "https://res.cloudinary.com/demo/image/upload/v1312461204/sample.jpg";
+        throw new InvalidOperationException("Không thể tải ảnh lên. Vui lòng thử lại sau.");
     }
 
     public async Task<string> UploadAvatarAsync(Stream fileStream, string fileName)
