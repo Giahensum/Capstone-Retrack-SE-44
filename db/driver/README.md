@@ -1,6 +1,8 @@
 # SQL Driver
 
-Chạy trong pgAdmin trên **database phát triển cá nhân** đang kết nối backend, theo thứ tự:
+Máy mới chỉ cần chạy `db/bootstrap.psql` một lần; schema Driver và các bảng chung đã nằm trong nguồn DB-first `db/depot ower/retrack-system.sql`. File bên dưới là fixture kiểm thử mở rộng hoặc bản vá cho database cũ, không chạy lại trên máy mới nếu không có nhu cầu cụ thể.
+
+Khi cần chạy fixture bằng pgAdmin trên **database phát triển cá nhân** đang kết nối backend, dùng theo thứ tự:
 
 1. `01_driver_setup.sql`: thêm liên kết chuyến cho thông báo. Đây là file `db/drv_job_pool.sql` đã chuyển vào thư mục này.
 2. `02_driver_demo.sql`: chạy toàn bộ để tạo 3 lô `DRV-DEMO-01/02/03`, PET 100/150/200 kg và 3 chuyến chờ nhận. Giữ nguyên tài khoản, mật khẩu, địa chỉ và các dữ liệu khác.
