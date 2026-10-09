@@ -1,5 +1,5 @@
 -- Dữ liệu demo dùng cục bộ/phát triển, không dùng production.
--- Máy mới: chạy db/depot ower/retrack-system.sql trước; mở file này trong Query Tool pgAdmin, nhấn F5.
+-- Máy mới: chạy db/bootstrap/01-retrack-system.sql trước; mở file này trong Query Tool pgAdmin, nhấn F5.
 -- Có thể chạy lại; các UUID fixture đã có sẽ được giữ nguyên.
 -- Tài khoản demo được tạo khi email/ID chưa tồn tại; mật khẩu chỉ lưu dạng BCrypt.
 -- Không dùng thông tin demo cho môi trường thật.
