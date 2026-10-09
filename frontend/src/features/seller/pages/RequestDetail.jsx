@@ -51,7 +51,7 @@ export default function RequestDetail() {
 
   const reviewMutation = useMutation({
     mutationFn: () => sellerApi.reviewDepot(id, review),
-    onSuccess: () => { toast.success('Đánh giá thành công!'); setReviewOpen(false); },
+    onSuccess: () => { invalidate(); toast.success('Đánh giá thành công!'); setReviewOpen(false); },
   });
 
   if (isLoading) return (
@@ -224,7 +224,23 @@ export default function RequestDetail() {
       {/* ═══ ACTION: Review depot (UC-1.11) ═══ */}
       {req.status === 'DONE' && (
         <div className="space-y-3">
-          {!reviewOpen ? (
+          {req.reviewRating ? (
+            /* Đã đánh giá rồi — hiển thị lại */
+            <div className="bg-gray-100/50 border border-gray-300/50 rounded-2xl p-5 space-y-3">
+              <h3 className="text-sm font-bold text-gray-900">⭐ Đánh giá của bạn</h3>
+              <div className="flex gap-1 justify-center">
+                {[1, 2, 3, 4, 5].map(n => (
+                  <Star key={n} size={28} className={n <= req.reviewRating ? 'text-yellow-400 fill-yellow-400' : 'text-slate-300'} />
+                ))}
+              </div>
+              {req.reviewComment && (
+                <p className="text-sm text-gray-700 bg-white/60 rounded-xl px-4 py-3 border border-gray-200 italic">“{req.reviewComment}”</p>
+              )}
+              <p className="text-[10px] text-gray-400 text-center">
+                Đã đánh giá vào {req.reviewCreatedAt ? new Date(req.reviewCreatedAt).toLocaleDateString('vi-VN') : ''}
+              </p>
+            </div>
+          ) : !reviewOpen ? (
             <button onClick={() => setReviewOpen(true)} className="w-full bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 font-bold py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-yellow-500/20 transition-all">
               <Star size={16} /> Đánh giá kho vựa
             </button>
@@ -241,7 +257,7 @@ export default function RequestDetail() {
               <textarea
                 value={review.comment}
                 onChange={e => setReview({ ...review, comment: e.target.value })}
-                placeholder="Nhận xét của bạn (tùy chọn)..."
+                placeholder="Nhận xét của bạn (tuỳ chọn)..."
                 rows={3}
                 className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-sm text-gray-800 placeholder-slate-600 focus:border-emerald-500 outline-none resize-none"
               />
