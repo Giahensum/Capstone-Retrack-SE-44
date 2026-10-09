@@ -1,0 +1,4 @@
+ALTER TABLE users ADD COLUMN bank_name VARCHAR(255);
+ALTER TABLE users ADD COLUMN bank_account_number VARCHAR(100);
+ALTER TABLE users ADD COLUMN bank_account_name VARCHAR(255);
+ALTER TABLE users ADD COLUMN bank_qr_url VARCHAR(2048);
