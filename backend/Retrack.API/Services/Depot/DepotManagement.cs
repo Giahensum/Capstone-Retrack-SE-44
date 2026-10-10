@@ -26,6 +26,8 @@ public sealed partial class DepotService
         await RequireOwnerAsync(ownerId, depotId);
         if (!string.IsNullOrEmpty(query.Status) && query.Status is not ("APPROVED" or "PENDING" or "BLOCKED" or "DECLINED"))
             throw new ArgumentException("Trạng thái đối tác không hợp lệ.");
+        if (!string.IsNullOrWhiteSpace(query.MaterialType))
+            query.MaterialType = Retrack.API.Services.Shared.MaterialCatalog.RequireCode(query.MaterialType);
         return await owners.FactoriesAsync(depotId, query);
     }
     public async Task<PagedResult<DemandDto>> GetDemandsAsync(Guid ownerId, Guid depotId, DepotQuery query)

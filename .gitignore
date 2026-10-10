@@ -26,6 +26,8 @@ backend/**/appsettings.*.json
 !backend/**/appsettings.example.json
 # Fixture dữ liệu riêng trên máy, không dùng làm seed chia sẻ.
 backend/seed_test_data.sql
+# Bản seed kho TP.HCM cũ chỉ giữ local trong .ai-context.
+db/seed_more_depots.sql
 be/**/bin/
 be/**/obj/
 be/**/*.user

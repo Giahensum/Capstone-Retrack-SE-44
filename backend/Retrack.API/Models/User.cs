@@ -43,6 +43,22 @@ namespace Retrack.API.Models
         [Column("updated_at")]
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
+        [Column("bank_name")]
+        [MaxLength(255)]
+        public string? BankName { get; set; }
+
+        [Column("bank_account_number")]
+        [MaxLength(100)]
+        public string? BankAccountNumber { get; set; }
+
+        [Column("bank_account_name")]
+        [MaxLength(255)]
+        public string? BankAccountName { get; set; }
+
+        [Column("bank_qr_url")]
+        [MaxLength(2048)]
+        public string? BankQrUrl { get; set; }
+
         // Navigation
         [Column("avatar_url")]
         [MaxLength(2048)]

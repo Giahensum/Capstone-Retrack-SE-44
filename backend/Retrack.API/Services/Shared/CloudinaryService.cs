@@ -7,11 +7,13 @@ namespace Retrack.API.Services.Shared;
 public class CloudinaryService : ICloudinaryService
 {
     private readonly IConfiguration _config;
+    private readonly ILogger<CloudinaryService> _logger;
     private Cloudinary? _cloudinary;
 
-    public CloudinaryService(IConfiguration config)
+    public CloudinaryService(IConfiguration config, ILogger<CloudinaryService> logger)
     {
         _config = config;
+        _logger = logger;
     }
 
     private Cloudinary Client
@@ -32,9 +34,11 @@ public class CloudinaryService : ICloudinaryService
 
     public async Task<string> UploadImageAsync(Stream fileStream, string fileName)
     {
+        // Không coi ảnh mẫu của nhà cung cấp là chứng từ/ảnh vật liệu của người dùng.
+        var client = Client;
         try
         {
-            var result = await Client.UploadAsync(new ImageUploadParams
+            var result = await client.UploadAsync(new ImageUploadParams
             {
                 File = new FileDescription(fileName, fileStream),
                 Folder = "retrack",
@@ -43,16 +47,16 @@ public class CloudinaryService : ICloudinaryService
                     .Quality("auto").FetchFormat("auto")
             });
 
-            if (result.StatusCode == System.Net.HttpStatusCode.OK && result.SecureUrl != null)
+            if (result.Error == null && result.StatusCode == System.Net.HttpStatusCode.OK && result.SecureUrl != null)
                 return result.SecureUrl.ToString();
+            _logger.LogError("Cloudinary image upload returned failure for file {FileName}: {Error}", Path.GetFileName(fileName), result.Error?.Message ?? $"HTTP {(int)result.StatusCode}");
         }
-        catch (Exception)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // Ignore exception to fallback to dummy image
+            _logger.LogError(ex, "Cloudinary image upload failed for file {FileName}", Path.GetFileName(fileName));
+            throw new InvalidOperationException("Không thể tải ảnh lên. Vui lòng kiểm tra cấu hình dịch vụ ảnh hoặc thử lại sau.", ex);
         }
-
-        // Return a dummy image if Cloudinary upload fails due to bad config / quota
-        return "https://res.cloudinary.com/demo/image/upload/v1312461204/sample.jpg";
+        throw new InvalidOperationException("Không thể tải ảnh lên. Vui lòng kiểm tra cấu hình dịch vụ ảnh hoặc thử lại sau.");
     }
 
     public async Task<string> UploadAvatarAsync(Stream fileStream, string fileName)

@@ -30,6 +30,34 @@ test.describe('Depot — biểu mẫu lô xuất', () => {
     await expect(page.getByText('Chỉ chọn tối đa 5 ảnh.')).toHaveCount(0);
   });
 
+  test('tạo lô công khai rồi hủy, tồn khả dụng được hoàn lại', async ({ page }) => {
+    test.skip(process.env.E2E_CREATE_BATCH !== 'true', 'Bật E2E_CREATE_BATCH=true trên database phát triển để tạo lô thử.');
+    const material = page.getByLabel('Loại phế liệu');
+    await expect(material.locator('option[value="PET"]')).toBeAttached();
+    await material.selectOption('PET');
+    const before = await page.getByText(/Tồn kho khả dụng:/).innerText();
+    await page.getByLabel('Khối lượng (kg)', { exact: true }).fill('1');
+    await page.getByLabel('Mô tả / ghi chú').fill(`E2E-Depot-Batch-${Date.now()}`);
+    const createResponse = page.waitForResponse(r => r.url().includes('/api/depot/batches?') && r.request().method() === 'POST');
+    await page.getByRole('button', { name: 'Tạo lô xuất hàng', exact: true }).click();
+    const response = await createResponse;
+    expect(response.status(), `Tạo lô: ${await response.text()}`).toBe(200);
+    const batch = (await response.json()).data;
+    expect(batch.status).toBe('LISTED');
+    await page.reload();
+    await selectDepot(page);
+    const row = page.getByRole('row').filter({ hasText: batch.code });
+    await expect(row).toContainText('Đang đăng');
+    await row.getByTitle('Hủy lô', { exact: true }).click();
+    const cancelResponse = page.waitForResponse(r => r.url().includes(`/api/depot/batches/${batch.id}/cancel`) && r.request().method() === 'PATCH');
+    await page.getByRole('button', { name: 'Xác nhận hủy', exact: true }).click();
+    expect((await cancelResponse).status()).toBe(200);
+    await expect(row).toContainText('Đã hủy');
+    await page.getByRole('button', { name: 'Tạo lô xuất hàng mới' }).click();
+    await material.selectOption('PET');
+    await expect(page.getByText(before, { exact: true })).toBeVisible();
+  });
+
   test('tạo lô có ảnh thật, Factory xem được và Depot hủy hoàn tồn', async ({ page, browser }) => {
     test.skip(process.env.E2E_UPLOAD !== 'true', 'Bật E2E_UPLOAD=true để tạo lô và tải ảnh lên Cloudinary thật.');
     test.setTimeout(90_000);
@@ -49,7 +77,7 @@ test.describe('Depot — biểu mẫu lô xuất', () => {
     expect(response.status(), 'API tạo lô multipart').toBe(200);
     const batch = (await response.json()).data;
     expect(batch.imageUrls).toHaveLength(1);
-    expect(batch.imageUrls[0]).toMatch(/^https:\/\/res\.cloudinary\.com\//);
+    expect(batch.imageUrls[0]).toMatch(/^https:\/\/res\.cloudinary\.com\/(?!demo\/)/);
     let factoryContext;
     try {
       await page.reload();
