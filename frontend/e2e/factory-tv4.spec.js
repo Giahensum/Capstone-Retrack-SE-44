@@ -110,9 +110,11 @@ async function login(page) {
 
 test.describe("Factory TV4 browser flow", () => {
   test("shared login and logout use the common session", async ({ page }) => {
+    await page.setViewportSize({ width: 869, height: 768 });
     await useFactoryApi(page, apiFixture());
     await login(page);
     await expect(page.getByText(/Đăng nhập nhà máy|Tạo tài khoản nhà máy/)).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Hồ sơ nhà máy" })).toBeVisible();
     await page.getByRole("button", { name: "Đăng xuất" }).click();
     await expect(page).toHaveURL(/\/login/);
     await expect(page.getByRole("button", { name: "Đăng nhập" })).toBeVisible();

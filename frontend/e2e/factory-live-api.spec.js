@@ -1,8 +1,9 @@
 import { test, expect } from "@playwright/test";
+import { cleanupDeliveredFactoryOrder, createDeliveredFactoryOrder } from "./factory-live-fixture";
 
 const email = process.env.E2E_FACTORY_EMAIL;
 const password = process.env.E2E_FACTORY_PASSWORD;
-const orderId = process.env.E2E_FACTORY_ORDER_ID;
+const configuredOrderId = process.env.E2E_FACTORY_ORDER_ID;
 
 test.describe("Factory UI with the local API and PostgreSQL test database", () => {
   test.skip(!email || !password, "Set E2E_FACTORY_EMAIL and E2E_FACTORY_PASSWORD to run against the local API.");
@@ -39,45 +40,52 @@ test.describe("Factory UI with the local API and PostgreSQL test database", () =
   });
 
   test("receives a delivered Depot batch, saves real QC, settles, and reloads persisted status", async ({ page }) => {
-    test.skip(!orderId, "Seed E2E_FACTORY_ORDER_ID on the isolated test database.");
-    await page.goto("/login");
-    await page.getByPlaceholder("email@example.com").fill(email);
-    await page.getByPlaceholder("••••••••").fill(password);
-    await page.getByRole("button", { name: "Đăng nhập" }).click();
-    await expect(page).toHaveURL(/\/factory/);
+    const canCreateFixture = process.env.E2E_FACTORY_DB_FIXTURE === "true";
+    test.skip(!configuredOrderId && !canCreateFixture, "Cần E2E_FACTORY_ORDER_ID hoặc bật fixture trên database test local.");
+    const fixture = configuredOrderId ? null : createDeliveredFactoryOrder();
+    const orderId = configuredOrderId || fixture.batchId;
+    try {
+      await page.goto("/login");
+      await page.getByPlaceholder("email@example.com").fill(email);
+      await page.getByPlaceholder("••••••••").fill(password);
+      await page.getByRole("button", { name: "Đăng nhập" }).click();
+      await expect(page).toHaveURL(/\/factory/);
 
-    await page.getByRole("button", { name: "Trạm cân & KCS" }).click();
-    const row = page.getByRole("row").filter({ hasText: orderId });
-    await expect(row).toBeVisible();
-    await row.getByRole("button", { name: "Chi tiết" }).click();
-    await page.getByRole("button", { name: "Xác nhận nhận hàng" }).click();
-    await expect(page.getByText("Đã xác nhận xe giao hàng. Có thể lập phiếu cân.")).toBeVisible();
+      await page.getByRole("button", { name: "Trạm cân & KCS" }).click();
+      const row = page.getByRole("row").filter({ hasText: orderId });
+      await expect(row).toBeVisible();
+      await row.getByRole("button", { name: "Chi tiết" }).click();
+      await page.getByRole("button", { name: "Xác nhận nhận hàng" }).click();
+      await expect(page.getByText("Đã xác nhận xe giao hàng. Có thể lập phiếu cân.")).toBeVisible();
 
-    await page.getByRole("button", { name: "Lập phiếu cân" }).click();
-    await page.getByLabel("Gross • Xe có hàng (kg)").fill("105");
-    await page.getByLabel("Tare • Xe rỗng (kg)").fill("5");
-    await page.getByRole("button", { name: "Lưu phiếu cân" }).click();
-    await expect(page.getByText("Đã lưu phiếu cân. Lô hàng sẵn sàng kiểm tra KCS.")).toBeVisible();
+      await page.getByRole("button", { name: "Lập phiếu cân" }).click();
+      await page.getByLabel("Gross • Xe có hàng (kg)").fill("105");
+      await page.getByLabel("Tare • Xe rỗng (kg)").fill("5");
+      await page.getByRole("button", { name: "Lưu phiếu cân" }).click();
+      await expect(page.getByText("Đã lưu phiếu cân. Lô hàng sẵn sàng kiểm tra KCS.")).toBeVisible();
 
-    await page.getByRole("button", { name: "Kiểm tra & Chốt KCS" }).click();
-    await page.getByLabel("Độ tinh khiết (%)").fill("95");
-    await page.getByLabel("Độ ẩm (%)").fill("2");
-    await page.getByLabel("Tạp chất (%)").fill("3");
-    await page.getByLabel("Grade").selectOption("A");
-    await page.getByRole("button", { name: "Chốt kết quả KCS" }).click();
-    await expect(page.getByText("KCS đạt. Đã chuyển lô sang chờ quyết toán.")).toBeVisible();
+      await page.getByRole("button", { name: "Kiểm tra & Chốt KCS" }).click();
+      await page.getByLabel("Độ tinh khiết (%)").fill("95");
+      await page.getByLabel("Độ ẩm (%)").fill("2");
+      await page.getByLabel("Tạp chất (%)").fill("3");
+      await page.getByLabel("Grade").selectOption("A");
+      await page.getByRole("button", { name: "Chốt kết quả KCS" }).click();
+      await expect(page.getByText("KCS đạt. Đã chuyển lô sang chờ quyết toán.")).toBeVisible();
 
-    await page.getByRole("button", { name: "Quyết toán", exact: true }).click();
-    await page.getByRole("row").filter({ hasText: orderId }).getByRole("button", { name: "Chi tiết" }).click();
-    await page.getByRole("button", { name: "Thỏa thuận giá & Quyết toán" }).click();
-    await page.getByLabel("Đơn giá đã thỏa thuận sau KCS (đ/kg)").fill("1200");
-    await page.getByLabel("Mã tham chiếu chuyển khoản").fill("LIVE-E2E-FACTORY");
-    await page.locator(".checkbox-line input[type=checkbox]").check();
-    await page.getByRole("button", { name: "Ghi nhận quyết toán" }).click();
-    await expect(page.getByText("Đã ghi nhận quyết toán. Có thể đánh giá lô hàng.")).toBeVisible();
+      await page.getByRole("button", { name: "Quyết toán", exact: true }).click();
+      await page.getByRole("row").filter({ hasText: orderId }).getByRole("button", { name: "Chi tiết" }).click();
+      await page.getByRole("button", { name: "Thỏa thuận giá & Quyết toán" }).click();
+      await page.getByLabel("Đơn giá đã thỏa thuận sau KCS (đ/kg)").fill("1200");
+      await page.getByLabel("Mã tham chiếu chuyển khoản").fill("LIVE-E2E-FACTORY");
+      await page.locator(".checkbox-line input[type=checkbox]").check();
+      await page.getByRole("button", { name: "Ghi nhận quyết toán" }).click();
+      await expect(page.getByText("Đã ghi nhận quyết toán. Có thể đánh giá lô hàng.")).toBeVisible();
 
-    await page.reload();
-    await page.getByRole("button", { name: "Quyết toán", exact: true }).click();
-    await expect(page.getByRole("table").getByText("Đã quyết toán", { exact: true })).toBeVisible();
+      await page.reload();
+      await page.getByRole("button", { name: "Quyết toán", exact: true }).click();
+      await expect(page.getByRole("table").getByText("Đã quyết toán", { exact: true })).toBeVisible();
+    } finally {
+      if (fixture) cleanupDeliveredFactoryOrder(fixture.batchId);
+    }
   });
 });

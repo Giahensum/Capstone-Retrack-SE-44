@@ -20,6 +20,8 @@ npm run test:e2e -- --reporter=line --workers=1
 
 Thiếu tài khoản hoặc chưa bật cờ kiểm thử có ghi dữ liệu thì các bài tương ứng **Skipped**, không được báo cáo là Passed.
 
+Riêng `factory-live-api.spec.js` có thể tự tạo và tự dọn một đơn đã giao trên database test local. Đặt `E2E_FACTORY_DB_FIXTURE=true`, cấu hình `PGHOST`, `PGDATABASE`, `PGUSER`, `PGPASSWORD` và `E2E_PSQL_PATH`. Fixture chỉ chấp nhận `Retrack_TV2_test` hoặc `Retrack_Factory_local`, khóa dòng Depot và chỉ xóa bản ghi mang đúng ID/mô tả do chính bài test tạo.
+
 Nếu backend đang mở là bản build cũ, chạy bản mới trên cổng riêng và trỏ Vite tới nó:
 
 ```powershell

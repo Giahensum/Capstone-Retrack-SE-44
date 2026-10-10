@@ -726,6 +726,18 @@ export function Profile() {
         title="Hồ sơ nhà máy"
         text="Thông tin tiếp nhận nguyên liệu và giấy tờ phục vụ hợp tác với kho vựa."
       />
+      <Card title="Tài khoản & trạng thái hồ sơ">
+        <div className="detail-grid">
+          <div><span>Chủ tài khoản</span><strong>{form.ownerName || "Chưa cập nhật"}</strong></div>
+          <div><span>Email đăng nhập</span><strong>{form.ownerEmail || "Chưa cập nhật"}</strong></div>
+          <div><span>Số điện thoại tài khoản</span><strong>{form.ownerPhone || form.phone || "Chưa cập nhật"}</strong></div>
+          <div><span>Mã hồ sơ nhà máy</span><strong>{form.id}</strong></div>
+          <div><span>Ngày tạo hồ sơ</span><strong>{form.createdAt || "Chưa xác định"}</strong></div>
+          <div><span>Điểm đánh giá</span><strong>{Number(form.rating || 0).toFixed(1)} / 5</strong></div>
+          <div><span>Phí nền tảng hiện tại</span><strong>{number(form.platformFeePercentage)}%</strong></div>
+        </div>
+        <p className="muted">Tên, email và số điện thoại tài khoản được quản lý bởi phiên đăng nhập chung.</p>
+      </Card>
       <form
         onSubmit={async (e) => {
           e.preventDefault();
@@ -765,12 +777,18 @@ export function Profile() {
                   type="checkbox"
                   checked={form.materials.includes(key)}
                   onChange={(e) =>
-                    set(
-                      "materials",
-                      e.target.checked
-                        ? [...form.materials, key]
-                        : form.materials.filter((m) => m !== key),
-                    )
+                    setForm((current) => {
+                      const selected = e.target.checked
+                        ? [...current.materials, key]
+                        : current.materials.filter((material) => material !== key);
+                      return {
+                        ...current,
+                        materials: selected,
+                        primaryMaterial: selected.includes(current.primaryMaterial)
+                          ? current.primaryMaterial
+                          : (selected[0] || ""),
+                      };
+                    })
                   }
                 />
                 {label}
@@ -780,11 +798,12 @@ export function Profile() {
           <Field label="Vật liệu chính">
             <select
               value={form.primaryMaterial}
+              disabled={!form.materials.length}
               onChange={(e) => set("primaryMaterial", e.target.value)}
             >
-              {Object.entries(materials).map(([key, label]) => (
+              {form.materials.map((key) => (
                 <option key={key} value={key}>
-                  {label}
+                  {materials[key]}
                 </option>
               ))}
             </select>
@@ -811,7 +830,7 @@ export function Profile() {
           <Button secondary onClick={() => setForm(state.profile)}>
             Bỏ thay đổi
           </Button>
-          <Button type="submit">Lưu hồ sơ nhà máy</Button>
+          <Button type="submit" disabled={!form.materials.length}>Lưu hồ sơ nhà máy</Button>
         </div>
       </form>
     </>
