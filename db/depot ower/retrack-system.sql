@@ -8,8 +8,7 @@
 -- CREATE DATABASE "ReTrack_DB";
 -- \c "ReTrack_DB";
 
--- Enable UUID extension
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+-- UUID dùng hàm lõi của PostgreSQL, không phụ thuộc extension hoặc schema cài đặt.
 
 -- ==========================================
 -- MODULE 1: HỆ THỐNG & TÀI KHOẢN (ROLES)
@@ -22,6 +21,9 @@ CREATE TABLE IF NOT EXISTS system_configs (
     description     TEXT,
     updated_at      TIMESTAMPTZ  DEFAULT NOW()
 );
+ALTER TABLE system_configs ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
+ALTER TABLE system_configs ALTER COLUMN updated_at SET DEFAULT NOW();
+UPDATE system_configs SET updated_at = NOW() WHERE updated_at IS NULL;
 
 -- Insert mặc định
 INSERT INTO system_configs (config_key, config_value, description)
@@ -32,7 +34,7 @@ WHERE config_key = 'PLATFORM_FEE_PERCENTAGE' AND config_value = '1.00';
 
 -- Bảng người dùng
 CREATE TABLE IF NOT EXISTS users (
-    id              UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id              UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
     email           VARCHAR(255) UNIQUE NOT NULL,
     password_hash   TEXT         NOT NULL,
     role            VARCHAR(50)  NOT NULL,   -- SELLER, DEPOT_OWNER, DEPOT_EMPLOYEE, DRIVER, FACTORY, ADMIN
@@ -46,7 +48,7 @@ CREATE TABLE IF NOT EXISTS users (
 
 -- Bảng kho/depot
 CREATE TABLE IF NOT EXISTS depots (
-    id              UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id              UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
     owner_id        UUID         NOT NULL REFERENCES users(id),
     name            VARCHAR(255) NOT NULL,
     address         TEXT         NOT NULL,
@@ -64,7 +66,7 @@ ALTER TABLE depots ADD COLUMN IF NOT EXISTS description TEXT;
 
 -- Bảng nhà máy
 CREATE TABLE IF NOT EXISTS factories (
-    id              UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id              UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
     owner_id        UUID         NOT NULL REFERENCES users(id),
     name            VARCHAR(255) NOT NULL,
     address         TEXT         NOT NULL,
@@ -84,7 +86,7 @@ CREATE TABLE IF NOT EXISTS factories (
 
 -- Nhân viên & Tài xế thuộc về 1 Depot
 CREATE TABLE IF NOT EXISTS depot_staffs (
-    id              UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id              UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
     depot_id        UUID         NOT NULL REFERENCES depots(id),
     user_id         UUID         NOT NULL REFERENCES users(id),
     staff_type      VARCHAR(50)  NOT NULL,   -- DEPOT_EMPLOYEE, DRIVER
@@ -97,7 +99,7 @@ CREATE TABLE IF NOT EXISTS depot_staffs (
 
 -- Yêu cầu thu gom của Seller
 CREATE TABLE IF NOT EXISTS pickup_requests (
-    id                       UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id                       UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
     seller_id                UUID         NOT NULL REFERENCES users(id),
     target_depot_id          UUID         REFERENCES depots(id),
     accepted_collector_id    UUID         REFERENCES users(id),
@@ -137,7 +139,7 @@ CREATE TABLE IF NOT EXISTS pickup_checkins (
 
 -- Chi tiết các loại phế liệu (NV cân và nhập)
 CREATE TABLE IF NOT EXISTS pickup_request_items (
-    id                  UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id                  UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
     pickup_request_id   UUID         NOT NULL REFERENCES pickup_requests(id) ON DELETE CASCADE,
     material_type       VARCHAR(100) NOT NULL,
     weight_kg           DECIMAL(10, 2) NOT NULL,
@@ -147,7 +149,7 @@ CREATE TABLE IF NOT EXISTS pickup_request_items (
 
 -- Đánh giá Seller dành cho Depot
 CREATE TABLE IF NOT EXISTS seller_depot_reviews (
-    id                  UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id                  UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
     pickup_request_id   UUID         NOT NULL REFERENCES pickup_requests(id),
     depot_id            UUID         NOT NULL REFERENCES depots(id),
     rating              INT          CHECK (rating >= 1 AND rating <= 5),
@@ -161,7 +163,7 @@ CREATE TABLE IF NOT EXISTS seller_depot_reviews (
 
 -- Bảng nhu cầu nhà máy (Demand Board)
 CREATE TABLE IF NOT EXISTS factory_demands (
-    id                  UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id                  UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
     factory_id          UUID         NOT NULL REFERENCES factories(id),
     material_type       VARCHAR(100) NOT NULL,
     required_weight_kg  DECIMAL(18, 2) NOT NULL,
@@ -176,7 +178,7 @@ CREATE TABLE IF NOT EXISTS factory_demands (
 
 -- Quan hệ đối tác Depot - Factory
 CREATE TABLE IF NOT EXISTS factory_depot_partnerships (
-    id          UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
     depot_id    UUID        NOT NULL REFERENCES depots(id),
     factory_id  UUID        NOT NULL REFERENCES factories(id),
     status      VARCHAR(50) NOT NULL DEFAULT 'PENDING',   -- PENDING, APPROVED, BLOCKED
@@ -191,7 +193,7 @@ ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS blocked_by_facto
 
 -- Lô hàng tồn kho
 CREATE TABLE IF NOT EXISTS inventory_batches (
-    id                  UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id                  UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
     depot_id            UUID         NOT NULL REFERENCES depots(id),
     target_factory_id   UUID         REFERENCES factories(id),
     direct_offer_factory_id UUID     REFERENCES factories(id),
@@ -226,7 +228,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS ix_inventory_batches_code ON inventory_batches
 
 -- Công việc vận chuyển
 CREATE TABLE IF NOT EXISTS transport_jobs (
-    id                          UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id                          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
     batch_id                    UUID        NOT NULL UNIQUE REFERENCES inventory_batches(id),
     driver_id                   UUID        REFERENCES users(id),
     status                      VARCHAR(50) NOT NULL DEFAULT 'PENDING',  -- PENDING, IN_TRANSIT, DELIVERED
@@ -238,7 +240,7 @@ CREATE TABLE IF NOT EXISTS transport_jobs (
 
 -- Bảng giá tham khảo. Giá trong ứng dụng phải được Admin cập nhật kèm nguồn.
 CREATE TABLE IF NOT EXISTS market_prices (
-    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     material_type   VARCHAR(100) NOT NULL,
     price_per_kg    DECIMAL(18, 2) NOT NULL CHECK (price_per_kg > 0),
     effective_date  TIMESTAMPTZ NOT NULL,
@@ -248,7 +250,7 @@ CREATE TABLE IF NOT EXISTS market_prices (
 
 -- Kiểm tra chất lượng tại nhà máy
 CREATE TABLE IF NOT EXISTS batch_quality_checks (
-    id                      UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id                      UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
     batch_id                UUID         NOT NULL UNIQUE REFERENCES inventory_batches(id),
     factory_id              UUID         NOT NULL REFERENCES factories(id),
     actual_weight_kg        DECIMAL(18, 2) NOT NULL,
@@ -279,7 +281,7 @@ CREATE TABLE IF NOT EXISTS batch_quality_checks (
 
 -- Factory đánh giá Depot
 CREATE TABLE IF NOT EXISTS factory_depot_reviews (
-    id          UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
     batch_id    UUID        NOT NULL REFERENCES inventory_batches(id),
     factory_id  UUID        NOT NULL REFERENCES factories(id),
     depot_id    UUID        NOT NULL REFERENCES depots(id),
@@ -294,7 +296,7 @@ CREATE TABLE IF NOT EXISTS factory_depot_reviews (
 
 -- Bảng lưu vết doanh thu của nền tảng để hiển thị cho Admin
 CREATE TABLE IF NOT EXISTS platform_transactions (
-    id          UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
     source_type VARCHAR(50) NOT NULL,  -- 'PICKUP_REQUEST' hoặc 'BATCH_ORDER'
     source_id   UUID        NOT NULL,  -- ID của pickup_requests hoặc inventory_batches
     fee_amount  DECIMAL(18, 2) NOT NULL,
@@ -314,7 +316,7 @@ ALTER TABLE platform_transactions ADD COLUMN IF NOT EXISTS fee_percentage DECIMA
 
 -- Nhật ký hành động của Admin trên hệ thống (tạo/sửa/xóa user, giá tham khảo, cấu hình phí, hóa đơn...)
 CREATE TABLE IF NOT EXISTS audit_logs (
-    id          UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id     UUID         REFERENCES users(id) ON DELETE SET NULL,  -- NULL nếu user bị xóa, log vẫn giữ lại
     action      VARCHAR(100) NOT NULL,   -- CREATE, UPDATE, DELETE, ACTIVATE, DEACTIVATE, MARK_PAID, GENERATE...
     entity_name VARCHAR(100) NOT NULL,   -- User, MarketPrice, SystemConfig, PlatformInvoice...
@@ -326,7 +328,7 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 
 -- Thông báo trong hệ thống (ví dụ: nhắc thanh toán hóa đơn phí nền tảng)
 CREATE TABLE IF NOT EXISTS notifications (
-    id          UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id     UUID         NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     title       VARCHAR(255) NOT NULL,
     message     TEXT,
@@ -340,7 +342,7 @@ ALTER TABLE notifications ADD COLUMN IF NOT EXISTS pickup_request_id UUID;
 CREATE INDEX IF NOT EXISTS ix_notifications_user_created ON notifications(user_id, created_at DESC, id);
 
 CREATE TABLE IF NOT EXISTS platform_invoices (
-    id               UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id               UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
     payer_id         UUID         NOT NULL REFERENCES users(id),
     period_year      INT          NOT NULL,
     period_month     INT          NOT NULL,

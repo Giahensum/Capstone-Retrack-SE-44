@@ -4,8 +4,6 @@
 
 BEGIN;
 
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
 DO $$
 BEGIN
     IF to_regclass('public.users') IS NULL OR to_regclass('public.factories') IS NULL
@@ -34,7 +32,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS ix_inventory_batches_code ON public.inventory_
 
 -- Factory nhận lô sẽ phát thông báo cho tài xế; đây là bảng thông báo dùng chung.
 CREATE TABLE IF NOT EXISTS public.notifications (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
     title VARCHAR(255) NOT NULL,
     message TEXT,
