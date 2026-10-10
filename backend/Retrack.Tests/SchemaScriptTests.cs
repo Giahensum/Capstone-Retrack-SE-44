@@ -21,28 +21,40 @@ public sealed class SchemaScriptTests
 
         await using var db = new NpgsqlConnection(connection);
         await db.OpenAsync();
-        await using var tx = await db.BeginTransactionAsync();
         var schema = $"schema_test_{Guid.NewGuid():N}";
-        await using (var setup = new NpgsqlCommand($"CREATE SCHEMA \"{schema}\"; SET LOCAL search_path TO \"{schema}\", public;", db, tx))
+        await using (var setup = new NpgsqlCommand($"CREATE SCHEMA \"{schema}\";", db))
             await setup.ExecuteNonQueryAsync();
-        await using (var create = new NpgsqlCommand(sql, db, tx) { CommandTimeout = 120 })
-            await create.ExecuteNonQueryAsync();
-
-        await AssertColumnsAsync(db, tx, schema);
-        await using (var simulateOldSchema = new NpgsqlCommand("""
-            ALTER TABLE depots DROP COLUMN contact_phone;
-            ALTER TABLE depots DROP COLUMN tax_code;
-            ALTER TABLE depots DROP COLUMN description;
-            DROP TABLE pickup_checkins;
-            """, db, tx))
-            await simulateOldSchema.ExecuteNonQueryAsync();
-        await using (var upgrade = new NpgsqlCommand(sql, db, tx) { CommandTimeout = 120 })
-            await upgrade.ExecuteNonQueryAsync();
-        await AssertColumnsAsync(db, tx, schema);
-        await tx.RollbackAsync();
+        try
+        {
+            await ExecuteInSchemaAsync(db, schema, sql);
+            await AssertColumnsAsync(db, schema);
+            await using (var simulateOldSchema = new NpgsqlCommand($"""
+                ALTER TABLE "{schema}".depots DROP COLUMN contact_phone;
+                ALTER TABLE "{schema}".depots DROP COLUMN tax_code;
+                ALTER TABLE "{schema}".depots DROP COLUMN description;
+                DROP TABLE "{schema}".pickup_checkins;
+                """, db))
+                await simulateOldSchema.ExecuteNonQueryAsync();
+            await ExecuteInSchemaAsync(db, schema, sql);
+            await AssertColumnsAsync(db, schema);
+        }
+        finally
+        {
+            await using var cleanup = new NpgsqlCommand($"SET search_path TO public; DROP SCHEMA IF EXISTS \"{schema}\" CASCADE;", db);
+            await cleanup.ExecuteNonQueryAsync();
+        }
     }
 
-    private static async Task AssertColumnsAsync(NpgsqlConnection db, NpgsqlTransaction tx, string schema)
+    private static async Task ExecuteInSchemaAsync(NpgsqlConnection db, string schema, string sql)
+    {
+        await using var command = new NpgsqlCommand($"SET search_path TO \"{schema}\", public;\n{sql}", db)
+        {
+            CommandTimeout = 120
+        };
+        await command.ExecuteNonQueryAsync();
+    }
+
+    private static async Task AssertColumnsAsync(NpgsqlConnection db, string schema)
     {
         await using var columns = new NpgsqlCommand("""
             SELECT count(*) FROM information_schema.columns
@@ -50,7 +62,7 @@ public sealed class SchemaScriptTests
               ((table_name = 'depots' AND column_name IN ('contact_phone', 'tax_code', 'description'))
                 OR (table_name = 'inventory_batches' AND column_name = 'image_urls')
                 OR (table_name = 'pickup_checkins' AND column_name = 'revision'))
-            """, db, tx);
+            """, db);
         columns.Parameters.AddWithValue("schema", schema);
         Assert.Equal(5L, (long)(await columns.ExecuteScalarAsync())!);
     }
