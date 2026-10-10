@@ -75,7 +75,11 @@ Mỗi lần chạy thành công giữ lại một lô đã quyết toán 1 kg PE
 
 `e2e/depot-visual-audit.spec.js` mở 10 màn ở 1440×900 và 390×844, đợi API tải xong rồi kiểm tra font, nhãn ô nhập, tràn ngang và icon Depot; ở 1920×900 kiểm tra cùng chiều rộng/căn lề và khả năng cuộn tới phân trang hiệu suất. Bài này còn mở/đóng popup tạo lô, hồ sơ, nhân sự, chi tiết lô; đổi tab hóa đơn, kiểm tra nút tìm đối tác, lọc nhà máy theo khoảng cách ước tính và xác nhận Depot không còn nút tự duyệt hợp tác. Ảnh chụp nằm trong `test-results` local, không đưa lên Git. Chạy bằng cùng biến tài khoản Depot ở trên: `npm run test:e2e -- e2e/depot-visual-audit.spec.js --reporter=line`. Đây là kiểm tra bố cục và thao tác an toàn, không tạo dữ liệu hoặc xác nhận thanh toán.
 
+`e2e/depot-batches.spec.js` kiểm tra chọn ảnh sai số lượng và có thêm ca tạo lô công khai 1 kg PET → hủy → đối chiếu tồn khả dụng trên **backend/database Development thật**. Ca tạo lô mặc định bỏ qua; chỉ đặt `E2E_CREATE_BATCH=true` khi đang dùng kho test có ít nhất 1 kg PET khả dụng. Lô tạo xong sẽ ở trạng thái `CANCELLED`, không xóa bản ghi lịch sử. Nếu bài dừng sau bước tạo, tìm mô tả có tiền tố `E2E-Depot-Batch-` để hủy thủ công. Không dùng database dùng chung/production.
+
 ### PayOS giả lập
+
+`e2e/depot-seller-payment.spec.js` kiểm tra popup đối soát Depot và màn chi tiết Seller trong trình duyệt bằng API giả lập có kiểm soát, không sửa database hoặc chuyển tiền. Chạy `npm run test:e2e -- e2e/depot-seller-payment.spec.js --reporter=line`; ảnh popup nằm trong `test-results` local. Bài này cần đi cùng `PaymentTests.cs` trên PostgreSQL để xác nhận quyền, trạng thái, phí ghi một lần và tồn kho sau Seller xác nhận; nó không thay thế E2E đầy đủ Employee bàn giao → Depot chuyển tiền → Seller nhận tiền trên backend đang chạy.
 
 Chuẩn bị một hóa đơn phí riêng có trạng thái `UNPAID` ở trang đầu danh sách; đặt `E2E_PAYOS_INVOICE_ID` bằng UUID hóa đơn. Với frontend/backend Development, chạy `npm run test:e2e -- e2e/depot-payos.spec.js --reporter=line`. Bài này thay hóa đơn thành `SUBMITTED` (chờ Admin đối soát), kiểm tra sau reload và không gọi PayOS/chuyển tiền thật. Không dùng hóa đơn thật và không tự đổi lại trạng thái hóa đơn. PayOS production cần tích hợp riêng sau khi có cấu hình nhà cung cấp.
 

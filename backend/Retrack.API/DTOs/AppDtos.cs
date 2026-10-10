@@ -62,8 +62,14 @@ namespace Retrack.API.DTOs
         public string Status { get; set; } = string.Empty;
         public decimal GrossAmount { get; set; }
         public decimal NetAmount { get; set; }
+        public string? PaymentProofUrl { get; set; }
         public DateTime CreatedAt { get; set; }
         public List<PickupRequestItemDto> Items { get; set; } = new();
+
+        // Review đã gửi (nếu có)
+        public int? ReviewRating { get; set; }
+        public string? ReviewComment { get; set; }
+        public DateTime? ReviewCreatedAt { get; set; }
     }
 
     public class PickupRequestItemDto
@@ -134,6 +140,10 @@ namespace Retrack.API.DTOs
     {
         public string? FullName { get; set; }
         public string? Phone { get; set; }
+        public string? BankName { get; set; }
+        public string? BankAccountNumber { get; set; }
+        public string? BankAccountName { get; set; }
+        public string? BankQrUrl { get; set; }
     }
 
     // ===== GENERIC RESPONSE =====

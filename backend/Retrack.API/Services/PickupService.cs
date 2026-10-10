@@ -201,6 +201,10 @@ namespace Retrack.API.Services
             if (!r.Items.Any())
                 await _db.Entry(r).Collection(x => x.Items).LoadAsync();
 
+            // Load review if exists
+            var review = await _db.SellerDepotReviews
+                .FirstOrDefaultAsync(rv => rv.PickupRequestId == r.Id);
+
             return new PickupRequestDto
             {
                 Id = r.Id,
@@ -217,6 +221,7 @@ namespace Retrack.API.Services
                 Status = r.Status,
                 GrossAmount = r.GrossAmount,
                 NetAmount = r.NetAmount,
+                PaymentProofUrl = r.PaymentProofUrl,
                 CreatedAt = r.CreatedAt,
                 Items = r.Items.Select(i => new PickupRequestItemDto
                 {
@@ -224,7 +229,10 @@ namespace Retrack.API.Services
                     WeightKg = i.WeightKg,
                     PricePerKg = i.PricePerKg,
                     SubTotal = i.SubTotal
-                }).ToList()
+                }).ToList(),
+                ReviewRating = review?.Rating,
+                ReviewComment = review?.Comment,
+                ReviewCreatedAt = review?.CreatedAt
             };
         }
     }

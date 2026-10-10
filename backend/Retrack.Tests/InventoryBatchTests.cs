@@ -123,6 +123,31 @@ public sealed class InventoryBatchTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Factory_search_filters_only_factories_that_accept_selected_material_including_legacy_labels()
+    {
+        await using var db = Open();
+        db.Users.Add(new User { Id = factoryOwnerId, Email = $"material-filter-{factoryOwnerId}@test.invalid", Role = "FACTORY", FullName = "Factory" });
+        var marker = $"MaterialFilter-{factoryOwnerId:N}";
+        db.Factories.AddRange(
+            new Factory { OwnerId = factoryOwnerId, Name = $"{marker}-aluminum", Address = "Test", AcceptedMaterialsCsv = "ALUMINUM,IRON" },
+            new Factory { OwnerId = factoryOwnerId, Name = $"{marker}-legacy-label", Address = "Test", AcceptedMaterialsCsv = "Nhôm, Nhựa PET" },
+            new Factory { OwnerId = factoryOwnerId, Name = $"{marker}-pet-only", Address = "Test", AcceptedMaterialsCsv = "PET" },
+            new Factory { OwnerId = factoryOwnerId, Name = $"{marker}-empty", Address = "Test", AcceptedMaterialsCsv = "" });
+        await db.SaveChangesAsync();
+        var service = new DepotService(new Retrack.API.Repositories.DepotOwnerRepository(db), new Retrack.API.Repositories.DepotPaymentReadRepository(db));
+
+        var aluminum = await service.GetFactoriesAsync(ownerId, depotId, new() { Search = marker, MaterialType = "Nhôm" });
+        Assert.Equal(2, aluminum.TotalCount);
+        Assert.Contains(aluminum.Items, x => x.Name.EndsWith("-aluminum"));
+        Assert.Contains(aluminum.Items, x => x.Name.EndsWith("-legacy-label"));
+
+        var pet = await service.GetFactoriesAsync(ownerId, depotId, new() { Search = marker, MaterialType = "PET" });
+        Assert.Equal(2, pet.TotalCount);
+        Assert.Contains(pet.Items, x => x.Name.EndsWith("-pet-only"));
+        Assert.Contains(pet.Items, x => x.Name.EndsWith("-legacy-label"));
+    }
+
+    [Fact]
     public async Task Approved_factory_direct_batch_checks_material_and_capacity_before_transport()
     {
         await using var db = Open();
@@ -133,6 +158,11 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         await db.SaveChangesAsync();
         var input = Input(10); input.TargetFactoryId = factory.Id;
 
+        factory.AcceptedMaterialsCsv = "";
+        await db.SaveChangesAsync();
+        await Assert.ThrowsAsync<DepotConflictException>(() => Batches(db).CreateAsync(ownerId, depotId, input));
+        factory.AcceptedMaterialsCsv = "PAPER";
+        await db.SaveChangesAsync();
         await Assert.ThrowsAsync<DepotConflictException>(() => Batches(db).CreateAsync(ownerId, depotId, input));
         factory.AcceptedMaterialsCsv = "PET";
         await db.SaveChangesAsync();

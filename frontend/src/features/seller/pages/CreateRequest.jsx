@@ -23,6 +23,7 @@ export default function CreateRequest() {
 
   const [step, setStep] = useState(1);
   const [mode, setMode] = useState(null);
+  const [showPricesId, setShowPricesId] = useState(null);
   const [form, setForm] = useState({
     description: '',
     address: '',
@@ -451,6 +452,29 @@ export default function CreateRequest() {
                         <span className="text-xs font-semibold text-green-700">📍 {depot.distanceKm.toFixed(1)} km</span>
                       ) : null}
                     </div>
+                    
+                    {/* Nút nhỏ xem giá */}
+                    {depot.prices && (
+                      <div className="mt-2">
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setShowPricesId(showPricesId === depot.id ? null : depot.id); }}
+                          className="text-[11px] font-semibold text-emerald-600 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-lg transition-all"
+                        >
+                          {showPricesId === depot.id ? '✕ Ẩn giá' : '💰 Xem giá thu mua'}
+                        </button>
+                        {showPricesId === depot.id && (
+                          <div className="mt-2 pt-2 border-t border-emerald-500/20 grid grid-cols-2 gap-1.5">
+                            {Object.entries(depot.prices).map(([mat, price]) => (
+                              <div key={mat} className="flex justify-between items-center text-[11px] bg-emerald-50/80 px-2 py-1 rounded">
+                                <span className="font-medium text-gray-700">{mat}</span>
+                                <span className="font-bold text-emerald-700">{price.toLocaleString('vi-VN')} đ/kg</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <ChevronRight size={16} className="text-slate-600 mt-3" />
                 </div>

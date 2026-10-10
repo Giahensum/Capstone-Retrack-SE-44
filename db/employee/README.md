@@ -1,6 +1,8 @@
 # SQL cho Depot Employee
 
-Chạy bằng pgAdmin trên đúng database backend. Đây là script bổ sung trên schema ReTrack có sẵn, không phải schema song song. Máy mới cần tạo schema bằng `db/depot ower/retrack-system.sql` trước.
+Máy mới chạy hai file `db/bootstrap/01-retrack-system.sql` rồi `db/bootstrap/02-seed-data.sql` trong pgAdmin. Schema Employee và bảng chung đã có trong hai file đó. Các script bên dưới là fixture kiểm thử mở rộng hoặc bản vá cho database cũ, không chạy lại trên máy mới nếu không có nhu cầu cụ thể.
+
+Khi cần chạy fixture bằng pgAdmin, chọn đúng database backend. Đây là script bổ sung trên schema ReTrack hiện có, không phải schema song song.
 
 ## Thứ tự chạy
 
@@ -27,7 +29,7 @@ Reset chỉ xóa 13 UUID demo có đúng nhãn: pickup_requests và các dòng c
 
 - Các script check-in, dashboard, bổ sung cột depot và cấu hình phí đã hợp nhất vào `01_employee_setup.sql`.
 - Script seed và reset demo đã hợp nhất vào `02_employee_demo.sql`, với reset mặc định tắt.
-- `db/seed_more_depots.sql` là dữ liệu kho dùng chung, giữ nguyên ngoài thư mục Employee.
-- Schema đầy đủ của hệ thống vẫn nằm ở `db/depot ower/retrack-system.sql`.
+- Các kho demo dùng chung được tạo bằng `DataSeeder` và `Program.cs` khi bật `Database__Initialize` ở Development. Bản SQL kho TP.HCM cũ đã chuyển sang lưu trữ local trong `.ai-context` và không còn dùng để seed.
+- Schema đầy đủ của hệ thống vẫn nằm ở `db/bootstrap/01-retrack-system.sql`.
 
 Các script đã được rà soát cấu trúc và đường dẫn; chưa thực thi trên database của bạn.

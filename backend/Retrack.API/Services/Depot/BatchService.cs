@@ -51,7 +51,7 @@ public sealed class BatchService(IDepotBatchRepository batches, IDepotUnitOfWork
                 ?? throw new ArgumentException("Nhà máy không tồn tại hoặc đã ngừng hoạt động.");
             var acceptedMaterials = factory.AcceptedMaterialsCsv.Split(',', StringSplitOptions.RemoveEmptyEntries)
                 .Select(Retrack.API.Services.Shared.MaterialCatalog.Normalize).ToArray();
-            if (acceptedMaterials.Length > 0 && !acceptedMaterials.Contains(dto.MaterialType))
+            if (acceptedMaterials.Length == 0 || !acceptedMaterials.Contains(dto.MaterialType))
                 throw new DepotConflictException("Nhà máy không tiếp nhận loại vật liệu này.");
             if (factory.CapacityKgPerMonth > 0 && dto.WeightKg > factory.CapacityKgPerMonth)
                 throw new DepotConflictException("Khối lượng lô vượt mức nhà máy hiện có thể tiếp nhận.");

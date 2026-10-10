@@ -20,7 +20,7 @@ function CreateBatchForm({ onClose, initialMaterial, initialFactoryId }) {
     return () => urls.forEach((url) => URL.revokeObjectURL(url));
   }, [photos]);
   const stock = useDepotQuery('inventory');
-  const factories = useDepotQuery('partners', { page, search: factorySearch }, strategy === 'direct');
+  const factories = useDepotQuery('partners', { page, search: factorySearch, materialType: form.materialType }, strategy === 'direct' && !!form.materialType);
   const save = useDepotMutation('post', (_id, body) => body instanceof FormData ? 'batches/with-images' : 'batches', onClose);
   const available = stock.data?.find((i) => i.materialType === form.materialType)?.availableKg ?? 0;
   const selectedFactory = factories.data?.items.find((factory) => factory.id === form.targetFactoryId);
@@ -48,7 +48,7 @@ function CreateBatchForm({ onClose, initialMaterial, initialFactoryId }) {
       {strategy === 'direct' && <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4"><label className="block">Tìm nhà máy<input className={inputClass} value={factorySearch} onChange={(e) => { setFactorySearch(e.target.value); setPage(1); }} /></label>
         <div><QueryState query={factories}><label className="block">Nhà máy<select required value={form.targetFactoryId} onChange={(e) => field('targetFactoryId', e.target.value)} className={inputClass}>
           <option value="">Chọn nhà máy</option>
-          {initialFactoryId && !factories.data?.items.some((f) => f.id === initialFactoryId) && <option value={initialFactoryId}>Nhà máy đã chọn từ danh sách</option>}
+          {initialFactoryId && !factories.data?.items.some((f) => f.id === initialFactoryId) && <option value={initialFactoryId} disabled>Nhà máy đã chọn không nhận vật liệu này hoặc không còn khả dụng</option>}
           {factories.data?.items.map((f) => <option key={f.id} value={f.id} disabled={f.partnershipStatus === 'BLOCKED'}>{f.name}{f.distanceKm == null ? '' : ` — ~${number(Math.round(f.distanceKm))} km`}{f.partnershipStatus === 'BLOCKED' ? ' — Đã chặn' : ''}</option>)}</select></label>
           <div className="mt-3"><Pager page={page} setPage={setPage} total={factories.data?.totalCount} /></div>
           <p className="mt-1 text-xs text-d-on-surface-variant">Khoảng cách đường chim bay, chỉ để tham khảo.</p>

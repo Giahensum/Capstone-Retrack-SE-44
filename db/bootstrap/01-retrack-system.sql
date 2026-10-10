@@ -1,7 +1,8 @@
 -- ============================================================
 -- ReTrack — schema PostgreSQL đầy đủ cho toàn hệ thống
 -- Nguồn cấu trúc cơ sở dữ liệu duy nhất (DB-first)
--- Chạy: psql -U postgres -d <database> -f "db/depot ower/retrack-system.sql"
+-- Máy mới: mở Query Tool pgAdmin trên DB trống, chạy toàn bộ file bằng F5.
+-- Chạy tiếp db/bootstrap/02-seed-data.sql để nạp dữ liệu demo cho các role.
 -- ============================================================
 
 -- Tạo database (chạy riêng nếu cần)
@@ -40,11 +41,19 @@ CREATE TABLE IF NOT EXISTS users (
     role            VARCHAR(50)  NOT NULL,   -- SELLER, DEPOT_OWNER, DEPOT_EMPLOYEE, DRIVER, FACTORY, ADMIN
     full_name       VARCHAR(255) NOT NULL,
     phone           VARCHAR(20)  NOT NULL,
+    bank_name       VARCHAR(255),
+    bank_account_number VARCHAR(100),
+    bank_account_name VARCHAR(255),
+    bank_qr_url     VARCHAR(2048),
     avatar_url      VARCHAR(2048),
     is_active       BOOLEAN      DEFAULT TRUE,
     created_at      TIMESTAMPTZ  DEFAULT NOW(),
     updated_at      TIMESTAMPTZ  DEFAULT NOW()
 );
+ALTER TABLE users ADD COLUMN IF NOT EXISTS bank_name VARCHAR(255);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS bank_account_number VARCHAR(100);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS bank_account_name VARCHAR(255);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS bank_qr_url VARCHAR(2048);
 
 -- Bảng kho/depot
 CREATE TABLE IF NOT EXISTS depots (
@@ -442,7 +451,7 @@ CREATE INDEX IF NOT EXISTS ix_employee_collection_events_employee_time
 
 -- UC-64..67: chạy trên DB phát triển trước khi chạy backend mới.
 -- Không tạo pickup, không thay đổi lô/chuyến hiện có. Có thể chạy lại.
-BEGIN;
+-- Không mở/đóng transaction giữa file: bên gọi có thể chạy toàn bộ schema trong một transaction.
 CREATE TABLE IF NOT EXISTS driver_delivery_events (
     id UUID PRIMARY KEY,
     job_id UUID NOT NULL REFERENCES transport_jobs(id) ON DELETE RESTRICT,
@@ -471,4 +480,3 @@ CREATE UNIQUE INDEX IF NOT EXISTS ix_driver_delivery_operation
     ON driver_delivery_events(job_id, driver_id, operation_id);
 CREATE INDEX IF NOT EXISTS ix_driver_delivery_history
     ON driver_delivery_events(job_id, driver_id, created_at DESC);
-COMMIT;
