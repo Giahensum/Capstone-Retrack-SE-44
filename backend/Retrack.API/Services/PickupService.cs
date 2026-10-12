@@ -1,6 +1,8 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Retrack.API.Data;
 using Retrack.API.DTOs;
+using Retrack.API.DTOs.Employee;
 using Retrack.API.Models;
 using Retrack.API.Repositories;
 using Retrack.API.Services.Depot;
@@ -124,7 +126,8 @@ namespace Retrack.API.Services
                 s.UserId == collectorId && s.DepotId == req.TargetDepotId && s.IsActive && s.User.IsActive &&
                 s.StaffType == "DEPOT_EMPLOYEE" && s.User.Role == "DEPOT_EMPLOYEE" && s.Depot.Owner.IsActive)) throw new DepotForbiddenException();
             if (req.Status != "IN_PROGRESS") throw new DepotConflictException("Đơn phải được check-in trước khi cân.");
-            if (string.IsNullOrWhiteSpace(req.CheckinImageUrl) || !await _db.PickupCheckIns.AnyAsync(c => c.PickupRequestId == requestId))
+            var checkin = await _db.PickupCheckIns.SingleOrDefaultAsync(c => c.PickupRequestId == requestId);
+            if (string.IsNullOrWhiteSpace(req.CheckinImageUrl) || checkin is null || checkin.EmployeeId != collectorId)
                 throw new DepotConflictException("Đơn chưa có bằng chứng check-in camera và GPS hợp lệ.");
 
             // Remove old items
@@ -132,18 +135,21 @@ namespace Retrack.API.Services
 
             // Add new items
             decimal gross = 0;
+            var newItems = new List<PickupRequestItem>();
             foreach (var item in validated)
             {
                 var subTotal = Employee.CollectionValidation.SubTotal(item.WeightKg, item.PricePerKg);
                 gross += subTotal;
-                _db.PickupRequestItems.Add(new PickupRequestItem
+                var row = new PickupRequestItem
                 {
                     PickupRequestId = requestId,
                     MaterialType = Retrack.API.Services.Shared.MaterialCatalog.Normalize(item.MaterialType),
                     WeightKg = item.WeightKg,
                     PricePerKg = item.PricePerKg,
                     SubTotal = subTotal
-                });
+                };
+                newItems.Add(row);
+                _db.PickupRequestItems.Add(row);
             }
 
             req.GrossAmount = gross;
@@ -152,6 +158,18 @@ namespace Retrack.API.Services
             // Bằng chứng check-in chỉ được ghi bởi luồng camera + GPS, không lấy URL từ request cân.
             req.Status = "WEIGHED";
             req.UpdatedAt = DateTime.UtcNow;
+
+            // API cân cũ phải tạo cùng mốc SUBMITTED như luồng Employee mới.
+            // Nếu thiếu mốc này, Seller xác nhận xong nhưng Employee không thể bàn giao sang Depot.
+            var snapshotItems = newItems.OrderBy(i => i.MaterialType).ThenBy(i => i.Id)
+                .Select(i => new ClassificationItemDto(i.Id, i.MaterialType, i.WeightKg, i.PricePerKg, i.SubTotal)).ToList();
+            _db.EmployeeCollectionEvents.Add(new EmployeeCollectionEvent
+            {
+                PickupRequestId = requestId, EmployeeId = collectorId, Kind = "SUBMITTED",
+                Revision = checkin.Revision, FromStatus = "IN_PROGRESS", ToStatus = "WEIGHED",
+                SnapshotJson = JsonSerializer.Serialize(new Employee.CollectionSubmissionSnapshot(snapshotItems,
+                    req.GrossAmount, req.PlatformFeePercentage, req.PlatformFeeAmount, req.NetAmount))
+            });
 
             await _db.SaveChangesAsync();
             await transaction.CommitAsync();
@@ -223,6 +241,7 @@ namespace Retrack.API.Services
                 NetAmount = r.NetAmount,
                 PaymentProofUrl = r.PaymentProofUrl,
                 CreatedAt = r.CreatedAt,
+                UpdatedAt = r.UpdatedAt,
                 Items = r.Items.Select(i => new PickupRequestItemDto
                 {
                     MaterialType = i.MaterialType,

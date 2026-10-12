@@ -104,9 +104,11 @@ export function mapOrder(order) {
       ? "IN_TRANSIT"
       : apiStatus;
   const normalizedStatus = status === "CANCELLED" ? "REJECTED" : status;
-  const statusSteps = normalizedStatus === "REJECTED"
-    ? ["ACCEPTED", "IN_TRANSIT", "DELIVERED", "RECEIVED", "WEIGHED", "REJECTED"]
-    : ["ACCEPTED", "IN_TRANSIT", "DELIVERED", "RECEIVED", "WEIGHED", "VERIFIED", "PAID"];
+  const statusSteps = normalizedStatus === "PENDING_APPROVAL"
+    ? ["PENDING_APPROVAL"]
+    : normalizedStatus === "REJECTED"
+      ? ["ACCEPTED", "IN_TRANSIT", "DELIVERED", "RECEIVED", "WEIGHED", "REJECTED"]
+      : ["ACCEPTED", "IN_TRANSIT", "DELIVERED", "RECEIVED", "WEIGHED", "VERIFIED", "PAID"];
   const reached = statusSteps.indexOf(normalizedStatus);
   const history = statusSteps.slice(0, reached >= 0 ? reached + 1 : 1).map((itemStatus) => ({
     status: itemStatus,

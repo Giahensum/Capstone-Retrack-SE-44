@@ -1,11 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { sellerApi } from '../api';
-import { formatCurrency } from '@/lib/utils';
-import { Package, Clock, CheckCircle, DollarSign, PlusCircle, ArrowRight, TrendingUp, Recycle } from 'lucide-react';
+import { formatCurrency, PICKUP_STATUS_LABEL, PICKUP_STATUS_STYLE } from '@/lib/utils';
+import { Package, Clock, CheckCircle, PlusCircle, ArrowRight, TrendingUp, Recycle } from 'lucide-react';
 
 export default function SellerHome() {
-  const { data: stats, isLoading } = useQuery({
+  const { data: stats } = useQuery({
     queryKey: ['seller-stats'],
     queryFn: sellerApi.getStats,
   });
@@ -108,18 +108,9 @@ export default function SellerHome() {
 }
 
 function StatusBadge({ status }) {
-  const map = {
-    PENDING: { label: 'Chờ xử lý', cls: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/30' },
-    SCHEDULED: { label: 'Đã nhận đơn', cls: 'bg-blue-500/15 text-blue-400 border-blue-500/30' },
-    IN_PROGRESS: { label: 'Đang thu gom', cls: 'bg-indigo-500/15 text-indigo-400 border-indigo-500/30' },
-    WEIGHED: { label: 'Chờ xác nhận', cls: 'bg-purple-500/15 text-purple-400 border-purple-500/30' },
-    SELLER_CONFIRMED: { label: 'Đã xác nhận', cls: 'bg-cyan-500/15 text-cyan-400 border-cyan-500/30' },
-    AWAITING_PAYMENT: { label: 'Chờ thanh toán', cls: 'bg-orange-500/15 text-orange-400 border-orange-500/30' },
-    PAYMENT_SENT: { label: 'Đã thanh toán', cls: 'bg-teal-500/15 text-teal-400 border-teal-500/30' },
-    DONE: { label: 'Hoàn thành', cls: 'bg-green-200/15 text-green-700 border-emerald-500/30' },
-  };
-  const { label, cls } = map[status] ?? { label: status, cls: 'bg-slate-500/15 text-gray-600 border-slate-500/30' };
-  return <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${cls}`}>{label}</span>;
+  return <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${PICKUP_STATUS_STYLE[status] ?? 'bg-slate-500/15 text-gray-600 border-slate-500/30'}`}>
+    {PICKUP_STATUS_LABEL[status] ?? status}
+  </span>;
 }
 
 function ClipboardList(props) {

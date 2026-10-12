@@ -64,6 +64,7 @@ namespace Retrack.API.DTOs
         public decimal NetAmount { get; set; }
         public string? PaymentProofUrl { get; set; }
         public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
         public List<PickupRequestItemDto> Items { get; set; } = new();
 
         // Review đã gửi (nếu có)

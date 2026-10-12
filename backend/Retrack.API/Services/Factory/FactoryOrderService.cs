@@ -27,7 +27,8 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
         }
         source = status switch
         {
-            "ACCEPTED" => source.Where(x => x.Status == "PENDING_APPROVAL" || x.Status == "PENDING_FACTORY" ||
+            "PENDING_APPROVAL" => source.Where(x => x.Status == "PENDING_APPROVAL" || x.Status == "PENDING_FACTORY"),
+            "ACCEPTED" => source.Where(x =>
                 ((x.Status == "ACCEPTED" || x.Status == "TRANSPORT_READY" || x.Status == "READY_FOR_PICKUP") &&
                  (x.TransportJob == null || (x.TransportJob.Status != "PICKED_UP" && x.TransportJob.Status != "IN_TRANSIT" && x.TransportJob.Status != "ON_THE_WAY" && x.TransportJob.Status != "IN_PROGRESS" && x.TransportJob.Status != "DELIVERED")))),
             "IN_TRANSIT" => source.Where(x => ((x.Status == "IN_PROGRESS" || x.Status == "IN_TRANSIT") && (x.TransportJob == null || x.TransportJob.Status != "DELIVERED")) ||

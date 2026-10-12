@@ -1,10 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { sellerApi } from '../api';
 import { formatCurrency } from '@/lib/utils';
-import { TrendingUp, DollarSign, Package, CheckCircle, Clock, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { TrendingUp, DollarSign, Package, CheckCircle, ArrowUpRight } from 'lucide-react';
 
 export default function SellerIncome() {
-  const { data: stats, isLoading } = useQuery({
+  const { data: stats } = useQuery({
     queryKey: ['seller-stats'],
     queryFn: sellerApi.getStats,
   });
@@ -15,16 +15,16 @@ export default function SellerIncome() {
   });
 
   const doneRequests = requests.filter(r => r.status === 'DONE');
-  const totalIncome = doneRequests.reduce((sum, r) => sum + (r.netAmount || r.grossAmount || 0), 0);
+  const totalIncome = doneRequests.reduce((sum, r) => sum + Number(r.netAmount ?? r.grossAmount ?? 0), 0);
 
   // Group by month
   const monthlyMap = {};
   doneRequests.forEach(r => {
-    const d = new Date(r.createdAt);
-    const key = `${d.getMonth() + 1}/${d.getFullYear()}`;
+    const d = new Date(r.updatedAt ?? r.createdAt);
+    const key = new Intl.DateTimeFormat('vi-VN', { month: 'numeric', year: 'numeric', timeZone: 'Asia/Ho_Chi_Minh' }).format(d);
     if (!monthlyMap[key]) monthlyMap[key] = { month: key, count: 0, income: 0 };
     monthlyMap[key].count++;
-    monthlyMap[key].income += r.netAmount || r.grossAmount || 0;
+    monthlyMap[key].income += Number(r.netAmount ?? r.grossAmount ?? 0);
   });
   const monthlyData = Object.values(monthlyMap).reverse();
 
@@ -102,7 +102,7 @@ export default function SellerIncome() {
               <div key={r.id} className="flex items-center justify-between px-5 py-3.5">
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium text-gray-800 truncate">{r.description || r.address}</p>
-                  <p className="text-xs text-gray-500">{new Date(r.createdAt).toLocaleDateString('vi-VN')}</p>
+                  <p className="text-xs text-gray-500">{new Date(r.updatedAt ?? r.createdAt).toLocaleDateString('vi-VN')}</p>
                 </div>
                 <div className="flex items-center gap-1 text-green-700">
                   <ArrowUpRight size={14} />

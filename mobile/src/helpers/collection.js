@@ -28,7 +28,7 @@ export const money = (value) => `${Number(value).toLocaleString("vi-VN")} đ`;
 export const pickupStatus = (status) => ({
   PENDING: "Chờ nhận", SCHEDULED: "Đã nhận · Chưa check-in", IN_PROGRESS: "Đang phân loại và cân",
   WEIGHED: "Chờ người bán xác nhận", SELLER_CONFIRMED: "Người bán đã xác nhận",
-  AWAITING_PAYMENT: "Chờ thanh toán", PAYMENT_SENT: "Đã chuyển tiền", DONE: "Hoàn tất", CANCELLED: "Đã hủy",
+  AWAITING_PAYMENT: "Chờ chủ kho chuyển tiền", PAYMENT_SENT: "Đã chuyển tiền · chờ người bán xác nhận", DONE: "Hoàn tất · người bán đã nhận tiền", CANCELLED: "Đã hủy",
 })[status] || status;
 
 export function checkInLocationError(location, pickup, now = Date.now()) {
