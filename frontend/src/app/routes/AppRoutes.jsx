@@ -6,6 +6,7 @@ import { lazy, Suspense } from 'react';
 // Auth
 const LoginPage = lazy(() => import('@/features/auth/pages/LoginPage'));
 const RegisterPage = lazy(() => import('@/features/auth/pages/RegisterPage'));
+const ForgotPasswordPage = lazy(() => import('@/features/auth/pages/ForgotPasswordPage'));
 // Landing
 const LandingPage = lazy(() => import('@/features/landing/pages/LandingPage'));
 // Seller
@@ -44,6 +45,7 @@ export function AppRoutes() {
           <Route path="/" element={<LandingPage />}/>
           <Route path="/login" element={<LoginPage />}/>
           <Route path="/register" element={<RegisterPage />}/>
+          <Route path="/forgot-password" element={<ForgotPasswordPage />}/>
           <Route path="/staff-app" element={<StaffMobilePage />}/>
 
           {/* Seller */}

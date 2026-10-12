@@ -1,11 +1,15 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
 using Google.Apis.Auth;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Retrack.API.Data;
 using Retrack.API.DTOs;
 using Retrack.API.Models;
 using Retrack.API.Repositories;
+using Retrack.API.Services.Interfaces;
 
 namespace Retrack.API.Services
 {
@@ -14,17 +18,29 @@ namespace Retrack.API.Services
         Task<AuthResponseDto?> LoginAsync(LoginDto dto);
         Task<AuthResponseDto> RegisterAsync(RegisterDto dto);
         Task<AuthResponseDto> GoogleLoginAsync(string googleIdToken);
+        Task ForgotPasswordAsync(string email);
+        Task<bool> VerifyOtpAsync(string email, string otp);
+        Task ResetPasswordAsync(string email, string otp, string newPassword);
     }
 
     public class AuthService : IAuthService
     {
         private readonly IUserRepository _userRepo;
         private readonly IConfiguration _config;
+        private readonly AppDbContext _db;
+        private readonly IEmailService _emailService;
 
         public AuthService(IUserRepository userRepo, IConfiguration config)
+            : this(userRepo, config, null!, null!)
+        {
+        }
+
+        public AuthService(IUserRepository userRepo, IConfiguration config, AppDbContext db, IEmailService emailService)
         {
             _userRepo = userRepo;
             _config = config;
+            _db = db;
+            _emailService = emailService;
         }
 
         // ── Email / Password Login ──────────────────────────────────────
@@ -111,6 +127,88 @@ namespace Retrack.API.Services
                 throw new UnauthorizedAccessException("Tài khoản đã bị vô hiệu hóa.");
 
             return BuildResponse(user);
+        }
+
+        // ── Forgot Password & OTP ───────────────────────────────────────
+        public async Task ForgotPasswordAsync(string email)
+        {
+            var normalizedEmail = email.Trim().ToLowerInvariant();
+            var user = await _userRepo.GetByEmailAsync(normalizedEmail);
+            if (user == null)
+            {
+                throw new KeyNotFoundException("Không tìm thấy tài khoản với email này.");
+            }
+
+            if (!user.IsActive)
+                throw new UnauthorizedAccessException("Tài khoản đã bị vô hiệu hóa.");
+
+            // Hủy các mã OTP cũ chưa sử dụng của email này
+            var oldOtps = await _db.PasswordResetOtps
+                .Where(x => x.Email.ToLower() == normalizedEmail && !x.IsUsed)
+                .ToListAsync();
+            foreach (var old in oldOtps)
+            {
+                old.IsUsed = true;
+            }
+
+            // Tạo mã OTP ngẫu nhiên 6 chữ số
+            var otpCode = RandomNumberGenerator.GetInt32(100000, 1000000).ToString();
+
+            var otpEntity = new PasswordResetOtp
+            {
+                Email = normalizedEmail,
+                OtpCode = otpCode,
+                ExpiresAt = DateTime.UtcNow.AddMinutes(10),
+                IsUsed = false,
+                CreatedAt = DateTime.UtcNow
+            };
+            _db.PasswordResetOtps.Add(otpEntity);
+            await _db.SaveChangesAsync();
+
+            // Gửi email OTP
+            await _emailService.SendPasswordResetOtpAsync(user.Email, otpCode, user.FullName);
+        }
+
+        public async Task<bool> VerifyOtpAsync(string email, string otp)
+        {
+            var normalizedEmail = email.Trim().ToLowerInvariant();
+            var cleanOtp = otp.Trim();
+
+            var validOtp = await _db.PasswordResetOtps
+                .Where(x => x.Email.ToLower() == normalizedEmail && x.OtpCode == cleanOtp && !x.IsUsed && x.ExpiresAt > DateTime.UtcNow)
+                .OrderByDescending(x => x.CreatedAt)
+                .FirstOrDefaultAsync();
+
+            return validOtp != null;
+        }
+
+        public async Task ResetPasswordAsync(string email, string otp, string newPassword)
+        {
+            if (string.IsNullOrWhiteSpace(newPassword) || newPassword.Length < 6 || Encoding.UTF8.GetByteCount(newPassword) > 72)
+                throw new ArgumentException("Mật khẩu mới phải có ít nhất 6 ký tự và tối đa 72 byte.");
+
+            var normalizedEmail = email.Trim().ToLowerInvariant();
+            var cleanOtp = otp.Trim();
+
+            var validOtp = await _db.PasswordResetOtps
+                .Where(x => x.Email.ToLower() == normalizedEmail && x.OtpCode == cleanOtp && !x.IsUsed && x.ExpiresAt > DateTime.UtcNow)
+                .OrderByDescending(x => x.CreatedAt)
+                .FirstOrDefaultAsync();
+
+            if (validOtp == null)
+                throw new ArgumentException("Mã OTP không hợp lệ hoặc đã hết hạn.");
+
+            var user = await _userRepo.GetByEmailAsync(normalizedEmail);
+            if (user == null)
+                throw new KeyNotFoundException("Không tìm thấy tài khoản người dùng.");
+
+            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPassword);
+            user.UpdatedAt = DateTime.UtcNow;
+            await _userRepo.UpdateAsync(user);
+
+            // Đánh dấu mã OTP đã được dùng
+            validOtp.IsUsed = true;
+            await _db.SaveChangesAsync();
         }
 
         // ── Helpers ─────────────────────────────────────────────────────

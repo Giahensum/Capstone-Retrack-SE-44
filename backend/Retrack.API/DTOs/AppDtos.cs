@@ -34,6 +34,33 @@ namespace Retrack.API.DTOs
         public string IdToken { get; set; } = string.Empty;
     }
 
+    public class ForgotPasswordDto
+    {
+        [Required, EmailAddress, MaxLength(255)]
+        public string Email { get; set; } = string.Empty;
+    }
+
+    public class VerifyOtpDto
+    {
+        [Required, EmailAddress, MaxLength(255)]
+        public string Email { get; set; } = string.Empty;
+
+        [Required, MaxLength(10)]
+        public string Otp { get; set; } = string.Empty;
+    }
+
+    public class ResetPasswordDto
+    {
+        [Required, EmailAddress, MaxLength(255)]
+        public string Email { get; set; } = string.Empty;
+
+        [Required, MaxLength(10)]
+        public string Otp { get; set; } = string.Empty;
+
+        [Required, MinLength(6), MaxLength(72)]
+        public string NewPassword { get; set; } = string.Empty;
+    }
+
     // ===== PICKUP REQUEST =====
     public class CreatePickupRequestDto
     {

@@ -37,6 +37,12 @@ namespace Retrack.API.Services
 
         public async Task<PickupRequestDto> CreateAsync(Guid sellerId, CreatePickupRequestDto dto)
         {
+            if (dto.TargetDepotId == null)
+            {
+                if (!dto.Latitude.HasValue || !dto.Longitude.HasValue)
+                    throw new ArgumentException("Khi chọn hình thức nổ đơn (broadcast), cần cung cấp tọa độ vị trí (kinh độ, vĩ độ) để các kho trong bán kính 20km nhận đơn.");
+            }
+
             // Get platform fee from system config
             var feeConfig = await _db.SystemConfigs.FindAsync("PLATFORM_FEE_PERCENTAGE");
             var feePercent = decimal.Parse(feeConfig?.ConfigValue ?? "5.00", System.Globalization.CultureInfo.InvariantCulture);

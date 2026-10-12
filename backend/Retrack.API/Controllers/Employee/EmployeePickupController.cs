@@ -7,6 +7,7 @@ using Retrack.API.DTOs;
 using Retrack.API.DTOs.Employee;
 using Retrack.API.Models;
 using Retrack.API.Services.Interfaces;
+using Retrack.API.Services.Shared;
 
 namespace Retrack.API.Controllers.Employee;
 
@@ -42,14 +43,34 @@ public class EmployeePickupController(AppDbContext db, INotificationService noti
     public async Task<IActionResult> Pool(CancellationToken ct)
     {
         var depotId = await GetDepotIdAsync(ct);
+        var depot = await db.Depots.AsNoTracking()
+            .Where(d => d.Id == depotId)
+            .Select(d => new { d.Latitude, d.Longitude })
+            .FirstOrDefaultAsync(ct);
+
         var list = await db.PickupRequests.AsNoTracking()
             .Where(p => (p.TargetDepotId == depotId || p.TargetDepotId == null) && p.Status == "PENDING" && p.AcceptedCollectorId == null)
             .OrderBy(p => p.PreferredDatetime == null).ThenBy(p => p.PreferredDatetime)
             .ThenBy(p => p.CreatedAt).ThenBy(p => p.Id)
-            .Select(p => new PickupPoolItemDto(p.Id, p.Seller.FullName, p.Seller.Phone, p.Address,
-                p.Latitude, p.Longitude, p.PreferredDatetime, p.Description, p.RequestImageUrl, p.CreatedAt))
+            .Select(p => new
+            {
+                Item = new PickupPoolItemDto(p.Id, p.Seller.FullName, p.Seller.Phone, p.Address,
+                    p.Latitude, p.Longitude, p.PreferredDatetime, p.Description, p.RequestImageUrl, p.CreatedAt),
+                p.TargetDepotId,
+                p.Latitude,
+                p.Longitude
+            })
             .ToListAsync(ct);
-        return Ok(ApiResponse<List<PickupPoolItemDto>>.Ok(list));
+
+        var filtered = list.Where(p =>
+        {
+            if (p.TargetDepotId != null) return true;
+            if (depot == null || !depot.Latitude.HasValue || !depot.Longitude.HasValue || !p.Latitude.HasValue || !p.Longitude.HasValue) return false;
+            var dist = GeoUtils.CalculateDistanceKm((double)depot.Latitude.Value, (double)depot.Longitude.Value, (double)p.Latitude.Value, (double)p.Longitude.Value);
+            return dist <= 20.0;
+        }).Select(p => p.Item).ToList();
+
+        return Ok(ApiResponse<List<PickupPoolItemDto>>.Ok(filtered));
     }
 
     [HttpGet("/api/employee/pickups/active")]
@@ -70,18 +91,37 @@ public class EmployeePickupController(AppDbContext db, INotificationService noti
     [HttpGet("/api/employee/pickup/{pickupId:guid}")]
     public async Task<IActionResult> Detail(Guid pickupId, CancellationToken ct)
     {
-        await GetDepotIdAsync(ct);
+        var depotId = await GetDepotIdAsync(ct);
         var userId = UserId;
         var depots = ActiveDepotIds();
         var item = await db.PickupRequests.AsNoTracking()
             .Where(p => p.Id == pickupId && ((p.TargetDepotId != null && depots.Contains(p.TargetDepotId.Value)) || p.TargetDepotId == null)
                 && ((p.Status == "PENDING" && p.AcceptedCollectorId == null) || p.AcceptedCollectorId == userId))
-            .Select(p => new EmployeePickupDetailDto(p.Id, p.Seller.FullName, p.Seller.Phone, p.Address,
-                p.Latitude, p.Longitude, p.PreferredDatetime, p.Description, p.RequestImageUrl, p.CreatedAt,
-                p.Status, p.AcceptedCollectorId == userId)).FirstOrDefaultAsync(ct);
-        return item == null
-            ? NotFound(ApiResponse<object>.Fail("Đơn không tồn tại hoặc không còn thuộc phạm vi của bạn."))
-            : Ok(ApiResponse<EmployeePickupDetailDto>.Ok(item));
+            .Select(p => new
+            {
+                Detail = new EmployeePickupDetailDto(p.Id, p.Seller.FullName, p.Seller.Phone, p.Address,
+                    p.Latitude, p.Longitude, p.PreferredDatetime, p.Description, p.RequestImageUrl, p.CreatedAt,
+                    p.Status, p.AcceptedCollectorId == userId),
+                p.TargetDepotId,
+                p.Latitude,
+                p.Longitude
+            }).FirstOrDefaultAsync(ct);
+
+        if (item == null)
+            return NotFound(ApiResponse<object>.Fail("Đơn không tồn tại hoặc không còn thuộc phạm vi của bạn."));
+
+        if (item.TargetDepotId == null)
+        {
+            var depot = await db.Depots.AsNoTracking().Where(d => d.Id == depotId).Select(d => new { d.Latitude, d.Longitude }).FirstOrDefaultAsync(ct);
+            if (depot == null || !depot.Latitude.HasValue || !depot.Longitude.HasValue || !item.Latitude.HasValue || !item.Longitude.HasValue)
+                return NotFound(ApiResponse<object>.Fail("Đơn không thuộc phạm vi của bạn."));
+
+            var dist = GeoUtils.CalculateDistanceKm((double)depot.Latitude.Value, (double)depot.Longitude.Value, (double)item.Latitude.Value, (double)item.Longitude.Value);
+            if (dist > 20.0)
+                return NotFound(ApiResponse<object>.Fail("Đơn ngoài bán kính phục vụ 20 km của kho."));
+        }
+
+        return Ok(ApiResponse<EmployeePickupDetailDto>.Ok(item.Detail));
     }
 
     [HttpPost("/api/employee/pickup/{pickupId:guid}/accept")]
@@ -93,6 +133,17 @@ public class EmployeePickupController(AppDbContext db, INotificationService noti
             .SingleOrDefaultAsync(p => p.Id == pickupId && (p.TargetDepotId == depotId || p.TargetDepotId == null), ct);
         // Do not reveal another depot's orders, even if the caller knows their UUID.
         if (pickup == null) return NotFound(ApiResponse<object>.Fail("Không tìm thấy đơn thu gom."));
+
+        if (pickup.TargetDepotId == null)
+        {
+            var depot = await db.Depots.AsNoTracking().Where(d => d.Id == depotId).Select(d => new { d.Latitude, d.Longitude }).FirstOrDefaultAsync(ct);
+            if (depot == null || !depot.Latitude.HasValue || !depot.Longitude.HasValue || !pickup.Latitude.HasValue || !pickup.Longitude.HasValue)
+                return BadRequest(ApiResponse<object>.Fail("Không thể xác định khoảng cách giữa kho và địa chỉ thu gom."));
+
+            var dist = GeoUtils.CalculateDistanceKm((double)depot.Latitude.Value, (double)depot.Longitude.Value, (double)pickup.Latitude.Value, (double)pickup.Longitude.Value);
+            if (dist > 20.0)
+                return BadRequest(ApiResponse<object>.Fail("Đơn hàng nằm ngoài bán kính phục vụ 20 km của kho."));
+        }
 
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
         var now = DateTime.UtcNow;

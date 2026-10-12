@@ -357,7 +357,7 @@ export default function CreateRequest() {
                 </div>
                 <div className="flex-1">
                   <h3 className="font-bold text-gray-800 group-hover:text-gray-900 text-base">Nổ đơn (Broadcast)</h3>
-                  <p className="text-xs text-gray-500 mt-1">Gửi đến tất cả kho trong bán kính 10km. Ai nhận trước xử lý trước</p>
+                  <p className="text-xs text-gray-500 mt-1">Gửi đến tất cả kho trong bán kính 20km. Ai nhận trước xử lý trước</p>
                 </div>
                 <ChevronRight size={18} className="text-slate-600 group-hover:text-orange-400 transition-colors" />
               </div>

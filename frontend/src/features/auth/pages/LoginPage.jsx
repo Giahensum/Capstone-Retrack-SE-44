@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/CommonUI';
 import { useAuth } from '@/hooks/useAuth';
 import api from '@/lib/axios';
 import { Eye, EyeOff, Recycle, ArrowRight } from 'lucide-react';
+import ForgotPasswordModal from '../components/ForgotPasswordModal';
 // ── Role → path mapping ──────────────────────────────────
 const ROLE_HOME = {
     SELLER: '/seller',
@@ -29,6 +30,7 @@ export default function LoginPage() {
     const navigate = useNavigate();
     const { login } = useAuth();
     const [showPass, setShowPass] = useState(false);
+    const [showForgotPassword, setShowForgotPassword] = useState(false);
     const [form, setForm] = useState({ email: '', password: '' });
     // ── Helpers ──────────────────────────────────────────
     const handleSuccess = (data) => {
@@ -152,7 +154,11 @@ export default function LoginPage() {
             </div>
 
             <div className="flex justify-end">
-              <button type="button" className="text-sm text-[#446900] font-semibold hover:underline">
+              <button
+                type="button"
+                onClick={() => setShowForgotPassword(true)}
+                className="text-sm text-[#446900] font-semibold hover:underline"
+              >
                 Quên mật khẩu?
               </button>
             </div>
@@ -161,6 +167,15 @@ export default function LoginPage() {
               {loginMutation.isPending ? (<span className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin"/>) : (<>Đăng nhập <ArrowRight size={18}/></>)}
             </button>
           </form>
+
+          {/* Modal Quên mật khẩu */}
+          <ForgotPasswordModal
+            isOpen={showForgotPassword}
+            onClose={() => setShowForgotPassword(false)}
+            onPasswordResetSuccess={(resetEmail) => {
+              setForm((prev) => ({ ...prev, email: resetEmail, password: '' }));
+            }}
+          />
 
           {/* Dev hint - seed accounts */}
           <details className="mt-8 border border-[#e5e7eb] rounded-2xl overflow-hidden">
