@@ -7,7 +7,7 @@ public static class FactoryOrderMapper
 {
     public static string Status(InventoryBatch batch) => batch.Status switch
     {
-        "PENDING_APPROVAL" or "PENDING_FACTORY" => "ACCEPTED",
+        "PENDING_APPROVAL" or "PENDING_FACTORY" => "PENDING_APPROVAL",
         "TRANSPORT_READY" or "ACCEPTED" => batch.TransportJob?.Status switch
         {
             "PICKED_UP" or "IN_TRANSIT" or "ON_THE_WAY" => "IN_TRANSIT",

@@ -202,20 +202,19 @@ public class SellerPickupController : ControllerBase
     public async Task<IActionResult> GetStats()
     {
         var sellerId = GetUserId();
-        var requests = await _db.PickupRequests
-            .Where(r => r.SellerId == sellerId)
-            .ToListAsync();
+        var vietnamToday = DateTime.UtcNow.AddHours(7);
+        var monthStart = new DateTime(vietnamToday.Year, vietnamToday.Month, 1, 0, 0, 0, DateTimeKind.Utc).AddHours(-7);
+        var nextMonthStart = monthStart.AddMonths(1);
+        var requests = _db.PickupRequests.AsNoTracking().Where(r => r.SellerId == sellerId);
 
         var stats = new
         {
-            Total = requests.Count,
-            Pending = requests.Count(r => r.Status == "PENDING"),
-            InProgress = requests.Count(r => r.Status is "SCHEDULED" or "WEIGHED" or "SELLER_CONFIRMED" or "AWAITING_PAYMENT"),
-            Done = requests.Count(r => r.Status == "DONE"),
-            TotalIncome = requests.Where(r => r.Status == "DONE").Sum(r => r.NetAmount),
-            MonthlyIncome = requests
-                .Where(r => r.Status == "DONE" && r.CreatedAt.Month == DateTime.UtcNow.Month && r.CreatedAt.Year == DateTime.UtcNow.Year)
-                .Sum(r => r.NetAmount),
+            Total = await requests.CountAsync(),
+            Pending = await requests.CountAsync(r => r.Status == "PENDING"),
+            InProgress = await requests.CountAsync(r => r.Status == "SCHEDULED" || r.Status == "IN_PROGRESS" || r.Status == "WEIGHED" || r.Status == "SELLER_CONFIRMED" || r.Status == "AWAITING_PAYMENT" || r.Status == "PAYMENT_SENT"),
+            Done = await requests.CountAsync(r => r.Status == "DONE"),
+            TotalIncome = await requests.Where(r => r.Status == "DONE").SumAsync(r => r.NetAmount),
+            MonthlyIncome = await requests.Where(r => r.Status == "DONE" && r.UpdatedAt >= monthStart && r.UpdatedAt < nextMonthStart).SumAsync(r => r.NetAmount),
         };
         return Ok(ApiResponse<object>.Ok(stats));
     }

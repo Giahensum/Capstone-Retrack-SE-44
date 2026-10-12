@@ -13,6 +13,7 @@ export const materials = {
   OTHER: "Khác",
 };
 export const labels = {
+  PENDING_APPROVAL: "Chờ nhà máy duyệt",
   ACCEPTED: "Chờ tài xế",
   IN_TRANSIT: "Đang vận chuyển",
   DELIVERED: "Đã giao • Chờ nhận",

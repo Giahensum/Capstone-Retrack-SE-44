@@ -38,7 +38,7 @@ test('Depot đối soát tiền và chứng từ trước khi ghi nhận', async
 
 test('Đơn đã được xử lý trong lúc mở danh sách không thể duyệt lại', async ({ page }) => {
   await openPayment(page, { ...payment, status: 'PAYMENT_SENT', paymentProofUrl: 'https://example.com/proof.png' });
-  await expect(page.getByText('Chờ người bán xác nhận', { exact: true })).toBeVisible();
+  await expect(page.getByText('Đã chuyển tiền · chờ người bán xác nhận', { exact: true }).first()).toBeVisible();
   await expect(page.getByRole('link', { name: 'Xem chứng từ' })).toHaveAttribute('href', 'https://example.com/proof.png');
   await expect(page.getByRole('button', { name: 'Xác nhận đã chuyển tiền' })).toHaveCount(0);
 });
@@ -69,5 +69,21 @@ test('Seller thấy chứng từ trước khi xác nhận nhận tiền', async 
   await page.goto(`/seller/requests/${paymentId}`);
   await expect(page.getByRole('link', { name: 'Xem chứng từ chuyển khoản' })).toHaveAttribute('href', 'https://example.com/proof.png');
   await expect(page.getByRole('button', { name: 'Xác nhận đã nhận tiền' })).toBeVisible();
-  await expect(page.getByText('Đã thanh toán', { exact: true }).last()).toBeVisible();
+  await expect(page.getByText('Đã chuyển tiền · chờ người bán xác nhận', { exact: true }).first()).toBeVisible();
+});
+
+test('Seller lọc được đơn đang chờ chủ kho chuyển tiền', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('retrack-auth', JSON.stringify({
+    state: { token: 'ui-test-token', user: { userId: '44444444-4444-4444-4444-444444444444', role: 'SELLER' }, isAuthenticated: true },
+    version: 0,
+  })));
+  const requestedStatuses = [];
+  await page.route('**/api/seller/pickups?**', route => {
+    requestedStatuses.push(new URL(route.request().url()).searchParams.get('status'));
+    return route.fulfill({ json: { data: [{ ...payment, description: 'PET', createdAt: '2026-10-09T00:00:00Z' }] } });
+  });
+  await page.goto('/seller/requests');
+  await page.getByRole('button', { name: 'Chờ kho chuyển tiền' }).click();
+  await expect(page.getByText('Chờ chủ kho chuyển tiền', { exact: true })).toBeVisible();
+  await expect.poll(() => requestedStatuses.at(-1)).toBe('AWAITING_PAYMENT');
 });

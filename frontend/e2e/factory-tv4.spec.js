@@ -109,6 +109,19 @@ async function login(page) {
 }
 
 test.describe("Factory TV4 browser flow", () => {
+  test("shows a Depot offer as pending until Factory accepts it", async ({ page }) => {
+    const fixture = apiFixture();
+    fixture.state.orders[0].status = "PENDING_APPROVAL";
+    fixture.state.orders[0].transport = null;
+    await useFactoryApi(page, fixture);
+    await login(page);
+    await page.getByRole("button", { name: "Đơn hàng & Vận chuyển" }).click();
+    await expect(page.getByRole("table").getByText("Chờ nhà máy duyệt")).toBeVisible();
+    await page.getByRole("button", { name: "Chi tiết" }).click();
+    await expect(page.getByText("Chờ nhà máy duyệt").last()).toBeVisible();
+    await expect(page.getByText("Đang chờ cập nhật vận chuyển")).toHaveCount(0);
+  });
+
   test("shared login and logout use the common session", async ({ page }) => {
     await page.setViewportSize({ width: 869, height: 768 });
     await useFactoryApi(page, apiFixture());

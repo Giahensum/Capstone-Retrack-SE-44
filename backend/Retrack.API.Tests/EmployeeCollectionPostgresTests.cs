@@ -2,17 +2,78 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Retrack.API.Data;
+using Retrack.API.DTOs;
 using Retrack.API.DTOs.Employee;
 using Retrack.API.Models;
 using Retrack.API.Services.Depot;
 using Retrack.API.Services.Employee;
 using Retrack.API.Services.Interfaces;
+using Retrack.API.Repositories;
+using Retrack.API.Services;
 using Xunit;
 
 namespace Retrack.API.Tests;
 
 public sealed class EmployeeCollectionPostgresTests
 {
+    [PostgresPickupFact]
+    public async Task LegacyWeighCanBeConfirmedAndHandedOverForDepotPayment()
+    {
+        var connection = Environment.GetEnvironmentVariable("RETRACK_TEST_POSTGRES")!;
+        var other = Environment.GetEnvironmentVariable("RETRACK_TEST_CONNECTION");
+        if (new NpgsqlConnectionStringBuilder(connection).Database != "Retrack_TV2_test"
+            || string.IsNullOrWhiteSpace(other) || new NpgsqlConnectionStringBuilder(other).Database != "Retrack_TV2_test")
+            throw new InvalidOperationException("Chỉ chạy trên Retrack_TV2_test với cả hai biến kiểm thử PostgreSQL.");
+        var schema = "collection_test_" + Guid.NewGuid().ToString("N");
+        await using var admin = new NpgsqlConnection(connection);
+        await admin.OpenAsync();
+        await using (var create = new NpgsqlCommand($"CREATE SCHEMA {schema}", admin)) await create.ExecuteNonQueryAsync();
+        var scoped = new NpgsqlConnectionStringBuilder(connection) { SearchPath = schema, Pooling = false }.ConnectionString;
+        AppDbContext Open() => new(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(scoped).Options);
+        try
+        {
+            await using var setup = Open();
+            await setup.Database.ExecuteSqlRawAsync(setup.Database.GenerateCreateScript());
+            User NewUser(string role) => new() { Role = role, Email = $"{Guid.NewGuid():N}@test.local" };
+            var employee = NewUser("DEPOT_EMPLOYEE");
+            var seller = NewUser("SELLER");
+            var depot = new Depot { Owner = NewUser("DEPOT_OWNER"), Name = "Kho test" };
+            var pickup = new PickupRequest { Seller = seller, TargetDepot = depot, AcceptedCollector = employee,
+                Address = "Test", Latitude = 16m, Longitude = 108m, Status = "IN_PROGRESS",
+                CheckinImageUrl = "https://test.invalid/checkin.jpg", PlatformFeePercentage = 5m };
+            setup.DepotStaffs.Add(new DepotStaff { Depot = depot, User = employee, StaffType = employee.Role });
+            setup.PickupRequests.Add(pickup);
+            setup.PickupCheckIns.Add(new PickupCheckIn { PickupRequest = pickup, Employee = employee,
+                ImageUrl = pickup.CheckinImageUrl, Revision = 1 });
+            await setup.SaveChangesAsync();
+
+            await using (var weighDb = Open())
+            {
+                var service = new PickupService(new PickupRequestRepository(weighDb), weighDb, null!);
+                var weighed = await service.WeighAndUpdateAsync(pickup.Id, employee.Id,
+                    [new WeighItemDto { MaterialType = "PET", WeightKg = 10m, PricePerKg = 1000m }], null);
+                Assert.Equal("WEIGHED", weighed.Status);
+            }
+            await using (var sellerDb = Open())
+            {
+                var service = new PickupService(new PickupRequestRepository(sellerDb), sellerDb, null!);
+                Assert.Equal("SELLER_CONFIRMED", (await service.ConfirmBySellerAsync(pickup.Id, seller.Id)).Status);
+            }
+            await using (var handoverDb = Open())
+            {
+                var handedOver = await new EmployeeCollectionService(handoverDb, new ConcurrentImages())
+                    .TransitionAsync(employee.Id, pickup.Id, "HANDED_OVER", 1, default);
+                Assert.Equal("AWAITING_PAYMENT", handedOver.Status);
+                Assert.Equal(2, await handoverDb.EmployeeCollectionEvents.CountAsync(e => e.PickupRequestId == pickup.Id));
+            }
+        }
+        finally
+        {
+            await using var drop = new NpgsqlCommand($"DROP SCHEMA {schema} CASCADE", admin);
+            await drop.ExecuteNonQueryAsync();
+        }
+    }
+
     [PostgresPickupFact]
     public async Task ConcurrentCheckInAndDraftEditsAreSerializedAndPersisted()
     {

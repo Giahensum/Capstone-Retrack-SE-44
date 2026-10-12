@@ -2,28 +2,21 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { sellerApi } from '../api';
-import { formatCurrency, formatDate, PICKUP_STATUS_LABEL } from '@/lib/utils';
-import { Package, Search, Filter, ChevronRight } from 'lucide-react';
+import { formatCurrency, formatDate, PICKUP_STATUS_LABEL, PICKUP_STATUS_STYLE } from '@/lib/utils';
+import { Package, Search, ChevronRight } from 'lucide-react';
 
 const STATUS_TABS = [
   { key: '', label: 'Tất cả' },
   { key: 'PENDING', label: 'Chờ xử lý' },
   { key: 'SCHEDULED', label: 'Đã nhận' },
-  { key: 'WEIGHED', label: 'Chờ xác nhận' },
-  { key: 'PAYMENT_SENT', label: 'Đã chuyển khoản' },
+  { key: 'IN_PROGRESS', label: 'Đang thu gom' },
+  { key: 'WEIGHED', label: 'Chờ xác nhận cân' },
+  { key: 'SELLER_CONFIRMED', label: 'Đã xác nhận cân' },
+  { key: 'AWAITING_PAYMENT', label: 'Chờ kho chuyển tiền' },
+  { key: 'PAYMENT_SENT', label: 'Chờ xác nhận nhận tiền' },
   { key: 'DONE', label: 'Hoàn thành' },
+  { key: 'CANCELLED', label: 'Đã hủy' },
 ];
-
-const STATUS_STYLE = {
-  PENDING: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/30',
-  SCHEDULED: 'bg-blue-500/15 text-blue-400 border-blue-500/30',
-  IN_PROGRESS: 'bg-indigo-500/15 text-indigo-400 border-indigo-500/30',
-  WEIGHED: 'bg-purple-500/15 text-purple-400 border-purple-500/30',
-  SELLER_CONFIRMED: 'bg-cyan-500/15 text-cyan-400 border-cyan-500/30',
-  AWAITING_PAYMENT: 'bg-orange-500/15 text-orange-400 border-orange-500/30',
-  PAYMENT_SENT: 'bg-teal-500/15 text-teal-400 border-teal-500/30',
-  DONE: 'bg-green-200/15 text-green-700 border-emerald-500/30',
-};
 
 export default function RequestList() {
   const [statusFilter, setStatusFilter] = useState('');
@@ -91,7 +84,7 @@ export default function RequestList() {
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1.5">
-                    <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${STATUS_STYLE[req.status] ?? 'bg-slate-500/15 text-gray-600 border-slate-500/30'}`}>
+                    <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${PICKUP_STATUS_STYLE[req.status] ?? 'bg-slate-500/15 text-gray-600 border-slate-500/30'}`}>
                       {PICKUP_STATUS_LABEL[req.status] ?? req.status}
                     </span>
                     {req.depotName && (

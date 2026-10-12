@@ -3,10 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { sellerApi } from '../api';
-import { formatCurrency, formatDate, PICKUP_STATUS_LABEL, MATERIAL_TYPE_LABEL } from '@/lib/utils';
+import { formatCurrency, formatDate, PICKUP_STATUS_LABEL, PICKUP_STATUS_STEPS, PICKUP_STATUS_STYLE, MATERIAL_TYPE_LABEL } from '@/lib/utils';
 import { ArrowLeft, MapPin, Calendar, Clock, CheckCircle, XCircle, Star, Package, Ban, Banknote, Image as ImageIcon } from 'lucide-react';
-
-const STATUS_STEPS = ['PENDING', 'SCHEDULED', 'WEIGHED', 'SELLER_CONFIRMED', 'AWAITING_PAYMENT', 'PAYMENT_SENT', 'DONE'];
 
 export default function RequestDetail() {
   const { id } = useParams();
@@ -62,7 +60,7 @@ export default function RequestDetail() {
 
   if (!req) return <div className="p-8 text-center text-gray-500">Không tìm thấy đơn</div>;
 
-  const currentStep = STATUS_STEPS.indexOf(req.status);
+  const currentStep = PICKUP_STATUS_STEPS.indexOf(req.status);
   const requestImages = req.requestImageUrl ? req.requestImageUrl.split(',').filter(Boolean) : [];
 
   return (
@@ -74,34 +72,36 @@ export default function RequestDetail() {
 
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-black text-gray-900">Chi tiết đơn</h1>
-        <span className={`text-[10px] font-bold px-3 py-1.5 rounded-full border ${getStatusStyle(req.status)}`}>
+        <span className={`text-[10px] font-bold px-3 py-1.5 rounded-full border ${PICKUP_STATUS_STYLE[req.status] ?? 'bg-slate-500/15 text-gray-600 border-slate-500/30'}`}>
           {PICKUP_STATUS_LABEL[req.status] ?? req.status}
         </span>
       </div>
 
       {/* Progress bar */}
       {req.status !== 'CANCELLED' && (
-        <div className="bg-gray-100/50 border border-gray-300/50 rounded-2xl p-5">
+        <div className="bg-gray-100/50 border border-gray-300/50 rounded-2xl p-5 overflow-x-auto">
+          <div className="min-w-[760px]">
           <div className="flex items-center justify-between mb-3">
-            {STATUS_STEPS.map((s, i) => (
+            {PICKUP_STATUS_STEPS.map((s, i) => (
               <div key={s} className="flex items-center flex-1 last:flex-initial">
                 <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 transition-all ${
                   i <= currentStep ? 'bg-green-200 text-gray-900' : 'bg-slate-700 text-gray-500'
                 }`}>
                   {i <= currentStep ? <CheckCircle size={14} /> : i + 1}
                 </div>
-                {i < STATUS_STEPS.length - 1 && (
+                {i < PICKUP_STATUS_STEPS.length - 1 && (
                   <div className={`flex-1 h-0.5 mx-1 rounded-full ${i < currentStep ? 'bg-green-200' : 'bg-slate-700'}`} />
                 )}
               </div>
             ))}
           </div>
           <div className="flex justify-between">
-            {STATUS_STEPS.map(s => (
-              <span key={s} className="text-[9px] text-gray-500 font-medium text-center" style={{ width: `${100 / STATUS_STEPS.length}%` }}>
+            {PICKUP_STATUS_STEPS.map(s => (
+              <span key={s} className="text-[9px] text-gray-500 font-medium text-center leading-tight px-1" style={{ width: `${100 / PICKUP_STATUS_STEPS.length}%` }}>
                 {PICKUP_STATUS_LABEL[s] ?? s}
               </span>
             ))}
+          </div>
           </div>
         </div>
       )}
@@ -287,19 +287,5 @@ function InfoRow({ icon, label, value }) {
       <span className="text-sm text-gray-800 font-medium text-right max-w-[60%] truncate">{value}</span>
     </div>
   );
-}
-
-function getStatusStyle(status) {
-  const map = {
-    PENDING: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/30',
-    SCHEDULED: 'bg-blue-500/15 text-blue-400 border-blue-500/30',
-    WEIGHED: 'bg-purple-500/15 text-purple-400 border-purple-500/30',
-    SELLER_CONFIRMED: 'bg-cyan-500/15 text-cyan-400 border-cyan-500/30',
-    AWAITING_PAYMENT: 'bg-orange-500/15 text-orange-400 border-orange-500/30',
-    PAYMENT_SENT: 'bg-teal-500/15 text-teal-400 border-teal-500/30',
-    DONE: 'bg-green-200/15 text-green-700 border-emerald-500/30',
-    CANCELLED: 'bg-red-500/15 text-red-400 border-red-500/30',
-  };
-  return map[status] ?? 'bg-slate-500/15 text-gray-600 border-slate-500/30';
 }
 
