@@ -87,6 +87,14 @@ async function useFactoryApi(page, fixture) {
       const total = 95 * body.agreedPricePerKg; const fee = total * 0.01;
       state.orders[0] = { ...state.orders[0], status: "COMPLETED", agreedPrice: body.agreedPricePerKg, totalAmount: total, feeAmount: fee, platformFeePercentage: 1, netPayableAmount: total - fee, paymentReference: body.paymentReference, settledAt: new Date().toISOString() };
       data = state.orders[0];
+    } else if (path === `/api/factory/partners/orders/${orderId}/rating` && method === "POST") {
+      state.calls.push({ path, body });
+      state.orders[0] = { ...state.orders[0], rating: { rating: body.rating, comment: body.comment } };
+      if (body.partnershipStatus) {
+        state.partners = state.partners.map((partner) =>
+          partner.depotId === depotId ? { ...partner, status: body.partnershipStatus } : partner);
+      }
+      data = { id: "review-test", rating: body.rating, comment: body.comment, partnershipStatus: body.partnershipStatus };
     } else if (path === "/api/factory/marketplace/batches" && method === "GET") {
       const isDirect = url.searchParams.get("directOnly") === "true";
       data = paged(state.batches.filter((b) => b.isDirectOffer === isDirect));
@@ -188,10 +196,17 @@ test.describe("Factory TV4 browser flow", () => {
     await page.getByRole("button", { name: "Ghi nhận quyết toán" }).click();
     await expect(page.getByText("Đã ghi nhận quyết toán. Có thể đánh giá lô hàng.")).toBeVisible();
     expect(fixture.state.orders[0].status).toBe("COMPLETED");
+    await page.getByRole("button", { name: "Đánh giá lô & Hợp tác" }).click();
+    await page.getByLabel("Nhận xét").fill("Hàng đạt chất lượng");
+    await page.getByLabel("Quyết định hợp tác với vựa").selectOption("APPROVED");
+    await page.getByRole("button", { name: "Lưu đánh giá" }).click();
+    await expect(page.getByText("Đã lưu đánh giá lô và quyết định hợp tác.")).toBeVisible();
+    expect(fixture.state.partners[0].status).toBe("APPROVED");
     expect(fixture.state.calls.map((call) => call.path)).toEqual([
       `/api/factory/qc/orders/${orderId}/weigh`,
       `/api/factory/qc/orders/${orderId}/quality`,
       `/api/factory/orders/${orderId}/settle`,
+      `/api/factory/partners/orders/${orderId}/rating`,
     ]);
     await page.reload();
     await page.getByRole("button", { name: "Quyết toán", exact: true }).click();
