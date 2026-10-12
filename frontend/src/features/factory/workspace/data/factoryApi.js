@@ -273,6 +273,7 @@ export async function performFactoryAction(type, payload) {
         rating: Number(payload.stars),
         comment: payload.comment,
         blockPartner: false,
+        partnershipStatus: payload.partnership === "UNCHANGED" ? null : payload.partnership,
       } });
     case "PARTNER_STATUS":
       return request(`/api/factory/partners/${encodeURIComponent(payload.id)}/status`, { method: "PUT", body: { status: payload.status } });
