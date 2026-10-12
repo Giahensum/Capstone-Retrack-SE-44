@@ -932,6 +932,9 @@
   margin: 18px 0 0;
 }
 .factory-dialog {
+  position: fixed;
+  inset: 0;
+  margin: auto;
   color: #254735;
   font-family: Inter, "Segoe UI", sans-serif;
   border: 1px solid #dde5da;
