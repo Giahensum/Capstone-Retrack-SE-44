@@ -32,6 +32,7 @@ namespace Retrack.API.Data
         public DbSet<AuditLog> AuditLogs { get; set; }
         public DbSet<PlatformInvoice> PlatformInvoices { get; set; }
         public DbSet<Notification> Notifications { get; set; }
+        public DbSet<PasswordResetOtp> PasswordResetOtps { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
