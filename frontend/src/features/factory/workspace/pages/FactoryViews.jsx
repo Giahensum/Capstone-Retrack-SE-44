@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Attachment,
   Button,
@@ -717,8 +717,11 @@ export function Partners({ navigate }) {
   );
 }
 export function Profile() {
-  const { state, act } = useFactory();
+  const { state, act, busy } = useFactory();
   const [form, setForm] = useState(state.profile);
+  useEffect(() => {
+    setForm(state.profile);
+  }, [state.profile]);
   const set = (key, value) => setForm((f) => ({ ...f, [key]: value }));
   return (
     <>
@@ -827,10 +830,12 @@ export function Profile() {
           </p>
         </Card>
         <div className="form-actions">
-          <Button secondary onClick={() => setForm(state.profile)}>
+          <Button secondary disabled={busy} onClick={() => setForm(state.profile)}>
             Bỏ thay đổi
           </Button>
-          <Button type="submit" disabled={!form.materials.length}>Lưu hồ sơ nhà máy</Button>
+          <Button type="submit" disabled={busy || !form.materials.length}>
+            {busy ? "Đang lưu hồ sơ…" : "Lưu hồ sơ nhà máy"}
+          </Button>
         </div>
       </form>
     </>

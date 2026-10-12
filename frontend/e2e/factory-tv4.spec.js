@@ -152,6 +152,7 @@ test.describe("Factory TV4 browser flow", () => {
     await useFactoryApi(page, fixture);
     await login(page);
     await page.getByRole("button", { name: "Hồ sơ nhà máy" }).click();
+    await page.getByLabel("Tên nhà máy").fill("Nhà máy đã lưu");
     await page.getByLabel("Giấy phép kinh doanh").setInputFiles({
       name: "giay-phep.png",
       mimeType: "image/png",
@@ -161,6 +162,12 @@ test.describe("Factory TV4 browser flow", () => {
     await expect(page.getByText("Đã lưu hồ sơ nhà máy.")).toBeVisible();
     expect(fixture.state.calls).toContainEqual({ path: "/api/factory/attachments/upload" });
     expect(fixture.state.profile.businessLicenseUrl).toContain("/api/factory/attachments/");
+
+    await page.getByRole("button", { name: "Tổng quan" }).click();
+    await page.getByRole("button", { name: "Hồ sơ nhà máy" }).click();
+    await expect(page.getByLabel("Tên nhà máy")).toHaveValue("Nhà máy đã lưu");
+    await expect(page.getByText("Đã lưu trên máy chủ:")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Xem giấy phép kinh doanh" })).toBeVisible();
   });
 
   test("receives Depot delivery, records weighing and QC, then settles once", async ({ page }) => {
