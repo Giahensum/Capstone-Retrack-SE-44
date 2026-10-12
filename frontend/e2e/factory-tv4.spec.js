@@ -41,13 +41,19 @@ async function useFactoryApi(page, fixture) {
     const url = new URL(request.url());
     const path = url.pathname;
     const method = request.method();
-    const body = request.postDataJSON?.() || {};
+    const body = request.headers()["content-type"]?.includes("application/json")
+      ? request.postDataJSON() || {}
+      : {};
     const { state, envelope, paged } = fixture;
     let data;
 
     if (path === "/api/auth/login" && method === "POST") {
       data = { token: "test-factory-token", userId: factoryId, role: "FACTORY", fullName: "Factory Test", email: "factory@test.invalid" };
     } else if (path === "/api/factory/profile" && method === "GET") data = state.profile;
+    else if (path === "/api/factory/attachments/upload" && method === "POST") {
+      state.calls.push({ path });
+      data = { url: `/api/factory/attachments/${factoryId}/50000000000000000000000000000001` };
+    }
     else if (path === "/api/factory/dashboard" && method === "GET") data = {
       orderCount: state.orders.length, activeDemandCount: state.demands.length,
       partnerCount: state.partners.length, pendingQcCount: state.orders.filter((x) => ["DELIVERED", "RECEIVED", "WEIGHED"].includes(x.status)).length,
@@ -131,6 +137,22 @@ test.describe("Factory TV4 browser flow", () => {
     await page.getByRole("button", { name: "Đăng xuất" }).click();
     await expect(page).toHaveURL(/\/login/);
     await expect(page.getByRole("button", { name: "Đăng nhập" })).toBeVisible();
+  });
+
+  test("uploads a legal document before saving the Factory profile", async ({ page }) => {
+    const fixture = apiFixture();
+    await useFactoryApi(page, fixture);
+    await login(page);
+    await page.getByRole("button", { name: "Hồ sơ nhà máy" }).click();
+    await page.getByLabel("Giấy phép kinh doanh").setInputFiles({
+      name: "giay-phep.png",
+      mimeType: "image/png",
+      buffer: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    });
+    await page.getByRole("button", { name: "Lưu hồ sơ nhà máy" }).click();
+    await expect(page.getByText("Đã lưu hồ sơ nhà máy.")).toBeVisible();
+    expect(fixture.state.calls).toContainEqual({ path: "/api/factory/attachments/upload" });
+    expect(fixture.state.profile.businessLicenseUrl).toContain("/api/factory/attachments/");
   });
 
   test("receives Depot delivery, records weighing and QC, then settles once", async ({ page }) => {
