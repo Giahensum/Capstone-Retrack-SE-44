@@ -20,7 +20,7 @@ async function attachmentUrl(attachment) {
   const form = new FormData();
   form.append("file", attachment.file);
   try {
-    const response = await api.post("/factory/attachments", form, { headers: { "Content-Type": "multipart/form-data" } });
+    const response = await api.post("/factory/attachments/upload", form, { headers: { "Content-Type": "multipart/form-data" } });
     return response.data.data.url;
   } catch (error) {
     throw new Error(error.response?.data?.message || "Không tải được tệp đính kèm.");
