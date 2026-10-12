@@ -480,3 +480,17 @@ CREATE UNIQUE INDEX IF NOT EXISTS ix_driver_delivery_operation
     ON driver_delivery_events(job_id, driver_id, operation_id);
 CREATE INDEX IF NOT EXISTS ix_driver_delivery_history
     ON driver_delivery_events(job_id, driver_id, created_at DESC);
+
+-- ==========================================
+-- MODULE 8: XÁC THỰC OTP & QUÊN MẬT KHẨU
+-- ==========================================
+CREATE TABLE IF NOT EXISTS password_reset_otps (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    email       VARCHAR(255) NOT NULL,
+    otp_code    VARCHAR(10) NOT NULL,
+    expires_at  TIMESTAMPTZ NOT NULL,
+    is_used     BOOLEAN DEFAULT FALSE,
+    created_at  TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_password_reset_otps_email ON password_reset_otps(email);
+
