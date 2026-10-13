@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Retrack.API.Data;
 using Retrack.API.DTOs;
+using Retrack.API.DTOs.Depot;
 using Retrack.API.DTOs.Employee;
 using Retrack.API.Models;
 using Retrack.API.Services.Depot;
@@ -16,6 +17,72 @@ namespace Retrack.API.Tests;
 
 public sealed class EmployeeCollectionPostgresTests
 {
+    [PostgresPickupFact]
+    public async Task SharedSeedSellerConfirmationIsVisibleAndCanCompletePaymentAfterHandover()
+    {
+        var connection = Environment.GetEnvironmentVariable("RETRACK_TEST_POSTGRES")!;
+        var other = Environment.GetEnvironmentVariable("RETRACK_TEST_CONNECTION");
+        if (new NpgsqlConnectionStringBuilder(connection).Database != "Retrack_TV2_test"
+            || string.IsNullOrWhiteSpace(other) || new NpgsqlConnectionStringBuilder(other).Database != "Retrack_TV2_test")
+            throw new InvalidOperationException("Chỉ chạy trên Retrack_TV2_test với cả hai biến kiểm thử PostgreSQL.");
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory != null && !File.Exists(Path.Combine(directory.FullName, "db", "bootstrap", "02-seed-data.sql")))
+            directory = directory.Parent;
+        if (directory == null) throw new FileNotFoundException("Không tìm thấy SQL schema/seed chung.");
+        var schemaSql = await File.ReadAllTextAsync(Path.Combine(directory.FullName, "db", "bootstrap", "01-retrack-system.sql"));
+        var seedSql = await File.ReadAllTextAsync(Path.Combine(directory.FullName, "db", "bootstrap", "02-seed-data.sql"));
+        var schema = "collection_test_" + Guid.NewGuid().ToString("N");
+        await using var admin = new NpgsqlConnection(connection);
+        await admin.OpenAsync();
+        await using (var create = new NpgsqlCommand($"CREATE SCHEMA {schema}", admin)) await create.ExecuteNonQueryAsync();
+        var scoped = new NpgsqlConnectionStringBuilder(connection) { SearchPath = schema + ",public", Pooling = false }.ConnectionString;
+        AppDbContext Open() => new(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(scoped).Options);
+        async Task ExecuteScript(string script)
+        {
+            await using var scriptConnection = new NpgsqlConnection(scoped);
+            await scriptConnection.OpenAsync();
+            await using var command = new NpgsqlCommand(script, scriptConnection) { CommandTimeout = 120 };
+            await command.ExecuteNonQueryAsync();
+        }
+        try
+        {
+            await using var db = Open();
+            // Chạy đúng hai file bàn giao, không dựng fixture chỉ từ model EF.
+            await ExecuteScript(schemaSql);
+            await ExecuteScript(seedSql);
+            await ExecuteScript(seedSql);
+            var pickupId = Guid.Parse("00000000-0000-0000-0000-000000001022");
+            var pickup = await db.PickupRequests.AsNoTracking().SingleAsync(p => p.Id == pickupId);
+            var ownerId = await db.Depots.Where(d => d.Id == pickup.TargetDepotId).Select(d => d.OwnerId).SingleAsync();
+            var depot = new DepotService(new DepotOwnerRepository(db), new DepotPaymentReadRepository(db));
+            var service = new PickupService(new PickupRequestRepository(db), db,
+                new DepotPaymentService(new DepotOwnerRepository(db), new DepotPaymentRepository(db), new DepotUnitOfWork(db)));
+            var list = await depot.GetPaymentsAsync(ownerId, pickup.TargetDepotId!.Value, new DepotQuery());
+            Assert.Contains(list.Items, p => p.Id == pickupId && p.Status == "SELLER_CONFIRMED");
+            Assert.Equal("SELLER_CONFIRMED", (await depot.GetPaymentAsync(ownerId, pickup.TargetDepotId.Value, pickupId)).Status);
+            var before = await depot.GetPaymentSummaryAsync(ownerId, pickup.TargetDepotId.Value);
+            await Assert.ThrowsAsync<DepotConflictException>(() => service.MarkPaymentSentAsync(pickupId, ownerId, "https://example.com/proof.png"));
+            Assert.False(await db.PlatformTransactions.AnyAsync(t => t.SourceId == pickupId));
+            var handedOver = await new EmployeeCollectionService(db, new ConcurrentImages())
+                .TransitionAsync(pickup.AcceptedCollectorId!.Value, pickupId, "HANDED_OVER", 1, default);
+            Assert.Equal("AWAITING_PAYMENT", handedOver.Status);
+            var after = await depot.GetPaymentSummaryAsync(ownerId, pickup.TargetDepotId.Value);
+            Assert.Equal(before.PendingCount + 1, after.PendingCount);
+            Assert.Equal(before.PendingAmount + pickup.NetAmount, after.PendingAmount);
+            Assert.Equal("PAYMENT_SENT", (await service.MarkPaymentSentAsync(pickupId, ownerId, "https://example.com/proof.png")).Status);
+            Assert.Equal("DONE", (await service.MarkDoneAsync(pickupId, pickup.SellerId)).Status);
+            await ExecuteScript(seedSql);
+            Assert.Equal("DONE", await db.PickupRequests.AsNoTracking().Where(p => p.Id == pickupId).Select(p => p.Status).SingleAsync());
+            Assert.Equal(1, await db.PlatformTransactions.CountAsync(t => t.SourceId == pickupId));
+            Assert.Equal(2, await db.EmployeeCollectionEvents.CountAsync(e => e.PickupRequestId == pickupId));
+        }
+        finally
+        {
+            await using var drop = new NpgsqlCommand($"DROP SCHEMA {schema} CASCADE", admin);
+            await drop.ExecuteNonQueryAsync();
+        }
+    }
+
     [PostgresPickupFact]
     public async Task LegacyWeighCanBeConfirmedAndHandedOverForDepotPayment()
     {

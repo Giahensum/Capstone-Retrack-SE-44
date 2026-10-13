@@ -28,7 +28,7 @@ public sealed partial class DepotService(Retrack.API.Repositories.Interfaces.IDe
     public async Task<PagedResult<DepotPaymentDto>> GetPaymentsAsync(Guid ownerId, Guid depotId, DepotQuery query)
     {
         await RequireOwnerAsync(ownerId, depotId);
-        if (!string.IsNullOrEmpty(query.Status) && query.Status is not ("AWAITING_PAYMENT" or "PAYMENT_SENT" or "DONE"))
+        if (!string.IsNullOrEmpty(query.Status) && query.Status is not ("SELLER_CONFIRMED" or "AWAITING_PAYMENT" or "PAYMENT_SENT" or "DONE"))
             throw new ArgumentException("Trạng thái thanh toán không hợp lệ.");
         return await payments.ListAsync(depotId, query);
     }
