@@ -706,6 +706,20 @@ function RatingForm({ order, close }) {
           onChange={(e) => setForm({ ...form, comment: e.target.value })}
         />
       </Field>
+      <Field label="Quyết định hợp tác với vựa">
+        <select
+          value={form.partnership}
+          onChange={(e) => setForm({ ...form, partnership: e.target.value })}
+        >
+          <option value="UNCHANGED">Chưa quyết định</option>
+          <option value="APPROVED">Đồng ý hợp tác lâu dài</option>
+          <option value="DECLINED">Không hợp tác lâu dài</option>
+        </select>
+      </Field>
+      <p className="muted">
+        Đồng ý hợp tác cho phép vựa gửi thẳng các lô sau. Không hợp tác thì mỗi
+        lô chỉ định tiếp theo phải được nhà máy duyệt lại.
+      </p>
       <div className="form-actions">
         <Button secondary onClick={close}>
           Hủy

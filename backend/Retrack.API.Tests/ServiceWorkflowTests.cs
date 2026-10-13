@@ -147,6 +147,31 @@ public class FactoryServiceWorkflowTests
     }
 
     [Fact]
+    public async Task RatingAfterSettlementCanApprovePartnershipAtomically()
+    {
+        await using var db = NewDb();
+        var (factory, depot, batch) = await Seed(db, "COMPLETED");
+        db.FactoryDepotPartnerships.Add(new FactoryDepotPartnership
+        {
+            Factory = factory, Depot = depot, Status = "PENDING"
+        });
+        await db.SaveChangesAsync();
+
+        var result = await new FactoryPartnerService(db).RateAsync(factory.OwnerId, batch.Id,
+            new RatingRequest
+            {
+                Rating = 5,
+                Comment = "Hàng đạt chất lượng",
+                PartnershipStatus = PartnershipStatus.APPROVED
+            }, default);
+
+        Assert.Equal(ServiceOutcome.Success, result.Outcome);
+        Assert.Equal("APPROVED", result.Data!.PartnershipStatus);
+        Assert.Equal("APPROVED", (await db.FactoryDepotPartnerships.SingleAsync()).Status);
+        Assert.Equal(5, (await db.FactoryDepotReviews.SingleAsync()).Rating);
+    }
+
+    [Fact]
     public async Task FactoryCanReceiveOnlyDeliveredOrdersOnce()
     {
         await using var db = NewDb();
