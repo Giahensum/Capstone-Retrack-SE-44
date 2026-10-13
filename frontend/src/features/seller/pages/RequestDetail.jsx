@@ -187,6 +187,15 @@ export default function RequestDetail() {
         </div>
       )}
 
+      {req.status === 'SELLER_CONFIRMED' && <div role="status" className="rounded-2xl border border-cyan-500/30 bg-cyan-500/10 p-5">
+        <h3 className="font-bold text-gray-900">Đã xác nhận cân · chờ nhân viên bàn giao</h3>
+        <p className="mt-2 text-sm text-gray-600">Nhân viên cần gửi đơn cho chủ kho. Sau khi bàn giao, trạng thái chuyển thành “Chờ chủ kho chuyển tiền”.</p>
+      </div>}
+      {req.status === 'AWAITING_PAYMENT' && <div role="status" className="rounded-2xl border border-orange-500/30 bg-orange-500/10 p-5">
+        <h3 className="font-bold text-gray-900">Chờ chủ kho chuyển tiền</h3>
+        <p className="mt-2 text-sm text-gray-600">Nhân viên đã bàn giao. Chủ kho đang đối soát và chuyển tiền; bạn sẽ xác nhận đã nhận tiền sau khi chủ kho gửi chứng từ.</p>
+      </div>}
+
       {/* ═══ ACTION: Confirm Payment Received (UC-1.9) ═══ */}
       {req.status === 'PAYMENT_SENT' && (
         <div className="bg-gradient-to-br from-teal-500/10 to-teal-600/5 border border-teal-500/30 rounded-2xl p-5 space-y-4">
