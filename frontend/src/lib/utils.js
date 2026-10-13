@@ -25,7 +25,7 @@ export const PICKUP_STATUS_LABEL = {
     SCHEDULED: 'Đã nhận đơn',
     IN_PROGRESS: 'Đang thu gom và cân',
     WEIGHED: 'Chờ người bán xác nhận cân',
-    SELLER_CONFIRMED: 'Người bán đã xác nhận cân',
+    SELLER_CONFIRMED: 'Đã xác nhận cân · chờ nhân viên bàn giao',
     AWAITING_PAYMENT: 'Chờ chủ kho chuyển tiền',
     PAYMENT_SENT: 'Đã chuyển tiền · chờ người bán xác nhận',
     DONE: 'Hoàn tất · người bán đã nhận tiền',

@@ -9,7 +9,7 @@ public sealed class DepotPaymentReadRepository(AppDbContext db) : IDepotPaymentR
 {
     private IQueryable<PickupRequest> Payments(Guid depotId) => db.PickupRequests.AsNoTracking()
         .Where(p => p.TargetDepotId == depotId &&
-            (p.Status == "AWAITING_PAYMENT" || p.Status == "PAYMENT_SENT" || p.Status == "DONE"));
+            (p.Status == "SELLER_CONFIRMED" || p.Status == "AWAITING_PAYMENT" || p.Status == "PAYMENT_SENT" || p.Status == "DONE"));
 
     public async Task<PagedResult<DepotPaymentDto>> ListAsync(Guid depotId, DepotQuery query)
     {
