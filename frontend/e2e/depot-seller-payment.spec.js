@@ -10,19 +10,29 @@ const payment = {
   items: [{ materialType: 'PET', weightKg: 10, pricePerKg: 10000, subTotal: 100000 }],
 };
 
-async function openPayment(page, current = payment) {
+async function openPayment(page, current = payment, listed = payment) {
   await page.addInitScript(() => localStorage.setItem('retrack-auth', JSON.stringify({
     state: { token: 'ui-test-token', user: { userId: '33333333-3333-3333-3333-333333333333', fullName: 'Chủ kho kiểm thử', role: 'DEPOT_OWNER' }, isAuthenticated: true },
     version: 0,
   })));
   await page.route('**/api/depot/owned', route => route.fulfill({ json: { data: [{ id: depotId, name: 'Kho kiểm thử' }] } }));
   await page.route('**/api/depot/payments/summary?**', route => route.fulfill({ json: { data: { pendingCount: 1, pendingAmount: 95000, sentTodayAmount: 0 } } }));
-  await page.route('**/api/depot/payments?**', route => route.fulfill({ json: { data: { items: [payment], totalCount: 1 } } }));
+  await page.route('**/api/depot/payments?**', route => route.fulfill({ json: { data: { items: [listed], totalCount: 1 } } }));
   await page.route(`**/api/depot/payments/${paymentId}?**`, route => route.fulfill({ json: { data: current } }));
   await page.goto('/depot/payments');
-  await page.getByRole('button', { name: 'Đối soát' }).click();
-  await expect(page.getByRole('heading', { name: /Đối soát đơn/ })).toBeVisible();
+  await page.getByRole('button', { name: listed.status === 'AWAITING_PAYMENT' ? 'Đối soát' : 'Chi tiết', exact: true }).click();
+  await expect(page.getByRole('heading', { name: listed.status === 'AWAITING_PAYMENT' ? /Đối soát đơn/ : /Chi tiết đơn/ })).toBeVisible();
 }
+
+test('Depot thấy đơn Seller đã xác nhận cân nhưng chỉ thanh toán sau bàn giao', async ({ page }) => {
+  const confirmed = { ...payment, status: 'SELLER_CONFIRMED' };
+  await openPayment(page, confirmed, confirmed);
+  await expect(page.getByLabel('Trạng thái')).toHaveValue('');
+  await expect(page.getByRole('heading', { name: 'Chờ nhân viên bàn giao' })).toBeVisible();
+  await expect(page.getByText('Đã xác nhận cân · chờ nhân viên bàn giao', { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Xác nhận đã chuyển tiền' })).toHaveCount(0);
+  await expect(page.getByText('Chưa có đường dẫn chứng từ hợp lệ. Vui lòng liên hệ quản trị viên.')).toHaveCount(0);
+});
 
 test('Depot đối soát tiền và chứng từ trước khi ghi nhận', async ({ page }) => {
   await openPayment(page);
@@ -78,7 +88,7 @@ test('Seller lọc được đơn đang chờ chủ kho chuyển tiền', async 
     version: 0,
   })));
   const requestedStatuses = [];
-  await page.route('**/api/seller/pickups?**', route => {
+  await page.route('**/api/seller/pickups*', route => {
     requestedStatuses.push(new URL(route.request().url()).searchParams.get('status'));
     return route.fulfill({ json: { data: [{ ...payment, description: 'PET', createdAt: '2026-10-09T00:00:00Z' }] } });
   });

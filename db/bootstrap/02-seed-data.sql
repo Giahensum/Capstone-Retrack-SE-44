@@ -142,7 +142,7 @@ VALUES
      '[DEMO] Đã cân PET, chờ Seller xác nhận.', 'Khu vực Mỹ An, Ngũ Hành Sơn, Đà Nẵng', 16.0355000, 108.2453000,
      NOW() - INTERVAL '3 hours', 600000, 5, 30000, 570000, 'WEIGHED', NOW() - INTERVAL '1 day', NOW()),
     ('00000000-0000-0000-0000-000000001022', '00000000-0000-0000-0000-00000000000b', '00000000-0000-0000-0000-000000000010', '00000000-0000-0000-0000-00000000000c',
-     '[DEMO] Seller đã duyệt cân HDPE, chờ chủ kho xử lý.', 'Khu vực Khuê Mỹ, Ngũ Hành Sơn, Đà Nẵng', 16.0127000, 108.2544000,
+     '[DEMO] Seller đã duyệt cân HDPE, chờ nhân viên bàn giao cho chủ kho.', 'Khu vực Khuê Mỹ, Ngũ Hành Sơn, Đà Nẵng', 16.0127000, 108.2544000,
      NOW() - INTERVAL '1 day', 420000, 5, 21000, 399000, 'SELLER_CONFIRMED', NOW() - INTERVAL '2 days', NOW()),
     ('00000000-0000-0000-0000-000000001023', '00000000-0000-0000-0000-000000000009', '00000000-0000-0000-0000-000000000011', '00000000-0000-0000-0000-000000000004',
      '[DEMO] Chủ kho đã gửi tiền, chờ Seller xác nhận.', 'Khu vực Thanh Bình, Hải Châu, Đà Nẵng', 16.0770000, 108.2070000,
@@ -174,6 +174,47 @@ VALUES
     ('00000000-0000-0000-0000-000000001035', '00000000-0000-0000-0000-000000001025', 'ALUMINUM', 150, 28000, 4200000),
     ('00000000-0000-0000-0000-000000001036', '00000000-0000-0000-0000-000000001026', 'CARDBOARD', 120, 4000, 480000)
 ON CONFLICT DO NOTHING;
+
+-- Hai đơn demo đang chờ Seller/xử lý bàn giao cần đủ snapshot như luồng Employee.
+-- Chỉ bổ sung fixture demo còn thiếu, không ghi đè ảnh/lịch sử của đơn đã thao tác thật.
+-- Ảnh mẫu được ghi rõ DEMO, không phải bằng chứng camera/GPS thực tế.
+INSERT INTO pickup_checkins (pickup_request_id, employee_id, latitude, longitude,
+    accuracy_meters, distance_meters, location_recorded_at, photo_taken_at, checked_in_at, image_url, revision)
+SELECT p.id, p.accepted_collector_id, p.latitude, p.longitude, 5, 0,
+    p.updated_at - INTERVAL '10 minutes', p.updated_at - INTERVAL '10 minutes',
+    p.updated_at - INTERVAL '10 minutes', '/demo/collection-checkin.svg', 1
+FROM pickup_requests p
+WHERE p.id IN ('00000000-0000-0000-0000-000000001021', '00000000-0000-0000-0000-000000001022')
+    AND p.description LIKE '[DEMO]%' AND p.status IN ('WEIGHED', 'SELLER_CONFIRMED')
+    AND p.checkin_image_url IS NULL
+    AND NOT EXISTS (SELECT 1 FROM employee_collection_events e WHERE e.pickup_request_id = p.id)
+ON CONFLICT (pickup_request_id) DO NOTHING;
+
+UPDATE pickup_requests p SET checkin_image_url = c.image_url
+FROM pickup_checkins c
+WHERE p.id = c.pickup_request_id
+    AND p.id IN ('00000000-0000-0000-0000-000000001021', '00000000-0000-0000-0000-000000001022')
+    AND p.description LIKE '[DEMO]%' AND p.status IN ('WEIGHED', 'SELLER_CONFIRMED')
+    AND p.checkin_image_url IS NULL AND c.image_url = '/demo/collection-checkin.svg';
+
+INSERT INTO employee_collection_events (id, pickup_request_id, employee_id, kind, revision,
+    from_status, to_status, snapshot_json, created_at)
+SELECT gen_random_uuid(), p.id, c.employee_id, 'SUBMITTED', c.revision, 'IN_PROGRESS', 'WEIGHED',
+    jsonb_build_object('Items', rows.items, 'GrossAmount', p.gross_amount,
+        'PlatformFeePercentage', p.platform_fee_percentage, 'PlatformFeeAmount', p.platform_fee_amount,
+        'NetAmount', p.net_amount)::TEXT, p.updated_at
+FROM pickup_requests p
+JOIN pickup_checkins c ON c.pickup_request_id = p.id AND c.employee_id = p.accepted_collector_id
+JOIN LATERAL (
+    SELECT jsonb_agg(jsonb_build_object('Id', i.id, 'MaterialType', i.material_type,
+        'WeightKg', i.weight_kg, 'PricePerKg', i.price_per_kg, 'SubTotal', i.sub_total)
+        ORDER BY i.material_type, i.id) AS items, SUM(i.sub_total) AS gross
+    FROM pickup_request_items i WHERE i.pickup_request_id = p.id
+) rows ON rows.items IS NOT NULL AND rows.gross = p.gross_amount
+WHERE p.id IN ('00000000-0000-0000-0000-000000001021', '00000000-0000-0000-0000-000000001022')
+    AND p.description LIKE '[DEMO]%' AND p.status IN ('WEIGHED', 'SELLER_CONFIRMED')
+    AND c.image_url = '/demo/collection-checkin.svg' AND p.checkin_image_url = c.image_url
+ON CONFLICT (pickup_request_id, kind, revision) DO NOTHING;
 
 -- Một lời mời trực tiếp chờ nhà máy quyết định lô đầu tiên; không seed APPROVED.
 INSERT INTO factory_depot_partnerships (id, depot_id, factory_id, status, blocked_by_factory, created_at, updated_at)

@@ -68,7 +68,11 @@ export default function PaymentDrawer({ payment, onClose }) {
           <div className="flex justify-between gap-4 border-t border-d-border-subtle pt-3 text-lg font-bold text-d-primary"><span>Chuyển cho người bán</span><span>{money(item.netAmount)}</span></div>
         </section>
         {safeUrl(item.checkinImageUrl) && <a className="inline-flex items-center gap-2 rounded-full border border-d-border-subtle px-4 py-2 text-d-primary hover:bg-d-surface-container-low" href={item.checkinImageUrl} target="_blank" rel="noreferrer"><MaterialIcon name="visibility" />Xem ảnh check-in</a>}
-        {item.status === 'AWAITING_PAYMENT' ? <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); if (canSubmit && !save.isPending) save.mutate(); }}>
+        {item.status === 'SELLER_CONFIRMED' ? <div role="status" className="rounded-2xl border border-d-border-subtle bg-d-surface-container-low p-4">
+          <h3 className="font-semibold">Chờ nhân viên bàn giao</h3>
+          <p className="mt-2 text-sm text-d-on-surface-variant">Người bán đã đồng ý kết quả cân. Nhân viên thu gom cần mở đơn và chọn “Bàn giao chủ kho” để gửi đơn sang bước chờ thanh toán.</p>
+          <p className="mt-2 text-sm text-d-on-surface-variant">Chủ kho chỉ chuyển tiền sau khi hoàn tất bàn giao. Đơn này chưa được tính vào tổng nợ cần trả.</p>
+        </div> : item.status === 'AWAITING_PAYMENT' ? <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); if (canSubmit && !save.isPending) save.mutate(); }}>
           <div className="rounded-2xl border border-d-border-subtle p-4"><h3 className="font-semibold">Chứng từ chuyển khoản</h3>
             <p className="mt-1 text-sm text-d-on-surface-variant">Chuyển đúng số tiền thực trả ở trên, rồi tải ảnh chứng từ hoặc nhập đường dẫn HTTPS.</p>
             <div className="mt-4"><ProofUpload onUploaded={setProof} onBusyChange={setUploading} disabled={save.isPending} /></div>

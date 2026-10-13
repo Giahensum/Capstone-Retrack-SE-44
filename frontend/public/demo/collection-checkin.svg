@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="480" viewBox="0 0 800 480">
+  <rect width="800" height="480" fill="#f0fdf4"/>
+  <rect x="32" y="32" width="736" height="416" rx="24" fill="#fff" stroke="#15803d" stroke-width="3"/>
+  <g font-family="Arial, sans-serif" text-anchor="middle" fill="#14532d">
+    <text x="400" y="195" font-size="34" font-weight="bold">DỮ LIỆU DEMO RETRACK</text>
+    <text x="400" y="250" font-size="24">Bản mẫu check-in để thử luồng đơn thu gom</text>
+    <text x="400" y="300" font-size="22">Đây không phải ảnh camera hay bằng chứng thực tế.</text>
+  </g>
+</svg>
