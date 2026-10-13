@@ -367,8 +367,17 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Success, (await orders.InvoiceAsync(factoryOwnerId, first.Id,
             new() { InvoiceNumber = "HD-TEST-001", InvoiceFileUrl = "https://example.com/factory-invoice-test.pdf" }, default)).Outcome);
         var settled = await orders.SettleAsync(factoryOwnerId, first.Id,
-            new() { AgreedPricePerKg = 12000, PaymentReference = "SIM-FACTORY-001" }, default);
+            new() { AgreedPricePerKg = 12000, VatTreatment = "TAXABLE", VatPercentage = 10, PaymentReference = "SIM-FACTORY-001" }, default);
         Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Success, settled.Outcome);
+        Assert.Equal(720000m, settled.Data!.TotalAmount);
+        Assert.Equal(72000m, settled.Data.VatAmount);
+        Assert.Equal(792000m, settled.Data.InvoiceTotalAmount);
+        Assert.Equal(36000m, settled.Data.FeeAmount);
+        Assert.Equal(756000m, settled.Data.NetPayableAmount);
+        var platformTransaction = await db.PlatformTransactions.SingleAsync(x => x.SourceType == "BATCH_ORDER" && x.SourceId == first.Id);
+        Assert.Equal(factoryOwnerId, platformTransaction.PayerId);
+        Assert.Equal(720000m, platformTransaction.TransactionAmount);
+        Assert.Equal(5m, platformTransaction.FeePercentage);
         Assert.Equal("PAID", (await orders.GetAsync(factoryOwnerId, first.Id, default)).Data!.Status);
 
         var detail = await Batches(db).DetailAsync(ownerId, depotId, first.Id);
@@ -381,6 +390,10 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         Assert.Equal("A", detail.Quality.Grade);
         Assert.Equal("HD-TEST-001", detail.Quality.InvoiceNumber);
         Assert.Equal(settled.Data!.TotalAmount, detail.Settlement!.GrossAmount);
+        Assert.Equal("TAXABLE", detail.Settlement.VatTreatment);
+        Assert.Equal(10m, detail.Settlement.VatPercentage);
+        Assert.Equal(settled.Data.VatAmount, detail.Settlement.VatAmount);
+        Assert.Equal(settled.Data.InvoiceTotalAmount, detail.Settlement.InvoiceTotalAmount);
         Assert.Equal(settled.Data.FeeAmount, detail.Settlement.FeeAmount);
         Assert.Equal(settled.Data.NetPayableAmount, detail.Settlement.NetAmount);
         Assert.Equal("SIM-FACTORY-001", detail.Settlement.PaymentReference);

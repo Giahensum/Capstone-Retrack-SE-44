@@ -84,6 +84,9 @@ public class DecisionRequest
 public class SettlementRequest
 {
     [Range(0, 1000000000)] public decimal AgreedPricePerKg { get; set; }
+    [Required, RegularExpression("^(NOT_APPLICABLE|ZERO_RATE|TAXABLE)$")]
+    public string VatTreatment { get; set; } = "NOT_APPLICABLE";
+    [Range(0, 100)] public decimal VatPercentage { get; set; }
     [Required, StringLength(200)] public string PaymentReference { get; set; } = "";
 }
 
@@ -98,7 +101,6 @@ public class InvoiceRequest
 {
     [StringLength(100)] public string? InvoiceNumber { get; set; }
     [Required, StringLength(1000000)] public string InvoiceFileUrl { get; set; } = "";
-    [Range(0, 1000000000000)] public decimal? VatAmount { get; set; }
 }
 
 public class BatchOfferRequest

@@ -175,6 +175,10 @@ namespace Retrack.API.Models
         [Column("rejection_reason")] public string? RejectionReason { get; set; }
         [Column("agreed_price_per_kg")] public decimal? AgreedPricePerKg { get; set; }
         [Column("gross_amount")] public decimal? GrossAmount { get; set; }
+        [Column("vat_treatment")] public string? VatTreatment { get; set; }
+        [Column("vat_percentage")] public decimal? VatPercentage { get; set; }
+        [Column("vat_amount")] public decimal? VatAmount { get; set; }
+        [Column("invoice_total_amount")] public decimal? InvoiceTotalAmount { get; set; }
         [Column("platform_fee_amount")] public decimal? PlatformFeeAmount { get; set; }
         [Column("net_amount")] public decimal? NetAmount { get; set; }
         [Column("payment_reference")] public string? PaymentReference { get; set; }
@@ -266,6 +270,19 @@ namespace Retrack.API.Models
         [Required]
         [Column("gross_amount")]
         public decimal GrossAmount { get; set; }
+
+        [Column("vat_treatment")]
+        [MaxLength(30)]
+        public string VatTreatment { get; set; } = "NOT_APPLICABLE";
+
+        [Column("vat_percentage")]
+        public decimal VatPercentage { get; set; }
+
+        [Column("vat_amount")]
+        public decimal VatAmount { get; set; }
+
+        [Column("invoice_total_amount")]
+        public decimal InvoiceTotalAmount { get; set; }
 
         [Column("platform_fee_percentage")]
         public decimal PlatformFeePercentage { get; set; } = 0;

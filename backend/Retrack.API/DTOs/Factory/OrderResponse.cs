@@ -14,6 +14,10 @@ public sealed record OrderResponse
     public required string? DepotPhone { get; init; }
     public required decimal AgreedPrice { get; init; }
     public required decimal? TotalAmount { get; init; }
+    public required string? VatTreatment { get; init; }
+    public required decimal? VatPercentage { get; init; }
+    public required decimal? VatAmount { get; init; }
+    public required decimal? InvoiceTotalAmount { get; init; }
     public required string Status { get; init; }
     public required DateTime? ReceivedAt { get; init; }
     public required DateTime? DecidedAt { get; init; }

@@ -56,6 +56,7 @@ public class FactoryResponseContractTests
         var json = JsonSerializer.SerializeToElement(response, JsonOptions);
         AssertFields(json, "id", "batchId", "batchCode", "materialType", "estimatedWeightKg", "actualWeightKg",
             "depotId", "depotName", "depotAddress", "depotPhone", "agreedPrice", "totalAmount", "status",
+            "vatTreatment", "vatPercentage", "vatAmount", "invoiceTotalAmount",
             "receivedAt", "decidedAt", "rejectionReason", "settledAt", "feeAmount", "netPayableAmount",
             "paymentReference", "platformFeePercentage", "createdAt", "transport", "weightVerification", "weightTicket", "invoice");
         Assert.Equal(JsonValueKind.Null, json.GetProperty("transport").ValueKind);

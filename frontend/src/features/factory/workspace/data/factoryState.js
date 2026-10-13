@@ -62,7 +62,7 @@ export function weigh(gross, tare, estimated) {
     flagged: Math.abs(difference) > 5,
   };
 }
-export function settlement(net, price, feePercentage = 1) {
+export function settlement(net, price, feePercentage = 1, vatTreatment = "NOT_APPLICABLE", vatPercentage = 0) {
   requireThat(
     positive(net) && positive(price),
     "Khối lượng và đơn giá phải lớn hơn 0.",
@@ -71,8 +71,14 @@ export function settlement(net, price, feePercentage = 1) {
   const percentage = Number.isFinite(Number(feePercentage)) && Number(feePercentage) >= 0
     ? Number(feePercentage)
     : 1;
+  const vatRate = Number(vatPercentage);
+  requireThat(Number.isFinite(vatRate) && vatRate >= 0 && vatRate <= 100, "Thuế suất VAT phải từ 0% đến 100%.");
+  requireThat(vatTreatment !== "TAXABLE" || vatRate > 0, "Giao dịch chịu VAT phải có thuế suất lớn hơn 0%.");
+  requireThat(vatTreatment === "TAXABLE" || vatRate === 0, "Chỉ giao dịch chịu VAT mới có thuế suất lớn hơn 0%.");
+  const vat = Math.round(total * vatRate / 100);
+  const invoiceTotal = total + vat;
   const fee = Math.round(total * percentage / 100);
-  return { price: Number(price), total, fee, feePercentage: percentage, payable: total - fee };
+  return { price: Number(price), total, vatTreatment, vatPercentage: vatRate, vat, invoiceTotal, fee, feePercentage: percentage, payable: invoiceTotal - fee };
 }
 export function createInitialState() {
   const now = stamp();
