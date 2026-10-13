@@ -83,7 +83,10 @@ public class FactoryPartnerService(AppDbContext db) : FactoryServiceBase(db), IF
     public async Task<ServiceResult<PartnerRatingResponse>> RateAsync(Guid userId, Guid orderId, RatingRequest request, CancellationToken ct)
     {
         if (request.BlockPartner) return ServiceResult<PartnerRatingResponse>.Invalid("Dùng chức năng chặn đối tác riêng để xác nhận thao tác.");
+        if (request.PartnershipStatus is not null and not (PartnershipStatus.APPROVED or PartnershipStatus.DECLINED))
+            return ServiceResult<PartnerRatingResponse>.Invalid("Quyết định hợp tác chỉ nhận APPROVED hoặc DECLINED.");
         var factory = await CurrentFactory(userId, ct);
+        await using var tx = Db.Database.IsRelational() ? await Db.Database.BeginTransactionAsync(ct) : null;
         var batch = await Db.InventoryBatches.SingleOrDefaultAsync(x => x.Id == orderId && x.TargetFactoryId == factory.Id, ct);
         if (batch is null) return ServiceResult<PartnerRatingResponse>.NotFound("Không tìm thấy đơn hàng.");
         if (batch.Status is not ("PAID" or "COMPLETED")) return ServiceResult<PartnerRatingResponse>.Conflict("Chỉ đánh giá sau khi đã quyết toán.");
@@ -96,18 +99,25 @@ public class FactoryPartnerService(AppDbContext db) : FactoryServiceBase(db), IF
         review.Rating = request.Rating;
         review.Comment = request.Comment?.Trim();
         var partner = await Db.FactoryDepotPartnerships.SingleOrDefaultAsync(x => x.FactoryId == factory.Id && x.DepotId == batch.DepotId, ct);
-        if (partner is not null)
+        if (request.PartnershipStatus is not null)
         {
-            if (request.BlockPartner) partner.BlockedByFactory = true;
-            // Đánh giá không tự thay quyết định hợp tác sau kiểm tra.
+            if (partner is null)
+                return ServiceResult<PartnerRatingResponse>.NotFound("Không tìm thấy quan hệ hợp tác với vựa.");
+            if (partner.IsBlocked)
+                return ServiceResult<PartnerRatingResponse>.Conflict("Quan hệ đang bị chặn; hãy xử lý trạng thái chặn trước.");
+            partner.Status = request.PartnershipStatus.Value.ToString();
             partner.UpdatedAt = DateTime.UtcNow;
         }
         await Db.SaveChangesAsync(ct);
+        if (tx != null) await tx.CommitAsync(ct);
         return ServiceResult<PartnerRatingResponse>.Success(data: new PartnerRatingResponse
         {
             Id = review.Id,
             Rating = review.Rating,
-            Comment = review.Comment
-        }, message: "Đã lưu đánh giá đối tác.");
+            Comment = review.Comment,
+            PartnershipStatus = request.PartnershipStatus?.ToString()
+        }, message: request.PartnershipStatus is null
+            ? "Đã lưu đánh giá đối tác."
+            : "Đã lưu đánh giá và quyết định hợp tác.");
     }
 }

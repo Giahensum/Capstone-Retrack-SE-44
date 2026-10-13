@@ -147,7 +147,12 @@ export function Attachment({ label, value, onChange }) {
     finally { input.value = ""; setBusy(false); }
   }} />
     <small>{busy ? "Đang đọc tệp…" : "PDF, JPG, PNG · Tối đa 700 KB/tệp"}</small>
-    {value && (value.file ? <span>{value.name}</span> : <button type="button" onClick={() => void downloadFactoryAttachment(value.data, value.name).catch((error) => notify(error.message, true))}>{value.name}</button>)}
+    {value && <div className="factory-attachment-saved">
+      <strong>{value.file ? "Đã chọn để lưu:" : "Đã lưu trên máy chủ:"}</strong>
+      {value.file
+        ? <span>{value.name}</span>
+        : <button type="button" onClick={() => void downloadFactoryAttachment(value.data, value.name).catch((error) => notify(error.message, true))}>Xem {value.name.toLowerCase()}</button>}
+    </div>}
   </div>;
 }
 export function Confirm({ title, text, onClose, onConfirm, danger }) {

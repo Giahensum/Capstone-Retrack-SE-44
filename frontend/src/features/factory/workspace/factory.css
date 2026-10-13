@@ -932,6 +932,9 @@
   margin: 18px 0 0;
 }
 .factory-dialog {
+  position: fixed;
+  inset: 0;
+  margin: auto;
   color: #254735;
   font-family: Inter, "Segoe UI", sans-serif;
   border: 1px solid #dde5da;
@@ -981,6 +984,29 @@
 .field small {
   font-size: 10px;
   color: #829077;
+}
+.factory-attachment-saved {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-height: 34px;
+  padding: 8px 10px;
+  border: 1px solid #cfe4d2;
+  border-radius: 7px;
+  background: #f1f8f0;
+  color: #315c3b;
+  font-size: 11px;
+}
+.factory-attachment-saved button {
+  border: 0;
+  background: transparent;
+  color: #087443;
+  padding: 0;
+  font: inherit;
+  font-weight: 650;
+  text-decoration: underline;
+  cursor: pointer;
 }
 .weight-preview {
   background: #edf5e9;

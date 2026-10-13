@@ -41,13 +41,19 @@ async function useFactoryApi(page, fixture) {
     const url = new URL(request.url());
     const path = url.pathname;
     const method = request.method();
-    const body = request.postDataJSON?.() || {};
+    const body = request.headers()["content-type"]?.includes("application/json")
+      ? request.postDataJSON() || {}
+      : {};
     const { state, envelope, paged } = fixture;
     let data;
 
     if (path === "/api/auth/login" && method === "POST") {
       data = { token: "test-factory-token", userId: factoryId, role: "FACTORY", fullName: "Factory Test", email: "factory@test.invalid" };
     } else if (path === "/api/factory/profile" && method === "GET") data = state.profile;
+    else if (path === "/api/factory/attachments/upload" && method === "POST") {
+      state.calls.push({ path });
+      data = { url: `/api/factory/attachments/${factoryId}/50000000000000000000000000000001` };
+    }
     else if (path === "/api/factory/dashboard" && method === "GET") data = {
       orderCount: state.orders.length, activeDemandCount: state.demands.length,
       partnerCount: state.partners.length, pendingQcCount: state.orders.filter((x) => ["DELIVERED", "RECEIVED", "WEIGHED"].includes(x.status)).length,
@@ -81,6 +87,14 @@ async function useFactoryApi(page, fixture) {
       const total = 95 * body.agreedPricePerKg; const fee = total * 0.01;
       state.orders[0] = { ...state.orders[0], status: "COMPLETED", agreedPrice: body.agreedPricePerKg, totalAmount: total, feeAmount: fee, platformFeePercentage: 1, netPayableAmount: total - fee, paymentReference: body.paymentReference, settledAt: new Date().toISOString() };
       data = state.orders[0];
+    } else if (path === `/api/factory/partners/orders/${orderId}/rating` && method === "POST") {
+      state.calls.push({ path, body });
+      state.orders[0] = { ...state.orders[0], rating: { rating: body.rating, comment: body.comment } };
+      if (body.partnershipStatus) {
+        state.partners = state.partners.map((partner) =>
+          partner.depotId === depotId ? { ...partner, status: body.partnershipStatus } : partner);
+      }
+      data = { id: "review-test", rating: body.rating, comment: body.comment, partnershipStatus: body.partnershipStatus };
     } else if (path === "/api/factory/marketplace/batches" && method === "GET") {
       const isDirect = url.searchParams.get("directOnly") === "true";
       data = paged(state.batches.filter((b) => b.isDirectOffer === isDirect));
@@ -133,6 +147,29 @@ test.describe("Factory TV4 browser flow", () => {
     await expect(page.getByRole("button", { name: "Đăng nhập" })).toBeVisible();
   });
 
+  test("uploads a legal document before saving the Factory profile", async ({ page }) => {
+    const fixture = apiFixture();
+    await useFactoryApi(page, fixture);
+    await login(page);
+    await page.getByRole("button", { name: "Hồ sơ nhà máy" }).click();
+    await page.getByLabel("Tên nhà máy").fill("Nhà máy đã lưu");
+    await page.getByLabel("Giấy phép kinh doanh").setInputFiles({
+      name: "giay-phep.png",
+      mimeType: "image/png",
+      buffer: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    });
+    await page.getByRole("button", { name: "Lưu hồ sơ nhà máy" }).click();
+    await expect(page.getByText("Đã lưu hồ sơ nhà máy.")).toBeVisible();
+    expect(fixture.state.calls).toContainEqual({ path: "/api/factory/attachments/upload" });
+    expect(fixture.state.profile.businessLicenseUrl).toContain("/api/factory/attachments/");
+
+    await page.getByRole("button", { name: "Tổng quan" }).click();
+    await page.getByRole("button", { name: "Hồ sơ nhà máy" }).click();
+    await expect(page.getByLabel("Tên nhà máy")).toHaveValue("Nhà máy đã lưu");
+    await expect(page.getByText("Đã lưu trên máy chủ:")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Xem giấy phép kinh doanh" })).toBeVisible();
+  });
+
   test("receives Depot delivery, records weighing and QC, then settles once", async ({ page }) => {
     const fixture = apiFixture();
     await useFactoryApi(page, fixture);
@@ -166,10 +203,17 @@ test.describe("Factory TV4 browser flow", () => {
     await page.getByRole("button", { name: "Ghi nhận quyết toán" }).click();
     await expect(page.getByText("Đã ghi nhận quyết toán. Có thể đánh giá lô hàng.")).toBeVisible();
     expect(fixture.state.orders[0].status).toBe("COMPLETED");
+    await page.getByRole("button", { name: "Đánh giá lô & Hợp tác" }).click();
+    await page.getByLabel("Nhận xét").fill("Hàng đạt chất lượng");
+    await page.getByLabel("Quyết định hợp tác với vựa").selectOption("APPROVED");
+    await page.getByRole("button", { name: "Lưu đánh giá" }).click();
+    await expect(page.getByText("Đã lưu đánh giá lô và quyết định hợp tác.")).toBeVisible();
+    expect(fixture.state.partners[0].status).toBe("APPROVED");
     expect(fixture.state.calls.map((call) => call.path)).toEqual([
       `/api/factory/qc/orders/${orderId}/weigh`,
       `/api/factory/qc/orders/${orderId}/quality`,
       `/api/factory/orders/${orderId}/settle`,
+      `/api/factory/partners/orders/${orderId}/rating`,
     ]);
     await page.reload();
     await page.getByRole("button", { name: "Quyết toán", exact: true }).click();
