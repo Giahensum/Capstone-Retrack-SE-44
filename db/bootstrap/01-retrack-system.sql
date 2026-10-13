@@ -216,6 +216,10 @@ CREATE TABLE IF NOT EXISTS inventory_batches (
     rejection_reason    TEXT,
     agreed_price_per_kg DECIMAL(18, 2),
     gross_amount        DECIMAL(18, 2),
+    vat_treatment       VARCHAR(30),
+    vat_percentage      DECIMAL(5, 2),
+    vat_amount          DECIMAL(18, 2),
+    invoice_total_amount DECIMAL(18, 2),
     platform_fee_amount DECIMAL(18, 2),
     net_amount          DECIMAL(18, 2),
     payment_reference   VARCHAR(200),
@@ -228,6 +232,10 @@ CREATE TABLE IF NOT EXISTS inventory_batches (
 );
 ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS code VARCHAR(40);
 ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS image_urls TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS vat_treatment VARCHAR(30);
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS vat_percentage DECIMAL(5, 2);
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS vat_amount DECIMAL(18, 2);
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS invoice_total_amount DECIMAL(18, 2);
 CREATE SEQUENCE IF NOT EXISTS depot_batch_number START WITH 1 INCREMENT BY 1 NO MINVALUE NO MAXVALUE NO CYCLE;
 CREATE UNIQUE INDEX IF NOT EXISTS ix_inventory_batches_code ON inventory_batches(code);
 
@@ -267,6 +275,10 @@ CREATE TABLE IF NOT EXISTS batch_quality_checks (
     agreed_price_per_kg     DECIMAL(18, 2) NOT NULL,
     -- Hạch toán tài chính (mức phí mặc định 5%, lưu riêng theo từng giao dịch)
     gross_amount            DECIMAL(18, 2) NOT NULL,
+    vat_treatment           VARCHAR(30) NOT NULL DEFAULT 'NOT_APPLICABLE',
+    vat_percentage          DECIMAL(5, 2) NOT NULL DEFAULT 0,
+    vat_amount              DECIMAL(18, 2) NOT NULL DEFAULT 0,
+    invoice_total_amount    DECIMAL(18, 2) NOT NULL DEFAULT 0,
     platform_fee_percentage DECIMAL(5, 2)  DEFAULT 0,
     platform_fee_amount     DECIMAL(18, 2) DEFAULT 0,
     net_amount              DECIMAL(18, 2) NOT NULL,
@@ -287,6 +299,10 @@ CREATE TABLE IF NOT EXISTS batch_quality_checks (
     invoice_status          VARCHAR(30),
     created_at              TIMESTAMPTZ  DEFAULT NOW()
 );
+ALTER TABLE batch_quality_checks ADD COLUMN IF NOT EXISTS vat_treatment VARCHAR(30) NOT NULL DEFAULT 'NOT_APPLICABLE';
+ALTER TABLE batch_quality_checks ADD COLUMN IF NOT EXISTS vat_percentage DECIMAL(5, 2) NOT NULL DEFAULT 0;
+ALTER TABLE batch_quality_checks ADD COLUMN IF NOT EXISTS vat_amount DECIMAL(18, 2) NOT NULL DEFAULT 0;
+ALTER TABLE batch_quality_checks ADD COLUMN IF NOT EXISTS invoice_total_amount DECIMAL(18, 2) NOT NULL DEFAULT 0;
 
 -- Factory đánh giá Depot
 CREATE TABLE IF NOT EXISTS factory_depot_reviews (

@@ -93,22 +93,39 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
         if (batch.Status != "VERIFIED" || qc?.IsAccepted != true)
             return ServiceResult<OrderSettlementResponse>.Conflict("Chỉ quyết toán lô đã được KCS chấp nhận.");
         if (request.AgreedPricePerKg <= 0) return ServiceResult<OrderSettlementResponse>.Invalid("Đơn giá phải lớn hơn 0.");
+        var vatTreatment = request.VatTreatment.Trim().ToUpperInvariant();
+        if (vatTreatment == "NOT_APPLICABLE" && request.VatPercentage != 0)
+            return ServiceResult<OrderSettlementResponse>.Invalid("Giao dịch không áp dụng VAT phải có thuế suất 0%.");
+        if (vatTreatment == "ZERO_RATE" && request.VatPercentage != 0)
+            return ServiceResult<OrderSettlementResponse>.Invalid("Giao dịch VAT 0% phải có thuế suất 0%.");
+        if (vatTreatment == "TAXABLE" && request.VatPercentage <= 0)
+            return ServiceResult<OrderSettlementResponse>.Invalid("Giao dịch chịu VAT phải có thuế suất lớn hơn 0%.");
         var feeText = await Db.SystemConfigs.AsNoTracking().Where(x => x.ConfigKey == "PLATFORM_FEE_PERCENTAGE")
             .Select(x => x.ConfigValue).FirstOrDefaultAsync(ct);
         var feePercent = decimal.TryParse(feeText, System.Globalization.NumberStyles.Number,
             System.Globalization.CultureInfo.InvariantCulture, out var configuredFee) ? configuredFee : 5m;
         if (feePercent is < 0 or > 100) feePercent = 5m;
         var total = decimal.Round(qc.ActualWeightKg * request.AgreedPricePerKg, 0, MidpointRounding.AwayFromZero);
+        var vat = decimal.Round(total * request.VatPercentage / 100m, 0, MidpointRounding.AwayFromZero);
+        var invoiceTotal = total + vat;
         var fee = decimal.Round(total * feePercent / 100m, 0, MidpointRounding.AwayFromZero);
         qc.AgreedPricePerKg = request.AgreedPricePerKg;
         qc.GrossAmount = total;
+        qc.VatTreatment = vatTreatment;
+        qc.VatPercentage = request.VatPercentage;
+        qc.VatAmount = vat;
+        qc.InvoiceTotalAmount = invoiceTotal;
         qc.PlatformFeePercentage = feePercent;
         qc.PlatformFeeAmount = fee;
-        qc.NetAmount = total - fee;
+        qc.NetAmount = invoiceTotal - fee;
         batch.AgreedPricePerKg = request.AgreedPricePerKg;
         batch.GrossAmount = total;
+        batch.VatTreatment = vatTreatment;
+        batch.VatPercentage = request.VatPercentage;
+        batch.VatAmount = vat;
+        batch.InvoiceTotalAmount = invoiceTotal;
         batch.PlatformFeeAmount = fee;
-        batch.NetAmount = total - fee;
+        batch.NetAmount = invoiceTotal - fee;
         batch.QualityCheck = qc;
         batch.PaymentReference = request.PaymentReference.Trim();
         batch.SettledAt = DateTime.UtcNow;
@@ -116,6 +133,7 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
         Db.PlatformTransactions.Add(new Retrack.API.Models.PlatformTransaction
         {
             SourceType = "BATCH_ORDER", SourceId = batch.Id, FeeAmount = fee,
+            PayerId = factory.OwnerId, TransactionAmount = total, FeePercentage = feePercent,
             Description = $"Factory settlement at {feePercent}%"
         });
         await Db.SaveChangesAsync(ct);
@@ -125,8 +143,12 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
             Id = batch.Id,
             Status = "PAID",
             TotalAmount = total,
+            VatTreatment = vatTreatment,
+            VatPercentage = request.VatPercentage,
+            VatAmount = vat,
+            InvoiceTotalAmount = invoiceTotal,
             FeeAmount = fee,
-            NetPayableAmount = total - fee,
+            NetPayableAmount = invoiceTotal - fee,
             PaymentReference = batch.PaymentReference,
             SettledAt = batch.SettledAt,
             FeePercentage = feePercent
@@ -148,7 +170,6 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
         batch.QualityCheck.InvoiceNumber = request.InvoiceNumber?.Trim();
         batch.QualityCheck.InvoiceFileUrl = request.InvoiceFileUrl.Trim();
         batch.QualityCheck.InvoiceStatus = "UPLOADED";
-        if (request.VatAmount.HasValue) batch.QualityCheck.QualityNote = $"VAT:{request.VatAmount.Value}";
         await Db.SaveChangesAsync(ct);
         return ServiceResult<InvoiceUpdatedResponse>.Success(data: new InvoiceUpdatedResponse
         {

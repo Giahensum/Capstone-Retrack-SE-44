@@ -84,8 +84,8 @@ async function useFactoryApi(page, fixture) {
       data = state.orders[0];
     } else if (path === `/api/factory/orders/${orderId}/settle` && method === "POST") {
       state.calls.push({ path, body });
-      const total = 95 * body.agreedPricePerKg; const fee = total * 0.01;
-      state.orders[0] = { ...state.orders[0], status: "COMPLETED", agreedPrice: body.agreedPricePerKg, totalAmount: total, feeAmount: fee, platformFeePercentage: 1, netPayableAmount: total - fee, paymentReference: body.paymentReference, settledAt: new Date().toISOString() };
+      const total = 95 * body.agreedPricePerKg; const vat = total * body.vatPercentage / 100; const fee = total * 0.01;
+      state.orders[0] = { ...state.orders[0], status: "COMPLETED", agreedPrice: body.agreedPricePerKg, totalAmount: total, vatTreatment: body.vatTreatment, vatPercentage: body.vatPercentage, vatAmount: vat, invoiceTotalAmount: total + vat, feeAmount: fee, platformFeePercentage: 1, netPayableAmount: total + vat - fee, paymentReference: body.paymentReference, settledAt: new Date().toISOString() };
       data = state.orders[0];
     } else if (path === `/api/factory/partners/orders/${orderId}/rating` && method === "POST") {
       state.calls.push({ path, body });
@@ -199,10 +199,13 @@ test.describe("Factory TV4 browser flow", () => {
     await page.getByRole("button", { name: "Thỏa thuận giá & Quyết toán" }).click();
     await page.getByLabel("Đơn giá đã thỏa thuận sau KCS (đ/kg)").fill("1200");
     await page.getByLabel("Mã tham chiếu chuyển khoản").fill("BANK-TEST-001");
+    await page.getByLabel("VAT theo hóa đơn của vựa").selectOption("TAXABLE:10");
+    await expect(page.getByText("Tổng giá trị hóa đơn")).toBeVisible();
     await page.locator(".checkbox-line input[type=checkbox]").check();
     await page.getByRole("button", { name: "Ghi nhận quyết toán" }).click();
     await expect(page.getByText("Đã ghi nhận quyết toán. Có thể đánh giá lô hàng.")).toBeVisible();
     expect(fixture.state.orders[0].status).toBe("COMPLETED");
+    expect(fixture.state.orders[0].vatPercentage).toBe(10);
     await page.getByRole("button", { name: "Đánh giá lô & Hợp tác" }).click();
     await page.getByLabel("Nhận xét").fill("Hàng đạt chất lượng");
     await page.getByLabel("Quyết định hợp tác với vựa").selectOption("APPROVED");

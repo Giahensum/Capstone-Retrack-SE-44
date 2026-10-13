@@ -147,6 +147,10 @@ export function mapOrder(order) {
     payment: order.settledAt ? {
       price: order.agreedPrice,
       total: order.totalAmount || net * order.agreedPrice,
+      vatTreatment: order.vatTreatment || "NOT_APPLICABLE",
+      vatPercentage: order.vatPercentage || 0,
+      vat: order.vatAmount || 0,
+      invoiceTotal: order.invoiceTotalAmount || order.totalAmount || net * order.agreedPrice,
       fee: order.feeAmount || 0,
       feePercentage: order.platformFeePercentage ?? 1,
       payable: order.netPayableAmount || 0,
@@ -257,6 +261,8 @@ export async function performFactoryAction(type, payload) {
     case "SETTLE":
       return request(`/api/factory/orders/${id}/settle`, { method: "POST", body: {
         agreedPricePerKg: Number(payload.price),
+        vatTreatment: payload.vatTreatment,
+        vatPercentage: Number(payload.vatPercentage),
         paymentReference: payload.reference,
       } });
     case "INVOICE":
@@ -265,7 +271,6 @@ export async function performFactoryAction(type, payload) {
       return request(`/api/factory/orders/${id}/invoice`, { method: "PUT", body: {
         invoiceNumber: payload.file.invoiceNumber || payload.file.name,
         invoiceFileUrl,
-        vatAmount: 0,
       } });
       }
     case "RATE":

@@ -384,6 +384,14 @@ function Financial({ values, net }) {
         <dd>{money(values.total)}</dd>
       </div>
       <div>
+        <dt>{values.vatTreatment === "NOT_APPLICABLE" ? "VAT" : `VAT (${values.vatPercentage}%)`}</dt>
+        <dd>{values.vatTreatment === "NOT_APPLICABLE" ? "Không áp dụng" : `+ ${money(values.vat)}`}</dd>
+      </div>
+      <div>
+        <dt>Tổng giá trị hóa đơn</dt>
+        <dd>{money(values.invoiceTotal)}</dd>
+      </div>
+      <div>
         <dt>Phí nền tảng giữ lại ({values.feePercentage}%)</dt>
         <dd>− {money(values.fee)}</dd>
       </div>
@@ -600,10 +608,12 @@ function SettlementForm({ order, close }) {
   const { act, state } = useFactory();
   const [price, setPrice] = useState("");
   const [reference, setReference] = useState("");
+  const [vatOption, setVatOption] = useState("NOT_APPLICABLE:0");
   const [confirmed, setConfirmed] = useState(false);
+  const [vatTreatment, vatPercentage] = vatOption.split(":");
   let preview;
   try {
-    preview = settlement(order.weight.net, Number(price), state?.profile?.platformFeePercentage ?? order.payment?.feePercentage ?? 1);
+    preview = settlement(order.weight.net, Number(price), state?.profile?.platformFeePercentage ?? order.payment?.feePercentage ?? 1, vatTreatment, Number(vatPercentage));
   } catch {
     /* Price has not been entered. */
   }
@@ -615,7 +625,7 @@ function SettlementForm({ order, close }) {
           confirmed &&
           await act(
             "SETTLE",
-            { id: order.id, price, reference },
+            { id: order.id, price, vatTreatment, vatPercentage, reference },
             "Đã ghi nhận quyết toán. Có thể đánh giá lô hàng.",
           )
         )
@@ -643,6 +653,15 @@ function SettlementForm({ order, close }) {
         value={reference}
         onChange={(e) => setReference(e.target.value)}
       />
+      <Field label="VAT theo hóa đơn của vựa">
+        <select value={vatOption} onChange={(e) => setVatOption(e.target.value)}>
+          <option value="NOT_APPLICABLE:0">Không áp dụng VAT</option>
+          <option value="ZERO_RATE:0">VAT 0%</option>
+          <option value="TAXABLE:5">VAT 5%</option>
+          <option value="TAXABLE:8">VAT 8%</option>
+          <option value="TAXABLE:10">VAT 10%</option>
+        </select>
+      </Field>
       <label className="checkbox-line">
         <input
           type="checkbox"
