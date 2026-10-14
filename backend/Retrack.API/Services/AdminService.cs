@@ -141,6 +141,12 @@ namespace Retrack.API.Services
         {
             if (!ValidRoles.Contains(dto.Role))
                 throw new ArgumentException("Vai trò không hợp lệ.");
+            if (string.IsNullOrWhiteSpace(dto.Email) || !dto.Email.Contains('@') || dto.Email.Length > 255)
+                throw new ArgumentException("Email không hợp lệ.");
+            if (string.IsNullOrWhiteSpace(dto.Password) || dto.Password.Length < 6)
+                throw new ArgumentException("Mật khẩu phải có ít nhất 6 ký tự.");
+            if (string.IsNullOrWhiteSpace(dto.FullName))
+                throw new ArgumentException("Họ tên không được để trống.");
 
             var existing = await _userRepo.GetByEmailAsync(dto.Email);
             if (existing != null)
@@ -165,6 +171,9 @@ namespace Retrack.API.Services
         {
             var user = await _userRepo.GetByIdAsync(id)
                 ?? throw new KeyNotFoundException("Không tìm thấy người dùng.");
+
+            if (string.IsNullOrWhiteSpace(dto.FullName))
+                throw new ArgumentException("Họ tên không được để trống.");
 
             var oldData = new { user.FullName, user.Phone };
             user.FullName = dto.FullName;
@@ -199,6 +208,16 @@ namespace Retrack.API.Services
         {
             var user = await _userRepo.GetByIdAsync(id)
                 ?? throw new KeyNotFoundException("Không tìm thấy người dùng.");
+
+            if (id == actorId)
+                throw new InvalidOperationException("Không thể tự xóa tài khoản đang đăng nhập.");
+
+            if (user.Role == "ADMIN" && user.IsActive)
+            {
+                var otherAdmins = await _db.Users.CountAsync(u => u.Role == "ADMIN" && u.IsActive && u.Id != id);
+                if (otherAdmins == 0)
+                    throw new InvalidOperationException("Không thể xóa tài khoản Admin cuối cùng.");
+            }
 
             var hasDependents =
                 await _db.Depots.AnyAsync(d => d.OwnerId == id) ||
@@ -258,6 +277,8 @@ namespace Retrack.API.Services
 
         public async Task<MarketPriceDto> CreateMarketPriceAsync(UpsertMarketPriceDto dto, Guid actorId)
         {
+            if (dto.PricePerKg <= 0)
+                throw new ArgumentException("Giá phải lớn hơn 0.");
             var price = new MarketPrice
             {
                 MaterialType = ParseMaterialType(dto.MaterialType),
@@ -275,6 +296,8 @@ namespace Retrack.API.Services
             var price = await _priceRepo.GetByIdAsync(id)
                 ?? throw new KeyNotFoundException("Không tìm thấy giá tham khảo.");
 
+            if (dto.PricePerKg <= 0)
+                throw new ArgumentException("Giá phải lớn hơn 0.");
             var oldData = new { MaterialType = price.MaterialType.ToString(), price.PricePerKg, price.EffectiveDate, price.Source };
             price.MaterialType = ParseMaterialType(dto.MaterialType);
             price.PricePerKg = dto.PricePerKg;
