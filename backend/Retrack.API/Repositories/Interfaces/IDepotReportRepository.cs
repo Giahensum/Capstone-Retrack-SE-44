@@ -17,4 +17,5 @@ public interface IDepotReportRepository
     Task<FeeSummaryDto> FeeSummaryAsync(Guid ownerId, Guid depotId, DateTime start, DateTime end);
     Task<PagedResult<FeeInvoiceDto>> InvoicesAsync(Guid ownerId, DepotQuery query);
     Task<PlatformInvoice?> LockInvoiceAsync(Guid id);
+    Task<PlatformInvoice?> LockInvoiceByPayosOrderAsync(long orderCode);
 }

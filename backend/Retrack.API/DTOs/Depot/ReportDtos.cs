@@ -25,3 +25,5 @@ public record StaffHistoryDto(Guid Id, string Type, string Status, decimal Weigh
 public record FeeEntryDto(Guid Id, Guid SourceId, decimal FeeAmount, DateTime Date);
 public record FeeSummaryDto(decimal AccruedAmount, decimal UnpaidInvoiceAmount, decimal SubmittedInvoiceAmount);
 public record FeeInvoiceDto(Guid Id, DateOnly PeriodStart, decimal Amount, string Status, string? PaymentProofUrl, DateTime? SubmittedAt);
+
+public record PayOsLinkDto(string CheckoutUrl, long OrderCode);
