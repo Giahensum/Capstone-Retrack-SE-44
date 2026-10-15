@@ -65,11 +65,23 @@ namespace Retrack.API.DTOs
     public class CreatePickupRequestDto
     {
         public Guid? TargetDepotId { get; set; }
+
+        [MaxLength(1000, ErrorMessage = "Mô tả không được vượt quá 1000 ký tự.")]
         public string? Description { get; set; }
+
+        [Required(ErrorMessage = "Địa chỉ thu gom không được để trống.")]
+        [MaxLength(500, ErrorMessage = "Địa chỉ không được vượt quá 500 ký tự.")]
         public string Address { get; set; } = string.Empty;
+
+        [Range(-90.0, 90.0, ErrorMessage = "Vĩ độ phải nằm trong khoảng -90 đến 90.")]
         public decimal? Latitude { get; set; }
+
+        [Range(-180.0, 180.0, ErrorMessage = "Kinh độ phải nằm trong khoảng -180 đến 180.")]
         public decimal? Longitude { get; set; }
+
         public DateTime? PreferredDatetime { get; set; }
+
+        [MaxLength(1000, ErrorMessage = "URL ảnh không được vượt quá 1000 ký tự.")]
         public string? RequestImageUrl { get; set; }
     }
 
@@ -159,18 +171,34 @@ namespace Retrack.API.DTOs
     // ===== REVIEW =====
     public class CreateReviewDto
     {
+        [Required(ErrorMessage = "Vui lòng chọn số sao đánh giá.")]
+        [Range(1, 5, ErrorMessage = "Số sao đánh giá phải từ 1 đến 5 sao.")]
         public int Rating { get; set; }
+
+        [MaxLength(1000, ErrorMessage = "Nội dung nhận xét không được vượt quá 1000 ký tự.")]
         public string? Comment { get; set; }
     }
 
     // ===== SELLER PROFILE =====
     public class UpdateSellerProfileDto
     {
+        [MaxLength(255, ErrorMessage = "Họ và tên không được vượt quá 255 ký tự.")]
         public string? FullName { get; set; }
+
+        [MaxLength(20, ErrorMessage = "Số điện thoại không được vượt quá 20 ký tự.")]
+        [RegularExpression(@"^(\+84|0)[0-9]{9,10}$", ErrorMessage = "Số điện thoại không hợp lệ (phải gồm 10-11 số, bắt đầu bằng 0 hoặc +84).")]
         public string? Phone { get; set; }
+
+        [MaxLength(100, ErrorMessage = "Tên ngân hàng không được vượt quá 100 ký tự.")]
         public string? BankName { get; set; }
+
+        [MaxLength(50, ErrorMessage = "Số tài khoản không được vượt quá 50 ký tự.")]
         public string? BankAccountNumber { get; set; }
+
+        [MaxLength(255, ErrorMessage = "Tên chủ tài khoản không được vượt quá 255 ký tự.")]
         public string? BankAccountName { get; set; }
+
+        [MaxLength(1000, ErrorMessage = "Đường dẫn mã QR không được vượt quá 1000 ký tự.")]
         public string? BankQrUrl { get; set; }
     }
 
