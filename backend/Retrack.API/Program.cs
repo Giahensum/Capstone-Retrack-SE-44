@@ -83,6 +83,9 @@ builder.Services.AddScoped<IPickupRequestRepository, PickupRequestRepository>();
 builder.Services.AddScoped<IMarketPriceRepository, MarketPriceRepository>();
 builder.Services.AddScoped<IAuditLogRepository, AuditLogRepository>();
 builder.Services.AddScoped<IPlatformInvoiceRepository, PlatformInvoiceRepository>();
+builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.ISellerRepository, Retrack.API.Repositories.SellerRepository>();
+builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IPasswordResetOtpRepository, Retrack.API.Repositories.PasswordResetOtpRepository>();
+builder.Services.AddScoped<Retrack.API.Services.Interfaces.ISellerService, Retrack.API.Services.Seller.SellerService>();
 
 builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IDepotOwnerRepository, DepotOwnerRepository>();
 
