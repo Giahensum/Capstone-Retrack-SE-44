@@ -155,6 +155,29 @@ public sealed class DepotPayOsTests
         await Assert.ThrowsAsync<DepotForbiddenException>(() => f.Service.SyncAsync(Owner, Depot, other.Id));
     }
 
+    // ---------- tác vụ nền (không cần webhook) ----------
+    [Fact]
+    public async Task Reconcile_marks_paid_only_when_payos_confirms_exact_amount()
+    {
+        var f = new Fixture(); var inv = f.Invoice(orderCode: 1700000000123);
+        f.Payos.Remote = new("PENDING", 0, null, null);
+        Assert.False(await f.Service.ReconcileAsync(inv.Id)); Assert.Equal("PENDING", inv.Status);
+        f.Payos.Remote = new("PAID", 1, null, null);
+        Assert.False(await f.Service.ReconcileAsync(inv.Id)); Assert.Equal("PENDING", inv.Status);
+        f.Payos.Remote = new("PAID", 150000, "FT7", new DateTime(2026, 9, 6, 2, 0, 0, DateTimeKind.Utc));
+        Assert.True(await f.Service.ReconcileAsync(inv.Id)); Assert.Equal("PAID", inv.Status);
+        Assert.False(await f.Service.ReconcileAsync(inv.Id)); // đã PAID: không xử lý lại
+    }
+
+    [Fact]
+    public async Task Reconcile_ignores_invoices_without_payos_link_or_unknown()
+    {
+        var f = new Fixture(); var plain = f.Invoice();
+        Assert.False(await f.Service.ReconcileAsync(plain.Id));
+        Assert.False(await f.Service.ReconcileAsync(Guid.NewGuid()));
+        Assert.Equal("PENDING", plain.Status);
+    }
+
     // ---------- fixture & fakes ----------
     private static PayOsClient NewClient() => new(new HttpClient(), Options.Create(new PayOsOptions
         { ClientId = "id", ApiKey = "key", ChecksumKey = Key, ReturnUrl = "https://x.test/return", CancelUrl = "https://x.test/cancel" }));
@@ -171,6 +194,7 @@ public sealed class DepotPayOsTests
             var repo = Fake<IDepotReportRepository>((m, a) => m switch
             {
                 nameof(IDepotReportRepository.LockInvoiceAsync) => Task.FromResult(invoices.SingleOrDefault(i => i.Id == (Guid)a[0]!)),
+                nameof(IDepotReportRepository.PendingPayosInvoiceIdsAsync) => Task.FromResult(invoices.Where(i => i.Status == "PENDING" && DepotPayOsService.OrderCodeOf(i) != null).Select(i => i.Id).ToList()),
                 nameof(IDepotReportRepository.LockInvoiceByPayosOrderAsync) => Task.FromResult(invoices.SingleOrDefault(i => DepotPayOsService.OrderCodeOf(i) == (long)a[0]!)),
                 _ => throw new NotSupportedException(m)
             });

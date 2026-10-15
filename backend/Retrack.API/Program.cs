@@ -121,6 +121,7 @@ builder.Services.AddScoped<IAdminService, AdminService>();
 builder.Services.Configure<Retrack.API.Services.Depot.PayOsOptions>(builder.Configuration.GetSection("PayOS"));
 builder.Services.AddHttpClient<Retrack.API.Services.Depot.IPayOsClient, Retrack.API.Services.Depot.PayOsClient>(c => c.Timeout = TimeSpan.FromSeconds(20));
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IDepotPayOsService, Retrack.API.Services.Depot.DepotPayOsService>();
+builder.Services.AddHostedService<Retrack.API.Services.Depot.PayOsReconciliationWorker>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.INotificationService, Retrack.API.Services.Shared.NotificationService>();
 builder.Services.AddScoped<Retrack.API.Services.Driver.DriverJobService>();
 builder.Services.AddScoped<Retrack.API.Services.Driver.DriverReportingService>();
