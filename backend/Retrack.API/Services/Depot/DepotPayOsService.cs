@@ -54,6 +54,24 @@ public sealed class DepotPayOsService(IDepotUnitOfWork work, IDepotReportReposit
         return "PAID";
     }
 
+    public Task<List<Guid>> PendingInvoiceIdsAsync(int take) => reports.PendingPayosInvoiceIdsAsync(take);
+
+    public async Task<bool> ReconcileAsync(Guid invoiceId)
+    {
+        await using var tx = await work.BeginAsync();
+        var invoice = await reports.LockInvoiceAsync(invoiceId);
+        if (invoice == null || invoice.Status != "PENDING" || OrderCodeOf(invoice) is not long code) return false;
+        var payment = await payos.GetPaymentAsync(code);
+        if (payment.Status != "PAID") return false;
+        if (payment.Amount != (long)invoice.TotalFeeAmount)
+        {
+            logger.LogWarning("PayOS ghi nhận sai số tiền cho hóa đơn {InvoiceId}: {Amount}", invoice.Id, payment.Amount);
+            return false; // giữ PENDING để Admin đối soát thủ công
+        }
+        Apply(invoice, payment); await work.SaveAsync(); await tx.CommitAsync();
+        return true;
+    }
+
     public async Task<bool> HandleWebhookAsync(JsonElement body)
     {
         if (!body.TryGetProperty("data", out var data) || !body.TryGetProperty("signature", out var sig) || sig.ValueKind != JsonValueKind.String) return false;

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import ProofUpload from './components/ProofUpload';
 import { useDepotQuery, useDepotMutation, money, date } from './depotApi';
 import { Page, Cards, QueryState, GridTable, Pager, PeriodFilter, Dialog, MutationError, inputClass, buttonClass, cellClass } from './components/DepotUI';
@@ -36,6 +37,10 @@ export default function PlatformFees(){
  const [params]=useSearchParams(); const returned=params.get('payos')==='return'?params.get('orderCode'):null;
  const [period,setPeriod]=useState({}),[tab,setTab]=useState(returned?'invoices':'fees'),[page,setPage]=useState(1),[invoice,setInvoice]=useState(null),[simulatedInvoice,setSimulatedInvoice]=useState(null);
  const summary=useDepotQuery('reports/fees/summary',period); const query=useDepotQuery(`reports/${tab}`,{...period,page});
+ const client=useQueryClient();
+ // Có hóa đơn đã tạo link PayOS mà chưa thanh toán: tải lại mỗi 10 giây vì backend tự đối soát với PayOS.
+ const waitingPayos=tab==='invoices'&&query.data?.items?.some((i)=>i.status==='UNPAID'&&orderCodeOf(i.paymentProofUrl));
+ useEffect(()=>{if(!waitingPayos)return undefined;const t=setInterval(()=>client.invalidateQueries({queryKey:['depot']}),10000);return ()=>clearInterval(t);},[waitingPayos,client]);
  return <Page title="Phí nền tảng" description="Phí từ đơn thu gom và trạng thái hóa đơn do nền tảng phát hành."><PeriodFilter period={period} setPeriod={(p)=>{setPeriod(p);setPage(1);}} showGroupBy={false}/>
   <p className="text-sm text-d-on-surface-variant">Khoảng ngày chỉ lọc phí của kho đang chọn. Hóa đơn và hai số dư hóa đơn bên dưới hiển thị tất cả kỳ, trên mọi kho của chủ tài khoản.</p>
   <QueryState query={summary}><Cards items={[

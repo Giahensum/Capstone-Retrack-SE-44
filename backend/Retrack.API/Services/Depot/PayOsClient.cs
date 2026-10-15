@@ -15,6 +15,7 @@ public sealed class PayOsOptions
     public string ChecksumKey { get; set; } = "";
     public string ReturnUrl { get; set; } = "";
     public string CancelUrl { get; set; } = "";
+    public int PollSeconds { get; set; } = 15;
     public string BaseUrl { get; set; } = "https://api-merchant.payos.vn";
     public bool IsConfigured => !string.IsNullOrWhiteSpace(ClientId) && !string.IsNullOrWhiteSpace(ApiKey) && !string.IsNullOrWhiteSpace(ChecksumKey);
 }
