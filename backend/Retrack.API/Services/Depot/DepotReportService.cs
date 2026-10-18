@@ -9,6 +9,19 @@ namespace Retrack.API.Services.Depot;
 
 public sealed class DepotReportService(IDepotUnitOfWork work, IDepotReportRepository reports, IDepotStaffRepository staffRepository, IDepotService scope, IInventoryService inventory) : IDepotReportService
 {
+    public async Task<CostReportDto> CostReportAsync(Guid ownerId, Guid depotId, PeriodQuery period)
+    {
+        await scope.RequireOwnerAsync(ownerId, depotId);
+        var (start, end) = period.Bounds();
+        var channels = await reports.CostChannelsAsync(depotId, start, end);
+        return new(channels.Sum(x => x.TransactionCount), channels.Sum(x => x.IncompleteCount),
+            channels.All(x => x.GrossRevenue.HasValue) ? channels.Sum(x => x.GrossRevenue) : null,
+            channels.All(x => x.PlatformFees.HasValue) ? channels.Sum(x => x.PlatformFees) : null,
+            channels.All(x => x.NetRevenue.HasValue) ? channels.Sum(x => x.NetRevenue) : null,
+            channels.Sum(x => x.KnownCostOfGoods), channels.Sum(x => x.SellingCosts),
+            channels.All(x => x.PretaxDifference.HasValue) ? channels.Sum(x => x.PretaxDifference) : null, channels,
+            "Theo ngày quyết toán Factory hoặc ngày ghi bán đồ cũ (giờ Việt Nam). Giá vốn đã phân bổ gồm chi phí đầu vào được duyệt; chi phí bán là các khoản đã ghi gắn với giao dịch, kể cả bổ sung sau kỳ. Không trừ lại phí đã nằm trong tiền ròng. Không gồm chi phí chưa nhập, thuế thu nhập hay hàng trả chưa đối soát; pickup cũ chỉ có giá mua. Đây là chênh lệch quản trị trước thuế, chưa xác nhận tiền về ngân hàng. Lô cũ thiếu nguồn giá vốn giữ trạng thái chưa đủ dữ liệu.");
+    }
     public async Task<RevenueReportDto> RevenueAsync(Guid ownerId, Guid depotId, PeriodQuery period)
     {
         await scope.RequireOwnerAsync(ownerId, depotId);

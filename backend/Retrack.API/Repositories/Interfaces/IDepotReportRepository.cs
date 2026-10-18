@@ -9,6 +9,7 @@ public record DepotDashboardCounts(int NewRequests, int OpenBatches, int Awaitin
 
 public interface IDepotReportRepository
 {
+    Task<List<CostChannelDto>> CostChannelsAsync(Guid depotId, DateTime start, DateTime end);
     Task<(List<DepotDailyAmount> Revenue, List<DepotDailyAmount> Costs)> DailyAmountsAsync(Guid depotId, DateTime start, DateTime end);
     Task<DepotDashboardCounts> DashboardCountsAsync(Guid depotId, DateTime day);
     Task<PagedResult<StaffPerformanceDto>> PerformanceAsync(Guid depotId, DateTime start, DateTime end, DepotQuery query);
