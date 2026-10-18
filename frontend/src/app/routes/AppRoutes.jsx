@@ -16,12 +16,12 @@ const SellerDashboard = lazy(() => import('@/features/seller/pages/SellerDashboa
 // Giao diện Chủ kho vựa — Ngô Sỹ Giá (TV2)
 import DepotLayout from '@/components/layout/DepotLayout';
 import MyDepotDashboard from '@/features/depot/Dashboard';
-import DepotInventory from '@/features/depot/Inventory';
-import DepotBatches from '@/features/depot/Batches';
+const DepotInventory = lazy(() => import('@/features/depot/Inventory'));
+const DepotBatches = lazy(() => import('@/features/depot/Batches'));
 import DepotPartners from '@/features/depot/Partners';
 import DepotPayments from '@/features/depot/Payments';
 import DepotPlatformFees from '@/features/depot/PlatformFees';
-import DepotRevenueReport from '@/features/depot/RevenueReport';
+const DepotRevenueReport = lazy(() => import('@/features/depot/RevenueReport'));
 import DepotStaff from '@/features/depot/Staff';
 import DepotStaffPerformance from '@/features/depot/StaffPerformance';
 import DepotProfile from '@/features/depot/Profile';
