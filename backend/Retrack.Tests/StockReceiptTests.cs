@@ -23,6 +23,7 @@ public sealed class StockReceiptTests : IAsyncLifetime
     private static DepotStockService Stock(AppDbContext db) => new(new DepotStockRepository(db), new DepotBatchRepository(db), new DepotUnitOfWork(db), Scope(db));
     private static InventoryService Inventory(AppDbContext db) => new(new DepotInventoryRepository(db), Scope(db));
     private static BatchService Batches(AppDbContext db) => new(new DepotBatchRepository(db), new DepotUnitOfWork(db), Scope(db), Inventory(db), new NoImages(), Stock(db));
+    private static DepotReportService Reports(AppDbContext db) => new(new DepotUnitOfWork(db), new DepotReportRepository(db), new DepotStaffRepository(db), Scope(db), Inventory(db));
     public async Task InitializeAsync()
     {
         await using var db = Open(); await TestDatabase.MigrateAsync(db);
@@ -52,6 +53,102 @@ public sealed class StockReceiptTests : IAsyncLifetime
     {
         var draft = await Stock(db).CreateAsync(owner, depot, input);
         return await Stock(db).ReviewAsync(owner, depot, draft.Id, "POSTED");
+    }
+    [Fact]
+    public async Task Cost_report_matches_settled_fifo_and_partial_reuse_sale_without_double_subtracting_fees()
+    {
+        await using var db = Open(); await Posted(db, Input(50)); await Posted(db, Input(50));
+        var chairs = await Posted(db, Input(10, 300000, true));
+        await Stock(db).SellAsync(owner, depot, chairs.Lines.Single().Id, new(Guid.NewGuid(), 3, 450000, 50000, "Đã giao"));
+        var batch = await Batches(db).CreateAsync(owner, depot, new() { OperationId = Guid.NewGuid(), MaterialType = "IRON", WeightKg = 100 });
+        await Stock(db).AddBatchExpenseAsync(owner, depot, batch.Id, new(Guid.NewGuid(), "Xe", 50000));
+        await Stock(db).AddBatchExpenseAsync(owner, depot, batch.Id, new(Guid.NewGuid(), "Bốc xếp", 50000));
+        var entity = await db.InventoryBatches.SingleAsync(x => x.Id == batch.Id);
+        entity.Status = "PAID"; entity.GrossAmount = 1000000; entity.PlatformFeeAmount = 100000; entity.NetAmount = 900000; entity.SettledAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+        var report = await Reports(db).CostReportAsync(owner, depot, new());
+        Assert.Equal(2, report.TransactionCount); Assert.Equal(0, report.IncompleteCount);
+        Assert.Equal(2250000, report.NetRevenue); Assert.Equal(1400000, report.KnownCostOfGoods);
+        Assert.Equal(150000, report.SellingCosts); Assert.Equal(700000, report.PretaxDifference);
+        Assert.Equal(100000, report.PlatformFees);
+        Assert.Equal(300000, report.Channels.Single(x => x.Channel == "FACTORY").PretaxDifference);
+        Assert.Equal(400000, report.Channels.Single(x => x.Channel == "REUSABLE").PretaxDifference);
+    }
+    [Fact]
+    public async Task Cost_report_uses_one_settlement_per_batch_and_never_includes_another_owned_depot()
+    {
+        await using var db = Open(); var factoryUser = Guid.NewGuid(); var factoryId = Guid.NewGuid(); var otherDepot = Guid.NewGuid();
+        db.Users.Add(new User { Id = factoryUser, Role = "FACTORY", Email = $"cost-{factoryUser}@test.invalid" });
+        db.Factories.Add(new Factory { Id = factoryId, OwnerId = factoryUser, Name = "Nhà máy kiểm thử", Address = "Đà Nẵng" });
+        db.Depots.Add(new Depot { Id = otherDepot, OwnerId = owner, Name = "Kho khác cùng chủ", Address = "Đà Nẵng" });
+        await db.SaveChangesAsync();
+        try
+        {
+            await Posted(db, Input(100));
+            var batch = await Batches(db).CreateAsync(owner, depot, new() { OperationId = Guid.NewGuid(), MaterialType = "IRON", WeightKg = 100 });
+            var settled = await db.InventoryBatches.SingleAsync(x => x.Id == batch.Id);
+            settled.Status = "PAID"; settled.SettledAt = DateTime.UtcNow; settled.NetAmount = 900000;
+            var legacy = new InventoryBatch { DepotId = depot, Status = "VERIFIED", MaterialType = "IRON", DeclaredWeightKg = 100 };
+            db.InventoryBatches.AddRange(legacy, new InventoryBatch { DepotId = otherDepot, Status = "PAID", MaterialType = "IRON",
+                DeclaredWeightKg = 100, SettledAt = DateTime.UtcNow, NetAmount = 9999999 });
+            db.BatchQualityChecks.AddRange(new BatchQualityCheck { BatchId = settled.Id, FactoryId = factoryId, IsAccepted = true,
+                PaymentProofUrl = "https://example.test/paid", NetAmount = 999000 },
+                new BatchQualityCheck { Batch = legacy, FactoryId = factoryId, IsAccepted = true,
+                PaymentProofUrl = "https://example.test/legacy", NetAmount = 700000 });
+            await db.SaveChangesAsync();
+            var report = await Reports(db).CostReportAsync(owner, depot, new());
+            Assert.Equal(2, report.TransactionCount); Assert.Equal(1600000, report.NetRevenue);
+            Assert.Equal(1, report.IncompleteCount); Assert.Equal(500000, report.KnownCostOfGoods); Assert.Null(report.PretaxDifference);
+        }
+        finally
+        {
+            await db.BatchQualityChecks.Where(x => x.FactoryId == factoryId).ExecuteDeleteAsync();
+            await db.InventoryBatches.Where(x => x.DepotId == otherDepot).ExecuteDeleteAsync();
+            await db.Depots.Where(x => x.Id == otherDepot).ExecuteDeleteAsync();
+            await db.Factories.Where(x => x.Id == factoryId).ExecuteDeleteAsync();
+            await db.Users.Where(x => x.Id == factoryUser).ExecuteDeleteAsync();
+        }
+    }
+    [Fact]
+    public async Task Cost_report_keeps_incomplete_settlement_unknown_instead_of_zero_revenue()
+    {
+        await using var db = Open(); await Posted(db, Input(100));
+        var batch = await Batches(db).CreateAsync(owner, depot, new() { OperationId = Guid.NewGuid(), MaterialType = "IRON", WeightKg = 100 });
+        var entity = await db.InventoryBatches.SingleAsync(x => x.Id == batch.Id);
+        entity.Status = "PAID"; entity.SettledAt = DateTime.UtcNow; entity.NetAmount = null;
+        await db.SaveChangesAsync();
+        var report = await Reports(db).CostReportAsync(owner, depot, new());
+        Assert.Equal(1, report.TransactionCount); Assert.Equal(1, report.IncompleteCount);
+        Assert.Equal(500000, report.KnownCostOfGoods); Assert.Null(report.NetRevenue); Assert.Null(report.PretaxDifference);
+    }
+    [Fact]
+    public async Task Cost_report_leaves_legacy_cost_unknown_and_does_not_count_open_or_cancelled_batches()
+    {
+        await using var db = Open();
+        db.InventoryBatches.AddRange(new InventoryBatch { DepotId = depot, MaterialType = "IRON", DeclaredWeightKg = 100,
+            Status = "PAID", GrossAmount = 1000000, PlatformFeeAmount = 100000, NetAmount = 900000, SettledAt = DateTime.UtcNow },
+            new InventoryBatch { DepotId = depot, MaterialType = "IRON", DeclaredWeightKg = 100, Status = "MARKETPLACE" },
+            new InventoryBatch { DepotId = depot, MaterialType = "IRON", DeclaredWeightKg = 100, Status = "CANCELLED", NetAmount = 9999999, SettledAt = DateTime.UtcNow });
+        await db.SaveChangesAsync();
+        var report = await Reports(db).CostReportAsync(owner, depot, new());
+        Assert.Equal(1, report.TransactionCount); Assert.Equal(1, report.IncompleteCount);
+        Assert.Equal(900000, report.NetRevenue); Assert.Null(report.PretaxDifference);
+        Assert.Null(report.Channels.Single(x => x.Channel == "FACTORY").PretaxDifference);
+        await Assert.ThrowsAsync<DepotForbiddenException>(() => Reports(db).CostReportAsync(employee, depot, new()));
+        await Assert.ThrowsAsync<DepotForbiddenException>(() => Reports(db).CostReportAsync(Guid.NewGuid(), depot, new()));
+    }
+    [Fact]
+    public async Task Cost_report_filters_by_vietnam_day_and_does_not_convert_unknown_reuse_cost_to_zero()
+    {
+        await using var db = Open(); var input = Input(10, 0, true); input.CostsConfirmed = false;
+        var receipt = await Posted(db, input);
+        var sale = await Stock(db).SellAsync(owner, depot, receipt.Lines.Single().Id, new(Guid.NewGuid(), 1, 450000, 50000, "Đã giao"));
+        var entity = await db.DepotReuseSales.SingleAsync(x => x.Id == sale.Id);
+        entity.CreatedAt = new DateTime(2026, 10, 17, 17, 0, 0, DateTimeKind.Utc); await db.SaveChangesAsync();
+        var report = await Reports(db).CostReportAsync(owner, depot, new() { From = new(2026, 10, 18), To = new(2026, 10, 18) });
+        Assert.Equal(1, report.TransactionCount); Assert.Equal(450000, report.NetRevenue); Assert.Equal(1, report.IncompleteCount); Assert.Null(report.PretaxDifference);
+        var previous = await Reports(db).CostReportAsync(owner, depot, new() { From = new(2026, 10, 17), To = new(2026, 10, 17) });
+        Assert.Equal(0, previous.TransactionCount);
     }
     [Fact]
     public async Task Draft_does_not_increase_stock_and_post_retry_cannot_duplicate_stock()
