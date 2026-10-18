@@ -1,10 +1,590 @@
+-- ============================================================
+-- RETRACK — KHỞI TẠO TOÀN HỆ THỐNG VÀ DỮ LIỆU DEMO
+-- Máy mới: tạo database rỗng bằng pgAdmin, mở Query Tool của đúng DB,
+-- mở file này và nhấn F5 để chạy TOÀN BỘ, không cần lệnh terminal.
+-- Mặc định có seed demo các role tại Đà Nẵng. Không dùng cho production.
+-- Muốn chỉ tạo cấu trúc: đổi retrack.seed_demo từ 'on' thành 'off' bên dưới.
+-- Không thay kết nối/mật khẩu PostgreSQL; cấu hình backend bằng .env local.
+-- File khởi tạo không thay thế quy trình nâng cấp database có dữ liệu thật.
+-- Nếu lỗi: toàn bộ transaction chưa được ghi; chạy ROLLBACK; trước khi thử lại.
+-- ============================================================
+
+BEGIN;
+SET LOCAL retrack.seed_demo = 'on';
+
+-- RETRACK_SCHEMA_BEGIN
+-- UUID dùng hàm lõi của PostgreSQL, không phụ thuộc extension hoặc schema cài đặt.
+
+-- ==========================================
+-- MODULE 1: HỆ THỐNG & TÀI KHOẢN (ROLES)
+-- ==========================================
+
+-- Bảng cấu hình hệ thống (Admin quản lý phí)
+CREATE TABLE IF NOT EXISTS system_configs (
+    config_key      VARCHAR(50)  PRIMARY KEY,
+    config_value    TEXT         NOT NULL,
+    description     TEXT,
+    updated_at      TIMESTAMPTZ  DEFAULT NOW()
+);
+ALTER TABLE system_configs ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
+ALTER TABLE system_configs ALTER COLUMN updated_at SET DEFAULT NOW();
+UPDATE system_configs SET updated_at = NOW() WHERE updated_at IS NULL;
+
+-- Insert mặc định
+INSERT INTO system_configs (config_key, config_value, description)
+VALUES ('PLATFORM_FEE_PERCENTAGE', '5.00', 'Phí nền tảng mặc định 5%')
+ON CONFLICT (config_key) DO NOTHING;
+UPDATE system_configs SET config_value = '5.00', description = 'Phí nền tảng mặc định 5%'
+WHERE config_key = 'PLATFORM_FEE_PERCENTAGE' AND config_value = '1.00';
+
+-- Bảng người dùng
+CREATE TABLE IF NOT EXISTS users (
+    id              UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    email           VARCHAR(255) UNIQUE NOT NULL,
+    password_hash   TEXT         NOT NULL,
+    role            VARCHAR(50)  NOT NULL,   -- SELLER, DEPOT_OWNER, DEPOT_EMPLOYEE, DRIVER, FACTORY, ADMIN
+    full_name       VARCHAR(255) NOT NULL,
+    phone           VARCHAR(20)  NOT NULL,
+    bank_name       VARCHAR(255),
+    bank_account_number VARCHAR(100),
+    bank_account_name VARCHAR(255),
+    bank_qr_url     VARCHAR(2048),
+    avatar_url      VARCHAR(2048),
+    is_active       BOOLEAN      DEFAULT TRUE,
+    created_at      TIMESTAMPTZ  DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ  DEFAULT NOW()
+);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS bank_name VARCHAR(255);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS bank_account_number VARCHAR(100);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS bank_account_name VARCHAR(255);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS bank_qr_url VARCHAR(2048);
+
+-- Bảng kho/depot
+CREATE TABLE IF NOT EXISTS depots (
+    id              UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    owner_id        UUID         NOT NULL REFERENCES users(id),
+    name            VARCHAR(255) NOT NULL,
+    address         TEXT         NOT NULL,
+    latitude        DECIMAL(10, 7),
+    longitude       DECIMAL(10, 7),
+    rating          DECIMAL(3, 2) DEFAULT 0.0,
+    contact_phone   VARCHAR(20),
+    tax_code        TEXT,
+    description     TEXT,
+    created_at      TIMESTAMPTZ  DEFAULT NOW()
+);
+ALTER TABLE depots ADD COLUMN IF NOT EXISTS contact_phone VARCHAR(20);
+ALTER TABLE depots ADD COLUMN IF NOT EXISTS tax_code TEXT;
+ALTER TABLE depots ADD COLUMN IF NOT EXISTS description TEXT;
+
+-- Bảng nhà máy
+CREATE TABLE IF NOT EXISTS factories (
+    id              UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    owner_id        UUID         NOT NULL REFERENCES users(id),
+    name            VARCHAR(255) NOT NULL,
+    address         TEXT         NOT NULL,
+    latitude        DECIMAL(10, 7),
+    longitude       DECIMAL(10, 7),
+    rating          DECIMAL(3, 2) DEFAULT 0.0,
+    tax_code        VARCHAR(50),
+    industrial_zone VARCHAR(200),
+    contact_phone   VARCHAR(30),
+    business_license_url TEXT,
+    environmental_license_url TEXT,
+    capacity_kg_per_month DECIMAL(18, 2) NOT NULL DEFAULT 0,
+    minimum_purity_percent DECIMAL(5, 2) NOT NULL DEFAULT 0,
+    accepted_materials TEXT NOT NULL DEFAULT 'PET',
+    created_at      TIMESTAMPTZ  DEFAULT NOW()
+);
+
+-- Nhân viên & Tài xế thuộc về 1 Depot
+CREATE TABLE IF NOT EXISTS depot_staffs (
+    id              UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    depot_id        UUID         NOT NULL REFERENCES depots(id),
+    user_id         UUID         NOT NULL REFERENCES users(id),
+    staff_type      VARCHAR(50)  NOT NULL,   -- DEPOT_EMPLOYEE, DRIVER
+    is_active       BOOLEAN      DEFAULT TRUE
+);
+
+-- ==========================================
+-- MODULE 2: GIAI ĐOẠN 1 - THU GOM PHẾ LIỆU & PHÍ MẶC ĐỊNH 5%
+-- ==========================================
+
+-- Yêu cầu thu gom của Seller
+CREATE TABLE IF NOT EXISTS pickup_requests (
+    id                       UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    seller_id                UUID         NOT NULL REFERENCES users(id),
+    target_depot_id          UUID         REFERENCES depots(id),
+    accepted_collector_id    UUID         REFERENCES users(id),
+    description              TEXT,
+    request_image_url        TEXT,
+    address                  TEXT         NOT NULL,
+    latitude                 DECIMAL(10, 7),
+    longitude                DECIMAL(10, 7),
+    preferred_datetime       TIMESTAMPTZ,
+    checkin_image_url        TEXT,
+    -- Hạch toán tài chính (mức phí mặc định 5%, lưu riêng theo từng giao dịch)
+    gross_amount             DECIMAL(18, 2) DEFAULT 0,
+    platform_fee_percentage  DECIMAL(5, 2)  DEFAULT 0,
+    platform_fee_amount      DECIMAL(18, 2) DEFAULT 0,
+    net_amount               DECIMAL(18, 2) DEFAULT 0,
+    payment_proof_url        TEXT,
+    status                   VARCHAR(50)  NOT NULL DEFAULT 'PENDING',
+    -- PENDING, SCHEDULED, WEIGHED, SELLER_CONFIRMED, AWAITING_PAYMENT, PAYMENT_SENT, DONE
+    created_at               TIMESTAMPTZ  DEFAULT NOW(),
+    updated_at               TIMESTAMPTZ  DEFAULT NOW()
+);
+
+-- Bằng chứng UC-51 và phiên bản bản nháp UC-52/53.
+CREATE TABLE IF NOT EXISTS pickup_checkins (
+    pickup_request_id UUID PRIMARY KEY REFERENCES pickup_requests(id) ON DELETE CASCADE,
+    employee_id UUID NOT NULL REFERENCES users(id),
+    latitude DOUBLE PRECISION NOT NULL CHECK (latitude BETWEEN -90 AND 90),
+    longitude DOUBLE PRECISION NOT NULL CHECK (longitude BETWEEN -180 AND 180),
+    accuracy_meters DOUBLE PRECISION NOT NULL CHECK (accuracy_meters BETWEEN 0 AND 50),
+    distance_meters DOUBLE PRECISION NOT NULL CHECK (distance_meters BETWEEN 0 AND 200),
+    location_recorded_at TIMESTAMPTZ NOT NULL,
+    photo_taken_at TIMESTAMPTZ NOT NULL,
+    checked_in_at TIMESTAMPTZ NOT NULL,
+    image_url TEXT NOT NULL,
+    revision INTEGER NOT NULL DEFAULT 0 CHECK (revision >= 0)
+);
+
+-- Chi tiết các loại phế liệu (NV cân và nhập)
+CREATE TABLE IF NOT EXISTS pickup_request_items (
+    id                  UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    pickup_request_id   UUID         NOT NULL REFERENCES pickup_requests(id) ON DELETE CASCADE,
+    material_type       VARCHAR(100) NOT NULL,
+    weight_kg           DECIMAL(10, 2) NOT NULL,
+    price_per_kg        DECIMAL(18, 2) NOT NULL,
+    sub_total           DECIMAL(18, 2) NOT NULL
+);
+
+-- Đánh giá Seller dành cho Depot
+CREATE TABLE IF NOT EXISTS seller_depot_reviews (
+    id                  UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    pickup_request_id   UUID         NOT NULL REFERENCES pickup_requests(id),
+    depot_id            UUID         NOT NULL REFERENCES depots(id),
+    rating              INT          CHECK (rating >= 1 AND rating <= 5),
+    comment             TEXT,
+    created_at          TIMESTAMPTZ  DEFAULT NOW()
+);
+
+-- ==========================================
+-- MODULE 3: DEMAND BOARD & LÔ HÀNG (GIAI ĐOẠN 2)
+-- ==========================================
+
+-- Bảng nhu cầu nhà máy (Demand Board)
+CREATE TABLE IF NOT EXISTS factory_demands (
+    id                  UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    factory_id          UUID         NOT NULL REFERENCES factories(id),
+    material_type       VARCHAR(100) NOT NULL,
+    required_weight_kg  DECIMAL(18, 2) NOT NULL,
+    min_price_per_kg    DECIMAL(18, 2),
+    max_price_per_kg    DECIMAL(18, 2),
+    deadline            TIMESTAMPTZ  NOT NULL,
+    is_active           BOOLEAN      DEFAULT TRUE,
+    note                TEXT,
+    created_at          TIMESTAMPTZ  DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ  DEFAULT NOW()
+);
+
+-- Quan hệ đối tác Depot - Factory
+CREATE TABLE IF NOT EXISTS factory_depot_partnerships (
+    id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    depot_id    UUID        NOT NULL REFERENCES depots(id),
+    factory_id  UUID        NOT NULL REFERENCES factories(id),
+    status      VARCHAR(50) NOT NULL DEFAULT 'PENDING',   -- PENDING, APPROVED, BLOCKED
+    created_at  TIMESTAMPTZ DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ DEFAULT NOW(),
+    blocked_by_depot BOOLEAN NOT NULL DEFAULT FALSE,
+    blocked_by_factory BOOLEAN NOT NULL DEFAULT FALSE,
+    CONSTRAINT uq_factory_depot UNIQUE (depot_id, factory_id)
+);
+ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS blocked_by_depot BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS blocked_by_factory BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- Lô hàng tồn kho
+CREATE TABLE IF NOT EXISTS inventory_batches (
+    id                  UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    depot_id            UUID         NOT NULL REFERENCES depots(id),
+    target_factory_id   UUID         REFERENCES factories(id),
+    direct_offer_factory_id UUID     REFERENCES factories(id),
+    material_type       VARCHAR(100) NOT NULL,
+    declared_weight_kg  DECIMAL(18, 2) NOT NULL,
+    description         TEXT,
+    status              VARCHAR(50)  NOT NULL,
+    actual_weight_kg    DECIMAL(18, 2),
+    factory_received_at TIMESTAMPTZ,
+    factory_decided_at  TIMESTAMPTZ,
+    rejection_reason    TEXT,
+    agreed_price_per_kg DECIMAL(18, 2),
+    gross_amount        DECIMAL(18, 2),
+    platform_fee_amount DECIMAL(18, 2),
+    net_amount          DECIMAL(18, 2),
+    payment_reference   VARCHAR(200),
+    settled_at          TIMESTAMPTZ,
+    code                VARCHAR(40),
+    image_urls          TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+    -- MARKETPLACE, PENDING_APPROVAL, TRANSPORT_READY, COMPLETED
+    created_at          TIMESTAMPTZ  DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ  DEFAULT NOW()
+);
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS code VARCHAR(40);
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS image_urls TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];
+CREATE SEQUENCE IF NOT EXISTS depot_batch_number START WITH 1 INCREMENT BY 1 NO MINVALUE NO MAXVALUE NO CYCLE;
+CREATE UNIQUE INDEX IF NOT EXISTS ix_inventory_batches_code ON inventory_batches(code);
+
+-- ==========================================
+-- MODULE 4: VẬN CHUYỂN & QC & QUYẾT TOÁN CÓ PHÍ (GIAI ĐOẠN 3)
+-- ==========================================
+
+-- Công việc vận chuyển
+CREATE TABLE IF NOT EXISTS transport_jobs (
+    id                          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    batch_id                    UUID        NOT NULL UNIQUE REFERENCES inventory_batches(id),
+    driver_id                   UUID        REFERENCES users(id),
+    status                      VARCHAR(50) NOT NULL DEFAULT 'PENDING',  -- PENDING, IN_TRANSIT, DELIVERED
+    checkin_depot_image_url     TEXT,
+    checkout_factory_image_url  TEXT,
+    created_at                  TIMESTAMPTZ DEFAULT NOW(),
+    updated_at                  TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Bảng giá tham khảo. Giá trong ứng dụng phải được Admin cập nhật kèm nguồn.
+CREATE TABLE IF NOT EXISTS market_prices (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    material_type   VARCHAR(100) NOT NULL,
+    price_per_kg    DECIMAL(18, 2) NOT NULL CHECK (price_per_kg > 0),
+    effective_date  TIMESTAMPTZ NOT NULL,
+    source          TEXT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Kiểm tra chất lượng tại nhà máy
+CREATE TABLE IF NOT EXISTS batch_quality_checks (
+    id                      UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    batch_id                UUID         NOT NULL UNIQUE REFERENCES inventory_batches(id),
+    factory_id              UUID         NOT NULL REFERENCES factories(id),
+    actual_weight_kg        DECIMAL(18, 2) NOT NULL,
+    grade                   VARCHAR(10)  NOT NULL,
+    agreed_price_per_kg     DECIMAL(18, 2) NOT NULL,
+    -- Hạch toán tài chính (mức phí mặc định 5%, lưu riêng theo từng giao dịch)
+    gross_amount            DECIMAL(18, 2) NOT NULL,
+    platform_fee_percentage DECIMAL(5, 2)  DEFAULT 0,
+    platform_fee_amount     DECIMAL(18, 2) DEFAULT 0,
+    net_amount              DECIMAL(18, 2) NOT NULL,
+    payment_proof_url       TEXT,
+    is_accepted             BOOLEAN      NOT NULL,
+    gross_weight_kg         DECIMAL(18, 2),
+    tare_weight_kg          DECIMAL(18, 2),
+    difference_percentage  DECIMAL(8, 2),
+    ticket_number           VARCHAR(100),
+    ticket_image_url        TEXT,
+    purity_percent          DECIMAL(5, 2),
+    moisture_percent        DECIMAL(5, 2),
+    contamination_percent   DECIMAL(5, 2),
+    quality_note            TEXT,
+    resolution              VARCHAR(20),
+    invoice_number          VARCHAR(100),
+    invoice_file_url        TEXT,
+    invoice_status          VARCHAR(30),
+    created_at              TIMESTAMPTZ  DEFAULT NOW()
+);
+
+-- Factory đánh giá Depot
+CREATE TABLE IF NOT EXISTS factory_depot_reviews (
+    id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    batch_id    UUID        NOT NULL REFERENCES inventory_batches(id),
+    factory_id  UUID        NOT NULL REFERENCES factories(id),
+    depot_id    UUID        NOT NULL REFERENCES depots(id),
+    rating      INT         CHECK (rating >= 1 AND rating <= 5),
+    comment     TEXT,
+    created_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ==========================================
+-- MODULE 5: REVENUE - DOANH THU NỀN TẢNG
+-- ==========================================
+
+-- Bảng lưu vết doanh thu của nền tảng để hiển thị cho Admin
+CREATE TABLE IF NOT EXISTS platform_transactions (
+    id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    source_type VARCHAR(50) NOT NULL,  -- 'PICKUP_REQUEST' hoặc 'BATCH_ORDER'
+    source_id   UUID        NOT NULL,  -- ID của pickup_requests hoặc inventory_batches
+    fee_amount  DECIMAL(18, 2) NOT NULL,
+    payer_id    UUID,                  -- Người trả phí, nếu giao dịch cũ có thông tin này
+    transaction_amount DECIMAL(18, 2), -- Giá trị giao dịch gốc, nếu có
+    fee_percentage DECIMAL(5, 2),      -- Tỷ lệ phí đã áp dụng, nếu có
+    description TEXT,
+    created_at  TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE platform_transactions ADD COLUMN IF NOT EXISTS payer_id UUID;
+ALTER TABLE platform_transactions ADD COLUMN IF NOT EXISTS transaction_amount DECIMAL(18, 2);
+ALTER TABLE platform_transactions ADD COLUMN IF NOT EXISTS fee_percentage DECIMAL(5, 2);
+
+-- ==========================================
+-- MODULE 6: ADMIN - AUDIT LOG, HÓA ĐƠN PHÍ, THÔNG BÁO
+-- ==========================================
+
+-- Nhật ký hành động của Admin trên hệ thống (tạo/sửa/xóa user, giá tham khảo, cấu hình phí, hóa đơn...)
+CREATE TABLE IF NOT EXISTS audit_logs (
+    id          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id     UUID         REFERENCES users(id) ON DELETE SET NULL,  -- NULL nếu user bị xóa, log vẫn giữ lại
+    action      VARCHAR(100) NOT NULL,   -- CREATE, UPDATE, DELETE, ACTIVATE, DEACTIVATE, MARK_PAID, GENERATE...
+    entity_name VARCHAR(100) NOT NULL,   -- User, MarketPrice, SystemConfig, PlatformInvoice...
+    entity_id   UUID,
+    old_data    TEXT,   -- JSON snapshot trước khi đổi
+    new_data    TEXT,   -- JSON snapshot sau khi đổi
+    created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+-- Thông báo trong hệ thống (ví dụ: nhắc thanh toán hóa đơn phí nền tảng)
+CREATE TABLE IF NOT EXISTS notifications (
+    id          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id     UUID         NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    title       VARCHAR(255) NOT NULL,
+    message     TEXT,
+    is_read     BOOLEAN      NOT NULL DEFAULT FALSE,
+    created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+-- Hóa đơn phí nền tảng hàng tháng, gộp theo từng Depot Owner / Factory có phát sinh giao dịch
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS transport_job_id UUID;
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS pickup_request_id UUID;
+CREATE INDEX IF NOT EXISTS ix_notifications_user_created ON notifications(user_id, created_at DESC, id);
+
+CREATE TABLE IF NOT EXISTS platform_invoices (
+    id               UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    payer_id         UUID         NOT NULL REFERENCES users(id),
+    period_year      INT          NOT NULL,
+    period_month     INT          NOT NULL,
+    total_fee_amount DECIMAL(18, 2) NOT NULL,
+    status           VARCHAR(20)  NOT NULL DEFAULT 'PENDING',  -- PENDING, PAID
+    paid_at          TIMESTAMPTZ,
+    payment_proof_url TEXT,
+    submitted_at     TIMESTAMPTZ,
+    created_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_platform_invoice_period UNIQUE (payer_id, period_year, period_month)
+);
+ALTER TABLE platform_invoices ADD COLUMN IF NOT EXISTS payment_proof_url TEXT;
+ALTER TABLE platform_invoices ADD COLUMN IF NOT EXISTS submitted_at TIMESTAMPTZ;
+
+-- ==========================================
+-- FUNCTIONS & TRIGGERS (updated_at tự động)
+-- ==========================================
+
+-- Function dùng chung cho trigger updated_at
+CREATE OR REPLACE FUNCTION set_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Trigger cho system_configs
+DROP TRIGGER IF EXISTS trg_system_configs_upd ON system_configs;
+CREATE TRIGGER trg_system_configs_upd
+    BEFORE UPDATE ON system_configs
+    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- Trigger cho users
+DROP TRIGGER IF EXISTS trg_users_upd ON users;
+CREATE TRIGGER trg_users_upd
+    BEFORE UPDATE ON users
+    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- Trigger cho pickup_requests
+DROP TRIGGER IF EXISTS trg_pickup_requests_upd ON pickup_requests;
+CREATE TRIGGER trg_pickup_requests_upd
+    BEFORE UPDATE ON pickup_requests
+    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- Trigger cho inventory_batches
+DROP TRIGGER IF EXISTS trg_inventory_batches_upd ON inventory_batches;
+CREATE TRIGGER trg_inventory_batches_upd
+    BEFORE UPDATE ON inventory_batches
+    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- Trigger cho transport_jobs
+DROP TRIGGER IF EXISTS trg_transport_jobs_upd ON transport_jobs;
+CREATE TRIGGER trg_transport_jobs_upd
+    BEFORE UPDATE ON transport_jobs
+    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- Trigger cho factory_depot_partnerships
+DROP TRIGGER IF EXISTS trg_partnerships_upd ON factory_depot_partnerships;
+CREATE TRIGGER trg_partnerships_upd
+    BEFORE UPDATE ON factory_depot_partnerships
+    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- ==========================================
+-- INDEX GỢI Ý (Performance)
+-- ==========================================
+CREATE INDEX IF NOT EXISTS idx_users_email     ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_role      ON users(role);
+CREATE INDEX IF NOT EXISTS idx_pr_seller       ON pickup_requests(seller_id);
+CREATE INDEX IF NOT EXISTS idx_pr_status       ON pickup_requests(status);
+CREATE INDEX IF NOT EXISTS idx_pr_depot        ON pickup_requests(target_depot_id);
+CREATE INDEX IF NOT EXISTS idx_ib_depot        ON inventory_batches(depot_id);
+CREATE INDEX IF NOT EXISTS idx_ib_status       ON inventory_batches(status);
+CREATE INDEX IF NOT EXISTS idx_tj_driver       ON transport_jobs(driver_id);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_platform_transactions_source ON platform_transactions(source_type, source_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_user     ON audit_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_entity   ON audit_logs(entity_name);
+CREATE INDEX IF NOT EXISTS idx_notifications_user  ON notifications(user_id);
+CREATE INDEX IF NOT EXISTS idx_pi_payer            ON platform_invoices(payer_id);
+CREATE INDEX IF NOT EXISTS idx_pi_status           ON platform_invoices(status);
+
+-- Employee: lịch sử gửi kết quả cân và bàn giao chủ kho.
+CREATE TABLE IF NOT EXISTS employee_collection_events (
+    id UUID PRIMARY KEY,
+    pickup_request_id UUID NOT NULL REFERENCES pickup_requests(id) ON DELETE CASCADE,
+    employee_id UUID NOT NULL REFERENCES users(id),
+    kind VARCHAR(30) NOT NULL CHECK (kind IN ('SUBMITTED', 'HANDED_OVER', 'REOPENED')),
+    revision INTEGER NOT NULL CHECK (revision >= 0),
+    from_status VARCHAR(30) NOT NULL,
+    to_status VARCHAR(30) NOT NULL,
+    snapshot_json TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL,
+    UNIQUE (pickup_request_id, kind, revision)
+);
+CREATE INDEX IF NOT EXISTS ix_employee_collection_events_employee_time
+    ON employee_collection_events(employee_id, created_at DESC);
+
+-- UC-64..67: chạy trên DB phát triển trước khi chạy backend mới.
+-- Không tạo pickup, không thay đổi lô/chuyến hiện có. Có thể chạy lại.
+-- Không mở/đóng transaction giữa file: bên gọi có thể chạy toàn bộ schema trong một transaction.
+CREATE TABLE IF NOT EXISTS driver_delivery_events (
+    id UUID PRIMARY KEY,
+    job_id UUID NOT NULL REFERENCES transport_jobs(id) ON DELETE RESTRICT,
+    driver_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    operation_id UUID NOT NULL,
+    action VARCHAR(30) NOT NULL CHECK (action IN ('checkin','start','checkout','cancel','reject','incident')),
+    reason VARCHAR(1000),
+    image_url TEXT,
+    latitude DOUBLE PRECISION,
+    longitude DOUBLE PRECISION,
+    accuracy_meters DOUBLE PRECISION,
+    distance_meters DOUBLE PRECISION,
+    location_recorded_at TIMESTAMPTZ,
+    photo_taken_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL,
+    CONSTRAINT ck_driver_reason CHECK (action NOT IN ('cancel','reject','incident') OR
+        (reason IS NOT NULL AND char_length(btrim(reason)) BETWEEN 10 AND 1000)),
+    CONSTRAINT ck_driver_evidence CHECK (action NOT IN ('checkin','checkout') OR
+        (image_url IS NOT NULL AND latitude IS NOT NULL AND longitude IS NOT NULL
+         AND latitude BETWEEN -90 AND 90 AND longitude BETWEEN -180 AND 180
+         AND accuracy_meters IS NOT NULL AND accuracy_meters BETWEEN 0 AND 50
+         AND distance_meters IS NOT NULL AND distance_meters BETWEEN 0 AND 200
+         AND location_recorded_at IS NOT NULL AND photo_taken_at IS NOT NULL))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ix_driver_delivery_operation
+    ON driver_delivery_events(job_id, driver_id, operation_id);
+CREATE INDEX IF NOT EXISTS ix_driver_delivery_history
+    ON driver_delivery_events(job_id, driver_id, created_at DESC);
+
+-- ==========================================
+-- MODULE 8: XÁC THỰC OTP & QUÊN MẬT KHẨU
+-- ==========================================
+CREATE TABLE IF NOT EXISTS password_reset_otps (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    email       VARCHAR(255) NOT NULL,
+    otp_code    VARCHAR(10) NOT NULL,
+    expires_at  TIMESTAMPTZ NOT NULL,
+    is_used     BOOLEAN DEFAULT FALSE,
+    created_at  TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_password_reset_otps_email ON password_reset_otps(email);
+
+-- RETRACK_DEPOT_STOCK_V1
+-- Nhập kho đa nguồn bổ sung: giữ nguyên DONE cũ, không sao chép dữ liệu thu gom.
+-- Có thể chạy lại toàn bộ file trên DB hiện có; ứng dụng không tự migrate.
+CREATE TABLE IF NOT EXISTS depot_stock_receipts (
+    id UUID PRIMARY KEY,
+    depot_id UUID NOT NULL REFERENCES depots(id) ON DELETE RESTRICT,
+    created_by UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    source_type VARCHAR(40) NOT NULL CHECK (source_type IN ('EXTERNAL_PURCHASE','OPENING_BALANCE','BULK_PURCHASE')),
+    reference VARCHAR(255) NOT NULL CHECK (length(btrim(reference)) > 0),
+    status VARCHAR(20) NOT NULL DEFAULT 'DRAFT' CHECK (status IN ('DRAFT','SUBMITTED','POSTED','REJECTED','VOIDED')),
+    received_at TIMESTAMPTZ NOT NULL,
+    purchase_cost NUMERIC(18,0) NOT NULL CHECK (purchase_cost >= 0),
+    costs_confirmed BOOLEAN NOT NULL DEFAULT FALSE,
+    request_hash VARCHAR(64) NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    reviewed_at TIMESTAMPTZ,
+    reviewed_by UUID REFERENCES users(id) ON DELETE RESTRICT,
+    posted_at TIMESTAMPTZ,
+    posted_by UUID REFERENCES users(id) ON DELETE RESTRICT,
+    review_note VARCHAR(1000)
+);
+CREATE INDEX IF NOT EXISTS ix_depot_stock_receipts_scope ON depot_stock_receipts(depot_id, created_at DESC, id);
+ALTER TABLE depot_stock_receipts ADD COLUMN IF NOT EXISTS posted_at TIMESTAMPTZ;
+ALTER TABLE depot_stock_receipts ADD COLUMN IF NOT EXISTS posted_by UUID REFERENCES users(id) ON DELETE RESTRICT;
+ALTER TABLE depot_stock_receipts DROP CONSTRAINT IF EXISTS depot_stock_receipts_status_check;
+ALTER TABLE depot_stock_receipts ADD CONSTRAINT depot_stock_receipts_status_check
+    CHECK (status IN ('DRAFT','SUBMITTED','POSTED','REJECTED','VOIDED'));
+CREATE TABLE IF NOT EXISTS depot_stock_lines (
+    id UUID PRIMARY KEY,
+    receipt_id UUID NOT NULL REFERENCES depot_stock_receipts(id) ON DELETE CASCADE,
+    kind VARCHAR(20) NOT NULL CHECK (kind IN ('MATERIAL','REUSABLE')),
+    material_type VARCHAR(100), name VARCHAR(255) NOT NULL,
+    unit VARCHAR(10) NOT NULL,
+    quantity NUMERIC(18,3) NOT NULL CHECK (quantity > 0),
+    reference_price NUMERIC(18,0) NOT NULL CHECK (reference_price >= 0),
+    direct_cost NUMERIC(18,0) NOT NULL CHECK (direct_cost >= 0),
+    allocated_cost NUMERIC(18,0) CHECK (allocated_cost >= 0),
+    condition_note VARCHAR(1000), position INTEGER NOT NULL,
+    UNIQUE(receipt_id, position),
+    CHECK ((kind = 'MATERIAL' AND unit = 'kg' AND material_type IS NOT NULL) OR
+        (kind = 'REUSABLE' AND unit IN ('cái','bộ') AND material_type IS NULL AND quantity = trunc(quantity)))
+);
+CREATE TABLE IF NOT EXISTS depot_stock_expenses (
+    id UUID PRIMARY KEY, receipt_id UUID NOT NULL REFERENCES depot_stock_receipts(id) ON DELETE CASCADE,
+    category VARCHAR(30) NOT NULL, description VARCHAR(255) NOT NULL,
+    amount NUMERIC(18,0) NOT NULL CHECK (amount >= 0)
+);
+CREATE TABLE IF NOT EXISTS depot_reuse_sales (
+    id UUID PRIMARY KEY, line_id UUID NOT NULL REFERENCES depot_stock_lines(id) ON DELETE RESTRICT,
+    quantity NUMERIC(18,3) NOT NULL CHECK (quantity > 0 AND quantity = trunc(quantity)),
+    unit_price NUMERIC(18,0) NOT NULL CHECK (unit_price >= 0),
+    selling_cost NUMERIC(18,0) NOT NULL CHECK (selling_cost >= 0),
+    note VARCHAR(1000) NOT NULL, created_by UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS ix_depot_reuse_sales_line ON depot_reuse_sales(line_id);
+CREATE TABLE IF NOT EXISTS depot_batch_cost_sources (
+    id UUID PRIMARY KEY, batch_id UUID NOT NULL REFERENCES inventory_batches(id) ON DELETE CASCADE,
+    source_id UUID NOT NULL, source_type VARCHAR(20) NOT NULL CHECK (source_type IN ('PICKUP','RECEIPT')),
+    source_label VARCHAR(255) NOT NULL,
+    quantity NUMERIC(18,3) NOT NULL CHECK (quantity > 0), unit_cost NUMERIC(30,9) CHECK (unit_cost >= 0),
+    UNIQUE(batch_id, source_type, source_id)
+);
+CREATE INDEX IF NOT EXISTS ix_depot_batch_cost_source ON depot_batch_cost_sources(source_type, source_id);
+ALTER TABLE depot_batch_cost_sources ALTER COLUMN unit_cost TYPE NUMERIC(30,9);
+CREATE TABLE IF NOT EXISTS depot_batch_expenses (
+    id UUID PRIMARY KEY, batch_id UUID NOT NULL REFERENCES inventory_batches(id) ON DELETE CASCADE,
+    description VARCHAR(255) NOT NULL, amount NUMERIC(18,0) NOT NULL CHECK (amount >= 0),
+    created_by UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS ix_depot_batch_expenses_batch ON depot_batch_expenses(batch_id, created_at);
+
+-- RETRACK_SCHEMA_END
+
+-- RETRACK_SEED_BEGIN
+-- Dữ liệu mẫu nằm cùng file để thành viên chỉ cần chạy một lần.
+DO $retrack_seed$
+BEGIN
+IF current_setting('retrack.seed_demo', true) = 'on' THEN
 -- Dữ liệu demo dùng cục bộ/phát triển, không dùng production.
--- Máy mới: chạy db/bootstrap/01-retrack-system.sql trước; mở file này trong Query Tool pgAdmin, nhấn F5.
+-- Schema đã được dựng ở phần trên; seed chạy trong cùng transaction khi tùy chọn đang bật.
 -- Có thể chạy lại; các UUID fixture đã có sẽ được giữ nguyên.
 -- Tài khoản demo được tạo khi email/ID chưa tồn tại; mật khẩu chỉ lưu dạng BCrypt.
 -- Không dùng thông tin demo cho môi trường thật.
 
-BEGIN;
+
 
 -- Tài khoản đăng nhập cho Admin, bốn Seller, Depot Owner, hai Employee, hai Driver và ba Factory.
 INSERT INTO users (id, email, password_hash, role, full_name, phone, is_active, created_at, updated_at)
@@ -429,5 +1009,9 @@ FROM (VALUES
 ) AS v(id, category, description, amount)
 WHERE EXISTS (SELECT 1 FROM depot_stock_receipts WHERE id = '00000000-0000-0000-0000-000000001701')
 ON CONFLICT DO NOTHING;
+END IF;
+END;
+$retrack_seed$;
+-- RETRACK_SEED_END
 
 COMMIT;
