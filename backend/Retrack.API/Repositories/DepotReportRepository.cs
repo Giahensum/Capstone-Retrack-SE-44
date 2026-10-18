@@ -6,7 +6,7 @@ using Retrack.API.Models;
 using Retrack.API.Repositories.Interfaces;
 namespace Retrack.API.Repositories;
 
-public sealed class DepotReportRepository(AppDbContext db) : IDepotReportRepository
+public sealed partial class DepotReportRepository(AppDbContext db) : IDepotReportRepository
 {
     public async Task<PlatformInvoice?> LockInvoiceAsync(Guid id)
     {

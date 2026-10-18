@@ -88,3 +88,11 @@ Chuẩn bị một hóa đơn phí riêng có trạng thái `UNPAID` ở trang �
 - `test-results` và `playwright-report` là artifact local đã ignore. Trace có thể chứa phiên đăng nhập; không commit hoặc chia sẻ nguyên trace công khai.
 - Bộ test này không thay thế kiểm thử API sai quyền, race/rollback trên PostgreSQL, PayOS thật, Driver, hay kiểm thử toàn bộ use case các role khác.
 - Bộ backend cần cả `RETRACK_TEST_CONNECTION` và `RETRACK_TEST_POSTGRES` trỏ tới `Retrack_TV2_test`, rồi chạy `dotnet test backend/Retrack.sln --no-restore` từ gốc repo.
+
+### Nhập kho đa nguồn và báo cáo giá vốn của Depot
+
+`depot-stock-receipts.spec.js` dùng tài khoản/kho fixture riêng từ `E2E_STOCK_EMAIL`, `E2E_STOCK_PASSWORD`: nhập lô hỗn hợp → ghi sổ → bán một phần đồ cũ → xuất vật liệu → đối chiếu nguồn giá vốn sau tải lại. Không dùng kho nghiệp vụ thật. Bài bố cục kiểm tra popup tại320/768/1024/1440px và Escape.
+
+`depot-cost-report.spec.js` dùng cùng biến tài khoản, trên kho fixture **chưa có giao dịch quyết toán/bán đồ**: kiểm API thật, trạng thái rỗng, reload, bốn kích thước và link đến sổ đồ. Đặt thêm `E2E_COST_SALE=true` để lập/duyệt phiếu10ghế giá3triệu → bán3ghế×450000, chi phí50000 → báo cáo giá vốn900000 và chênh lệch400000 sau reload. Không cần code Seller/Employee mới cho bài này. Dọn/tạo fixture mới trước mỗi lượt để không cộng số liệu cũ.
+
+Chỉ chạy các bài có mutation với backend nối **Retrack_TV2_test**, seed tắt, có schema bootstrap. Dữ liệu test thay đổi thật; không reset/drop database và chỉ dọn record do fixture tạo. Thiếu biến fixture thì bài bị skip và phải ghi **Not Run**, không coi là Passed. `test-results`/trace/ảnh chụp đã ignore; trace có thể chứa phiên đăng nhập, không commit/chia sẻ công khai.
