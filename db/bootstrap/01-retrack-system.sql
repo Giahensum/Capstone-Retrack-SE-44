@@ -494,3 +494,76 @@ CREATE TABLE IF NOT EXISTS password_reset_otps (
 );
 CREATE INDEX IF NOT EXISTS idx_password_reset_otps_email ON password_reset_otps(email);
 
+-- RETRACK_DEPOT_STOCK_V1
+-- Nhập kho đa nguồn bổ sung: giữ nguyên DONE cũ, không sao chép dữ liệu thu gom.
+-- Có thể chạy lại toàn bộ file trên DB hiện có; ứng dụng không tự migrate.
+CREATE TABLE IF NOT EXISTS depot_stock_receipts (
+    id UUID PRIMARY KEY,
+    depot_id UUID NOT NULL REFERENCES depots(id) ON DELETE RESTRICT,
+    created_by UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    source_type VARCHAR(40) NOT NULL CHECK (source_type IN ('EXTERNAL_PURCHASE','OPENING_BALANCE','BULK_PURCHASE')),
+    reference VARCHAR(255) NOT NULL CHECK (length(btrim(reference)) > 0),
+    status VARCHAR(20) NOT NULL DEFAULT 'DRAFT' CHECK (status IN ('DRAFT','SUBMITTED','POSTED','REJECTED','VOIDED')),
+    received_at TIMESTAMPTZ NOT NULL,
+    purchase_cost NUMERIC(18,0) NOT NULL CHECK (purchase_cost >= 0),
+    costs_confirmed BOOLEAN NOT NULL DEFAULT FALSE,
+    request_hash VARCHAR(64) NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    reviewed_at TIMESTAMPTZ,
+    reviewed_by UUID REFERENCES users(id) ON DELETE RESTRICT,
+    posted_at TIMESTAMPTZ,
+    posted_by UUID REFERENCES users(id) ON DELETE RESTRICT,
+    review_note VARCHAR(1000)
+);
+CREATE INDEX IF NOT EXISTS ix_depot_stock_receipts_scope ON depot_stock_receipts(depot_id, created_at DESC, id);
+ALTER TABLE depot_stock_receipts ADD COLUMN IF NOT EXISTS posted_at TIMESTAMPTZ;
+ALTER TABLE depot_stock_receipts ADD COLUMN IF NOT EXISTS posted_by UUID REFERENCES users(id) ON DELETE RESTRICT;
+ALTER TABLE depot_stock_receipts DROP CONSTRAINT IF EXISTS depot_stock_receipts_status_check;
+ALTER TABLE depot_stock_receipts ADD CONSTRAINT depot_stock_receipts_status_check
+    CHECK (status IN ('DRAFT','SUBMITTED','POSTED','REJECTED','VOIDED'));
+CREATE TABLE IF NOT EXISTS depot_stock_lines (
+    id UUID PRIMARY KEY,
+    receipt_id UUID NOT NULL REFERENCES depot_stock_receipts(id) ON DELETE CASCADE,
+    kind VARCHAR(20) NOT NULL CHECK (kind IN ('MATERIAL','REUSABLE')),
+    material_type VARCHAR(100), name VARCHAR(255) NOT NULL,
+    unit VARCHAR(10) NOT NULL,
+    quantity NUMERIC(18,3) NOT NULL CHECK (quantity > 0),
+    reference_price NUMERIC(18,0) NOT NULL CHECK (reference_price >= 0),
+    direct_cost NUMERIC(18,0) NOT NULL CHECK (direct_cost >= 0),
+    allocated_cost NUMERIC(18,0) CHECK (allocated_cost >= 0),
+    condition_note VARCHAR(1000), position INTEGER NOT NULL,
+    UNIQUE(receipt_id, position),
+    CHECK ((kind = 'MATERIAL' AND unit = 'kg' AND material_type IS NOT NULL) OR
+        (kind = 'REUSABLE' AND unit IN ('cái','bộ') AND material_type IS NULL AND quantity = trunc(quantity)))
+);
+CREATE TABLE IF NOT EXISTS depot_stock_expenses (
+    id UUID PRIMARY KEY, receipt_id UUID NOT NULL REFERENCES depot_stock_receipts(id) ON DELETE CASCADE,
+    category VARCHAR(30) NOT NULL, description VARCHAR(255) NOT NULL,
+    amount NUMERIC(18,0) NOT NULL CHECK (amount >= 0)
+);
+CREATE TABLE IF NOT EXISTS depot_reuse_sales (
+    id UUID PRIMARY KEY, line_id UUID NOT NULL REFERENCES depot_stock_lines(id) ON DELETE RESTRICT,
+    quantity NUMERIC(18,3) NOT NULL CHECK (quantity > 0 AND quantity = trunc(quantity)),
+    unit_price NUMERIC(18,0) NOT NULL CHECK (unit_price >= 0),
+    selling_cost NUMERIC(18,0) NOT NULL CHECK (selling_cost >= 0),
+    note VARCHAR(1000) NOT NULL, created_by UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS ix_depot_reuse_sales_line ON depot_reuse_sales(line_id);
+CREATE TABLE IF NOT EXISTS depot_batch_cost_sources (
+    id UUID PRIMARY KEY, batch_id UUID NOT NULL REFERENCES inventory_batches(id) ON DELETE CASCADE,
+    source_id UUID NOT NULL, source_type VARCHAR(20) NOT NULL CHECK (source_type IN ('PICKUP','RECEIPT')),
+    source_label VARCHAR(255) NOT NULL,
+    quantity NUMERIC(18,3) NOT NULL CHECK (quantity > 0), unit_cost NUMERIC(30,9) CHECK (unit_cost >= 0),
+    UNIQUE(batch_id, source_type, source_id)
+);
+CREATE INDEX IF NOT EXISTS ix_depot_batch_cost_source ON depot_batch_cost_sources(source_type, source_id);
+ALTER TABLE depot_batch_cost_sources ALTER COLUMN unit_cost TYPE NUMERIC(30,9);
+CREATE TABLE IF NOT EXISTS depot_batch_expenses (
+    id UUID PRIMARY KEY, batch_id UUID NOT NULL REFERENCES inventory_batches(id) ON DELETE CASCADE,
+    description VARCHAR(255) NOT NULL, amount NUMERIC(18,0) NOT NULL CHECK (amount >= 0),
+    created_by UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS ix_depot_batch_expenses_batch ON depot_batch_expenses(batch_id, created_at);
+

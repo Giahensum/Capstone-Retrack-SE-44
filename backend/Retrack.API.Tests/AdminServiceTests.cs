@@ -27,6 +27,18 @@ public class AdminServiceTests
 
     private static DateTime Utc(int year, int month, int day) => new(year, month, day, 12, 0, 0, DateTimeKind.Utc);
 
+    [Fact]
+    public async Task CannotDeleteFormerStaffWhoCreatedStockReceipt()
+    {
+        await using var db = NewDb();
+        var user = new User { Email = "former-staff@test.invalid", Role = "DEPOT_EMPLOYEE", FullName = "Nhân viên đã nghỉ" };
+        db.Users.Add(user);
+        db.DepotStockReceipts.Add(new DepotStockReceipt { Id = Guid.NewGuid(), DepotId = Guid.NewGuid(), CreatedBy = user.Id, Reference = "Phiếu đã tạo" });
+        await db.SaveChangesAsync();
+        await Assert.ThrowsAsync<InvalidOperationException>(() => NewService(db).DeleteUserAsync(user.Id, Guid.NewGuid()));
+        Assert.True(await db.Users.AnyAsync(x => x.Id == user.Id));
+    }
+
     private static UpsertMarketPriceDto Price(string material, decimal perKg = 10_000m) => new()
     {
         MaterialType = material,

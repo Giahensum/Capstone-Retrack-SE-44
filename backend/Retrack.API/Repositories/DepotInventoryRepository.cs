@@ -9,9 +9,16 @@ public record DepotAllocatedWeight(string Material, string Status, bool HasLeftD
 
 public sealed class DepotInventoryRepository(AppDbContext db) : IDepotInventoryRepository
 {
-    public Task<List<DepotReceivedWeight>> ReceivedAsync(Guid depotId) => db.PickupRequestItems.AsNoTracking()
+    public async Task<List<DepotReceivedWeight>> ReceivedAsync(Guid depotId)
+    {
+        var received = await db.PickupRequestItems.AsNoTracking()
         .Where(i => i.PickupRequest.TargetDepotId == depotId && i.PickupRequest.Status == "DONE")
         .GroupBy(i => i.MaterialType).Select(g => new DepotReceivedWeight(g.Key, g.Sum(i => i.WeightKg))).ToListAsync();
+        received.AddRange(await db.DepotStockLines.AsNoTracking()
+            .Where(x => x.Receipt.DepotId == depotId && x.Receipt.Status == "POSTED" && x.Kind == "MATERIAL")
+            .GroupBy(x => x.MaterialType).Select(g => new DepotReceivedWeight(g.Key!, g.Sum(x => x.Quantity))).ToListAsync());
+        return received;
+    }
 
     public Task<List<DepotAllocatedWeight>> AllocatedAsync(Guid depotId) => db.InventoryBatches.AsNoTracking()
         .Where(b => b.DepotId == depotId && b.Status != "CANCELLED")

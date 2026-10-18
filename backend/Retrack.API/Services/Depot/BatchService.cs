@@ -6,7 +6,7 @@ using Retrack.API.Services.Interfaces;
 
 namespace Retrack.API.Services.Depot;
 
-public sealed class BatchService(IDepotBatchRepository batches, IDepotUnitOfWork work, IDepotService scope, IInventoryService inventory, ICloudinaryService images) : IBatchService
+public sealed class BatchService(IDepotBatchRepository batches, IDepotUnitOfWork work, IDepotService scope, IInventoryService inventory, ICloudinaryService images, IDepotStockService stockLedger) : IBatchService
 {
     public async Task<DepotBatchDetailDto> DetailAsync(Guid ownerId, Guid depotId, Guid batchId)
     {
@@ -26,7 +26,7 @@ public sealed class BatchService(IDepotBatchRepository batches, IDepotUnitOfWork
     {
         await scope.RequireOwnerAsync(ownerId, depotId);
         if (photos?.Count > 5) throw new ArgumentException("Mỗi lô chỉ được tải lên tối đa 5 ảnh vật liệu.");
-        if (dto.OperationId == Guid.Empty || string.IsNullOrWhiteSpace(dto.MaterialType) || dto.MaterialType.Length > 100 || dto.WeightKg <= 0)
+        if (dto.OperationId == Guid.Empty || string.IsNullOrWhiteSpace(dto.MaterialType) || dto.MaterialType.Length > 100 || dto.WeightKg <= 0 || dto.WeightKg > 1_000_000_000 || decimal.Round(dto.WeightKg, 2) != dto.WeightKg)
             throw new ArgumentException("Cần mã thao tác, loại vật liệu và khối lượng dương.");
         dto.MaterialType = Retrack.API.Services.Shared.MaterialCatalog.RequireCode(dto.MaterialType);
         await using var tx = await work.BeginAsync();
@@ -105,6 +105,7 @@ public sealed class BatchService(IDepotBatchRepository batches, IDepotUnitOfWork
             Status = status, ImageUrls = imageUrls.ToArray()
         };
         batches.AddBatch(batch);
+        await stockLedger.ReserveCostsAsync(depotId, batch.Id, dto.MaterialType, dto.WeightKg);
         if (status == "TRANSPORT_READY") await batches.AddTransportAsync(new TransportJob { BatchId = batch.Id }, depotId);
         await work.SaveAsync();
         await tx.CommitAsync();

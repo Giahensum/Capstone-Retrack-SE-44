@@ -398,4 +398,36 @@ VALUES
      '00000000-0000-0000-0000-000000001511', '{"demo":true}', NOW() - INTERVAL '5 days')
 ON CONFLICT DO NOTHING;
 
+-- Nhập kho đa nguồn demo: chỉ thêm khi tồn tại kho/chủ kho demo tương ứng.
+-- Không đổi trạng thái hay chi phí của phiếu đã được người dùng thao tác.
+INSERT INTO depot_stock_receipts
+    (id, depot_id, created_by, source_type, reference, status, received_at, purchase_cost,
+     costs_confirmed, request_hash, created_at, reviewed_at, reviewed_by)
+SELECT '00000000-0000-0000-0000-000000001701', d.id, d.owner_id,
+    'EXTERNAL_PURCHASE', '[DEMO] Lô sắt và ghế thanh lý tại Ngũ Hành Sơn', 'POSTED',
+    NOW() - INTERVAL '2 days', 10000000, TRUE, repeat('0', 64),
+    NOW() - INTERVAL '2 days', NOW() - INTERVAL '2 days', d.owner_id
+FROM depots d WHERE d.id = '00000000-0000-0000-0000-000000000010'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO depot_stock_lines
+    (id, receipt_id, kind, material_type, name, unit, quantity, reference_price, direct_cost, allocated_cost, condition_note, position)
+SELECT v.id::uuid, '00000000-0000-0000-0000-000000001701', v.kind, v.material_type, v.name,
+    v.unit, v.quantity, v.reference_price, 0, v.allocated_cost, v.condition_note, v.position
+FROM (VALUES
+    ('00000000-0000-0000-0000-000000001711', 'MATERIAL', 'IRON', 'Sắt', 'kg', 1000, 6000, 6109091, 'Hàng demo đã phân loại', 0),
+    ('00000000-0000-0000-0000-000000001712', 'REUSABLE', NULL, 'Ghế thanh lý', 'cái', 10, 500000, 5090909, 'Dữ liệu demo, cần xem tình trạng thực tế trước bán', 1)
+) AS v(id, kind, material_type, name, unit, quantity, reference_price, allocated_cost, condition_note, position)
+WHERE EXISTS (SELECT 1 FROM depot_stock_receipts WHERE id = '00000000-0000-0000-0000-000000001701')
+ON CONFLICT DO NOTHING;
+
+INSERT INTO depot_stock_expenses (id, receipt_id, category, description, amount)
+SELECT v.id::uuid, '00000000-0000-0000-0000-000000001701', v.category, v.description, v.amount
+FROM (VALUES
+    ('00000000-0000-0000-0000-000000001721', 'LABOR', '[DEMO] Công thu gom và bốc xếp', 1000000),
+    ('00000000-0000-0000-0000-000000001722', 'FUEL', '[DEMO] Xăng xe đầu vào phân bổ cho lô', 200000)
+) AS v(id, category, description, amount)
+WHERE EXISTS (SELECT 1 FROM depot_stock_receipts WHERE id = '00000000-0000-0000-0000-000000001701')
+ON CONFLICT DO NOTHING;
+
 COMMIT;
