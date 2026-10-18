@@ -7,10 +7,12 @@ import { QueryState, Pager } from './components/DepotUI';
 import StockReceipts from './StockReceipts';
 import ReusableInventory from './ReusableInventory';
 import { useDepot } from './DepotContext';
+import { useSearchParams } from 'react-router-dom';
 
 const Inventory = () => {
   const { depotId } = useDepot();
-  const [activeTab, setActiveTab] = useState('current');
+  const [searchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState(() => ['receipts', 'reusable', 'history'].includes(searchParams.get('tab')) ? searchParams.get('tab') : 'current');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
