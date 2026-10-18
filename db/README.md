@@ -19,6 +19,12 @@ Không sửa `appsettings.json` riêng của thành viên để khớp máy ngư
 
 ## Nguồn schema và dữ liệu
 
+### Bổ sung nhập kho đa nguồn cho database đã có schema
+
+Trước khi chạy backend có tab **Phiếu nhập đa nguồn**, sao lưu database local và kiểm tra `SELECT current_database();`. Trong file `bootstrap/01-retrack-system.sql`, chọn **riêng toàn bộ đoạn từ dòng đánh dấu `-- RETRACK_DEPOT_STOCK_V1` đến cuối file**, chạy bằng Query Tool. Đoạn này tạo các bảng phiếu/dòng hàng/chi phí/bán đồ cũ/nguồn giá vốn, không chuyển hoặc xóa đơn `DONE`, không thay mật khẩu kết nối. Có thể chạy lại đoạn bổ sung; không cần thêm file SQL thứ ba.
+
+Máy mới vẫn chạy toàn bộ file01 rồi file02. Seed mới có thêm một phiếu hỗn hợp sắt + ghế và hai khoản công/xăng xe tại kho demo Ngô Sỹ Giá; phân bổ chi phí khớp tổng 11.200.000đ. Không chạy seed demo lên database nghiệp vụ thật. Phiếu nhập tay gắn nhãn kho tự khai; chưa có phiên đấu giá trên app.
+
 - `bootstrap/01-retrack-system.sql` là **nguồn schema DB-first duy nhất** cho Auth, Seller, Depot Owner, Employee, Driver, Factory và Admin.
 - `bootstrap/02-seed-data.sql` là seed chung: 13 tài khoản thuộc 6 role, 3 điểm kho, 3 nhà máy, 6 nhu cầu theo vật liệu, 16 yêu cầu thu gom ở nhiều trạng thái, lượng tồn PET/nhôm/carton, 10 lô từ chờ duyệt tới KCS/quyết toán, 6 chuyến, đánh giá, giao dịch phí, hóa đơn, thông báo, nhật ký Admin và bảng giá demo. Tọa độ/địa chỉ mẫu trải từ Ngũ Hành Sơn, Hải Châu tới Cẩm Lệ. Dữ liệu có nhãn `[DEMO]`, không phải nghiệp vụ thật.
 - Seed chạy lại không nhân đôi các bản ghi fixture; không sửa tài khoản có sẵn khi ID/email trùng và có kiểm tra dừng nếu dữ liệu tài khoản xung đột.

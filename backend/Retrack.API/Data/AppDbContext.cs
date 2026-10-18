@@ -33,10 +33,22 @@ namespace Retrack.API.Data
         public DbSet<PlatformInvoice> PlatformInvoices { get; set; }
         public DbSet<Notification> Notifications { get; set; }
         public DbSet<PasswordResetOtp> PasswordResetOtps { get; set; }
+        public DbSet<DepotStockReceipt> DepotStockReceipts { get; set; }
+        public DbSet<DepotStockLine> DepotStockLines { get; set; }
+        public DbSet<DepotStockExpense> DepotStockExpenses { get; set; }
+        public DbSet<DepotReuseSale> DepotReuseSales { get; set; }
+        public DbSet<DepotBatchCostSource> DepotBatchCostSources { get; set; }
+        public DbSet<DepotBatchExpense> DepotBatchExpenses { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+            modelBuilder.Entity<DepotStockReceipt>().HasIndex(x => new { x.DepotId, x.CreatedAt });
+            modelBuilder.Entity<DepotStockLine>().HasIndex(x => new { x.ReceiptId, x.Position }).IsUnique();
+            modelBuilder.Entity<DepotBatchCostSource>().HasIndex(x => new { x.BatchId, x.SourceType, x.SourceId }).IsUnique();
+            modelBuilder.Entity<DepotReuseSale>().HasIndex(x => x.LineId);
+            modelBuilder.Entity<DepotStockReceipt>().HasOne(x => x.Depot).WithMany().OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<DepotReuseSale>().HasOne(x => x.Line).WithMany().OnDelete(DeleteBehavior.Restrict);
             modelBuilder.Entity<DriverDeliveryEvent>().HasOne(e => e.Job).WithMany()
                 .HasForeignKey(e => e.JobId).OnDelete(DeleteBehavior.Restrict);
             modelBuilder.Entity<DriverDeliveryEvent>().HasOne(e => e.Driver).WithMany()

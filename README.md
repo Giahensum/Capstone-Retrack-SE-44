@@ -95,6 +95,14 @@ Capstone/
 
 ## 🚀 Hướng Dẫn Cài Đặt và Chạy Dự Án (Getting Started)
 
+### Nhập kho đa nguồn và giá vốn Depot
+
+- Máy mới chạy lần lượt `db/bootstrap/01-retrack-system.sql` và `02-seed-data.sql` trên database rỗng. Máy đã có schema: trước backend mới, sao lưu và chạy **riêng khối từ `-- RETRACK_DEPOT_STOCK_V1` đến cuối file01** trong Query Tool của đúng database; không chạy seed lên dữ liệu thực. Khối bổ sung này giữ nguyên đơn thu gom/lô cũ và có thể chạy lại. Ứng dụng không tự migrate.
+- Trong **Quản lý tồn kho**, tab **Phiếu nhập đa nguồn** ghi hàng mua ngoài/tồn đầu kỳ/lô thanh lý mua ngoài phiên giá. Lưu nháp → kiểm tra số thực, giá mua và chi phí → chủ kho duyệt ghi sổ. Không nhập lại đơn thu gom `DONE` vì đã được tính tồn. Phiếu còn nguyên, chưa giữ/xuất/bán có thể đảo toàn bộ với lý do; giữ lịch sử.
+- Tab **Đồ tái sử dụng** theo cái/bộ, ghi bán ngoài sau giao thực tế và giảm đúng lượng. Nhân viên có API lập/gửi phiếu, chỉ chủ kho được chốt chi phí/ghi sổ/bán. Giao diện mobile nhận hàng cần TV3 tích hợp API mới.
+- Lô xuất mới có snapshot nguồn giá vốn FIFO, chi phí giao/bán và chênh lệch trước thuế trong **Chi tiết lô hàng**. Hàng trộn chỉ truy vết phân bổ chi phí; lô cũ thiếu snapshot/nguồn thiếu giá vốn sẽ hiện chưa đủ dữ liệu. Giá mua pickup cũ chưa bao gồm các chi phí đầu vào khác. Đây là sổ quản trị phục vụ giao dịch, chưa phải phần mềm kế toán thuế.
+- Feature này chưa gồm phiên đấu giá Seller, tin rao đồ cũ công khai, tự điều phối Employee, chuyển đồ cũ thành vật liệu hay xác minh giấy phép. Nguồn lô thanh lý nhập tay không được gắn nhãn đã trúng đấu giá trong app.
+
 ### 1. Yêu cầu hệ thống
 - **PostgreSQL** (đã kiểm thử local với PostgreSQL 17; dùng database riêng cho phát triển và test)
 - **.NET 8 SDK**
