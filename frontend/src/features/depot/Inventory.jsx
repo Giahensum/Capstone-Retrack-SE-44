@@ -4,8 +4,12 @@ import CreateBatchModal from './components/CreateBatchModal';
 import { materialLabel } from './materialLabels';
 import { useDepotQuery, number, date } from './depotApi';
 import { QueryState, Pager } from './components/DepotUI';
+import StockReceipts from './StockReceipts';
+import ReusableInventory from './ReusableInventory';
+import { useDepot } from './DepotContext';
 
 const Inventory = () => {
+  const { depotId } = useDepot();
   const [activeTab, setActiveTab] = useState('current');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [page, setPage] = useState(1);
@@ -21,9 +25,9 @@ const Inventory = () => {
     <div className="flex flex-col p-4 md:p-6 w-full max-w-7xl mx-auto h-[calc(100vh-4rem)] gap-4 md:gap-6 overflow-hidden bg-d-surface">
       <CreateBatchModal isOpen={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} initialMaterial={batchMaterial} />
       {/* Page Header */}
-      <div className="flex justify-between items-end shrink-0">
+      <div className="flex flex-wrap gap-4 justify-between items-end shrink-0">
         <div>
-          <h2 className="font-d-headline-lg text-d-headline-lg text-d-on-surface mb-2">Quản lý Tồn Kho</h2>
+          <h1 className="font-d-headline-lg text-d-headline-lg text-d-on-surface mb-2">Quản lý tồn kho</h1>
           <p className="font-d-body-md text-d-on-surface-variant">Theo dõi hàng tồn kho và lịch sử nhập phế liệu.</p>
         </div>
         <button
@@ -35,7 +39,7 @@ const Inventory = () => {
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-d-border-subtle shrink-0">
+      <div className="flex overflow-x-auto border-b border-d-border-subtle shrink-0 [&>button]:whitespace-nowrap [&>button]:min-h-11">
         <button
           onClick={() => { setActiveTab('current'); setPage(1); }}
           className={`pb-3 px-6 font-d-label-md transition-colors ${activeTab === 'current' ? 'text-d-primary font-bold border-b-2 border-d-primary' : 'text-d-on-surface-variant hover:text-d-primary'}`}
@@ -46,13 +50,14 @@ const Inventory = () => {
           onClick={() => { setActiveTab('history'); setPage(1); }}
           className={`pb-3 px-6 font-d-label-md transition-colors ${activeTab === 'history' ? 'text-d-primary font-bold border-b-2 border-d-primary' : 'text-d-on-surface-variant hover:text-d-primary'}`}
         >
-          Lịch sử nhập kho
+          Thu gom đã hoàn tất
         </button>
+        {[['receipts', 'Phiếu nhập đa nguồn'], ['reusable', 'Đồ tái sử dụng']].map(([key, label]) => <button type="button" key={key} onClick={() => { setActiveTab(key); setPage(1); }} className={`pb-3 px-6 font-d-label-md transition-colors ${activeTab === key ? 'text-d-primary font-bold border-b-2 border-d-primary' : 'text-d-on-surface-variant hover:text-d-primary'}`}>{label}</button>)}
       </div>
 
       {/* Scrollable Content */}
       <div className="flex-1 overflow-y-auto min-h-0 flex flex-col gap-6 pr-2">
-        {activeTab === 'current' ? (
+        {activeTab === 'receipts' ? <StockReceipts key={depotId} /> : activeTab === 'reusable' ? <ReusableInventory key={depotId} /> : activeTab === 'current' ? (
           <QueryState query={stock}>
             {/* KPI Cards Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 shrink-0">

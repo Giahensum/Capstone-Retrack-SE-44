@@ -2,6 +2,7 @@ import { useDepotQuery, number, money, batchLabels } from '../depotApi';
 import { Dialog, QueryState } from './DepotUI';
 import { materialLabel } from '../materialLabels';
 import { proofExtension } from '../proofDownload';
+import BatchCostPanel from './BatchCostPanel';
 const missing = 'Chưa cập nhật';
 const kg = (v) => v == null ? missing : `${number(v)} kg`;
 const percent = (v) => v == null ? missing : `${number(v)}%`;
@@ -21,7 +22,7 @@ export default function BatchDetailModal({ id, onClose }) {
   const query = useDepotQuery(`batches/${id}`);
   const d = query.data, b = d?.batch, q = d?.quality, s = d?.settlement;
   const transportLabels = { PENDING: 'Chờ phân công', ASSIGNED: 'Đã phân công', PICKED_UP: 'Đã lấy hàng', IN_TRANSIT: 'Đang vận chuyển', DELIVERED: 'Đã giao' };
-  return <Dialog title={`Chi tiết lô ${b?.code ?? ''}`} onClose={onClose}><QueryState query={query}>{d && <div className="space-y-4">
+  return <Dialog title={`Chi tiết lô ${b?.code ?? ''}`} onClose={onClose} wide><QueryState query={query}>{d && <div className="space-y-4">
     <div className="rounded-xl bg-d-surface-accent p-4"><p className="font-bold text-d-primary">{batchLabels[b.status] ?? b.status}</p><p className="text-sm mt-2">Thời gian hiển thị theo giờ Việt Nam.</p></div>
     {b.status === 'REJECTED' && <p role="status" className="rounded-xl border border-d-error p-3 text-d-error">Lô bị từ chối — cần kiểm tra lý do và hướng xử lý. Trạng thái này không xác nhận hàng đã quay về kho.</p>}
     <Rows title="Thông tin lô" items={[["Mã lô", b.code ?? b.id], ["Vật liệu", materialLabel(b.materialType)], ["Khối lượng khai báo", kg(b.weightKg)], ["Nhà máy", b.factoryName ?? 'Đăng công khai'], ["Ngày tạo", time(b.createdAt)], ["Ghi chú kho", b.description]]}/>
@@ -35,5 +36,6 @@ export default function BatchDetailModal({ id, onClose }) {
     <Rows title="Quyết toán do nhà máy ghi nhận" items={[["Đơn giá / kg", cash(s?.pricePerKg)], ["Tổng tiền", cash(s?.grossAmount)], ["Phí nền tảng", cash(s?.feeAmount)], ["Tiền thực nhận theo quyết toán", cash(s?.netAmount)], ["Tham chiếu thanh toán", s?.paymentReference], ["Ngày quyết toán", time(s?.settledAt)], ["Số hóa đơn", q?.invoiceNumber]]}/>
     <p className="text-sm text-d-on-surface-variant">Số liệu do nhà máy ghi nhận; chưa phải xác nhận nhận tiền từ phía chủ kho.</p>
     <Proof title="Hóa đơn nhà máy" url={q?.invoiceFileUrl}/><Proof title="Chứng từ thanh toán" url={s?.paymentProofUrl}/>
+    <BatchCostPanel id={id} quantity={b.weightKg} />
   </div>}</QueryState></Dialog>;
 }

@@ -114,6 +114,8 @@ builder.Services.AddScoped<Retrack.API.Services.Employee.EmployeeReportingServic
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IDepotService, Retrack.API.Services.Depot.DepotService>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IInventoryService, Retrack.API.Services.Depot.InventoryService>();
 builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IDepotInventoryRepository, DepotInventoryRepository>();
+builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IDepotStockRepository, DepotStockRepository>();
+builder.Services.AddScoped<Retrack.API.Services.Interfaces.IDepotStockService, Retrack.API.Services.Depot.DepotStockService>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IDepotProofService, Retrack.API.Services.Depot.DepotProofService>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IBatchService, Retrack.API.Services.Depot.BatchService>();
 builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IDepotStaffRepository, DepotStaffRepository>();
