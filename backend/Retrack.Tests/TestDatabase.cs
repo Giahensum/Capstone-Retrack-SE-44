@@ -6,11 +6,14 @@ namespace Retrack.Tests;
 internal static class TestDatabase
 {
     private static readonly SemaphoreSlim MigrationLock = new(1, 1);
+    private static bool initialized;
     public static async Task MigrateAsync(AppDbContext db)
     {
         await MigrationLock.WaitAsync();
         try
         {
+            // Chỉ dựng schema trước fixture đầu tiên, không chạy DDL giữa các bài đang truy vấn.
+            if (initialized) return;
             await db.Database.MigrateAsync();
             // Các kiểm thử dùng migration lịch sử; đồng bộ cột DB-first mới có trong SQL tổng hợp.
             await db.Database.ExecuteSqlRawAsync("""
@@ -23,7 +26,15 @@ internal static class TestDatabase
             var schema = await File.ReadAllTextAsync(schemaPath);
             var stockStart = schema.IndexOf("-- RETRACK_DEPOT_STOCK_V1", StringComparison.Ordinal);
             if (stockStart < 0) throw new InvalidOperationException("Không tìm thấy schema nhập kho để kiểm thử.");
-            await db.Database.ExecuteSqlRawAsync(schema[stockStart..]);
+            await db.Database.OpenConnectionAsync();
+            try
+            {
+                await using var command = db.Database.GetDbConnection().CreateCommand();
+                command.CommandText = schema[stockStart..];
+                await command.ExecuteNonQueryAsync();
+            }
+            finally { await db.Database.CloseConnectionAsync(); }
+            initialized = true;
         }
         finally { MigrationLock.Release(); }
     }
