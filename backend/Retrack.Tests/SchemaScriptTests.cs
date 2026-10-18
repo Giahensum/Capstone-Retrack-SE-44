@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
+using System.Text.RegularExpressions;
 using Npgsql;
 using Retrack.API.Data;
 using Xunit;
@@ -17,10 +18,11 @@ public sealed class SchemaScriptTests
             throw new InvalidOperationException("Chỉ chạy trên Retrack_TV2_test.");
 
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory != null && !File.Exists(Path.Combine(directory.FullName, "db", "bootstrap", "01-retrack-system.sql")))
+        while (directory != null && !File.Exists(Path.Combine(directory.FullName, "db", "bootstrap", "retrack-system.sql")))
             directory = directory.Parent;
         if (directory == null) throw new FileNotFoundException("Không tìm thấy SQL tổng hợp.");
-        var sql = await File.ReadAllTextAsync(Path.Combine(directory.FullName, "db", "bootstrap", "01-retrack-system.sql"));
+        var sql = WithoutTransaction(await File.ReadAllTextAsync(Path.Combine(directory.FullName, "db", "bootstrap", "retrack-system.sql")));
+        sql = sql.Replace("SET LOCAL retrack.seed_demo = 'on';", "SET LOCAL retrack.seed_demo = 'off';");
 
         await using var db = new NpgsqlConnection(connection);
         await db.OpenAsync();
@@ -54,11 +56,10 @@ public sealed class SchemaScriptTests
             throw new InvalidOperationException("Chỉ chạy trên Retrack_TV2_test.");
 
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory != null && !File.Exists(Path.Combine(directory.FullName, "db", "bootstrap", "01-retrack-system.sql")))
+        while (directory != null && !File.Exists(Path.Combine(directory.FullName, "db", "bootstrap", "retrack-system.sql")))
             directory = directory.Parent;
         if (directory == null) throw new FileNotFoundException("Không tìm thấy SQL tổng hợp.");
-        var schemaSql = await File.ReadAllTextAsync(Path.Combine(directory.FullName, "db", "bootstrap", "01-retrack-system.sql"));
-        var seedSql = await File.ReadAllTextAsync(Path.Combine(directory.FullName, "db", "bootstrap", "02-seed-data.sql"));
+        var sql = WithoutTransaction(await File.ReadAllTextAsync(Path.Combine(directory.FullName, "db", "bootstrap", "retrack-system.sql")));
 
         await using var db = new NpgsqlConnection(connection);
         await db.OpenAsync();
@@ -66,17 +67,10 @@ public sealed class SchemaScriptTests
         var schema = $"bootstrap_test_{Guid.NewGuid():N}";
         await using (var setup = new NpgsqlCommand($"CREATE SCHEMA \"{schema}\"; SET LOCAL search_path TO \"{schema}\", public;", db, tx))
             await setup.ExecuteNonQueryAsync();
-        await using (var create = new NpgsqlCommand(schemaSql, db, tx) { CommandTimeout = 120 })
+        await using (var create = new NpgsqlCommand(sql, db, tx) { CommandTimeout = 120 })
             await create.ExecuteNonQueryAsync();
-        // Giữ test trong transaction/schema cô lập; bỏ wrapper giao dịch của file seed
-        // để COMMIT trong fixture không thoát khỏi transaction rollback của test.
-        var isolatedSeedSql = seedSql
-            .Replace("BEGIN;", "", StringComparison.OrdinalIgnoreCase)
-            .Replace("COMMIT;", "", StringComparison.OrdinalIgnoreCase);
-        await using (var seed = new NpgsqlCommand(isolatedSeedSql, db, tx) { CommandTimeout = 120 })
-            await seed.ExecuteNonQueryAsync();
-        await using (var repeatSeed = new NpgsqlCommand(isolatedSeedSql, db, tx) { CommandTimeout = 120 })
-            await repeatSeed.ExecuteNonQueryAsync();
+        await using (var repeat = new NpgsqlCommand(sql, db, tx) { CommandTimeout = 120 })
+            await repeat.ExecuteNonQueryAsync();
 
         await AssertModelColumnsAsync(db, tx, schema);
 
@@ -121,6 +115,62 @@ public sealed class SchemaScriptTests
         await tx.RollbackAsync();
     }
 
+    [Fact]
+    public async Task UnifiedBootstrapSupportsSchemaOnlyAndRollsBackEntireFailedSetup()
+    {
+        var connection = Environment.GetEnvironmentVariable("RETRACK_TEST_CONNECTION")
+            ?? throw new InvalidOperationException("Cần RETRACK_TEST_CONNECTION.");
+        if (new NpgsqlConnectionStringBuilder(connection).Database != "Retrack_TV2_test")
+            throw new InvalidOperationException("Chỉ chạy trên Retrack_TV2_test.");
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory != null && !File.Exists(Path.Combine(directory.FullName, "db", "bootstrap", "retrack-system.sql")))
+            directory = directory.Parent;
+        if (directory == null) throw new FileNotFoundException("Không tìm thấy SQL tổng hợp.");
+        var sql = await File.ReadAllTextAsync(Path.Combine(directory.FullName, "db", "bootstrap", "retrack-system.sql"));
+        var schemas = new[] { $"bootstrap_off_{Guid.NewGuid():N}", $"bootstrap_fail_{Guid.NewGuid():N}" };
+        await using var admin = new NpgsqlConnection(connection);
+        await admin.OpenAsync();
+        try
+        {
+            foreach (var schema in schemas)
+            {
+                await using var create = new NpgsqlCommand($"CREATE SCHEMA {schema}", admin);
+                await create.ExecuteNonQueryAsync();
+            }
+            var scoped = new NpgsqlConnectionStringBuilder(connection) { SearchPath = schemas[0], Pooling = false };
+            await using (var db = new NpgsqlConnection(scoped.ConnectionString))
+            {
+                await db.OpenAsync();
+                await using var command = new NpgsqlCommand(sql.Replace("SET LOCAL retrack.seed_demo = 'on';", "SET LOCAL retrack.seed_demo = 'off';"), db) { CommandTimeout = 120 };
+                await command.ExecuteNonQueryAsync();
+                await using var verify = new NpgsqlCommand("SELECT COUNT(*) FROM users", db);
+                Assert.Equal(0L, (long)(await verify.ExecuteScalarAsync())!);
+            }
+            scoped.SearchPath = schemas[1];
+            await using (var db = new NpgsqlConnection(scoped.ConnectionString))
+            {
+                await db.OpenAsync();
+                // Chạy nguyên wrapper BEGIN/COMMIT; lỗi sau seed phải hủy cả bảng lẫn dữ liệu vừa tạo.
+                var failing = Regex.Replace(sql, @"(?m)^COMMIT;\r?$", "SELECT 1 / 0;\nCOMMIT;");
+                await using var command = new NpgsqlCommand(failing, db) { CommandTimeout = 120 };
+                var error = await Assert.ThrowsAsync<PostgresException>(() => command.ExecuteNonQueryAsync());
+                Assert.Equal(PostgresErrorCodes.DivisionByZero, error.SqlState);
+                await using (var rollback = new NpgsqlCommand("ROLLBACK;", db)) await rollback.ExecuteNonQueryAsync();
+                await using var verify = new NpgsqlCommand("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = @schema", db);
+                verify.Parameters.AddWithValue("schema", schemas[1]);
+                Assert.Equal(0L, (long)(await verify.ExecuteScalarAsync())!);
+            }
+        }
+        finally
+        {
+            foreach (var schema in schemas)
+            {
+                await using var drop = new NpgsqlCommand($"DROP SCHEMA IF EXISTS {schema} CASCADE", admin);
+                await drop.ExecuteNonQueryAsync();
+            }
+        }
+    }
+
     private static async Task AssertColumnsAsync(NpgsqlConnection db, NpgsqlTransaction tx, string schema)
     {
         await using var columns = new NpgsqlCommand("""
@@ -134,6 +184,9 @@ public sealed class SchemaScriptTests
         columns.Parameters.AddWithValue("schema", schema);
         Assert.Equal(9L, (long)(await columns.ExecuteScalarAsync())!);
     }
+
+    // Giữ giao dịch ngoài của test; không bỏ BEGIN/END bên trong function/DO.
+    private static string WithoutTransaction(string sql) => Regex.Replace(sql, @"(?m)^(BEGIN;|COMMIT;)\r?$", "");
 
     private static async Task AssertModelColumnsAsync(NpgsqlConnection db, NpgsqlTransaction tx, string schema)
     {
