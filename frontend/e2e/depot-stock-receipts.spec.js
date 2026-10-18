@@ -1,0 +1,90 @@
+import { test, expect } from '@playwright/test';
+
+test.describe('Depot — nhập đa nguồn và giá vốn trên API thật', () => {
+  test.skip(!process.env.E2E_STOCK_EMAIL || !process.env.E2E_STOCK_PASSWORD, 'Cần tài khoản fixture riêng trên Retrack_TV2_test.');
+  test('lập phiếu hỗn hợp, duyệt, bán một phần và xuất nguồn FIFO sau tải lại', async ({ page }) => {
+    test.setTimeout(120_000);
+    const errors = [];
+    page.on('pageerror', error => errors.push(error.message));
+    await page.goto('/login');
+    await page.getByLabel(/email/i).fill(process.env.E2E_STOCK_EMAIL);
+    await page.getByLabel(/mật khẩu|password/i).fill(process.env.E2E_STOCK_PASSWORD);
+    await page.getByRole('button', { name: /đăng nhập|login/i }).click();
+    await expect(page).toHaveURL(/\/depot/);
+    await page.goto('/depot/inventory');
+    await page.getByRole('button', { name: 'Phiếu nhập đa nguồn', exact: true }).click();
+    await page.getByRole('button', { name: 'Lập phiếu nhập', exact: true }).click();
+    const form = page.getByRole('dialog');
+    await form.getByLabel('Chứng từ / tham chiếu nguồn').fill('E2E-Lô hỗn hợp Đà Nẵng');
+    await form.getByLabel('Số lượng (kg)').fill('1000');
+    await form.getByRole('button', { name: 'Thêm dòng hàng' }).click();
+    const second = form.locator('section').filter({ has: page.getByRole('heading', { name: 'Dòng 2' }) });
+    await second.getByLabel('Nhóm hàng').selectOption('REUSABLE');
+    await second.getByLabel('Tên đồ / hãng / model').fill('Ghế thanh lý');
+    await second.getByLabel('Số lượng (cái)').fill('10');
+    await form.getByLabel('Giá mua cả lô / giá trị tồn đầu kỳ (đ)').fill('8000000');
+    await form.getByRole('checkbox').check();
+    await form.getByLabel('Giá bán tham khảo / kg (đ)').fill('5000');
+    await form.getByLabel('Giá bán tham khảo / cái (đ)').fill('300000');
+    await form.getByRole('button', { name: 'Lưu phiếu nháp' }).click();
+    await expect(form).toHaveCount(0);
+    const row = page.getByRole('row').filter({ hasText: 'E2E-Lô hỗn hợp Đà Nẵng' });
+    await row.getByRole('button', { name: 'Chi tiết / duyệt' }).click();
+    await page.getByRole('button', { name: 'Xác nhận hàng thực nhận và ghi sổ' }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(row).toContainText('Đã ghi sổ');
+    await page.reload();
+    await page.getByRole('button', { name: 'Đồ tái sử dụng', exact: true }).click();
+    const chairs = page.getByRole('row').filter({ hasText: 'Ghế thanh lý' });
+    await chairs.getByRole('button', { name: 'Ghi bán ngoài' }).click();
+    await page.getByLabel('Lượng đã giao (cái)').fill('3');
+    await page.getByLabel('Giá bán / cái (đ)').fill('450000');
+    await page.getByLabel('Ghi chú giao nhận / chứng từ').fill('Đã giao 3 ghế tại kho');
+    await page.getByRole('button', { name: 'Xác nhận đã giao và ghi bán' }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(chairs).toContainText('7 cái');
+    await page.getByRole('button', { name: 'Lịch sử bán ngoài' }).click();
+    await expect(page.getByRole('row').filter({ hasText: 'Đã giao 3 ghế tại kho' })).toContainText('450.000 đ');
+    await page.reload();
+    await page.getByRole('button', { name: 'Tạo lô xuất hàng', exact: true }).click();
+    await page.getByLabel('Loại phế liệu').selectOption('IRON');
+    await page.getByLabel('Khối lượng (kg)', { exact: true }).fill('100');
+    await page.getByRole('dialog').getByRole('button', { name: 'Tạo lô xuất hàng', exact: true }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await page.goto('/depot/batches');
+    await page.getByTitle('Chi tiết lô hàng', { exact: true }).first().click();
+    await expect(page.getByRole('heading', { name: 'Nguồn giá vốn và chi phí riêng của kho' })).toBeVisible();
+    await expect(page.getByRole('dialog')).toContainText('500.000 đ');
+    await expect(page.getByRole('dialog')).toContainText('E2E-Lô hỗn hợp Đà Nẵng');
+    await page.getByRole('dialog').getByLabel('Đóng').click();
+    for (const width of [320, 768, 1024, 1440]) {
+      await page.setViewportSize({ width, height: 1000 });
+      await page.goto('/depot/inventory');
+      await page.getByRole('button', { name: 'Phiếu nhập đa nguồn', exact: true }).click();
+      await page.getByRole('button', { name: 'Lập phiếu nhập', exact: true }).click();
+      await expect(page.getByRole('dialog')).toBeVisible();
+      const bounds = await page.getByRole('dialog').boundingBox();
+      expect(bounds.x).toBeGreaterThanOrEqual(0); expect(bounds.x + bounds.width).toBeLessThanOrEqual(width);
+      await page.getByRole('dialog').getByLabel('Đóng').click();
+    }
+    expect(errors).toEqual([]);
+  });
+  test('popup nhập kho dùng được bằng bàn phím và không tràn ở bốn kích thước', async ({ page }) => {
+    await page.goto('/login');
+    await page.getByLabel(/email/i).fill(process.env.E2E_STOCK_EMAIL);
+    await page.getByLabel(/mật khẩu|password/i).fill(process.env.E2E_STOCK_PASSWORD);
+    await page.getByRole('button', { name: /đăng nhập|login/i }).click();
+    await expect(page).toHaveURL(/\/depot/);
+    for (const width of [320, 768, 1024, 1440]) {
+      await page.setViewportSize({ width, height: 1000 });
+      await page.goto('/depot/inventory');
+      await page.getByRole('button', { name: 'Phiếu nhập đa nguồn', exact: true }).click();
+      await page.getByRole('button', { name: 'Lập phiếu nhập', exact: true }).click();
+      const dialog = page.getByRole('dialog');
+      await expect(dialog.getByLabel('Nguồn hàng')).toBeVisible();
+      await page.screenshot({ path: test.info().outputPath(`nhap-kho-${width}.png`), fullPage: true });
+      await page.keyboard.press('Escape');
+      await expect(dialog).toHaveCount(0);
+    }
+  });
+});

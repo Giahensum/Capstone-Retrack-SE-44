@@ -19,6 +19,11 @@ internal static class TestDatabase
                 ALTER TABLE users ADD COLUMN IF NOT EXISTS bank_account_name VARCHAR(255);
                 ALTER TABLE users ADD COLUMN IF NOT EXISTS bank_qr_url VARCHAR(2048);
                 """);
+            var schemaPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../db/bootstrap/01-retrack-system.sql"));
+            var schema = await File.ReadAllTextAsync(schemaPath);
+            var stockStart = schema.IndexOf("-- RETRACK_DEPOT_STOCK_V1", StringComparison.Ordinal);
+            if (stockStart < 0) throw new InvalidOperationException("Không tìm thấy schema nhập kho để kiểm thử.");
+            await db.Database.ExecuteSqlRawAsync(schema[stockStart..]);
         }
         finally { MigrationLock.Release(); }
     }
