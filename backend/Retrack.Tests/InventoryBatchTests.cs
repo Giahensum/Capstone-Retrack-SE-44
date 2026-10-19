@@ -333,6 +333,27 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         Assert.Equal("DECLINED", (await depot.UpdateAsync(ownerId, depotId, factory.Id, "UNBLOCKED", default)).Status);
     }
 
+    [Theory]
+    [InlineData("WEIGHED")]
+    [InlineData("VERIFIED")]
+    [InlineData("REJECTED")]
+    [InlineData("CANCELLED")]
+    [InlineData("COMPLETED")]
+    [InlineData("PAID")]
+    public async Task Factory_receive_cannot_reopen_advanced_or_terminal_batches(string status)
+    {
+        await using var db = Open();
+        var factory = new Factory { Owner = new User { Id = factoryOwnerId, Role = "FACTORY", Email = $"guard-{factoryOwnerId}@test.invalid" }, Name = "Factory guard", Address = "Đà Nẵng" };
+        var batch = new InventoryBatch { DepotId = depotId, TargetFactory = factory, MaterialType = "PET", DeclaredWeightKg = 1, Status = status,
+            SettledAt = status is "COMPLETED" or "PAID" ? DateTime.UtcNow : null };
+        batch.TransportJob = new TransportJob { Batch = batch, Status = "DELIVERED" };
+        db.InventoryBatches.Add(batch); await db.SaveChangesAsync();
+        var result = await new Retrack.API.Services.Factory.FactoryOrderService(db).ReceiveAsync(factoryOwnerId, batch.Id, default);
+        Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Conflict, result.Outcome);
+        db.ChangeTracker.Clear();
+        Assert.Equal(status, (await db.InventoryBatches.SingleAsync(x => x.Id == batch.Id)).Status);
+    }
+
     [Fact]
     public async Task Depot_factory_batch_settlement_roundtrips_weight_qc_invoice_and_payment_details()
     {
@@ -384,6 +405,15 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         Assert.Equal(settled.Data.FeeAmount, detail.Settlement.FeeAmount);
         Assert.Equal(settled.Data.NetPayableAmount, detail.Settlement.NetAmount);
         Assert.Equal("SIM-FACTORY-001", detail.Settlement.PaymentReference);
+
+        var settledAt = detail.Settlement.SettledAt;
+        Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Conflict,
+            (await orders.ReceiveAsync(factoryOwnerId, first.Id, default)).Outcome);
+        db.ChangeTracker.Clear();
+        var unchanged = await Batches(db).DetailAsync(ownerId, depotId, first.Id);
+        Assert.Equal("COMPLETED", unchanged.Batch.Status);
+        Assert.Equal(settledAt, unchanged.Settlement!.SettledAt);
+        Assert.Equal(settled.Data.NetPayableAmount, unchanged.Settlement.NetAmount);
 
         var followUp = Input(40); followUp.TargetFactoryId = factory.Id;
         Assert.Equal("TRANSPORT_READY", (await Batches(db).CreateAsync(ownerId, depotId, followUp)).Status);

@@ -1,4 +1,9 @@
 // Tương thích chứng từ inline của Factory; không nhận HTML/SVG hay URL thực thi.
+export function factoryProofPath(url) {
+  return typeof url === 'string' && /^\/api\/factory\/attachments\/[a-f0-9]{32}\/[a-f0-9]{32}$/i.test(url)
+    ? url.slice(4) : null;
+}
+
 export function proofExtension(url) {
   if (typeof url !== 'string' || url.length > 960_000) return null;
   const match = /^data:(application\/pdf|image\/png|image\/jpeg);base64,([A-Za-z0-9+/]+={0,2})$/.exec(url);
