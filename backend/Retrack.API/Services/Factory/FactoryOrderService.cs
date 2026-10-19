@@ -99,8 +99,7 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
     {
         var factory = await CurrentFactory(userId, ct);
         await using var transaction = await Db.Database.BeginTransactionAsync(ct);
-        var batch = await Db.InventoryBatches.FromSqlInterpolated($"SELECT * FROM inventory_batches WHERE id = {id} AND target_factory_id = {factory.Id} FOR UPDATE")
-            .Include(x => x.QualityCheck).SingleOrDefaultAsync(ct);
+        var batch = await LockOrderAsync(id, factory.Id, ct);
         if (batch is null) return ServiceResult<OrderSettlementResponse>.NotFound("Không tìm thấy đơn hàng.");
         if (batch.Status is "PAID" or "COMPLETED") return ServiceResult<OrderSettlementResponse>.Conflict("Đơn hàng đã được quyết toán.");
         var qc = batch.QualityCheck;
@@ -150,8 +149,8 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
     public async Task<ServiceResult<InvoiceUpdatedResponse>> InvoiceAsync(Guid userId, Guid id, InvoiceRequest request, CancellationToken ct)
     {
         var factory = await CurrentFactory(userId, ct);
-        var batch = await Db.InventoryBatches.Include(x => x.QualityCheck)
-            .SingleOrDefaultAsync(x => x.Id == id && x.TargetFactoryId == factory.Id, ct);
+        await using var tx = Db.Database.IsRelational() ? await Db.Database.BeginTransactionAsync(ct) : null;
+        var batch = await LockOrderAsync(id, factory.Id, ct);
         if (batch is null) return ServiceResult<InvoiceUpdatedResponse>.NotFound("Không tìm thấy đơn hàng.");
         if (batch.QualityCheck is null || batch.Status is not ("VERIFIED" or "COMPLETED"))
             return ServiceResult<InvoiceUpdatedResponse>.Conflict("Chỉ đính kèm hóa đơn sau khi chốt KCS.");
@@ -164,6 +163,7 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
         batch.QualityCheck.InvoiceStatus = "UPLOADED";
         if (request.VatAmount.HasValue) batch.QualityCheck.QualityNote = $"VAT:{request.VatAmount.Value}";
         await Db.SaveChangesAsync(ct);
+        if (tx != null) await tx.CommitAsync(ct);
         return ServiceResult<InvoiceUpdatedResponse>.Success(data: new InvoiceUpdatedResponse
         {
             Id = batch.Id,

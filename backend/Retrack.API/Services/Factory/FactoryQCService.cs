@@ -18,10 +18,10 @@ public class FactoryQCService(AppDbContext db, IConfiguration configuration, Fac
         if (request.GrossWeightKg <= request.TareWeightKg)
             return ServiceResult<WeighResponse>.Invalid("Khối lượng tổng phải lớn hơn khối lượng bì.");
         var factory = await CurrentFactory(userId, ct);
-        var batch = await Db.InventoryBatches.Include(x => x.QualityCheck)
-            .SingleOrDefaultAsync(x => x.Id == id && x.TargetFactoryId == factory.Id, ct);
+        await using var tx = Db.Database.IsRelational() ? await Db.Database.BeginTransactionAsync(ct) : null;
+        var batch = await LockOrderAsync(id, factory.Id, ct);
         if (batch is null) return ServiceResult<WeighResponse>.NotFound("Không tìm thấy đơn hàng.");
-        if (batch.Status is not ("RECEIVED" or "WEIGHED"))
+        if (batch.SettledAt != null || batch.Status is not ("RECEIVED" or "WEIGHED"))
             return ServiceResult<WeighResponse>.Conflict("Chỉ cân sau khi nhận hàng và trước khi chốt KCS.");
         if (attachments is not null && request.TicketImageUrl != batch.QualityCheck?.TicketImageUrl && !attachments.IsOwnedUrl(request.TicketImageUrl, userId))
             return ServiceResult<WeighResponse>.Invalid("Phiếu cân phải được tải lên qua chức năng đính kèm của nhà máy.");
@@ -51,6 +51,7 @@ public class FactoryQCService(AppDbContext db, IConfiguration configuration, Fac
         batch.ActualWeightKg = net;
         batch.Status = "WEIGHED";
         await Db.SaveChangesAsync(ct);
+        if (tx != null) await tx.CommitAsync(ct);
         return ServiceResult<WeighResponse>.Success(data: new WeighResponse
         {
             Id = batch.Id,
@@ -67,10 +68,10 @@ public class FactoryQCService(AppDbContext db, IConfiguration configuration, Fac
     public async Task<ServiceResult<QualityResponse>> QualityAsync(Guid userId, Guid id, QualityRequest request, CancellationToken ct)
     {
         var factory = await CurrentFactory(userId, ct);
-        var batch = await Db.InventoryBatches.Include(x => x.QualityCheck)
-            .SingleOrDefaultAsync(x => x.Id == id && x.TargetFactoryId == factory.Id, ct);
+        await using var tx = Db.Database.IsRelational() ? await Db.Database.BeginTransactionAsync(ct) : null;
+        var batch = await LockOrderAsync(id, factory.Id, ct);
         if (batch is null) return ServiceResult<QualityResponse>.NotFound("Không tìm thấy đơn hàng.");
-        if (batch.Status != "WEIGHED" || batch.QualityCheck is null)
+        if (batch.SettledAt != null || batch.Status != "WEIGHED" || batch.QualityCheck is null)
             return ServiceResult<QualityResponse>.Conflict("Cần hoàn tất cân trước khi chốt KCS.");
         if (request.Accept && request.PurityPercent < factory.MinimumPurityPercent)
             return ServiceResult<QualityResponse>.Invalid($"Độ tinh khiết thấp hơn ngưỡng nhà máy ({factory.MinimumPurityPercent}%).");
@@ -88,6 +89,7 @@ public class FactoryQCService(AppDbContext db, IConfiguration configuration, Fac
         batch.FactoryDecidedAt = DateTime.UtcNow;
         batch.RejectionReason = request.Accept ? null : request.Note?.Trim();
         await Db.SaveChangesAsync(ct);
+        if (tx != null) await tx.CommitAsync(ct);
         return ServiceResult<QualityResponse>.Success(data: new QualityResponse
         {
             Id = batch.Id,
