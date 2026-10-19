@@ -46,12 +46,17 @@ public sealed partial class DepotStockRepository(AppDbContext db) : IDepotStockR
         .SumAsync(x => (decimal?)x.Quantity) ?? 0;
     public Task<DepotReuseSale?> FindSaleAsync(Guid id) => db.DepotReuseSales.Include(x => x.Line).ThenInclude(x => x.Receipt).SingleOrDefaultAsync(x => x.Id == id);
     public void AddSale(DepotReuseSale sale) => db.DepotReuseSales.Add(sale);
-    public Task<PagedResult<ReuseSaleDto>> SalesAsync(Guid depotId, DepotQuery query) => PageAsync(db.DepotReuseSales.AsNoTracking()
-        .Where(x => x.Line.Receipt.DepotId == depotId).OrderByDescending(x => x.CreatedAt).ThenBy(x => x.Id)
-        .Select(x => new ReuseSaleDto(x.Id, x.LineId, x.Line.Name, x.Quantity, x.Quantity * x.UnitPrice, x.SellingCost,
-            x.UnitCost * x.Quantity,
-            x.Quantity * x.UnitPrice - x.SellingCost - x.UnitCost * x.Quantity,
-            x.Note, x.CreatedAt)), query);
+    public Task<PagedResult<ReuseSaleDto>> SalesAsync(Guid depotId, DepotQuery query)
+    {
+        var rows = db.DepotReuseSales.AsNoTracking().Where(x => x.Line.Receipt.DepotId == depotId).Select(x => new {
+            Sale = x, EffectiveCost = db.DepotCostReconciliations.Where(r => r.ReuseSaleId == x.Id).OrderByDescending(r => r.SequenceNo).Select(r => r.UnitCost).FirstOrDefault() ?? x.UnitCost,
+            Reconciled = db.DepotCostReconciliations.Any(r => r.ReuseSaleId == x.Id)
+        });
+        return PageAsync(rows.OrderByDescending(x => x.Sale.CreatedAt).ThenBy(x => x.Sale.Id).Select(x => new ReuseSaleDto(
+            x.Sale.Id, x.Sale.LineId, x.Sale.Line.Name, x.Sale.Quantity, x.Sale.Quantity * x.Sale.UnitPrice, x.Sale.SellingCost,
+            x.Sale.UnitCost * x.Sale.Quantity, x.Sale.Quantity * x.Sale.UnitPrice - x.Sale.SellingCost - x.EffectiveCost * x.Sale.Quantity,
+            x.Sale.Note, x.Sale.CreatedAt, x.EffectiveCost * x.Sale.Quantity, x.Reconciled)), query);
+    }
 
     private IQueryable<InventoryBatch> ActiveBatches(Guid depotId, string[] names) => db.InventoryBatches.Where(b =>
         b.DepotId == depotId && names.Contains(b.MaterialType) && b.Status != "CANCELLED" &&
@@ -91,7 +96,9 @@ public sealed partial class DepotStockRepository(AppDbContext db) : IDepotStockR
         .SingleOrDefaultAsync(x => x.Id == batchId && x.DepotId == depotId);
     public Task<List<BatchCostSourceDto>> BatchSourcesAsync(Guid batchId) => db.DepotBatchCostSources.AsNoTracking()
         .Where(x => x.BatchId == batchId).OrderBy(x => x.SourceLabel).ThenBy(x => x.Id)
-        .Select(x => new BatchCostSourceDto(x.SourceType, x.SourceLabel, x.Quantity, x.UnitCost)).ToListAsync();
+        .Select(x => new BatchCostSourceDto(x.SourceType, x.SourceLabel, x.Quantity, x.UnitCost,
+            db.DepotCostReconciliations.Where(r => r.BatchSourceId == x.Id).OrderByDescending(r => r.SequenceNo).Select(r => r.UnitCost).FirstOrDefault(),
+            db.DepotCostReconciliations.Any(r => r.BatchSourceId == x.Id))).ToListAsync();
     public Task<List<BatchExpenseDto>> BatchExpensesAsync(Guid batchId) => db.DepotBatchExpenses.AsNoTracking()
         .Where(x => x.BatchId == batchId).OrderBy(x => x.CreatedAt).ThenBy(x => x.Id)
         .Select(x => new BatchExpenseDto(x.Id, x.Description, x.Amount, x.CreatedAt)).ToListAsync();

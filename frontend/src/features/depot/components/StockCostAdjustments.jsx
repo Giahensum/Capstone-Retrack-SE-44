@@ -11,7 +11,7 @@ export default function StockCostAdjustments({ receipt, onBusyChange }) {
   useEffect(() => { onBusyChange(save.isPending); }, [save.isPending, onBusyChange]);
   const field = (key, value) => setForm({ ...form, [key]: value });
   return <section className="border-t border-d-border-subtle pt-4 space-y-4"><h3 className="font-semibold text-d-primary">Điều chỉnh chi phí sau ghi sổ</h3>
-    <p className="text-sm text-d-on-surface-variant">Chọn đúng dòng hàng và nhập phần chi phí phân bổ cho dòng đó (công, xăng xe, vận chuyển, thuế không hoàn lại…). Lịch sử và snapshot của lô đã xuất giữ nguyên; giao dịch bị ảnh hưởng cần đối soát riêng.</p>
+    <p className="text-sm text-d-on-surface-variant">Chọn dòng hàng và nhập chi phí bổ sung cho toàn bộ dòng đó (công, xăng xe, vận chuyển, thuế không hoàn lại…). Hệ thống tính phần tương ứng cho các lô/lần bán đã dùng nguồn và lưu bút toán riêng. Snapshot ban đầu và giá mua/bán đã thỏa thuận giữ nguyên.</p>
     <QueryState query={balance}><div className="space-y-2">{balance.data?.map(x => <p key={x.lineId} className="text-sm">{x.name}: vốn gốc {x.originalCost == null ? 'chưa xác định' : money(x.originalCost)} · vốn dùng cho lần xuất/bán mới {x.effectiveCost == null ? 'chưa xác định' : money(x.effectiveCost)}</p>)}</div></QueryState>
     <form onSubmit={e => { e.preventDefault(); save.mutate({ body: { ...form, amount: Number(form.amount) } }); }}><fieldset disabled={save.isPending} className="grid sm:grid-cols-2 gap-4">
       <label>Dòng hàng cần điều chỉnh<select className={inputClass} value={form.lineId} onChange={e => field('lineId', e.target.value)}>{receipt.lines.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select></label>

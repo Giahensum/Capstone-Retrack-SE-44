@@ -41,6 +41,9 @@ public sealed partial class DepotStockService
         if (dto.Kind == "ADDITIONAL_COST" && (dto.Amount == 0 || dto.Amount < 0 && (cost == null || cost + dto.Amount < 0)))
             throw new ArgumentException("Điều chỉnh phải khác 0 và không được làm tổng giá vốn âm hoặc giảm vốn chưa xác định.");
         repository.AddAdjustment(new() { Id = dto.OperationId, LineId = line.Id, Kind = dto.Kind, Amount = dto.Amount, Reason = dto.Reason.Trim(), CreatedBy = ownerId });
+        await work.SaveAsync();
+        var effective = await repository.CurrentLineCostAsync(line.Id);
+        await repository.ForwardCostAsync(line.Id, dto.OperationId, effective == null ? null : decimal.Round(effective.Value / line.Quantity, 9));
         await work.SaveAsync(); await tx.CommitAsync();
     }
 }

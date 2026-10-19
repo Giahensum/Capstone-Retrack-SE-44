@@ -39,13 +39,14 @@ public record ReusableStockDto(Guid Id, string Name, string Unit, string? Condit
 public record CreateReuseSaleDto(Guid OperationId, decimal Quantity, decimal UnitPrice, decimal SellingCost,
     [Required, StringLength(1000)] string Note);
 public record ReuseSaleDto(Guid Id, Guid LineId, string Name, decimal Quantity, decimal Revenue, decimal SellingCost,
-    decimal? CostOfGoods, decimal? PretaxDifference, string Note, DateTime CreatedAt);
-public record BatchCostSourceDto(string SourceType, string SourceLabel, decimal Quantity, decimal? UnitCost);
+    decimal? CostOfGoods, decimal? PretaxDifference, string Note, DateTime CreatedAt, decimal? AdjustedCostOfGoods = null, bool HasReconciliation = false);
+public record BatchCostSourceDto(string SourceType, string SourceLabel, decimal Quantity, decimal? UnitCost,
+    decimal? EffectiveUnitCost = null, bool HasReconciliation = false);
 public record CreateBatchExpenseDto(Guid OperationId, [Required, StringLength(255)] string Description, decimal Amount);
 public record BatchExpenseDto(Guid Id, string Description, decimal Amount, DateTime CreatedAt);
 public record BatchCostDto(List<BatchCostSourceDto> Sources, List<BatchExpenseDto> Expenses, bool HasCompleteCost,
     decimal? CostOfGoods, decimal SellingCosts, decimal? Revenue, decimal? PlatformFee,
-    decimal? PretaxDifference, bool IsSettled, string Note, bool NeedsCostReconciliation = false);
+    decimal? PretaxDifference, bool IsSettled, string Note, bool NeedsCostReconciliation = false, decimal? AdjustedCostOfGoods = null);
 
 public record CreateStockAdjustmentDto(Guid OperationId, Guid LineId, string Kind, decimal Amount, string Reason);
 public record StockAdjustmentDto(Guid Id, Guid LineId, string LineName, string Kind, decimal Amount, string Reason, Guid CreatedBy, DateTime CreatedAt);

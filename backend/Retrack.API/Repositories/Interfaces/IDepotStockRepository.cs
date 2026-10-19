@@ -31,4 +31,5 @@ public interface IDepotStockRepository
     Task<PagedResult<StockAdjustmentDto>> AdjustmentsAsync(Guid receiptId, DepotQuery query);
     Task<bool> HasLateCostsAsync(Guid batchId);
     Task<List<StockLineCostBalanceDto>> CurrentReceiptCostsAsync(Guid receiptId);
+    Task ForwardCostAsync(Guid lineId, Guid adjustmentId, decimal? unitCost);
 }

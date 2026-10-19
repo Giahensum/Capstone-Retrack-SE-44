@@ -11,9 +11,10 @@ public sealed partial class DepotReportRepository
         // SqlQuery nội suy của EF tham số hóa toàn bộ giá trị đầu vào.
         return db.Database.SqlQuery<CostChannelDto>($"""
             WITH sources AS (
-                SELECT s.batch_id, SUM(s.quantity) AS quantity, COUNT(*) FILTER (WHERE s.unit_cost IS NULL) AS missing,
-                       SUM(s.quantity * s.unit_cost) AS cost
+                SELECT s.batch_id, SUM(s.quantity) AS quantity, COUNT(*) FILTER (WHERE COALESCE(rc.unit_cost, s.unit_cost) IS NULL) AS missing,
+                       SUM(s.quantity * COALESCE(rc.unit_cost, s.unit_cost)) AS cost
                 FROM depot_batch_cost_sources s JOIN inventory_batches b ON b.id = s.batch_id
+                LEFT JOIN LATERAL (SELECT r.unit_cost FROM depot_cost_reconciliations r WHERE r.batch_source_id = s.id ORDER BY r.sequence_no DESC LIMIT 1) rc ON TRUE
                 WHERE b.depot_id = {depotId} GROUP BY s.batch_id
             ), expenses AS (
                 SELECT e.batch_id, SUM(e.amount) AS amount FROM depot_batch_expenses e
@@ -26,7 +27,8 @@ public sealed partial class DepotReportRepository
                     CASE WHEN s.missing = 0 AND s.quantity = b.declared_weight_kg THEN ROUND(s.cost, 0) ELSE NULL END AS cost,
                     COALESCE(e.amount, 0) AS selling,
                     EXISTS(SELECT 1 FROM depot_batch_cost_sources cs JOIN depot_stock_cost_adjustments a ON a.line_id = cs.source_id
-                           WHERE cs.batch_id = b.id AND cs.source_type = 'RECEIPT' AND a.created_at > b.created_at) AS needs_review
+                           WHERE cs.batch_id = b.id AND cs.source_type = 'RECEIPT' AND a.created_at > b.created_at
+                           AND NOT EXISTS(SELECT 1 FROM depot_cost_reconciliations rc WHERE rc.adjustment_id = a.id AND rc.batch_source_id = cs.id)) AS needs_review
                 FROM inventory_batches b
                 LEFT JOIN sources s ON s.batch_id = b.id LEFT JOIN expenses e ON e.batch_id = b.id
                 LEFT JOIN batch_quality_checks q ON q.batch_id = b.id
@@ -36,9 +38,11 @@ public sealed partial class DepotReportRepository
                     AND COALESCE(b.settled_at, q.created_at) >= {start} AND COALESCE(b.settled_at, q.created_at) < {end}
                 UNION ALL
                 SELECT 'REUSABLE', x.quantity * x.unit_price, 0, x.quantity * x.unit_price,
-                       x.unit_cost * x.quantity, x.selling_cost,
-                       EXISTS(SELECT 1 FROM depot_stock_cost_adjustments a WHERE a.line_id = x.line_id AND a.created_at > x.created_at)
+                       COALESCE(rc.unit_cost, x.unit_cost) * x.quantity, x.selling_cost,
+                       EXISTS(SELECT 1 FROM depot_stock_cost_adjustments a WHERE a.line_id = x.line_id AND a.created_at > x.created_at
+                              AND NOT EXISTS(SELECT 1 FROM depot_cost_reconciliations r WHERE r.adjustment_id = a.id AND r.reuse_sale_id = x.id))
                 FROM depot_reuse_sales x JOIN depot_stock_lines l ON l.id = x.line_id
+                LEFT JOIN LATERAL (SELECT r.unit_cost FROM depot_cost_reconciliations r WHERE r.reuse_sale_id = x.id ORDER BY r.sequence_no DESC LIMIT 1) rc ON TRUE
                 JOIN depot_stock_receipts r ON r.id = l.receipt_id
                 WHERE r.depot_id = {depotId} AND x.created_at >= {start} AND x.created_at < {end}
             )
