@@ -34,8 +34,7 @@ UPDATE system_configs SET updated_at = NOW() WHERE updated_at IS NULL;
 INSERT INTO system_configs (config_key, config_value, description)
 VALUES ('PLATFORM_FEE_PERCENTAGE', '5.00', 'Phí nền tảng mặc định 5%')
 ON CONFLICT (config_key) DO NOTHING;
-UPDATE system_configs SET config_value = '5.00', description = 'Phí nền tảng mặc định 5%'
-WHERE config_key = 'PLATFORM_FEE_PERCENTAGE' AND config_value = '1.00';
+-- Không ghi đè mức phí Admin đã cấu hình khi chạy lại/nâng cấp.
 
 -- Bảng người dùng
 CREATE TABLE IF NOT EXISTS users (
@@ -500,7 +499,7 @@ CREATE INDEX IF NOT EXISTS idx_password_reset_otps_email ON password_reset_otps(
 
 -- RETRACK_DEPOT_STOCK_V1
 -- Nhập kho đa nguồn bổ sung: giữ nguyên DONE cũ, không sao chép dữ liệu thu gom.
--- Có thể chạy lại toàn bộ file trên DB hiện có; ứng dụng không tự migrate.
+-- Máy cũ chỉ review/chạy khối schema cần thiết; ứng dụng không tự migrate.
 CREATE TABLE IF NOT EXISTS depot_stock_receipts (
     id UUID PRIMARY KEY,
     depot_id UUID NOT NULL REFERENCES depots(id) ON DELETE RESTRICT,
@@ -598,9 +597,19 @@ UPDATE depot_reuse_sales x SET unit_cost = l.allocated_cost / l.quantity
 FROM depot_stock_lines l WHERE l.id = x.line_id AND x.unit_cost IS NULL AND l.allocated_cost IS NOT NULL;
 -- Mốc nhận hàng bất biến cho FIFO; đơn cũ thiếu event dùng updated_at làm mốc ước tính.
 ALTER TABLE pickup_requests ADD COLUMN IF NOT EXISTS stock_received_at TIMESTAMPTZ;
-UPDATE pickup_requests p SET stock_received_at = COALESCE(
-    (SELECT MIN(e.created_at) FROM employee_collection_events e WHERE e.pickup_request_id = p.id AND e.kind = 'HANDED_OVER'), p.updated_at)
-WHERE p.status = 'DONE' AND p.stock_received_at IS NULL;
+-- Backfill không được làm trigger thay updated_at của đơn cũ sang ngày nâng cấp.
+DO $fifo_backfill$
+DECLARE restore_trigger BOOLEAN;
+BEGIN
+    SELECT EXISTS(SELECT 1 FROM pg_trigger WHERE tgrelid = 'pickup_requests'::regclass
+        AND tgname = 'trg_pickup_requests_upd' AND tgenabled = 'O') INTO restore_trigger;
+    IF restore_trigger THEN ALTER TABLE pickup_requests DISABLE TRIGGER trg_pickup_requests_upd; END IF;
+    UPDATE pickup_requests p SET stock_received_at = COALESCE(
+        (SELECT MIN(e.created_at) FROM employee_collection_events e WHERE e.pickup_request_id = p.id AND e.kind = 'HANDED_OVER'), p.updated_at)
+    WHERE p.status = 'DONE' AND p.stock_received_at IS NULL;
+    IF restore_trigger THEN ALTER TABLE pickup_requests ENABLE TRIGGER trg_pickup_requests_upd; END IF;
+END;
+$fifo_backfill$;
 -- Thống nhất kg đến 0,001 từ nguồn thu gom/phiếu nhập tới lô và cân Factory.
 ALTER TABLE pickup_request_items ALTER COLUMN weight_kg TYPE NUMERIC(18,3);
 ALTER TABLE inventory_batches ALTER COLUMN declared_weight_kg TYPE NUMERIC(18,3);
