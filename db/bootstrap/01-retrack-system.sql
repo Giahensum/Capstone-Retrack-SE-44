@@ -195,10 +195,42 @@ CREATE TABLE IF NOT EXISTS factory_depot_partnerships (
     updated_at  TIMESTAMPTZ DEFAULT NOW(),
     blocked_by_depot BOOLEAN NOT NULL DEFAULT FALSE,
     blocked_by_factory BOOLEAN NOT NULL DEFAULT FALSE,
+    contract_code VARCHAR(50),
+    contract_version INT NOT NULL DEFAULT 0,
+    contract_terms TEXT,
+    contract_terms_hash VARCHAR(64),
+    contract_status VARCHAR(30),
+    factory_signed_by UUID REFERENCES users(id),
+    factory_signed_at TIMESTAMPTZ,
+    depot_signed_by UUID REFERENCES users(id),
+    depot_signed_at TIMESTAMPTZ,
+    contract_effective_at TIMESTAMPTZ,
+    contract_expires_at TIMESTAMPTZ,
+    termination_status VARCHAR(30),
+    termination_requested_by UUID REFERENCES users(id),
+    termination_requested_at TIMESTAMPTZ,
+    termination_reason VARCHAR(2000),
+    terminated_at TIMESTAMPTZ,
     CONSTRAINT uq_factory_depot UNIQUE (depot_id, factory_id)
 );
 ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS blocked_by_depot BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS blocked_by_factory BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS contract_code VARCHAR(50);
+ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS contract_version INT NOT NULL DEFAULT 0;
+ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS contract_terms TEXT;
+ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS contract_terms_hash VARCHAR(64);
+ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS contract_status VARCHAR(30);
+ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS factory_signed_by UUID REFERENCES users(id);
+ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS factory_signed_at TIMESTAMPTZ;
+ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS depot_signed_by UUID REFERENCES users(id);
+ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS depot_signed_at TIMESTAMPTZ;
+ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS contract_effective_at TIMESTAMPTZ;
+ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS contract_expires_at TIMESTAMPTZ;
+ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS termination_status VARCHAR(30);
+ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS termination_requested_by UUID REFERENCES users(id);
+ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS termination_requested_at TIMESTAMPTZ;
+ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS termination_reason VARCHAR(2000);
+ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS terminated_at TIMESTAMPTZ;
 
 -- Lô hàng tồn kho
 CREATE TABLE IF NOT EXISTS inventory_batches (
@@ -220,6 +252,7 @@ CREATE TABLE IF NOT EXISTS inventory_batches (
     vat_percentage      DECIMAL(5, 2),
     vat_amount          DECIMAL(18, 2),
     invoice_total_amount DECIMAL(18, 2),
+    price_includes_vat  BOOLEAN NOT NULL DEFAULT FALSE,
     platform_fee_amount DECIMAL(18, 2),
     net_amount          DECIMAL(18, 2),
     payment_reference   VARCHAR(200),
@@ -236,6 +269,7 @@ ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS vat_treatment VARCHAR(30)
 ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS vat_percentage DECIMAL(5, 2);
 ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS vat_amount DECIMAL(18, 2);
 ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS invoice_total_amount DECIMAL(18, 2);
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS price_includes_vat BOOLEAN NOT NULL DEFAULT FALSE;
 CREATE SEQUENCE IF NOT EXISTS depot_batch_number START WITH 1 INCREMENT BY 1 NO MINVALUE NO MAXVALUE NO CYCLE;
 CREATE UNIQUE INDEX IF NOT EXISTS ix_inventory_batches_code ON inventory_batches(code);
 
@@ -279,6 +313,10 @@ CREATE TABLE IF NOT EXISTS batch_quality_checks (
     vat_percentage          DECIMAL(5, 2) NOT NULL DEFAULT 0,
     vat_amount              DECIMAL(18, 2) NOT NULL DEFAULT 0,
     invoice_total_amount    DECIMAL(18, 2) NOT NULL DEFAULT 0,
+    price_includes_vat      BOOLEAN NOT NULL DEFAULT FALSE,
+    invoice_date            DATE,
+    seller_tax_code         VARCHAR(50),
+    vat_legal_basis         VARCHAR(500),
     platform_fee_percentage DECIMAL(5, 2)  DEFAULT 0,
     platform_fee_amount     DECIMAL(18, 2) DEFAULT 0,
     net_amount              DECIMAL(18, 2) NOT NULL,
@@ -303,6 +341,10 @@ ALTER TABLE batch_quality_checks ADD COLUMN IF NOT EXISTS vat_treatment VARCHAR(
 ALTER TABLE batch_quality_checks ADD COLUMN IF NOT EXISTS vat_percentage DECIMAL(5, 2) NOT NULL DEFAULT 0;
 ALTER TABLE batch_quality_checks ADD COLUMN IF NOT EXISTS vat_amount DECIMAL(18, 2) NOT NULL DEFAULT 0;
 ALTER TABLE batch_quality_checks ADD COLUMN IF NOT EXISTS invoice_total_amount DECIMAL(18, 2) NOT NULL DEFAULT 0;
+ALTER TABLE batch_quality_checks ADD COLUMN IF NOT EXISTS price_includes_vat BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE batch_quality_checks ADD COLUMN IF NOT EXISTS invoice_date DATE;
+ALTER TABLE batch_quality_checks ADD COLUMN IF NOT EXISTS seller_tax_code VARCHAR(50);
+ALTER TABLE batch_quality_checks ADD COLUMN IF NOT EXISTS vat_legal_basis VARCHAR(500);
 
 -- Factory đánh giá Depot
 CREATE TABLE IF NOT EXISTS factory_depot_reviews (

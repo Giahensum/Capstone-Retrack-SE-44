@@ -340,6 +340,7 @@ export function Operations({ mode, focusId, navigate }) {
               key={order.id}
               order={order}
               close={() => setAction(null)}
+              next={() => setAction("qc")}
             />
           )}
           {action === "qc" && (
@@ -402,12 +403,13 @@ function Financial({ values, net }) {
     </dl>
   );
 }
-function WeighForm({ order, close }) {
+function WeighForm({ order, close, next }) {
   const { act } = useFactory();
   const [form, setForm] = useState({
     gross: order.weight?.gross ?? "",
     tare: order.weight?.tare ?? "",
     note: order.weight?.note || "",
+    ticketNumber: order.weight?.ticketNumber || "",
     attachment: order.weight?.attachment,
   });
   const set = (key, value) => setForm((f) => ({ ...f, [key]: value }));
@@ -421,14 +423,11 @@ function WeighForm({ order, close }) {
     <form
         onSubmit={async (e) => {
           e.preventDefault();
-          if (
-          await act(
+          if (await act(
             "WEIGH",
             { id: order.id, ...form },
-            "Đã lưu phiếu cân. Lô hàng sẵn sàng kiểm tra KCS.",
-          )
-        )
-          close();
+            "Đã lưu phiếu cân. Tiếp tục nhập kết quả KCS.",
+          )) next();
       }}
     >
       <div className="info-box">
@@ -481,11 +480,17 @@ function WeighForm({ order, close }) {
         value={form.attachment}
         onChange={(file) => set("attachment", file)}
       />
+      <Field
+        label="Số phiếu cân (không bắt buộc)"
+        maxLength={100}
+        value={form.ticketNumber}
+        onChange={(e) => set("ticketNumber", e.target.value)}
+      />
       <div className="form-actions">
         <Button secondary onClick={close}>
           Hủy
         </Button>
-        <Button type="submit">Lưu phiếu cân</Button>
+        <Button type="submit" disabled={!result}>Lưu và chuyển sang KCS</Button>
       </div>
     </form>
   );
@@ -609,11 +614,16 @@ function SettlementForm({ order, close }) {
   const [price, setPrice] = useState("");
   const [reference, setReference] = useState("");
   const [vatOption, setVatOption] = useState("NOT_APPLICABLE:0");
+  const [priceIncludesVat, setPriceIncludesVat] = useState(false);
+  const [invoiceNumber, setInvoiceNumber] = useState("");
+  const [invoiceDate, setInvoiceDate] = useState("");
+  const [sellerTaxCode, setSellerTaxCode] = useState("");
+  const [vatLegalBasis, setVatLegalBasis] = useState("");
   const [confirmed, setConfirmed] = useState(false);
   const [vatTreatment, vatPercentage] = vatOption.split(":");
   let preview;
   try {
-    preview = settlement(order.weight.net, Number(price), state?.profile?.platformFeePercentage ?? order.payment?.feePercentage ?? 1, vatTreatment, Number(vatPercentage));
+    preview = settlement(order.weight.net, Number(price), state?.profile?.platformFeePercentage ?? order.payment?.feePercentage ?? 1, vatTreatment, Number(vatPercentage), priceIncludesVat);
   } catch {
     /* Price has not been entered. */
   }
@@ -625,7 +635,7 @@ function SettlementForm({ order, close }) {
           confirmed &&
           await act(
             "SETTLE",
-            { id: order.id, price, vatTreatment, vatPercentage, reference },
+            { id: order.id, price, priceIncludesVat, vatTreatment, vatPercentage, invoiceNumber, invoiceDate, sellerTaxCode, vatLegalBasis, reference },
             "Đã ghi nhận quyết toán. Có thể đánh giá lô hàng.",
           )
         )
@@ -637,7 +647,7 @@ function SettlementForm({ order, close }) {
         không thực hiện giao dịch ngân hàng.
       </div>
       <Field
-        label="Đơn giá đã thỏa thuận sau KCS (đ/kg)"
+        label={`Đơn giá đã thỏa thuận sau KCS (đ/kg${priceIncludesVat ? ", đã gồm VAT" : ", chưa VAT"})`}
         required
         type="number"
         min="1"
@@ -645,14 +655,10 @@ function SettlementForm({ order, close }) {
         value={price}
         onChange={(e) => setPrice(e.target.value)}
       />
-      {preview && <Financial values={preview} net={order.weight.net} />}
-      <Field
-        label="Mã tham chiếu chuyển khoản"
-        required
-        maxLength={200}
-        value={reference}
-        onChange={(e) => setReference(e.target.value)}
-      />
+      <label className="checkbox-line">
+        <input type="checkbox" checked={priceIncludesVat} onChange={(e) => setPriceIncludesVat(e.target.checked)} />
+        Đơn giá trên đã bao gồm VAT
+      </label>
       <Field label="VAT theo hóa đơn của vựa">
         <select value={vatOption} onChange={(e) => setVatOption(e.target.value)}>
           <option value="NOT_APPLICABLE:0">Không áp dụng VAT</option>
@@ -662,6 +668,39 @@ function SettlementForm({ order, close }) {
           <option value="TAXABLE:10">VAT 10%</option>
         </select>
       </Field>
+      {vatTreatment !== "NOT_APPLICABLE" && (
+        <>
+          <Field label="Số hóa đơn điện tử" required value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} />
+          <Field label="Ngày hóa đơn" required type="date" max={new Date().toLocaleDateString("en-CA")} value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
+          <Field label="Mã số thuế bên bán (vựa)">
+            <input
+              required
+              inputMode="numeric"
+              pattern="[0-9]{10}(-[0-9]{3})?"
+              maxLength={14}
+              placeholder="Ví dụ: 0314892841"
+              title="Nhập 10 chữ số hoặc 10 chữ số kèm mã đơn vị phụ thuộc, ví dụ 0314892841-001."
+              value={sellerTaxCode}
+              onChange={(e) => setSellerTaxCode(e.target.value)}
+            />
+            <small>Gồm 10 chữ số; đơn vị phụ thuộc có thể thêm “-001”.</small>
+          </Field>
+        </>
+      )}
+      {(vatTreatment === "NOT_APPLICABLE" || Number(vatPercentage) === 8) && (
+        <Field label={vatTreatment === "NOT_APPLICABLE" ? "Căn cứ không áp dụng VAT" : "Căn cứ áp dụng mức giảm 8%"} required>
+          <textarea value={vatLegalBasis} onChange={(e) => setVatLegalBasis(e.target.value)} maxLength={500} />
+        </Field>
+      )}
+      <Field
+        label="Mã tham chiếu chuyển khoản"
+        required
+        maxLength={200}
+        value={reference}
+        onChange={(e) => setReference(e.target.value)}
+      />
+      <p className="muted">Thuế suất được ghi nhận theo hóa đơn do vựa cung cấp. Hệ thống không tự xác định nghĩa vụ thuế.</p>
+      {preview && <Financial values={preview} net={order.weight.net} />}
       <label className="checkbox-line">
         <input
           type="checkbox"
@@ -698,7 +737,9 @@ function RatingForm({ order, close }) {
           await act(
             "RATE",
             { id: order.id, ...form },
-            "Đã lưu đánh giá lô và quyết định hợp tác.",
+            form.partnership === "UNCHANGED"
+              ? "Đã lưu đánh giá lô hàng."
+              : "Đã lưu đánh giá và quyết định không hợp tác.",
           )
         )
           close();
@@ -725,19 +766,18 @@ function RatingForm({ order, close }) {
           onChange={(e) => setForm({ ...form, comment: e.target.value })}
         />
       </Field>
-      <Field label="Quyết định hợp tác với vựa">
+      <Field label="Quyết định sau đánh giá">
         <select
           value={form.partnership}
           onChange={(e) => setForm({ ...form, partnership: e.target.value })}
         >
           <option value="UNCHANGED">Chưa quyết định</option>
-          <option value="APPROVED">Đồng ý hợp tác lâu dài</option>
           <option value="DECLINED">Không hợp tác lâu dài</option>
         </select>
       </Field>
       <p className="muted">
-        Đồng ý hợp tác cho phép vựa gửi thẳng các lô sau. Không hợp tác thì mỗi
-        lô chỉ định tiếp theo phải được nhà máy duyệt lại.
+        Muốn hợp tác lâu dài, vào mục Vựa đối tác để lập hợp đồng điện tử và chờ
+        chủ vựa ký. Không hợp tác thì mỗi lô tiếp theo phải được duyệt lại.
       </p>
       <div className="form-actions">
         <Button secondary onClick={close}>

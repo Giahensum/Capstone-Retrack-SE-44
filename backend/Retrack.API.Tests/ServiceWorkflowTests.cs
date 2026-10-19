@@ -147,7 +147,7 @@ public class FactoryServiceWorkflowTests
     }
 
     [Fact]
-    public async Task RatingAfterSettlementCanApprovePartnershipAtomically()
+    public async Task RatingCannotBypassMutualElectronicContract()
     {
         await using var db = NewDb();
         var (factory, depot, batch) = await Seed(db, "COMPLETED");
@@ -165,10 +165,9 @@ public class FactoryServiceWorkflowTests
                 PartnershipStatus = PartnershipStatus.APPROVED
             }, default);
 
-        Assert.Equal(ServiceOutcome.Success, result.Outcome);
-        Assert.Equal("APPROVED", result.Data!.PartnershipStatus);
-        Assert.Equal("APPROVED", (await db.FactoryDepotPartnerships.SingleAsync()).Status);
-        Assert.Equal(5, (await db.FactoryDepotReviews.SingleAsync()).Rating);
+        Assert.Equal(ServiceOutcome.Invalid, result.Outcome);
+        Assert.Equal("PENDING", (await db.FactoryDepotPartnerships.SingleAsync()).Status);
+        Assert.Empty(db.FactoryDepotReviews);
     }
 
     [Fact]

@@ -42,14 +42,18 @@ function Workspace() {
         <a
           className="brand"
           href="#"
+          aria-label="Về tổng quan nhà máy"
           onClick={(e) => {
             e.preventDefault();
             navigate("dashboard");
           }}
         >
-          <span className="brand-mark">R</span>
-          <span>
-            retrack<span className="brand-sub">FACTORY WORKSPACE</span>
+          <span className="factory-brand-logo" aria-hidden="true">
+            <img src="/brand/factory-logo.png" alt="" />
+          </span>
+          <span className="factory-brand-wordmark" aria-hidden="true">
+            <strong>retrack</strong>
+            <small>FACTORY WORKSPACE</small>
           </span>
         </a>
         <div className="workspace-name">

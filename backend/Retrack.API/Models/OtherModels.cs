@@ -87,6 +87,22 @@ namespace Retrack.API.Models
     {
         [Column("blocked_by_depot")] public bool BlockedByDepot { get; set; }
         [Column("blocked_by_factory")] public bool BlockedByFactory { get; set; }
+        [Column("contract_code"), MaxLength(50)] public string? ContractCode { get; set; }
+        [Column("contract_version")] public int ContractVersion { get; set; }
+        [Column("contract_terms")] public string? ContractTerms { get; set; }
+        [Column("contract_terms_hash"), MaxLength(64)] public string? ContractTermsHash { get; set; }
+        [Column("contract_status"), MaxLength(30)] public string? ContractStatus { get; set; }
+        [Column("factory_signed_by")] public Guid? FactorySignedBy { get; set; }
+        [Column("factory_signed_at")] public DateTime? FactorySignedAt { get; set; }
+        [Column("depot_signed_by")] public Guid? DepotSignedBy { get; set; }
+        [Column("depot_signed_at")] public DateTime? DepotSignedAt { get; set; }
+        [Column("contract_effective_at")] public DateTime? ContractEffectiveAt { get; set; }
+        [Column("contract_expires_at")] public DateTime? ContractExpiresAt { get; set; }
+        [Column("termination_status"), MaxLength(30)] public string? TerminationStatus { get; set; }
+        [Column("termination_requested_by")] public Guid? TerminationRequestedBy { get; set; }
+        [Column("termination_requested_at")] public DateTime? TerminationRequestedAt { get; set; }
+        [Column("termination_reason"), MaxLength(2000)] public string? TerminationReason { get; set; }
+        [Column("terminated_at")] public DateTime? TerminatedAt { get; set; }
         // BLOCKED cũ không xác định bên chặn: giữ nguyên để đối chiếu, không tự mở.
         [NotMapped] public bool IsBlocked => Status == "BLOCKED" || BlockedByDepot || BlockedByFactory;
         [NotMapped] public string EffectiveStatus => IsBlocked ? "BLOCKED" : Status;
@@ -179,6 +195,7 @@ namespace Retrack.API.Models
         [Column("vat_percentage")] public decimal? VatPercentage { get; set; }
         [Column("vat_amount")] public decimal? VatAmount { get; set; }
         [Column("invoice_total_amount")] public decimal? InvoiceTotalAmount { get; set; }
+        [Column("price_includes_vat")] public bool PriceIncludesVat { get; set; }
         [Column("platform_fee_amount")] public decimal? PlatformFeeAmount { get; set; }
         [Column("net_amount")] public decimal? NetAmount { get; set; }
         [Column("payment_reference")] public string? PaymentReference { get; set; }
@@ -283,6 +300,20 @@ namespace Retrack.API.Models
 
         [Column("invoice_total_amount")]
         public decimal InvoiceTotalAmount { get; set; }
+
+        [Column("price_includes_vat")]
+        public bool PriceIncludesVat { get; set; }
+
+        [Column("invoice_date")]
+        public DateOnly? InvoiceDate { get; set; }
+
+        [Column("seller_tax_code")]
+        [MaxLength(50)]
+        public string? SellerTaxCode { get; set; }
+
+        [Column("vat_legal_basis")]
+        [MaxLength(500)]
+        public string? VatLegalBasis { get; set; }
 
         [Column("platform_fee_percentage")]
         public decimal PlatformFeePercentage { get; set; } = 0;

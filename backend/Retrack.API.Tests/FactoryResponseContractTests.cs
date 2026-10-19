@@ -57,6 +57,7 @@ public class FactoryResponseContractTests
         AssertFields(json, "id", "batchId", "batchCode", "materialType", "estimatedWeightKg", "actualWeightKg",
             "depotId", "depotName", "depotAddress", "depotPhone", "agreedPrice", "totalAmount", "status",
             "vatTreatment", "vatPercentage", "vatAmount", "invoiceTotalAmount",
+            "priceIncludesVat", "invoiceDate", "sellerTaxCode", "vatLegalBasis",
             "receivedAt", "decidedAt", "rejectionReason", "settledAt", "feeAmount", "netPayableAmount",
             "paymentReference", "platformFeePercentage", "createdAt", "transport", "weightVerification", "weightTicket", "invoice");
         Assert.Equal(JsonValueKind.Null, json.GetProperty("transport").ValueKind);

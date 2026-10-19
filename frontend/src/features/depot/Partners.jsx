@@ -5,8 +5,10 @@ import { QueryState, Pager, Dialog, MutationError, inputClass } from './componen
 import { MaterialIcon } from './components/DepotIcon';
 import { materialLabel } from './materialLabels';
 import CreateBatchModal from './components/CreateBatchModal';
+import ContractDocument from '../../components/ui/ContractDocument';
 
 const labels = { APPROVED: 'Đang hợp tác', PENDING: 'Chưa hợp tác', DECLINED: 'Không hợp tác', BLOCKED: 'Đã chặn' };
+const contractLabels = { PENDING_DEPOT: 'Chờ chủ vựa ký', ACTIVE: 'Đang hiệu lực', REJECTED: 'Đã từ chối', TERMINATED: 'Đã chấm dứt' };
 
 export default function Partners() {
   const { depotId } = useDepot();
@@ -18,6 +20,8 @@ export default function Partners() {
   const [nearestFirst, setNearestFirst] = useState(false);
   const [createFor, setCreateFor] = useState(null);
   const [decision, setDecision] = useState(null);
+  const [contractDecision, setContractDecision] = useState(null);
+  const [termination, setTermination] = useState(null);
   const searchRef = useRef(null);
   useEffect(() => { setMaxDistanceKm(''); setNearestFirst(false); setPage(1); }, [depotId]);
 
@@ -29,8 +33,12 @@ export default function Partners() {
     maxDistanceKm: hasCoordinates && validRadius ? radius : undefined,
     nearestFirst: hasCoordinates && nearestFirst }, activeTab === 'list');
   const demands = useDepotQuery('partners/demands', { page, search }, activeTab === 'demand');
-  const requests = useDepotQuery('partnerships', { page }, activeTab === 'requests');
+  const requests = useDepotQuery('partnerships', { page });
+  const pendingContracts = requests.data?.items?.filter((item) => item.contractStatus === 'PENDING_DEPOT') || [];
   const update = useDepotMutation('put', (id) => `partnerships/${id}/status`, () => setDecision(null));
+  const decideContract = useDepotMutation('post', (id) => `partnerships/${id}/contract/decision`, () => setContractDecision(null));
+  const requestTermination = useDepotMutation('post', (id) => `partnerships/${id}/contract/termination`, () => { setTermination(null); setContractDecision(null); });
+  const decideTermination = useDepotMutation('post', (id) => `partnerships/${id}/contract/termination/decision`, () => { setTermination(null); setContractDecision(null); });
 
   return (
     <div className="flex flex-col p-4 md:p-6 w-full max-w-7xl mx-auto min-h-full gap-6 bg-d-surface">
@@ -40,6 +48,18 @@ export default function Partners() {
         <MutationError mutation={update} />
         <div className="flex justify-end gap-3"><button onClick={() => setDecision(null)} disabled={update.isPending}>Đóng</button>
           <button className="bg-d-primary text-white px-4 py-2 rounded-full" disabled={update.isPending} onClick={() => update.mutate({ id: decision.factoryId, body: { status: decision.status } })}>{update.isPending ? 'Đang lưu…' : 'Xác nhận'}</button></div>
+      </Dialog>}
+      {contractDecision && <Dialog title={`Hợp đồng ${contractDecision.contractCode || ''}`} onClose={() => setContractDecision(null)} busy={decideContract.isPending}>
+        <ContractDocument contract={contractDecision} factoryName={contractDecision.factoryName} depotName={profile.data?.name || profile.data?.depotName} />
+        {contractDecision.contractStatus === 'PENDING_DEPOT' && <><label className="mt-4 flex items-start gap-2 text-sm"><input type="checkbox" checked={contractDecision.confirmed || false} onChange={(e) => setContractDecision({ ...contractDecision, confirmed: e.target.checked })} />Tôi đã đọc, đồng ý nội dung và xác nhận ký điện tử với tư cách chủ vựa.</label><MutationError mutation={decideContract} /></>}
+        <div className="mt-5 flex flex-wrap justify-end gap-3"><button className="border border-d-primary text-d-primary px-4 py-2 rounded-full" type="button" onClick={() => window.print()}>In / Lưu PDF</button><button onClick={() => setContractDecision(null)} disabled={decideContract.isPending}>Đóng</button>
+          {contractDecision.contractStatus === 'PENDING_DEPOT' && <><button className="border border-d-error text-d-error px-4 py-2 rounded-full" disabled={decideContract.isPending} onClick={() => decideContract.mutate({ id: contractDecision.factoryId, body: { decision: 'REJECT', confirmElectronicSignature: false } })}>Từ chối</button>
+          <button className="bg-d-primary text-white px-4 py-2 rounded-full" disabled={decideContract.isPending || !contractDecision.confirmed} onClick={() => decideContract.mutate({ id: contractDecision.factoryId, body: { decision: 'ACCEPT', confirmElectronicSignature: true } })}>{decideContract.isPending ? 'Đang lưu…' : 'Ký chấp thuận'}</button></>}
+          {contractDecision.contractStatus === 'ACTIVE' && !['PENDING_DEPOT', 'PENDING_FACTORY'].includes(contractDecision.terminationStatus) && <button className="border border-d-error text-d-error px-4 py-2 rounded-full" onClick={() => setTermination({ ...contractDecision, mode: 'request', reason: '' })}>Đề nghị chấm dứt</button>}
+          {contractDecision.terminationStatus === 'PENDING_DEPOT' && <button className="bg-d-error text-white px-4 py-2 rounded-full" onClick={() => setTermination({ ...contractDecision, mode: 'decision' })}>Xử lý đề nghị chấm dứt</button>}</div>
+      </Dialog>}
+      {termination && <Dialog title={termination.mode === 'request' ? 'Đề nghị chấm dứt hợp đồng' : 'Xử lý đề nghị chấm dứt'} onClose={() => setTermination(null)} busy={requestTermination.isPending || decideTermination.isPending}>
+        {termination.mode === 'request' ? <form onSubmit={(e) => { e.preventDefault(); requestTermination.mutate({ id: termination.factoryId, body: { reason: termination.reason } }); }}><p className="mb-3 text-sm text-d-on-surface-variant">Chỉ có thể chấm dứt khi các lô đang xử lý đã hoàn tất.</p><label className="block text-sm">Lý do<textarea className={`${inputClass} mt-1`} required minLength={10} maxLength={2000} value={termination.reason} onChange={(e) => setTermination({ ...termination, reason: e.target.value })} /></label><MutationError mutation={requestTermination} /><div className="mt-5 flex justify-end gap-3"><button type="button" onClick={() => setTermination(null)}>Đóng</button><button className="bg-d-error text-white px-4 py-2 rounded-full" type="submit">Gửi đề nghị</button></div></form> : <div><p className="rounded-xl bg-d-surface-container-low p-3">Nhà máy đề nghị chấm dứt: <strong>{termination.terminationReason}</strong></p><MutationError mutation={decideTermination} /><div className="mt-5 flex justify-end gap-3"><button onClick={() => decideTermination.mutate({ id: termination.factoryId, body: { decision: 'REJECT' } })}>Từ chối</button><button className="bg-d-error text-white px-4 py-2 rounded-full" onClick={() => decideTermination.mutate({ id: termination.factoryId, body: { decision: 'ACCEPT' } })}>Chấp thuận chấm dứt</button></div></div>}
       </Dialog>}
 
       {/* Page Header */}
@@ -71,8 +91,22 @@ export default function Partners() {
         >
           Nhu cầu thu mua
         </button>
-        <button onClick={() => { setActiveTab('requests'); setPage(1); setSearch(''); }} className={`pb-3 px-1 font-d-body-md text-d-body-md font-bold whitespace-nowrap transition-colors ${activeTab === 'requests' ? 'text-d-primary border-b-2 border-d-primary' : 'text-d-on-surface-variant hover:text-d-primary'}`}>Yêu cầu hợp tác</button>
+        <button onClick={() => { setActiveTab('requests'); setPage(1); setSearch(''); }} className={`pb-3 px-1 font-d-body-md text-d-body-md font-bold whitespace-nowrap transition-colors ${activeTab === 'requests' ? 'text-d-primary border-b-2 border-d-primary' : 'text-d-on-surface-variant hover:text-d-primary'}`}>Hợp đồng & yêu cầu{pendingContracts.length ? ` (${pendingContracts.length})` : ''}</button>
       </div>
+
+      {pendingContracts.length > 0 && activeTab !== 'requests' && (
+        <button
+          type="button"
+          onClick={() => { setActiveTab('requests'); setPage(1); setSearch(''); }}
+          className="flex w-full items-center justify-between gap-4 rounded-2xl border border-d-primary bg-d-surface-accent px-5 py-4 text-left text-d-on-surface shadow-sm transition hover:shadow-md"
+        >
+          <span className="flex items-center gap-3">
+            <MaterialIcon name="contract" className="text-2xl text-d-primary" />
+            <span><strong className="block text-d-primary">Có {pendingContracts.length} hợp đồng đang chờ bạn ký</strong><span className="text-sm text-d-on-surface-variant">Mở danh sách để xem nội dung và xác nhận hợp đồng điện tử.</span></span>
+          </span>
+          <span className="shrink-0 font-bold text-d-primary">Xem hợp đồng →</span>
+        </button>
+      )}
 
       {/* Scrollable Content */}
       <div className="flex flex-col gap-6">
@@ -224,7 +258,7 @@ export default function Partners() {
           </>
         ) : activeTab === 'requests' ? (
           <QueryState query={requests}><div className="bg-white rounded-[20px] border border-d-border-subtle overflow-x-auto"><table className="w-full min-w-[650px] text-left"><thead><tr className="border-b border-d-border-subtle"><th className="p-4">Nhà máy</th><th className="p-4">Liên hệ</th><th className="p-4">Ngày gửi</th><th className="p-4">Trạng thái</th><th className="p-4">Thao tác</th></tr></thead><tbody>
-            {requests.data?.items.map((p) => <tr key={p.id} className="border-b border-d-border-subtle"><td className="p-4">{p.factoryName}</td><td className="p-4">{p.contactPhone || 'Chưa cập nhật'}</td><td className="p-4">{date(p.createdAt)}</td><td className="p-4">{labels[p.status] ?? p.status}{p.blockedByFactory && <span className="block text-sm text-d-on-surface-variant">Nhà máy đã chặn</span>}{p.legacyBlocked && <span className="block text-sm text-d-on-surface-variant">Trạng thái chặn cũ cần đối chiếu</span>}</td><td className="p-4">{p.blockedByDepot ? <button className="text-d-primary underline" onClick={() => setDecision({ factoryId: p.factoryId, factoryName: p.factoryName, status: 'UNBLOCKED' })}>Bỏ chặn phía kho</button> : !p.blockedByFactory && !p.legacyBlocked ? <button className="text-d-error underline" onClick={() => setDecision({ factoryId: p.factoryId, factoryName: p.factoryName, status: 'BLOCKED' })}>Chặn</button> : <span className="text-sm text-d-on-surface-variant">—</span>}</td></tr>)}
+            {requests.data?.items.map((p) => <tr key={p.id} className="border-b border-d-border-subtle"><td className="p-4">{p.factoryName}</td><td className="p-4">{p.contactPhone || 'Chưa cập nhật'}</td><td className="p-4">{date(p.createdAt)}</td><td className="p-4">{labels[p.status] ?? p.status}{p.contractStatus && <span className="block text-sm text-d-primary">Hợp đồng: {contractLabels[p.contractStatus] || p.contractStatus}</span>}{p.blockedByFactory && <span className="block text-sm text-d-on-surface-variant">Nhà máy đã chặn</span>}{p.legacyBlocked && <span className="block text-sm text-d-on-surface-variant">Trạng thái chặn cũ cần đối chiếu</span>}</td><td className="p-4"><div className="flex flex-col items-start gap-2">{p.contractTerms && <button className="text-d-primary underline" onClick={() => setContractDecision(p)}>{p.contractStatus === 'PENDING_DEPOT' ? 'Xem và ký hợp đồng' : 'Xem hợp đồng'}</button>}{p.blockedByDepot ? <button className="text-d-primary underline" onClick={() => setDecision({ factoryId: p.factoryId, factoryName: p.factoryName, status: 'UNBLOCKED' })}>Bỏ chặn phía kho</button> : !p.blockedByFactory && !p.legacyBlocked ? <button className="text-d-error underline" onClick={() => setDecision({ factoryId: p.factoryId, factoryName: p.factoryName, status: 'BLOCKED' })}>Chặn</button> : <span className="text-sm text-d-on-surface-variant">—</span>}</div></td></tr>)}
             {!requests.data?.items.length && <tr><td colSpan="5" className="p-6 text-center">Chưa có yêu cầu hợp tác.</td></tr>}
           </tbody></table><Pager page={page} setPage={setPage} total={requests.data?.totalCount} /></div></QueryState>
         ) : (

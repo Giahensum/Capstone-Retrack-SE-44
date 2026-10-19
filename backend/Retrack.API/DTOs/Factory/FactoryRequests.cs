@@ -84,9 +84,15 @@ public class DecisionRequest
 public class SettlementRequest
 {
     [Range(0, 1000000000)] public decimal AgreedPricePerKg { get; set; }
+    public bool PriceIncludesVat { get; set; }
     [Required, RegularExpression("^(NOT_APPLICABLE|ZERO_RATE|TAXABLE)$")]
     public string VatTreatment { get; set; } = "NOT_APPLICABLE";
     [Range(0, 100)] public decimal VatPercentage { get; set; }
+    [StringLength(100)] public string? InvoiceNumber { get; set; }
+    public DateOnly? InvoiceDate { get; set; }
+    [RegularExpression(@"^\d{10}(-\d{3})?$", ErrorMessage = "Mã số thuế phải có 10 chữ số hoặc 10 chữ số kèm mã đơn vị phụ thuộc.")]
+    public string? SellerTaxCode { get; set; }
+    [StringLength(500)] public string? VatLegalBasis { get; set; }
     [Required, StringLength(200)] public string PaymentReference { get; set; } = "";
 }
 
