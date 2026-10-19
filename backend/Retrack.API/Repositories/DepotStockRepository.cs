@@ -44,8 +44,16 @@ public sealed partial class DepotStockRepository(AppDbContext db) : IDepotStockR
                 x.Line.Quantity - (db.DepotReuseSales.Where(s => s.LineId == x.Line.Id).Sum(s => (decimal?)s.Quantity) ?? 0),
                 x.Cost / x.Line.Quantity)), query);
     }
-    public Task<DepotStockLine?> FindLineAsync(Guid depotId, Guid lineId) => db.DepotStockLines.Include(x => x.Receipt)
-        .SingleOrDefaultAsync(x => x.Id == lineId && x.Receipt.DepotId == depotId);
+    public async Task<DepotStockLine?> FindLineAsync(Guid depotId, Guid lineId)
+    {
+        var line = await db.DepotStockLines.Include(x => x.Receipt).SingleOrDefaultAsync(x => x.Id == lineId && x.Receipt.DepotId == depotId);
+        if (line != null)
+        {
+            await db.Entry(line).ReloadAsync();
+            await db.Entry(line.Receipt).ReloadAsync();
+        }
+        return line;
+    }
     public async Task<decimal> SoldAsync(Guid lineId) => await db.DepotReuseSales.Where(x => x.LineId == lineId)
         .SumAsync(x => (decimal?)x.Quantity) ?? 0;
     public Task<DepotReuseSale?> FindSaleAsync(Guid id) => db.DepotReuseSales.Include(x => x.Line).ThenInclude(x => x.Receipt).SingleOrDefaultAsync(x => x.Id == id);

@@ -51,7 +51,11 @@ public sealed class DepotBatchRepository(AppDbContext db) : IDepotBatchRepositor
     }
 
 
-    public Task LockDepotAsync(Guid depotId) => db.Depots.FromSqlInterpolated($"SELECT * FROM depots WHERE id = {depotId} FOR UPDATE").LoadAsync();
+    public async Task LockDepotAsync(Guid depotId)
+    {
+        var depot = await db.Depots.FromSqlInterpolated($"SELECT * FROM depots WHERE id = {depotId} FOR UPDATE").SingleOrDefaultAsync();
+        if (depot != null) await db.Entry(depot).ReloadAsync();
+    }
     public Task<InventoryBatch?> FindOperationAsync(Guid id) => db.InventoryBatches.AsNoTracking().Include(b => b.TargetFactory).Include(b => b.DirectOfferFactory).SingleOrDefaultAsync(b => b.Id == id);
     public Task<Factory?> FindActiveFactoryAsync(Guid id) => db.Factories.SingleOrDefaultAsync(f => f.Id == id && f.Owner != null && f.Owner.IsActive);
     public Task<FactoryDepotPartnership?> FindPartnerAsync(Guid depotId, Guid factoryId) => db.FactoryDepotPartnerships.AsNoTracking().SingleOrDefaultAsync(p => p.DepotId == depotId && p.FactoryId == factoryId);
