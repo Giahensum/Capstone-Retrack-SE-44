@@ -88,6 +88,8 @@ builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IPasswordResetOtp
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.ISellerService, Retrack.API.Services.Seller.SellerService>();
 
 builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IDepotOwnerRepository, DepotOwnerRepository>();
+builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IDepotVerificationRepository, DepotVerificationRepository>();
+builder.Services.AddScoped<Retrack.API.Services.Depot.DepotVerificationService>();
 
 builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IDepotPaymentReadRepository, DepotPaymentReadRepository>();
 

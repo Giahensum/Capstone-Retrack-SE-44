@@ -39,10 +39,14 @@ namespace Retrack.API.Data
         public DbSet<DepotReuseSale> DepotReuseSales { get; set; }
         public DbSet<DepotBatchCostSource> DepotBatchCostSources { get; set; }
         public DbSet<DepotBatchExpense> DepotBatchExpenses { get; set; }
+        public DbSet<DepotVerificationSubmission> DepotVerificationSubmissions { get; set; }
+        public DbSet<DepotVerificationDocument> DepotVerificationDocuments { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+            modelBuilder.Entity<DepotVerificationSubmission>().HasOne(x => x.Depot).WithMany().OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<DepotVerificationDocument>().HasOne(x => x.Submission).WithMany(x => x.Documents).HasForeignKey(x => x.SubmissionId).OnDelete(DeleteBehavior.Cascade);
             modelBuilder.Entity<DepotStockReceipt>().HasIndex(x => new { x.DepotId, x.CreatedAt });
             modelBuilder.Entity<DepotStockLine>().HasIndex(x => new { x.ReceiptId, x.Position }).IsUnique();
             modelBuilder.Entity<DepotBatchCostSource>().HasIndex(x => new { x.BatchId, x.SourceType, x.SourceId }).IsUnique();

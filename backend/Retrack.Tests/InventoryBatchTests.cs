@@ -29,7 +29,7 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         await TestDatabase.MigrateAsync(db);
         db.Users.AddRange(new User { Id = ownerId, Email = $"batch-{ownerId}@test.invalid", Role = "DEPOT_OWNER", FullName = "Owner" },
             new User { Id = sellerId, Email = $"batch-{sellerId}@test.invalid", Role = "SELLER", FullName = "Seller" });
-        db.Depots.Add(new Depot { Id = depotId, OwnerId = ownerId, Name = "Test stock", Address = "Test" });
+        db.Depots.Add(new Depot { VerificationStatus = "APPROVED", Id = depotId, OwnerId = ownerId, Name = "Test stock", Address = "Test" });
         var receipt = new PickupRequest { SellerId = sellerId, TargetDepotId = depotId, Address = "Test", Status = "DONE" };
         receipt.Items.Add(new PickupRequestItem { MaterialType = "PET", WeightKg = 100, PricePerKg = 10, SubTotal = 1000 });
         db.PickupRequests.Add(receipt);
@@ -68,7 +68,7 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         var demand = new FactoryDemand { Factory = factory, MaterialType = "PET", RequiredWeightKg = 10, Deadline = DateTime.UtcNow.AddDays(3) };
         db.FactoryDemands.Add(demand);
         db.Users.Add(new User { Id = otherOwnerId, Email = $"demand-{otherOwnerId}@test.invalid", Role = "DEPOT_OWNER", FullName = "Other owner" });
-        db.Depots.Add(new Depot { Id = otherDepotId, OwnerId = otherOwnerId, Name = "Other depot", Address = "Test" });
+        db.Depots.Add(new Depot { VerificationStatus = "APPROVED", Id = otherDepotId, OwnerId = otherOwnerId, Name = "Other depot", Address = "Test" });
         db.FactoryDepotPartnerships.Add(new FactoryDepotPartnership { DepotId = depotId, Factory = factory, Status = "APPROVED", BlockedByFactory = true });
         await db.SaveChangesAsync();
         try

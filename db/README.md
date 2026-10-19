@@ -1,5 +1,12 @@
 # Khởi tạo database ReTrack bằng một file SQL
 
+## Hồ sơ xác minh kho (bổ sung 19/10/2026)
+
+- Kho mới mặc định `UNVERIFIED`. Chủ kho tạo kho và nộp 1–3 hồ sơ PDF/PNG/JPEG (tối đa 2 MB mỗi tệp) trong Hồ sơ kho vựa; Admin đối soát tại Hồ sơ kho vựa trên giao diện Admin.
+- Chưa duyệt: không tạo lô xuất, bán đồ cũ hoặc nhận giao dịch thu gom mới. Các đơn đang xử lý, thanh toán và đối soát nghĩa vụ cũ vẫn được tiếp tục. Thay đổi tên/địa chỉ/mã số thuế sau duyệt cần xác minh lại.
+- File hồ sơ lưu riêng tư trong database, chỉ Owner tương ứng và Admin đang hoạt động được tải; không phải URL công khai. Cần đưa dữ liệu này vào chính sách backup/quyền truy cập DB của nhóm.
+- Chỉ ba kho demo trong khối seed được đánh dấu đã duyệt. Không tự duyệt các kho thật khi nâng cấp. SQL bổ sung nằm trước `-- RETRACK_SCHEMA_END`; review và chạy phần schema cần thiết trên DB cũ, không chạy lại seed để nâng cấp dữ liệu thật.
+
 ## Máy mới: mở một file và nhấn F5
 
 1. Trong pgAdmin, tạo database **rỗng**, ví dụ `Retrack_DB`.

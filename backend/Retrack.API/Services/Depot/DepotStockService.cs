@@ -166,6 +166,7 @@ public sealed class DepotStockService(IDepotStockRepository repository, IDepotBa
                 throw new DepotConflictException("Mã thao tác đã dùng cho lần bán khác.");
             return Sale(old);
         }
+        await scope.RequireTradingAsync(userId, depotId);
         var line = await repository.FindLineAsync(depotId, lineId) ?? throw new KeyNotFoundException("Không tìm thấy món đồ trong kho.");
         if (line.Kind != "REUSABLE" || line.Receipt.Status != "POSTED" || dto.Quantity > line.Quantity - await repository.SoldAsync(lineId))
             throw new DepotConflictException("Đồ chưa nhập hoặc số lượng bán vượt lượng còn lại.");

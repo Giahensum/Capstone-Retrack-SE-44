@@ -25,6 +25,13 @@ public sealed partial class DepotService(Retrack.API.Repositories.Interfaces.IDe
             throw new DepotForbiddenException();
     }
 
+    public async Task RequireTradingAsync(Guid ownerId, Guid depotId)
+    {
+        await RequireOwnerAsync(ownerId, depotId);
+        if ((await owners.FindAsync(depotId)).VerificationStatus != "APPROVED")
+            throw new DepotConflictException("Kho chưa được Admin xác minh hồ sơ. Vui lòng nộp hồ sơ và chờ duyệt trước khi tạo giao dịch mới.");
+    }
+
     public async Task<PagedResult<DepotPaymentDto>> GetPaymentsAsync(Guid ownerId, Guid depotId, DepotQuery query)
     {
         await RequireOwnerAsync(ownerId, depotId);
