@@ -25,4 +25,10 @@ public interface IDepotStockRepository
     Task<List<BatchExpenseDto>> BatchExpensesAsync(Guid batchId);
     Task<DepotBatchExpense?> FindExpenseAsync(Guid id);
     void AddExpense(DepotBatchExpense expense);
+    Task<decimal?> CurrentLineCostAsync(Guid lineId);
+    Task<DepotStockCostAdjustment?> FindAdjustmentAsync(Guid id);
+    void AddAdjustment(DepotStockCostAdjustment adjustment);
+    Task<PagedResult<StockAdjustmentDto>> AdjustmentsAsync(Guid receiptId, DepotQuery query);
+    Task<bool> HasLateCostsAsync(Guid batchId);
+    Task<List<StockLineCostBalanceDto>> CurrentReceiptCostsAsync(Guid receiptId);
 }

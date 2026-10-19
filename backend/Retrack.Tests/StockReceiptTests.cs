@@ -303,6 +303,103 @@ public sealed class StockReceiptTests : IAsyncLifetime
         stored.PlatformFeeAmount = 84500; stored.NetAmount = 8365500; await db.SaveChangesAsync();
         Assert.Equal(965500, (await Stock(db).BatchCostsAsync(owner, depot, batch.Id)).PretaxDifference);
     }
+    [Fact]
+    public async Task Three_decimal_stock_can_be_exported_without_rounding_and_finer_weights_are_rejected()
+    {
+        await using var db = Open(); await Posted(db, Input(0.005m, 1000));
+        var batch = await Batches(db).CreateAsync(owner, depot, new() { OperationId = Guid.NewGuid(), MaterialType = "IRON", WeightKg = 0.005m });
+        db.ChangeTracker.Clear();
+        Assert.Equal(0.005m, (await db.InventoryBatches.SingleAsync(x => x.Id == batch.Id)).DeclaredWeightKg);
+        Assert.Equal(0, Assert.Single(await Inventory(db).GetAsync(owner, depot)).AvailableKg);
+        await Assert.ThrowsAsync<ArgumentException>(() => Batches(db).CreateAsync(owner, depot, new() { OperationId = Guid.NewGuid(), MaterialType = "IRON", WeightKg = 0.0001m }));
+    }
+    [Fact]
+    public async Task Pickup_fifo_uses_immutable_handover_time_not_order_creation_or_later_updates()
+    {
+        await using var db = Open();
+        var seller = new User { Role = "SELLER", Email = $"fifo-{Guid.NewGuid()}@test.invalid" };
+        db.Users.Add(seller);
+        try
+        {
+            var now = DateTime.UtcNow;
+            PickupRequest Pickup(DateTime created, DateTime received, decimal price) => new() { Seller = seller, TargetDepotId = depot, Status = "DONE", Address = "Đà Nẵng",
+                CreatedAt = created, StockReceivedAt = received, UpdatedAt = now,
+                Items = [new() { MaterialType = "IRON", WeightKg = 10, PricePerKg = price, SubTotal = 10 * price }] };
+            db.PickupRequests.AddRange(Pickup(now.AddDays(-10), now.AddHours(-1), 1000), Pickup(now.AddDays(-5), now.AddDays(-4), 9000));
+            await db.SaveChangesAsync();
+            var batch = await Batches(db).CreateAsync(owner, depot, new() { OperationId = Guid.NewGuid(), MaterialType = "IRON", WeightKg = 10 });
+            Assert.Equal(90000, (await Stock(db).BatchCostsAsync(owner, depot, batch.Id)).CostOfGoods);
+        }
+        finally
+        {
+            await db.InventoryBatches.Where(x => x.DepotId == depot).ExecuteDeleteAsync();
+            await db.PickupRequests.Where(x => x.SellerId == seller.Id).ExecuteDeleteAsync();
+            await db.Users.Where(x => x.Id == seller.Id).ExecuteDeleteAsync();
+        }
+    }
+    [Fact]
+    public async Task Late_cost_adjustments_affect_future_exports_keep_snapshots_and_flag_settled_reports()
+    {
+        await using var db = Open(); var receipt = await Posted(db, Input(100, 10)); var line = receipt.Lines.Single();
+        var first = await Batches(db).CreateAsync(owner, depot, new() { OperationId = Guid.NewGuid(), MaterialType = "IRON", WeightKg = 40 });
+        var adjustment = new CreateStockAdjustmentDto(Guid.NewGuid(), line.Id, "ADDITIONAL_COST", 500, "Chi phí xăng xe bổ sung");
+        await Stock(db).AddAdjustmentAsync(owner, depot, receipt.Id, adjustment);
+        await Stock(db).AddAdjustmentAsync(owner, depot, receipt.Id, adjustment);
+        Assert.Single((await Stock(db).AdjustmentsAsync(owner, depot, receipt.Id, new())).Items);
+        Assert.Equal(1000, (await Stock(db).CurrentReceiptCostsAsync(owner, depot, receipt.Id)).Single().OriginalCost);
+        Assert.Equal(1500, (await Stock(db).CurrentReceiptCostsAsync(owner, depot, receipt.Id)).Single().EffectiveCost);
+        Assert.Equal(400, (await Stock(db).BatchCostsAsync(owner, depot, first.Id)).CostOfGoods);
+        Assert.True((await Stock(db).BatchCostsAsync(owner, depot, first.Id)).NeedsCostReconciliation);
+        var next = await Batches(db).CreateAsync(owner, depot, new() { OperationId = Guid.NewGuid(), MaterialType = "IRON", WeightKg = 60 });
+        Assert.Equal(900, (await Stock(db).BatchCostsAsync(owner, depot, next.Id)).CostOfGoods);
+        var batch = await db.InventoryBatches.SingleAsync(x => x.Id == first.Id);
+        batch.Status = "COMPLETED"; batch.SettledAt = DateTime.UtcNow; batch.GrossAmount = 800; batch.NetAmount = 800; await db.SaveChangesAsync();
+        var report = await Reports(db).CostReportAsync(owner, depot, new());
+        Assert.Equal(400, report.KnownCostOfGoods); Assert.Equal(1, report.IncompleteCount); Assert.Null(report.PretaxDifference);
+        await Assert.ThrowsAsync<ArgumentException>(() => Stock(db).AddAdjustmentAsync(owner, depot, receipt.Id, new(Guid.NewGuid(), line.Id, "ADDITIONAL_COST", -2000, "Không được âm vốn")));
+        Assert.Single((await Stock(db).AdjustmentsAsync(owner, depot, receipt.Id, new())).Items);
+    }
+    [Fact]
+    public async Task Missing_base_cost_can_be_confirmed_once_without_rewriting_unknown_export_history()
+    {
+        await using var db = Open(); var input = Input(10, 100); input.CostsConfirmed = false;
+        var receipt = await Posted(db, input); var line = receipt.Lines.Single();
+        var first = await Batches(db).CreateAsync(owner, depot, new() { OperationId = Guid.NewGuid(), MaterialType = "IRON", WeightKg = 1 });
+        await Stock(db).AddAdjustmentAsync(owner, depot, receipt.Id, new(Guid.NewGuid(), line.Id, "ADDITIONAL_COST", 1000, "Chi phí nhận hàng"));
+        await Stock(db).AddAdjustmentAsync(owner, depot, receipt.Id, new(Guid.NewGuid(), line.Id, "CONFIRM_BASE_COST", 4000, "Đã đối soát giá mua gốc"));
+        var next = await Batches(db).CreateAsync(owner, depot, new() { OperationId = Guid.NewGuid(), MaterialType = "IRON", WeightKg = 1 });
+        Assert.Null((await Stock(db).BatchCostsAsync(owner, depot, first.Id)).CostOfGoods);
+        Assert.Equal(500, (await Stock(db).BatchCostsAsync(owner, depot, next.Id)).CostOfGoods);
+        await Assert.ThrowsAsync<DepotConflictException>(() => Stock(db).AddAdjustmentAsync(owner, depot, receipt.Id, new(Guid.NewGuid(), line.Id, "CONFIRM_BASE_COST", 5000, "Không được chốt lại")));
+    }
+    [Fact]
+    public async Task Reusable_sales_store_the_cost_at_sale_and_do_not_reprice_past_sales()
+    {
+        await using var db = Open(); var receipt = await Posted(db, Input(10, 100, true)); var line = receipt.Lines.Single();
+        var first = await Stock(db).SellAsync(owner, depot, line.Id, new(Guid.NewGuid(), 2, 500, 0, "Đã giao lần đầu"));
+        Assert.Equal(200, first.CostOfGoods);
+        await Stock(db).AddAdjustmentAsync(owner, depot, receipt.Id, new(Guid.NewGuid(), line.Id, "ADDITIONAL_COST", 500, "Vệ sinh sửa chữa"));
+        var next = await Stock(db).SellAsync(owner, depot, line.Id, new(Guid.NewGuid(), 2, 500, 0, "Đã giao lần hai"));
+        Assert.Equal(300, next.CostOfGoods);
+        db.ChangeTracker.Clear();
+        Assert.Equal(200, (await Stock(db).SalesAsync(owner, depot, new())).Items.Single(x => x.Id == first.Id).CostOfGoods);
+        Assert.Null((await Reports(db).CostReportAsync(owner, depot, new())).PretaxDifference);
+    }
+    [Fact]
+    public async Task Concurrent_negative_adjustments_cannot_make_cost_negative_and_staff_cannot_post_costs()
+    {
+        Guid receiptId, lineId;
+        await using (var db = Open()) { var receipt = await Posted(db, Input(10, 100)); receiptId = receipt.Id; lineId = receipt.Lines.Single().Id;
+            await Assert.ThrowsAsync<DepotForbiddenException>(() => Stock(db).AddAdjustmentAsync(employee, depot, receiptId, new(Guid.NewGuid(), lineId, "ADDITIONAL_COST", 100, "Không phải owner"))); }
+        async Task<bool> Adjust()
+        {
+            await using var db = Open();
+            try { await Stock(db).AddAdjustmentAsync(owner, depot, receiptId, new(Guid.NewGuid(), lineId, "ADDITIONAL_COST", -600, "Điều chỉnh giảm đối soát")); return true; }
+            catch (ArgumentException) { return false; }
+        }
+        Assert.Single(await Task.WhenAll(Adjust(), Adjust()), x => x);
+        await using var verify = Open(); Assert.Equal(400, (await Stock(verify).CurrentReceiptCostsAsync(owner, depot, receiptId)).Single().EffectiveCost);
+    }
     private sealed class NoImages : ICloudinaryService
     {
         public Task<string> UploadImageAsync(Stream stream, string fileName) => throw new NotSupportedException();

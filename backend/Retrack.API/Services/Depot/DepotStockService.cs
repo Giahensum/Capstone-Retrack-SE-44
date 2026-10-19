@@ -10,7 +10,7 @@ using Retrack.API.Services.Shared;
 
 namespace Retrack.API.Services.Depot;
 
-public sealed class DepotStockService(IDepotStockRepository repository, IDepotBatchRepository batches,
+public sealed partial class DepotStockService(IDepotStockRepository repository, IDepotBatchRepository batches,
     IDepotUnitOfWork work, IDepotService scope) : IDepotStockService
 {
     private static void ValidatePage(DepotQuery query)
@@ -172,6 +172,7 @@ public sealed class DepotStockService(IDepotStockRepository repository, IDepotBa
             throw new DepotConflictException("Đồ chưa nhập hoặc số lượng bán vượt lượng còn lại.");
         var sale = new DepotReuseSale { Id = dto.OperationId, Line = line, LineId = line.Id, Quantity = dto.Quantity,
             UnitPrice = dto.UnitPrice, SellingCost = dto.SellingCost, Note = dto.Note.Trim(), CreatedBy = userId };
+        sale.UnitCost = await repository.CurrentLineCostAsync(lineId) / line.Quantity;
         repository.AddSale(sale); await work.SaveAsync(); await tx.CommitAsync(); return Sale(sale);
     }
     public async Task<PagedResult<ReuseSaleDto>> SalesAsync(Guid userId, Guid depotId, DepotQuery query)
@@ -197,9 +198,10 @@ public sealed class DepotStockService(IDepotStockRepository repository, IDepotBa
         decimal? cost = complete ? decimal.Round(sources.Sum(x => x.Quantity * x.UnitCost!.Value), 0) : null;
         var selling = expenses.Sum(x => x.Amount);
         var settled = batch.SettledAt != null;
+        var late = await repository.HasLateCostsAsync(batchId);
         return new(sources, expenses, complete, cost, selling, settled ? batch.GrossAmount : null,
-            settled ? batch.PlatformFeeAmount : null, settled ? batch.NetAmount - cost - selling : null, settled,
-            "Phân bổ giá vốn FIFO, không chứng minh nguồn vật lý khi hàng đã trộn. Chênh lệch chỉ gồm chi phí đã ghi, trước thuế thu nhập; chưa đối soát hàng trả/hao hụt. Nguồn pickup cũ chỉ có giá mua, chưa gồm chi phí đầu vào khác.");
+            settled ? batch.PlatformFeeAmount : null, settled && !late ? batch.NetAmount - cost - selling : null, settled,
+            "Phân bổ FIFO theo mốc nhận hàng; dữ liệu pickup cũ thiếu nhật ký nhận dùng mốc ước tính từ lần cập nhật. Snapshot vốn đã xuất giữ nguyên. Nếu nguồn có điều chỉnh sau xuất cần đối soát riêng, không chốt chênh lệch tự động. Chưa gồm thuế thu nhập/hàng trả/chi phí chưa ghi.", late);
     }
     public async Task AddBatchExpenseAsync(Guid ownerId, Guid depotId, Guid batchId, CreateBatchExpenseDto dto)
     {
@@ -231,7 +233,7 @@ public sealed class DepotStockService(IDepotStockRepository repository, IDepotBa
         includeCost ? x.Expenses.Select(e => new StockExpenseInput(e.Category, e.Description, e.Amount)).ToList() : []);
     private static ReuseSaleDto Sale(DepotReuseSale x)
     {
-        var cost = x.Line.AllocatedCost / x.Line.Quantity * x.Quantity;
+        var cost = x.UnitCost * x.Quantity;
         return new(x.Id, x.LineId, x.Line.Name, x.Quantity, x.Quantity * x.UnitPrice, x.SellingCost, cost,
             x.Quantity * x.UnitPrice - x.SellingCost - cost, x.Note, x.CreatedAt);
     }

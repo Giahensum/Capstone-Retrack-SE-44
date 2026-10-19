@@ -26,8 +26,9 @@ public sealed class BatchService(IDepotBatchRepository batches, IDepotUnitOfWork
     {
         await scope.RequireOwnerAsync(ownerId, depotId);
         if (photos?.Count > 5) throw new ArgumentException("Mỗi lô chỉ được tải lên tối đa 5 ảnh vật liệu.");
-        if (dto.OperationId == Guid.Empty || string.IsNullOrWhiteSpace(dto.MaterialType) || dto.MaterialType.Length > 100 || dto.WeightKg <= 0 || dto.WeightKg > 1_000_000_000 || decimal.Round(dto.WeightKg, 2) != dto.WeightKg)
+        if (dto.OperationId == Guid.Empty || string.IsNullOrWhiteSpace(dto.MaterialType) || dto.MaterialType.Length > 100 || dto.WeightKg <= 0 || dto.WeightKg > 1_000_000_000)
             throw new ArgumentException("Cần mã thao tác, loại vật liệu và khối lượng dương.");
+        if (decimal.Round(dto.WeightKg, 3) != dto.WeightKg) throw new ArgumentException("Khối lượng lô chỉ nhận tối đa 3 chữ số thập phân (0,001 kg).");
         dto.MaterialType = Retrack.API.Services.Shared.MaterialCatalog.RequireCode(dto.MaterialType);
         await using var tx = await work.BeginAsync();
         // Mọi thao tác giữ/hủy tồn kho của kho này dùng chung khóa dòng trong database.

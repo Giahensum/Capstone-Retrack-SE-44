@@ -12,6 +12,9 @@ public class FactoryQCService(AppDbContext db, IConfiguration configuration, Fac
 {
     public async Task<ServiceResult<WeighResponse>> WeighAsync(Guid userId, Guid id, WeighRequest request, CancellationToken ct)
     {
+        if (request.GrossWeightKg is <= 0 or > 1_000_000_000 || request.TareWeightKg < 0 ||
+            decimal.Round(request.GrossWeightKg, 3) != request.GrossWeightKg || decimal.Round(request.TareWeightKg, 3) != request.TareWeightKg)
+            return ServiceResult<WeighResponse>.Invalid("Khối lượng phải hợp lệ và tối đa 3 chữ số thập phân (0,001 kg).");
         if (request.GrossWeightKg <= request.TareWeightKg)
             return ServiceResult<WeighResponse>.Invalid("Khối lượng tổng phải lớn hơn khối lượng bì.");
         var factory = await CurrentFactory(userId, ct);

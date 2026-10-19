@@ -41,6 +41,7 @@ namespace Retrack.API.Data
         public DbSet<DepotBatchExpense> DepotBatchExpenses { get; set; }
         public DbSet<DepotVerificationSubmission> DepotVerificationSubmissions { get; set; }
         public DbSet<DepotVerificationDocument> DepotVerificationDocuments { get; set; }
+        public DbSet<DepotStockCostAdjustment> DepotStockCostAdjustments { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {

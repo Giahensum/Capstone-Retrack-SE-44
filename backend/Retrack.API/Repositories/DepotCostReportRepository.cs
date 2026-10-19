@@ -24,7 +24,9 @@ public sealed partial class DepotReportRepository
                     CASE WHEN b.settled_at IS NOT NULL THEN b.platform_fee_amount ELSE q.platform_fee_amount END AS fee,
                     CASE WHEN b.settled_at IS NOT NULL THEN b.net_amount ELSE q.net_amount END AS net,
                     CASE WHEN s.missing = 0 AND s.quantity = b.declared_weight_kg THEN ROUND(s.cost, 0) ELSE NULL END AS cost,
-                    COALESCE(e.amount, 0) AS selling
+                    COALESCE(e.amount, 0) AS selling,
+                    EXISTS(SELECT 1 FROM depot_batch_cost_sources cs JOIN depot_stock_cost_adjustments a ON a.line_id = cs.source_id
+                           WHERE cs.batch_id = b.id AND cs.source_type = 'RECEIPT' AND a.created_at > b.created_at) AS needs_review
                 FROM inventory_batches b
                 LEFT JOIN sources s ON s.batch_id = b.id LEFT JOIN expenses e ON e.batch_id = b.id
                 LEFT JOIN batch_quality_checks q ON q.batch_id = b.id
@@ -34,18 +36,19 @@ public sealed partial class DepotReportRepository
                     AND COALESCE(b.settled_at, q.created_at) >= {start} AND COALESCE(b.settled_at, q.created_at) < {end}
                 UNION ALL
                 SELECT 'REUSABLE', x.quantity * x.unit_price, 0, x.quantity * x.unit_price,
-                       l.allocated_cost / l.quantity * x.quantity, x.selling_cost
+                       x.unit_cost * x.quantity, x.selling_cost,
+                       EXISTS(SELECT 1 FROM depot_stock_cost_adjustments a WHERE a.line_id = x.line_id AND a.created_at > x.created_at)
                 FROM depot_reuse_sales x JOIN depot_stock_lines l ON l.id = x.line_id
                 JOIN depot_stock_receipts r ON r.id = l.receipt_id
                 WHERE r.depot_id = {depotId} AND x.created_at >= {start} AND x.created_at < {end}
             )
             SELECT c.channel AS "Channel", COUNT(r.channel)::int AS "TransactionCount",
-                (COUNT(*) FILTER (WHERE r.channel IS NOT NULL AND (r.cost IS NULL OR r.net IS NULL)))::int AS "IncompleteCount",
+                (COUNT(*) FILTER (WHERE r.channel IS NOT NULL AND (r.cost IS NULL OR r.net IS NULL OR r.needs_review)))::int AS "IncompleteCount",
                 CASE WHEN COUNT(*) FILTER (WHERE r.channel IS NOT NULL AND r.gross IS NULL) > 0 THEN NULL ELSE COALESCE(SUM(r.gross), 0) END AS "GrossRevenue",
                 CASE WHEN COUNT(*) FILTER (WHERE r.channel IS NOT NULL AND r.fee IS NULL) > 0 THEN NULL ELSE COALESCE(SUM(r.fee), 0) END AS "PlatformFees",
                 CASE WHEN COUNT(*) FILTER (WHERE r.channel IS NOT NULL AND r.net IS NULL) > 0 THEN NULL ELSE COALESCE(SUM(r.net), 0) END AS "NetRevenue",
                 COALESCE(SUM(r.cost), 0) AS "KnownCostOfGoods", COALESCE(SUM(r.selling), 0) AS "SellingCosts",
-                CASE WHEN COUNT(*) FILTER (WHERE r.channel IS NOT NULL AND (r.cost IS NULL OR r.net IS NULL)) > 0 THEN NULL
+                CASE WHEN COUNT(*) FILTER (WHERE r.channel IS NOT NULL AND (r.cost IS NULL OR r.net IS NULL OR r.needs_review)) > 0 THEN NULL
                      ELSE COALESCE(SUM(r.net - r.cost - r.selling), 0) END AS "PretaxDifference"
             FROM (VALUES ('FACTORY'), ('REUSABLE')) AS c(channel) LEFT JOIN rows r ON r.channel = c.channel
             GROUP BY c.channel ORDER BY c.channel

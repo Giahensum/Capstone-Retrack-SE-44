@@ -65,6 +65,7 @@ public class DepotReuseSale
     [Column("quantity", TypeName = "numeric(18,3)")] public decimal Quantity { get; set; }
     [Column("unit_price", TypeName = "numeric(18,0)")] public decimal UnitPrice { get; set; }
     [Column("selling_cost", TypeName = "numeric(18,0)")] public decimal SellingCost { get; set; }
+    [Column("unit_cost", TypeName = "numeric(30,9)")] public decimal? UnitCost { get; set; }
     [Column("note"), MaxLength(1000)] public string Note { get; set; } = "";
     [Column("created_by")] public Guid CreatedBy { get; set; }
     [Column("created_at")] public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
