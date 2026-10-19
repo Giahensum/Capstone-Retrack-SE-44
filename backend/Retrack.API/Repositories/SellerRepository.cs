@@ -56,7 +56,7 @@ namespace Retrack.API.Repositories
         {
             var rawDepots = await _db.Depots
                 .Include(d => d.Owner)
-                .Where(d => d.Owner.IsActive)
+                .Where(d => d.Owner.IsActive && d.VerificationStatus == "APPROVED")
                 .Select(d => new
                 {
                     d.Id,

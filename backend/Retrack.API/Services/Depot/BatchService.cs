@@ -40,6 +40,7 @@ public sealed class BatchService(IDepotBatchRepository batches, IDepotUnitOfWork
                 throw new DepotConflictException("Mã thao tác đã được dùng cho một lô khác.");
             return Map(existing);
         }
+        await scope.RequireTradingAsync(ownerId, depotId);
         var stock = (await inventory.GetAsync(ownerId, depotId)).SingleOrDefault(i => i.MaterialType == dto.MaterialType);
         if (stock == null || stock.AvailableKg < dto.WeightKg) throw new DepotConflictException("Tồn kho khả dụng không đủ.");
         var status = "LISTED";

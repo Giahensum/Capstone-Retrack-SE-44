@@ -42,7 +42,7 @@ public class EmployeePickupPostgresTests
             User UserFor(string role) => new() { Role = role, Email = Guid.NewGuid().ToString("N") + "@test.local" };
             var first = UserFor("DEPOT_EMPLOYEE"); var second = UserFor("DEPOT_EMPLOYEE");
             var seller = UserFor("SELLER");
-            var depot = new Depot { Name = "Test", Owner = UserFor("DEPOT_OWNER") };
+            var depot = new Depot { VerificationStatus = "APPROVED", Name = "Test", Owner = UserFor("DEPOT_OWNER") };
             setup.DepotStaffs.AddRange(new DepotStaff { User = first, Depot = depot, StaffType = first.Role },
                 new DepotStaff { User = second, Depot = depot, StaffType = second.Role });
             var pickup = new PickupRequest { Seller = seller, TargetDepot = depot, Address = "Test address" };

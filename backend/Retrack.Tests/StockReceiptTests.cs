@@ -29,7 +29,7 @@ public sealed class StockReceiptTests : IAsyncLifetime
         await using var db = Open(); await TestDatabase.MigrateAsync(db);
         db.Users.AddRange(new User { Id = owner, Email = $"stock-{owner}@test.invalid", FullName = "Chủ kho test", Role = "DEPOT_OWNER" },
             new User { Id = employee, Email = $"stock-{employee}@test.invalid", FullName = "Nhân viên test", Role = "DEPOT_EMPLOYEE" });
-        db.Depots.Add(new Depot { Id = depot, OwnerId = owner, Name = "Kho thử nhập nguồn", Address = "Đà Nẵng" });
+        db.Depots.Add(new Depot { VerificationStatus = "APPROVED", Id = depot, OwnerId = owner, Name = "Kho thử nhập nguồn", Address = "Đà Nẵng" });
         db.DepotStaffs.Add(new DepotStaff { DepotId = depot, UserId = employee, StaffType = "DEPOT_EMPLOYEE" });
         await db.SaveChangesAsync();
     }
@@ -80,7 +80,7 @@ public sealed class StockReceiptTests : IAsyncLifetime
         await using var db = Open(); var factoryUser = Guid.NewGuid(); var factoryId = Guid.NewGuid(); var otherDepot = Guid.NewGuid();
         db.Users.Add(new User { Id = factoryUser, Role = "FACTORY", Email = $"cost-{factoryUser}@test.invalid" });
         db.Factories.Add(new Factory { Id = factoryId, OwnerId = factoryUser, Name = "Nhà máy kiểm thử", Address = "Đà Nẵng" });
-        db.Depots.Add(new Depot { Id = otherDepot, OwnerId = owner, Name = "Kho khác cùng chủ", Address = "Đà Nẵng" });
+        db.Depots.Add(new Depot { VerificationStatus = "APPROVED", Id = otherDepot, OwnerId = owner, Name = "Kho khác cùng chủ", Address = "Đà Nẵng" });
         await db.SaveChangesAsync();
         try
         {

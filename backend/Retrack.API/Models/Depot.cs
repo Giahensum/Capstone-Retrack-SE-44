@@ -42,6 +42,9 @@ namespace Retrack.API.Models
         [Column("rating")]
         public decimal Rating { get; set; } = 0.0m;
 
+        [Column("verification_status")]
+        public string VerificationStatus { get; set; } = "UNVERIFIED";
+
         [Column("created_at")]
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 

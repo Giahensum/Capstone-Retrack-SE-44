@@ -6,6 +6,9 @@ import { DepotSelector, useDepot } from '@/features/depot/DepotContext';
 import { useAuthStore } from '@/app/store/useAuthStore';
 import { MaterialIcon } from '@/features/depot/components/DepotIcon';
 import DepotBrandLogo from '@/features/depot/components/DepotBrandLogo';
+import CreateDepotModal from '@/features/depot/components/CreateDepotModal';
+import { useDepotQuery } from '@/features/depot/depotApi';
+import { verificationLabels } from '@/features/depot/components/VerificationPanel';
 
 const SidebarItem = ({ iconName, label, to, active }) => (
   <Link
@@ -25,7 +28,9 @@ const SidebarItem = ({ iconName, label, to, active }) => (
 const DepotLayout = () => {
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [createDepot, setCreateDepot] = useState(false);
   const { depotId } = useDepot();
+  const profile = useDepotQuery('profile');
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
 
@@ -62,6 +67,7 @@ const DepotLayout = () => {
                 active={location.pathname === item.to || (location.pathname === '/depot' && item.to === '/depot/dashboard')}
               />
             ))}
+            <button className="w-full text-left rounded-xl px-4 py-3 text-d-primary hover:bg-d-surface-container" onClick={() => setCreateDepot(true)}>＋ Thêm kho vựa</button>
           </nav>
         </div>
         
@@ -97,7 +103,11 @@ const DepotLayout = () => {
 
         {/* Page Content */}
         <div className="flex-1 overflow-y-auto bg-d-background">
-          {depotId ? <Outlet key={depotId} /> : <p role="status" className="p-6">Chọn kho để quản lý dữ liệu.</p>}
+          {profile.data && profile.data.verificationStatus !== 'APPROVED' && <div role="status" className="m-4 rounded-xl border border-d-border-subtle bg-white p-4 text-sm">
+            <strong>{verificationLabels[profile.data.verificationStatus] ?? 'Chưa xác minh kho'}.</strong> Giao dịch mới đang khóa. <Link className="underline text-d-primary" to="/depot/profile">Xem và nộp hồ sơ</Link>.
+          </div>}
+          {depotId ? <Outlet key={depotId} /> : <div className="p-6 space-y-4"><h1 className="text-2xl font-bold">Bắt đầu với kho vựa của bạn</h1><p>Tạo kho đầu tiên, sau đó nộp hồ sơ để Admin xác minh.</p><button className="rounded-full bg-d-primary-container px-5 py-3 font-semibold" onClick={() => setCreateDepot(true)}>Tạo kho đầu tiên</button></div>}
+          {createDepot && <CreateDepotModal onClose={() => setCreateDepot(false)} />}
         </div>
       </main>
     </div>

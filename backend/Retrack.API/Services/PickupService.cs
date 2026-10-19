@@ -46,9 +46,9 @@ namespace Retrack.API.Services
 
             if (dto.TargetDepotId.HasValue)
             {
-                var depotExists = await _db.Depots.AnyAsync(d => d.Id == dto.TargetDepotId.Value);
+                var depotExists = await _db.Depots.AnyAsync(d => d.Id == dto.TargetDepotId.Value && d.VerificationStatus == "APPROVED" && d.Owner.IsActive);
                 if (!depotExists)
-                    throw new ArgumentException("Kho vựa được chọn không tồn tại.");
+                    throw new ArgumentException("Kho vựa chưa xác minh hồ sơ hoặc không còn hoạt động.");
             }
             else
             {
@@ -133,6 +133,8 @@ namespace Retrack.API.Services
             if (req.TargetDepotId != staff.DepotId) throw new DepotForbiddenException();
             if (req.Status != "PENDING" || req.AcceptedCollectorId != null)
                 throw new DepotConflictException("Đơn đã được nhận hoặc không còn chờ nhận.");
+            if (!await _db.Depots.AnyAsync(d => d.Id == staff.DepotId && d.VerificationStatus == "APPROVED"))
+                throw new DepotConflictException("Kho chưa được xác minh hồ sơ để nhận giao dịch mới.");
             req.AcceptedCollectorId = collectorId;
             req.Status = "SCHEDULED";
             await _repo.UpdateAsync(req);

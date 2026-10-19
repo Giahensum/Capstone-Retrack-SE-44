@@ -50,7 +50,7 @@ public sealed class PaymentTests : IAsyncLifetime
         await using var db = Open();
         var owner = new User { Email = $"owner-{Guid.NewGuid()}@test.invalid", Role = role, IsActive = active, FullName = "Test owner" };
         var seller = new User { Email = $"seller-{Guid.NewGuid()}@test.invalid", Role = "SELLER", FullName = "Test seller" };
-        var depot = new Depot { Owner = owner, Name = "Test depot", Address = "Test address" };
+        var depot = new Depot { VerificationStatus = "APPROVED", Owner = owner, Name = "Test depot", Address = "Test address" };
         var request = new PickupRequest { Seller = seller, TargetDepot = targeted ? depot : null, Address = "Test address", Status = status, GrossAmount = 1000m, PlatformFeePercentage = 1m, PlatformFeeAmount = 10m, NetAmount = 990m };
         db.AddRange(owner, seller, depot, request);
         await db.SaveChangesAsync();

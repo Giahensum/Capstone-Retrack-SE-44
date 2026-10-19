@@ -571,6 +571,22 @@ CREATE TABLE IF NOT EXISTS depot_batch_expenses (
 );
 CREATE INDEX IF NOT EXISTS ix_depot_batch_expenses_batch ON depot_batch_expenses(batch_id, created_at);
 
+-- RETRACK_DEPOT_VERIFICATION_V1: hồ sơ riêng tư; không tự duyệt các kho đang có.
+ALTER TABLE depots ADD COLUMN IF NOT EXISTS verification_status VARCHAR(20) NOT NULL DEFAULT 'UNVERIFIED';
+CREATE TABLE IF NOT EXISTS depot_verification_submissions (
+    id UUID PRIMARY KEY, depot_id UUID NOT NULL REFERENCES depots(id) ON DELETE CASCADE,
+    status VARCHAR(20) NOT NULL CHECK (status IN ('SUBMITTED','APPROVED','REJECTED')),
+    note VARCHAR(2000) NOT NULL DEFAULT '', depot_name VARCHAR(255) NOT NULL, depot_address TEXT NOT NULL, tax_code TEXT,
+    submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    reviewed_at TIMESTAMPTZ, reviewed_by UUID REFERENCES users(id), review_reason VARCHAR(2000)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ix_depot_verification_pending ON depot_verification_submissions(depot_id) WHERE status = 'SUBMITTED';
+CREATE INDEX IF NOT EXISTS ix_depot_verification_queue ON depot_verification_submissions(submitted_at DESC, id);
+CREATE TABLE IF NOT EXISTS depot_verification_documents (
+    id UUID PRIMARY KEY, submission_id UUID NOT NULL REFERENCES depot_verification_submissions(id) ON DELETE CASCADE,
+    name VARCHAR(150) NOT NULL, content_type VARCHAR(50) NOT NULL,
+    content BYTEA NOT NULL CHECK (octet_length(content) BETWEEN 1 AND 2097152)
+);
 -- RETRACK_SCHEMA_END
 
 -- RETRACK_SEED_BEGIN
@@ -647,6 +663,11 @@ VALUES
      'Kho thu gom Cẩm Lệ', 'Khu vực Cẩm Lệ, Đà Nẵng (địa điểm demo)',
      16.0150000, 108.2100000, 0, '0922222222', 'Kho demo phía nam trung tâm Đà Nẵng.', NOW())
 ON CONFLICT DO NOTHING;
+
+-- Chỉ ba kho demo được đánh dấu đã duyệt; kho thật cần Admin đối soát hồ sơ.
+UPDATE depots SET verification_status = 'APPROVED'
+WHERE id IN ('00000000-0000-0000-0000-000000000010', '00000000-0000-0000-0000-000000000011', '00000000-0000-0000-0000-000000000012')
+  AND owner_id = '00000000-0000-0000-0000-000000000003';
 
 INSERT INTO depot_staffs (id, depot_id, user_id, staff_type, is_active)
 VALUES
