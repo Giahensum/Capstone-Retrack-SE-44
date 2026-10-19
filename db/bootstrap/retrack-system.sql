@@ -633,6 +633,59 @@ CREATE TABLE IF NOT EXISTS depot_incident_followups (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS ix_depot_incident_followups_event_date ON depot_incident_followups(event_id, created_at DESC, id);
+-- RETRACK_LIQUIDATION_V1: phiên trả giá trọn lô, lịch sử giá bất biến và thỏa thuận ngoài app.
+CREATE TABLE IF NOT EXISTS liquidation_lots (
+    id UUID PRIMARY KEY, seller_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    title VARCHAR(255) NOT NULL, description VARCHAR(5000) NOT NULL, scope_details VARCHAR(3000) NOT NULL,
+    collection_terms VARCHAR(2000) NOT NULL, public_area VARCHAR(255) NOT NULL,
+    address VARCHAR(1000) NOT NULL, contact_phone VARCHAR(20) NOT NULL,
+    image_urls TEXT[] NOT NULL DEFAULT '{}',
+    survey_start TIMESTAMPTZ NOT NULL, survey_end TIMESTAMPTZ NOT NULL,
+    bidding_start TIMESTAMPTZ NOT NULL, original_end TIMESTAMPTZ NOT NULL, bidding_end TIMESTAMPTZ NOT NULL,
+    collection_deadline TIMESTAMPTZ NOT NULL,
+    starting_price NUMERIC(18,0) NOT NULL CHECK (starting_price > 0),
+    bid_increment NUMERIC(18,0) NOT NULL CHECK (bid_increment > 0),
+    highest_price NUMERIC(18,0), highest_bid_id UUID, bid_count INTEGER NOT NULL DEFAULT 0 CHECK (bid_count >= 0),
+    status VARCHAR(20) NOT NULL CHECK (status IN ('PUBLISHED','AWARDED','NO_SALE','CANCELLED')),
+    cancel_reason VARCHAR(1000), request_hash VARCHAR(64) NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CHECK (survey_start < survey_end AND survey_end <= bidding_start AND bidding_start < original_end
+        AND original_end <= bidding_end AND bidding_end <= original_end + INTERVAL '10 minutes'
+        AND original_end + INTERVAL '10 minutes' < collection_deadline)
+);
+CREATE INDEX IF NOT EXISTS ix_liquidation_closing ON liquidation_lots(status, bidding_end);
+CREATE INDEX IF NOT EXISTS ix_liquidation_seller ON liquidation_lots(seller_id, created_at DESC);
+CREATE TABLE IF NOT EXISTS liquidation_participations (
+    id UUID PRIMARY KEY, lot_id UUID NOT NULL REFERENCES liquidation_lots(id) ON DELETE CASCADE,
+    owner_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    depot_id UUID NOT NULL REFERENCES depots(id) ON DELETE RESTRICT,
+    registered_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), survey_declared_at TIMESTAMPTZ,
+    UNIQUE(lot_id, owner_id)
+);
+CREATE TABLE IF NOT EXISTS liquidation_bids (
+    id UUID PRIMARY KEY, lot_id UUID NOT NULL REFERENCES liquidation_lots(id) ON DELETE CASCADE,
+    owner_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    depot_id UUID NOT NULL REFERENCES depots(id) ON DELETE RESTRICT,
+    amount NUMERIC(18,0) NOT NULL CHECK (amount > 0), created_at TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_liquidation_bid_history ON liquidation_bids(lot_id, owner_id, created_at DESC, id);
+CREATE TABLE IF NOT EXISTS liquidation_agreements (
+    id UUID PRIMARY KEY, lot_id UUID NOT NULL UNIQUE REFERENCES liquidation_lots(id) ON DELETE RESTRICT,
+    winning_bid_id UUID NOT NULL UNIQUE REFERENCES liquidation_bids(id) ON DELETE RESTRICT,
+    depot_id UUID NOT NULL REFERENCES depots(id) ON DELETE RESTRICT,
+    buyer_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    amount NUMERIC(18,0) NOT NULL CHECK (amount > 0), payment_reference VARCHAR(255),
+    payment_reported_at TIMESTAMPTZ, payment_confirmed_at TIMESTAMPTZ,
+    owner_collected_at TIMESTAMPTZ, seller_handed_over_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CHECK (payment_confirmed_at IS NULL OR payment_reported_at IS NOT NULL),
+    CHECK ((owner_collected_at IS NULL AND seller_handed_over_at IS NULL) OR payment_confirmed_at IS NOT NULL)
+);
+ALTER TABLE depot_stock_receipts ADD COLUMN IF NOT EXISTS bulk_agreement_id UUID
+    REFERENCES liquidation_agreements(id) ON DELETE RESTRICT;
+CREATE UNIQUE INDEX IF NOT EXISTS ix_receipt_active_bulk_agreement ON depot_stock_receipts(bulk_agreement_id)
+    WHERE bulk_agreement_id IS NOT NULL AND status NOT IN ('VOIDED','REJECTED');
+
+
 -- RETRACK_SCHEMA_END
 
 -- RETRACK_SEED_BEGIN
@@ -1075,6 +1128,30 @@ FROM (VALUES
     ('00000000-0000-0000-0000-000000001722', 'FUEL', '[DEMO] Xăng xe đầu vào phân bổ cho lô', 200000)
 ) AS v(id, category, description, amount)
 WHERE EXISTS (SELECT 1 FROM depot_stock_receipts WHERE id = '00000000-0000-0000-0000-000000001701')
+ON CONFLICT DO NOTHING;
+-- Đầu ra contract Seller mẫu cho Depot; không thay tính năng đăng lô của TV1.
+INSERT INTO liquidation_lots
+    (id, seller_id, title, description, scope_details, collection_terms, public_area, address, contact_phone,
+     survey_start, survey_end, bidding_start, original_end, bidding_end, collection_deadline, starting_price, bid_increment, status, request_hash)
+SELECT v.id::uuid, '00000000-0000-0000-0000-000000000002', v.title,
+    '[DEMO] Tài sản thanh lý do bên bán mô tả; cần tự khảo sát hiện trạng.',
+    'Khoảng 1.000 kg sắt và 10 ghế còn dùng được; cân/phân loại thực tế sau khi nhận.',
+    'Trả giá trọn lô; hai bên tự chuyển tiền và thu gom ngoài hệ thống.',
+    'Ngũ Hành Sơn, Đà Nẵng', 'Khu vực đường Châu Thị Vĩnh Tế, Đà Nẵng (địa chỉ demo)', '0911111111',
+    NOW() - INTERVAL '1 day', v.survey_end, v.bidding_start, v.bidding_end, v.bidding_end,
+    NOW() + INTERVAL '7 days', 10000000, 100000, 'PUBLISHED', 'DEMO-CONTRACT-V1'
+FROM (VALUES
+    ('00000000-0000-0000-0000-000000001801', '[DEMO] Lô khách sạn đang khảo sát', NOW() + INTERVAL '1 day', NOW() + INTERVAL '2 days', NOW() + INTERVAL '3 days'),
+    ('00000000-0000-0000-0000-000000001802', '[DEMO] Lô thiết bị đang mở trả giá', NOW() - INTERVAL '2 hours', NOW() - INTERVAL '1 hour', NOW() + INTERVAL '1 day')
+) AS v(id, title, survey_end, bidding_start, bidding_end)
+WHERE EXISTS (SELECT 1 FROM users WHERE id = '00000000-0000-0000-0000-000000000002' AND role = 'SELLER')
+ON CONFLICT DO NOTHING;
+
+INSERT INTO liquidation_participations (id, lot_id, owner_id, depot_id, registered_at, survey_declared_at)
+SELECT '00000000-0000-0000-0000-000000001811', '00000000-0000-0000-0000-000000001802',
+    '00000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-000000000010', NOW() - INTERVAL '3 hours', NOW() - INTERVAL '2 hours'
+WHERE EXISTS (SELECT 1 FROM liquidation_lots WHERE id = '00000000-0000-0000-0000-000000001802')
+    AND EXISTS (SELECT 1 FROM depots WHERE id = '00000000-0000-0000-0000-000000000010' AND owner_id = '00000000-0000-0000-0000-000000000003')
 ON CONFLICT DO NOTHING;
 END IF;
 END;

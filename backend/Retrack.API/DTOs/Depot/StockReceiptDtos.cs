@@ -5,6 +5,7 @@ namespace Retrack.API.DTOs.Depot;
 public class CreateStockReceiptDto
 {
     public Guid OperationId { get; set; }
+    public Guid? BulkAgreementId { get; set; }
     [Required, StringLength(40)] public string SourceType { get; set; } = "EXTERNAL_PURCHASE";
     [Required, StringLength(255)] public string Reference { get; set; } = "";
     public DateTime ReceivedAt { get; set; }
@@ -29,7 +30,7 @@ public record StockLineDto(Guid Id, string Kind, string? MaterialType, string Na
     decimal Quantity, decimal ReferencePrice, decimal DirectCost, decimal? AllocatedCost, string? ConditionNote);
 public record StockReceiptDto(Guid Id, string SourceType, string Reference, string Status, DateTime ReceivedAt,
     decimal PurchaseCost, bool CostsConfirmed, decimal TotalCost, string? ReviewNote,
-    List<StockLineDto> Lines, List<StockExpenseInput> Expenses);
+    List<StockLineDto> Lines, List<StockExpenseInput> Expenses, Guid? BulkAgreementId = null);
 public record ReviewStockReceiptDto([Required, StringLength(1000)] string Reason);
 public record StockLineCostInput(Guid Id, decimal ReferencePrice, decimal DirectCost);
 public record UpdateStockCostsDto(decimal PurchaseCost, bool CostsConfirmed, List<StockLineCostInput> Lines,

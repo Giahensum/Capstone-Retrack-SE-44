@@ -57,3 +57,5 @@ Cập nhật schema vào **cùng** `bootstrap/retrack-system.sql`, trước mark
 Marker giúp test và người nâng cấp chọn đúng phần, không phải file thứ hai. Báo trong PR các thay đổi model, SQL, seed và cách nâng cấp database đã có dữ liệu; không sửa migration EF đã chia sẻ hoặc áp EF migration chồng lên DB-first.
 
 Hai file schema/seed cũ đã được gộp và xóa; không cần tìm lại chúng. Lịch sử vẫn có trong Git. Cấu hình PostgreSQL/appsettings/.env riêng của từng thành viên được giữ nguyên.
+
+Khối schema mới cũng có hồ sơ xác minh private, lịch sử điều chỉnh/đối soát vốn, theo dõi sự cố Depot và contract lô lớn. Kho thật mặc định UNVERIFIED, cần nộp hồ sơ và Admin duyệt để mở giao dịch mới; chỉ ba kho demo được duyệt trong seed. Seed có hai lô lớn `[DEMO]` để thử màn Depot; không thay cho API đăng lô Seller của TV1. Máy cũ cần bổ sung toàn khối mới trước khi chạy bản backend tương ứng; chỉ `dotnet run` không tự tạo cột/bảng.

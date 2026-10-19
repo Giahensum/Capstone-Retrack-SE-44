@@ -46,6 +46,7 @@ const DepotLayout = () => {
     { iconName: 'notifications', label: `Thông báo${unread.data > 0 ? ` (${Number(unread.data).toLocaleString('vi-VN')})` : ''}`, to: '/depot/notifications' },
     { iconName: 'inventory_2', label: 'Hồ sơ kho vựa', to: '/depot/profile' },
     { iconName: 'warehouse', label: 'Quản lý kho', to: '/depot/inventory' },
+    { iconName: 'gavel', label: 'Lô lớn mua vào', to: '/depot/liquidations' },
     { iconName: 'local_shipping', label: 'Lô xuất hàng', to: '/depot/batches' },
     { iconName: 'factory', label: 'Nhà máy đối tác', to: '/depot/partners' },
     { iconName: 'badge', label: 'Quản lý nhân sự', to: '/depot/staff' },

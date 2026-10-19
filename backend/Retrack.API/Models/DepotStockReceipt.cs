@@ -9,6 +9,7 @@ public class DepotStockReceipt
     [Key, Column("id")] public Guid Id { get; set; }
     [Column("depot_id")] public Guid DepotId { get; set; }
     [ForeignKey(nameof(DepotId))] public Depot Depot { get; set; } = null!;
+    [Column("bulk_agreement_id")] public Guid? BulkAgreementId { get; set; }
     [Column("created_by")] public Guid CreatedBy { get; set; }
     [Column("source_type"), MaxLength(40)] public string SourceType { get; set; } = "EXTERNAL_PURCHASE";
     [Column("reference"), MaxLength(255)] public string Reference { get; set; } = "";
