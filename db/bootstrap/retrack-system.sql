@@ -625,6 +625,14 @@ CREATE TABLE IF NOT EXISTS depot_verification_documents (
     name VARCHAR(150) NOT NULL, content_type VARCHAR(50) NOT NULL,
     content BYTEA NOT NULL CHECK (octet_length(content) BETWEEN 1 AND 2097152)
 );
+-- RETRACK_DEPOT_OPERATIONS_V1
+CREATE TABLE IF NOT EXISTS depot_incident_followups (
+    id UUID PRIMARY KEY, event_id UUID NOT NULL REFERENCES driver_delivery_events(id) ON DELETE CASCADE,
+    status VARCHAR(20) NOT NULL CHECK (status IN ('NOTED','CONTACTING','CLOSED')),
+    note VARCHAR(1000) NOT NULL CHECK (length(btrim(note)) > 0), created_by UUID NOT NULL REFERENCES users(id),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS ix_depot_incident_followups_event_date ON depot_incident_followups(event_id, created_at DESC, id);
 -- RETRACK_SCHEMA_END
 
 -- RETRACK_SEED_BEGIN

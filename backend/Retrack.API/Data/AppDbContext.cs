@@ -43,10 +43,12 @@ namespace Retrack.API.Data
         public DbSet<DepotVerificationDocument> DepotVerificationDocuments { get; set; }
         public DbSet<DepotStockCostAdjustment> DepotStockCostAdjustments { get; set; }
         public DbSet<DepotCostReconciliation> DepotCostReconciliations { get; set; }
+        public DbSet<DepotIncidentFollowup> DepotIncidentFollowups { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+            modelBuilder.Entity<DepotIncidentFollowup>().HasOne(x => x.Event).WithMany().HasForeignKey(x => x.EventId).OnDelete(DeleteBehavior.Cascade);
             modelBuilder.Entity<DepotCostReconciliation>().HasOne(x => x.BatchSource).WithMany().HasForeignKey(x => x.BatchSourceId).OnDelete(DeleteBehavior.Cascade);
             modelBuilder.Entity<DepotCostReconciliation>().HasOne(x => x.ReuseSale).WithMany().HasForeignKey(x => x.ReuseSaleId).OnDelete(DeleteBehavior.Cascade);
             modelBuilder.Entity<DepotVerificationSubmission>().HasOne(x => x.Depot).WithMany().OnDelete(DeleteBehavior.Cascade);
