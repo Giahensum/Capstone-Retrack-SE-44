@@ -310,27 +310,49 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         var input = Input(10); input.TargetFactoryId = factory.Id;
         await Batches(db).CreateAsync(ownerId, depotId, input);
         var partnerService = new Retrack.API.Services.Factory.FactoryPartnerService(db);
-        var approve = new Retrack.API.DTOs.Factory.PartnerStatusRequest { Status = Retrack.API.Models.Enums.PartnershipStatus.APPROVED };
-        Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Conflict, (await partnerService.UpdateStatusAsync(factoryOwnerId, depotId, approve, default)).Outcome);
+        var contract = new Retrack.API.DTOs.Factory.PartnershipContractRequest { Terms = new string('A', 80), ValidMonths = 12, ConfirmElectronicSignature = true };
+        Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Conflict, (await partnerService.ProposeContractAsync(factoryOwnerId, depotId, contract, default)).Outcome);
         Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Success, (await new Retrack.API.Services.Factory.FactoryMarketService(db).AcceptAsync(factoryOwnerId, input.OperationId, new(), default)).Outcome);
         var batch = await db.InventoryBatches.SingleAsync(b => b.Id == input.OperationId);
         batch.Status = "VERIFIED";
         batch.QualityCheck = new BatchQualityCheck { BatchId = batch.Id, FactoryId = factory.Id, ActualWeightKg = 10, Grade = "A", IsAccepted = true };
         db.BatchQualityChecks.Add(batch.QualityCheck);
         await db.SaveChangesAsync();
-        Assert.Equal("APPROVED", (await partnerService.UpdateStatusAsync(factoryOwnerId, depotId, approve, default)).Data!.Status);
+        Assert.Equal("PENDING_DEPOT", (await partnerService.ProposeContractAsync(factoryOwnerId, depotId, contract, default)).Data!.ContractStatus);
+        var pendingContract = await db.FactoryDepotPartnerships.SingleAsync(x => x.FactoryId == factory.Id && x.DepotId == depotId);
+        Assert.NotNull(pendingContract.FactorySignedAt);
+        Assert.Equal(factoryOwnerId, pendingContract.FactorySignedBy);
+        Assert.Equal(64, pendingContract.ContractTermsHash!.Length);
+        var depot = new DepotPartnershipService(new DepotService(new Retrack.API.Repositories.DepotOwnerRepository(db), new Retrack.API.Repositories.DepotPaymentReadRepository(db)), new Retrack.API.Repositories.DepotPartnershipRepository(db), new Retrack.API.Repositories.DepotUnitOfWork(db));
+        Assert.Equal("APPROVED", (await depot.DecideContractAsync(ownerId, depotId, factory.Id, new("ACCEPT", true), default)).Status);
+        await db.Entry(pendingContract).ReloadAsync();
+        Assert.Equal("ACTIVE", pendingContract.ContractStatus);
+        Assert.Equal(ownerId, pendingContract.DepotSignedBy);
+        Assert.NotNull(pendingContract.ContractEffectiveAt);
         var next = Input(10); next.TargetFactoryId = factory.Id;
         Assert.Equal("TRANSPORT_READY", (await Batches(db).CreateAsync(ownerId, depotId, next)).Status);
-        Assert.Equal("DECLINED", (await partnerService.UpdateStatusAsync(factoryOwnerId, depotId, new() { Status = Retrack.API.Models.Enums.PartnershipStatus.DECLINED }, default)).Data!.Status);
+        Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Conflict,
+            (await partnerService.UpdateStatusAsync(factoryOwnerId, depotId, new() { Status = Retrack.API.Models.Enums.PartnershipStatus.DECLINED }, default)).Outcome);
         var again = Input(10); again.TargetFactoryId = factory.Id;
-        Assert.Equal("PENDING_APPROVAL", (await Batches(db).CreateAsync(ownerId, depotId, again)).Status);
+        Assert.Equal("TRANSPORT_READY", (await Batches(db).CreateAsync(ownerId, depotId, again)).Status);
         await partnerService.UpdateStatusAsync(factoryOwnerId, depotId, new() { Status = Retrack.API.Models.Enums.PartnershipStatus.BLOCKED }, default);
-        var depot = new DepotPartnershipService(new DepotService(new Retrack.API.Repositories.DepotOwnerRepository(db), new Retrack.API.Repositories.DepotPaymentReadRepository(db)), new Retrack.API.Repositories.DepotPartnershipRepository(db), new Retrack.API.Repositories.DepotUnitOfWork(db));
         Assert.Equal("BLOCKED", (await depot.UpdateAsync(ownerId, depotId, factory.Id, "UNBLOCKED", default)).Status);
         await Assert.ThrowsAsync<ArgumentException>(() => depot.UpdateAsync(ownerId, depotId, factory.Id, "APPROVED", default));
         await depot.UpdateAsync(ownerId, depotId, factory.Id, "BLOCKED", default);
         Assert.Equal("BLOCKED", (await partnerService.UpdateStatusAsync(factoryOwnerId, depotId, new() { Status = Retrack.API.Models.Enums.PartnershipStatus.UNBLOCKED }, default)).Data!.Status);
-        Assert.Equal("DECLINED", (await depot.UpdateAsync(ownerId, depotId, factory.Id, "UNBLOCKED", default)).Status);
+        Assert.Equal("APPROVED", (await depot.UpdateAsync(ownerId, depotId, factory.Id, "UNBLOCKED", default)).Status);
+        Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Conflict,
+            (await partnerService.RequestTerminationAsync(factoryOwnerId, depotId, new() { Reason = "Hai bên thống nhất dừng hợp tác." }, default)).Outcome);
+        foreach (var open in await db.InventoryBatches.Where(x => x.DepotId == depotId && x.TargetFactoryId == factory.Id).ToListAsync())
+            open.Status = "COMPLETED";
+        await db.SaveChangesAsync();
+        Assert.Equal("PENDING_DEPOT", (await partnerService.RequestTerminationAsync(factoryOwnerId, depotId,
+            new() { Reason = "Hai bên thống nhất dừng hợp tác." }, default)).Data!.TerminationStatus);
+        Assert.Equal("TERMINATED", (await depot.DecideTerminationAsync(ownerId, depotId, factory.Id, new("ACCEPT"), default)).ContractStatus);
+        await db.Entry(pendingContract).ReloadAsync();
+        Assert.Equal("TERMINATED", pendingContract.TerminationStatus);
+        Assert.NotNull(pendingContract.TerminatedAt);
+        Assert.Equal("DECLINED", pendingContract.Status);
     }
 
     [Fact]
@@ -362,12 +384,17 @@ public sealed class InventoryBatchTests : IAsyncLifetime
             new() { Accept = true, PurityPercent = 95, MoisturePercent = 3, ContaminationPercent = 2, Grade = "A", Note = "Đạt KCS" }, default)).Outcome);
 
         var partners = new Retrack.API.Services.Factory.FactoryPartnerService(db);
-        Assert.Equal("APPROVED", (await partners.UpdateStatusAsync(factoryOwnerId, depotId,
-            new() { Status = Retrack.API.Models.Enums.PartnershipStatus.APPROVED }, default)).Data!.Status);
+        var proposed = await partners.ProposeContractAsync(factoryOwnerId, depotId,
+            new() { Terms = new string('B', 80), ValidMonths = 12, ConfirmElectronicSignature = true }, default);
+        Assert.Equal("PENDING_DEPOT", proposed.Data!.ContractStatus);
+        var depotPartners = new DepotPartnershipService(new DepotService(new Retrack.API.Repositories.DepotOwnerRepository(db), new Retrack.API.Repositories.DepotPaymentReadRepository(db)), new Retrack.API.Repositories.DepotPartnershipRepository(db), new Retrack.API.Repositories.DepotUnitOfWork(db));
+        Assert.Equal("APPROVED", (await depotPartners.DecideContractAsync(ownerId, depotId, factory.Id, new("ACCEPT", true), default)).Status);
         Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Success, (await orders.InvoiceAsync(factoryOwnerId, first.Id,
             new() { InvoiceNumber = "HD-TEST-001", InvoiceFileUrl = "https://example.com/factory-invoice-test.pdf" }, default)).Outcome);
         var settled = await orders.SettleAsync(factoryOwnerId, first.Id,
-            new() { AgreedPricePerKg = 12000, VatTreatment = "TAXABLE", VatPercentage = 10, PaymentReference = "SIM-FACTORY-001" }, default);
+            new() { AgreedPricePerKg = 12000, VatTreatment = "TAXABLE", VatPercentage = 10,
+                InvoiceNumber = "HD-TEST-001", InvoiceDate = DateOnly.FromDateTime(DateTime.UtcNow),
+                SellerTaxCode = "0314892841", PaymentReference = "SIM-FACTORY-001" }, default);
         Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Success, settled.Outcome);
         Assert.Equal(720000m, settled.Data!.TotalAmount);
         Assert.Equal(72000m, settled.Data.VatAmount);

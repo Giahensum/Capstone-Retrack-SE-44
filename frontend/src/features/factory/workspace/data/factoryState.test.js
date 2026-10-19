@@ -149,5 +149,10 @@ test("profile validation and attachments survive serialization; payment rounding
   assert.equal(taxable.invoiceTotal, 1100000);
   assert.equal(taxable.fee, 50000);
   assert.equal(taxable.payable, 1050000);
+  const inclusive = settlement(100, 11000, 5, "TAXABLE", 10, true);
+  assert.equal(inclusive.total, 1000000);
+  assert.equal(inclusive.vat, 100000);
+  assert.equal(inclusive.invoiceTotal, 1100000);
+  assert.equal(inclusive.fee, 50000);
   assert.throws(() => settlement(100, 10000, 5, "NOT_APPLICABLE", 10));
 });

@@ -102,6 +102,19 @@ async function useFactoryApi(page, fixture) {
       state.calls.push({ path, body }); state.batches = state.batches.filter((b) => b.id !== batchId); data = { id: orderId };
     } else if (path === "/api/factory/marketplace/prices" && method === "GET") data = state.prices;
     else if (path === "/api/factory/partners" && method === "GET") data = paged(state.partners);
+    else if (path === `/api/factory/partners/${depotId}/contract` && method === "POST") {
+      state.calls.push({ path, body });
+      state.partners = state.partners.map((partner) => partner.depotId === depotId
+        ? { ...partner, status: "PENDING", contractStatus: "PENDING_DEPOT", contractCode: "HDHT-TEST-001", contractTerms: body.terms }
+        : partner);
+      data = { depotId, status: "PENDING", contractStatus: "PENDING_DEPOT", contractCode: "HDHT-TEST-001" };
+    } else if (path === `/api/factory/partners/${depotId}/contract/termination` && method === "POST") {
+      state.calls.push({ path, body });
+      state.partners = state.partners.map((partner) => partner.depotId === depotId
+        ? { ...partner, terminationStatus: "PENDING_DEPOT", terminationReason: body.reason }
+        : partner);
+      data = { depotId, status: "APPROVED", contractStatus: "ACTIVE", terminationStatus: "PENDING_DEPOT" };
+    }
     else if (path.startsWith("/api/factory/partners/") && method === "PUT") {
       state.calls.push({ path, body });
       state.partners = state.partners.map((partner) => partner.depotId === path.split("/").at(-2) ? { ...partner, status: body.status, blockedByFactory: body.status === "BLOCKED" } : partner);
@@ -119,7 +132,7 @@ async function login(page) {
   await page.getByPlaceholder("••••••••").fill("password");
   await page.getByRole("button", { name: "Đăng nhập" }).click();
   await expect(page).toHaveURL(/\/factory/);
-  await expect(page.getByText("FACTORY WORKSPACE")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Về tổng quan nhà máy" })).toBeVisible();
 }
 
 test.describe("Factory TV4 browser flow", () => {
@@ -183,10 +196,9 @@ test.describe("Factory TV4 browser flow", () => {
     await page.getByRole("button", { name: "Lập phiếu cân" }).click();
     await page.getByLabel("Gross • Xe có hàng (kg)").fill("105");
     await page.getByLabel("Tare • Xe rỗng (kg)").fill("10");
-    await page.getByRole("button", { name: "Lưu phiếu cân" }).click();
-    await expect(page.getByText("Đã lưu phiếu cân. Lô hàng sẵn sàng kiểm tra KCS.")).toBeVisible();
-
-    await page.getByRole("button", { name: "Kiểm tra & Chốt KCS" }).click();
+    await page.getByRole("button", { name: "Lưu và chuyển sang KCS" }).click();
+    await expect(page.getByText("Đã lưu phiếu cân. Tiếp tục nhập kết quả KCS.")).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Kiểm tra chất lượng/ })).toBeVisible();
     await page.getByLabel("Độ tinh khiết (%)").fill("92");
     await page.getByLabel("Độ ẩm (%)").fill("3");
     await page.getByLabel("Tạp chất (%)").fill("2");
@@ -197,20 +209,22 @@ test.describe("Factory TV4 browser flow", () => {
     await page.getByRole("button", { name: "Quyết toán", exact: true }).click();
     await page.getByRole("button", { name: "Chi tiết" }).click();
     await page.getByRole("button", { name: "Thỏa thuận giá & Quyết toán" }).click();
-    await page.getByLabel("Đơn giá đã thỏa thuận sau KCS (đ/kg)").fill("1200");
+    await page.getByLabel(/Đơn giá đã thỏa thuận sau KCS/).fill("1200");
     await page.getByLabel("Mã tham chiếu chuyển khoản").fill("BANK-TEST-001");
     await page.getByLabel("VAT theo hóa đơn của vựa").selectOption("TAXABLE:10");
+    await page.getByLabel("Số hóa đơn điện tử").fill("HD-E2E-001");
+    await page.getByLabel("Ngày hóa đơn").fill("2026-10-18");
+    await page.getByLabel("Mã số thuế bên bán (vựa)").fill("0314892841");
     await expect(page.getByText("Tổng giá trị hóa đơn")).toBeVisible();
-    await page.locator(".checkbox-line input[type=checkbox]").check();
+    await page.getByLabel(/Tôi xác nhận giá đã thống nhất/).check();
     await page.getByRole("button", { name: "Ghi nhận quyết toán" }).click();
     await expect(page.getByText("Đã ghi nhận quyết toán. Có thể đánh giá lô hàng.")).toBeVisible();
     expect(fixture.state.orders[0].status).toBe("COMPLETED");
     expect(fixture.state.orders[0].vatPercentage).toBe(10);
     await page.getByRole("button", { name: "Đánh giá lô & Hợp tác" }).click();
     await page.getByLabel("Nhận xét").fill("Hàng đạt chất lượng");
-    await page.getByLabel("Quyết định hợp tác với vựa").selectOption("APPROVED");
     await page.getByRole("button", { name: "Lưu đánh giá" }).click();
-    await expect(page.getByText("Đã lưu đánh giá lô và quyết định hợp tác.")).toBeVisible();
+    await expect(page.getByText("Đã lưu đánh giá lô hàng.")).toBeVisible();
     expect(fixture.state.partners[0].status).toBe("APPROVED");
     expect(fixture.state.calls.map((call) => call.path)).toEqual([
       `/api/factory/qc/orders/${orderId}/weigh`,
@@ -259,5 +273,41 @@ test.describe("Factory TV4 browser flow", () => {
       body: { status: "BLOCKED" },
     });
     await expect(page.getByRole("button", { name: "Bỏ chặn của nhà máy" })).toBeVisible();
+  });
+
+  test("sends an electronic partnership contract with the Depot id", async ({ page }) => {
+    const fixture = apiFixture();
+    await useFactoryApi(page, fixture);
+    await login(page);
+    await page.getByRole("button", { name: "Vựa đối tác" }).click();
+    await page.getByRole("button", { name: "Lập hợp đồng điện tử" }).click();
+    await page.getByLabel(/Tôi đã đọc, đồng ý nội dung/).check();
+    await page.getByRole("button", { name: "Ký và gửi chủ vựa" }).click();
+    await expect(page.getByText("Đã ký và gửi hợp đồng cho chủ vựa.")).toBeVisible();
+    expect(fixture.state.calls.at(-1)).toMatchObject({
+      path: `/api/factory/partners/${depotId}/contract`,
+      body: { validMonths: 12, confirmElectronicSignature: true },
+    });
+    await expect(page.getByText(/Chờ chủ vựa ký/)).toBeVisible();
+  });
+
+  test("requests contract termination and keeps the active contract for review", async ({ page }) => {
+    const fixture = apiFixture();
+    fixture.state.partners[0] = { ...fixture.state.partners[0], contractStatus: "ACTIVE", contractCode: "HDHT-TEST-001", contractVersion: 1, contractTerms: "Nội dung hợp đồng kiểm thử đủ dài để hiển thị và giữ lịch sử sau khi đề nghị chấm dứt.", contractTermsHash: "a".repeat(64) };
+    await useFactoryApi(page, fixture);
+    await login(page);
+    await page.getByRole("button", { name: "Vựa đối tác" }).click();
+    await expect(page.getByRole("button", { name: "Xem hợp đồng" })).toBeVisible();
+    await page.getByRole("button", { name: "Xem hợp đồng" }).click();
+    await expect(page.getByRole("heading", { name: /HỢP ĐỒNG HỢP TÁC THU MUA/ })).toBeVisible();
+    await expect(page.getByText("ĐẠI DIỆN BÊN MUA")).toBeVisible();
+    await expect(page.getByRole("button", { name: "In / Lưu PDF" })).toBeVisible();
+    await page.getByRole("button", { name: "Đóng hộp thoại" }).click();
+    await page.getByRole("button", { name: "Đề nghị chấm dứt" }).click();
+    await page.getByLabel("Lý do chấm dứt").fill("Hai bên đã hoàn tất kế hoạch hợp tác hiện tại.");
+    await page.getByRole("button", { name: "Gửi đề nghị" }).click();
+    await expect(page.getByText("Đã gửi đề nghị chấm dứt cho chủ vựa.")).toBeVisible();
+    expect(fixture.state.calls.at(-1)).toMatchObject({ path: `/api/factory/partners/${depotId}/contract/termination` });
+    await expect(page.getByText("Đang chờ chủ vựa xác nhận đề nghị chấm dứt.")).toBeVisible();
   });
 });

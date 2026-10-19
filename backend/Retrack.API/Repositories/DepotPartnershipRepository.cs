@@ -15,7 +15,10 @@ public sealed class DepotPartnershipRepository(AppDbContext db) : IDepotPartners
             .OrderByDescending(x => x.CreatedAt).ThenBy(x => x.Id)
             .Select(x => new DepotPartnershipDto(x.Id, x.FactoryId, x.Factory.Name, x.Factory.Owner!.Phone,
                 x.Status == "BLOCKED" || x.BlockedByDepot || x.BlockedByFactory ? "BLOCKED" : x.Status, x.CreatedAt, x.UpdatedAt,
-                x.BlockedByDepot, x.BlockedByFactory, x.Status == "BLOCKED"));
+                x.BlockedByDepot, x.BlockedByFactory, x.Status == "BLOCKED",
+                x.ContractCode, x.ContractVersion, x.ContractTerms, x.ContractTermsHash, x.ContractStatus,
+                x.FactorySignedAt, x.DepotSignedAt, x.ContractEffectiveAt, x.ContractExpiresAt,
+                x.TerminationStatus, x.TerminationRequestedBy, x.TerminationRequestedAt, x.TerminationReason, x.TerminatedAt));
         return await DepotRepositoryPage.ReadAsync(source, query, ct);
     }
     public async Task<FactoryDepotPartnership?> FindAsync(Guid depotId, Guid factoryId, CancellationToken ct)
@@ -26,4 +29,7 @@ public sealed class DepotPartnershipRepository(AppDbContext db) : IDepotPartners
     }
     public async Task SaveAsync(CancellationToken ct) => await db.SaveChangesAsync(ct);
     public Task LockDepotAsync(Guid depotId, CancellationToken ct) => db.Depots.FromSqlInterpolated($"SELECT * FROM depots WHERE id = {depotId} FOR UPDATE").LoadAsync(ct);
+    public Task<bool> HasOpenOrdersAsync(Guid depotId, Guid factoryId, CancellationToken ct) =>
+        db.InventoryBatches.AnyAsync(x => x.DepotId == depotId && x.TargetFactoryId == factoryId &&
+            x.Status != "COMPLETED" && x.Status != "PAID" && x.Status != "REJECTED" && x.Status != "CANCELLED", ct);
 }

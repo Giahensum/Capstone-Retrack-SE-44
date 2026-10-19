@@ -22,11 +22,44 @@ ALTER TABLE public.depots
 
 ALTER TABLE public.factory_depot_partnerships
     ADD COLUMN IF NOT EXISTS blocked_by_depot BOOLEAN NOT NULL DEFAULT FALSE,
-    ADD COLUMN IF NOT EXISTS blocked_by_factory BOOLEAN NOT NULL DEFAULT FALSE;
+    ADD COLUMN IF NOT EXISTS blocked_by_factory BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN IF NOT EXISTS contract_code VARCHAR(50),
+    ADD COLUMN IF NOT EXISTS contract_version INT NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS contract_terms TEXT,
+    ADD COLUMN IF NOT EXISTS contract_terms_hash VARCHAR(64),
+    ADD COLUMN IF NOT EXISTS contract_status VARCHAR(30),
+    ADD COLUMN IF NOT EXISTS factory_signed_by UUID REFERENCES public.users(id),
+    ADD COLUMN IF NOT EXISTS factory_signed_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS depot_signed_by UUID REFERENCES public.users(id),
+    ADD COLUMN IF NOT EXISTS depot_signed_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS contract_effective_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS contract_expires_at TIMESTAMPTZ;
+
+ALTER TABLE factory_depot_partnerships
+    ADD COLUMN IF NOT EXISTS termination_status VARCHAR(30),
+    ADD COLUMN IF NOT EXISTS termination_requested_by UUID REFERENCES users(id),
+    ADD COLUMN IF NOT EXISTS termination_requested_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS termination_reason VARCHAR(2000),
+    ADD COLUMN IF NOT EXISTS terminated_at TIMESTAMPTZ;
 
 ALTER TABLE public.inventory_batches
     ADD COLUMN IF NOT EXISTS code VARCHAR(40),
-    ADD COLUMN IF NOT EXISTS image_urls TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];
+    ADD COLUMN IF NOT EXISTS image_urls TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+    ADD COLUMN IF NOT EXISTS vat_treatment VARCHAR(30),
+    ADD COLUMN IF NOT EXISTS vat_percentage DECIMAL(5, 2),
+    ADD COLUMN IF NOT EXISTS vat_amount DECIMAL(18, 2),
+    ADD COLUMN IF NOT EXISTS invoice_total_amount DECIMAL(18, 2),
+    ADD COLUMN IF NOT EXISTS price_includes_vat BOOLEAN NOT NULL DEFAULT FALSE;
+
+ALTER TABLE public.batch_quality_checks
+    ADD COLUMN IF NOT EXISTS vat_treatment VARCHAR(30) NOT NULL DEFAULT 'NOT_APPLICABLE',
+    ADD COLUMN IF NOT EXISTS vat_percentage DECIMAL(5, 2) NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS vat_amount DECIMAL(18, 2) NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS invoice_total_amount DECIMAL(18, 2) NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS price_includes_vat BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN IF NOT EXISTS invoice_date DATE,
+    ADD COLUMN IF NOT EXISTS seller_tax_code VARCHAR(50),
+    ADD COLUMN IF NOT EXISTS vat_legal_basis VARCHAR(500);
 CREATE SEQUENCE IF NOT EXISTS public.depot_batch_number START WITH 1 INCREMENT BY 1;
 CREATE UNIQUE INDEX IF NOT EXISTS ix_inventory_batches_code ON public.inventory_batches(code);
 

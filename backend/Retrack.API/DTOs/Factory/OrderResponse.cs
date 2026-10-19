@@ -18,6 +18,10 @@ public sealed record OrderResponse
     public required decimal? VatPercentage { get; init; }
     public required decimal? VatAmount { get; init; }
     public required decimal? InvoiceTotalAmount { get; init; }
+    public required bool PriceIncludesVat { get; init; }
+    public required DateOnly? InvoiceDate { get; init; }
+    public required string? SellerTaxCode { get; init; }
+    public required string? VatLegalBasis { get; init; }
     public required string Status { get; init; }
     public required DateTime? ReceivedAt { get; init; }
     public required DateTime? DecidedAt { get; init; }

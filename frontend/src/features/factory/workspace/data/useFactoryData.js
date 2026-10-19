@@ -42,6 +42,20 @@ function mapPartner(partner) {
     reviewCount: partner.reviewCount,
     orderCount: partner.orderCount,
     completedOrderCount: partner.completedOrderCount,
+    contractCode: partner.contractCode,
+    contractVersion: partner.contractVersion,
+    contractTerms: partner.contractTerms,
+    contractTermsHash: partner.contractTermsHash,
+    contractStatus: partner.contractStatus,
+    factorySignedAt: partner.factorySignedAt,
+    depotSignedAt: partner.depotSignedAt,
+    contractEffectiveAt: partner.contractEffectiveAt,
+    contractExpiresAt: partner.contractExpiresAt,
+    terminationStatus: partner.terminationStatus,
+    terminationRequestedBy: partner.terminationRequestedBy,
+    terminationRequestedAt: partner.terminationRequestedAt,
+    terminationReason: partner.terminationReason,
+    terminatedAt: partner.terminatedAt,
   };
 }
 

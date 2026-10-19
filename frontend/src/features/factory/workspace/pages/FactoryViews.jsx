@@ -15,6 +15,7 @@ import {
 import { materials, money, number, today } from "../data/factoryState";
 import { mapOrder } from "../data/factoryApi";
 import { useFactoryDashboard, useFactoryPage } from "../data/useFactoryData";
+import ContractDocument from "../../../../components/ui/ContractDocument";
 
 const MaterialSelect = ({ value, onChange, all = false }) => (
   <select value={value} onChange={onChange}>
@@ -621,6 +622,9 @@ export function Partners({ navigate }) {
   const { act } = useFactory();
   const [filter, setFilter] = useState("");
   const [change, setChange] = useState(null);
+  const [contract, setContract] = useState(null);
+  const [contractView, setContractView] = useState(null);
+  const [termination, setTermination] = useState(null);
   const [page, setPage] = useState(1);
   const { data, isPending, error } = useFactoryPage("partners", { page, partnerStatus: filter });
   const depots = data?.items || [];
@@ -682,12 +686,18 @@ export function Partners({ navigate }) {
                   >
                     Xem đơn & đánh giá
                   </Button>
-                  {d.status !== "BLOCKED" && <><Button onClick={() => setChange({...d, action:'APPROVED', title:'Đồng ý hợp tác?', message:'Sau kiểm tra hàng, cho phép kho gửi thẳng các lô sau mà không cần duyệt từng lô.'})}>Đồng ý hợp tác</Button>
+                  {d.contractTerms && <Button secondary onClick={() => setContractView(d)}>Xem hợp đồng</Button>}
+                  {d.contractStatus === "ACTIVE" && !["PENDING_DEPOT", "PENDING_FACTORY"].includes(d.terminationStatus) && <Button danger onClick={() => setTermination({ ...d, mode: "request", reason: "" })}>Đề nghị chấm dứt</Button>}
+                  {d.terminationStatus === "PENDING_FACTORY" && <Button danger onClick={() => setTermination({ ...d, mode: "decision" })}>Xử lý đề nghị chấm dứt</Button>}
+                  {d.status !== "BLOCKED" && d.contractStatus !== "ACTIVE" && <><Button onClick={() => setContract({ ...d, terms: d.contractTerms || `HỢP ĐỒNG HỢP TÁC THU MUA NGUYÊN LIỆU TÁI CHẾ\n\nBên mua: Nhà máy trên hệ thống RETRACK.\nBên bán: ${d.name}.\n\nHai bên thống nhất giao nhận nguyên liệu theo từng lô trên RETRACK; khối lượng và chất lượng được chốt theo kết quả cân và KCS; đơn giá, VAT, phí nền tảng và thanh toán được ghi nhận riêng cho từng lô. Hai bên cam kết cung cấp thông tin hợp pháp, bảo mật dữ liệu và xử lý tranh chấp theo pháp luật Việt Nam.`, validMonths: 12, confirmed: false })}>{d.contractStatus === "PENDING_DEPOT" ? "Cập nhật và gửi lại" : "Lập hợp đồng điện tử"}</Button>
                   <Button secondary onClick={() => setChange({...d, action:'DECLINED', title:'Không hợp tác lâu dài?', message:'Các lô sau phải qua quy trình duyệt lô đầu. Quyết định này không hủy lô đã nhận và không chặn mọi giao dịch.'})}>Không hợp tác</Button></>}
                   <Button danger={!d.blockedByFactory} onClick={() => setChange({...d, action:d.blockedByFactory?'UNBLOCKED':'BLOCKED', title:d.blockedByFactory?'Bỏ chặn của nhà máy?':'Chặn vựa?', message:d.blockedByFactory?'Chỉ bỏ chặn của nhà máy. Kho còn chặn hoặc trạng thái chặn cũ chưa đối chiếu thì vẫn không giao dịch mới.':'Ngừng nhận lô mới; không tự hủy các lô đang xử lý.'})}>{d.blockedByFactory?'Bỏ chặn của nhà máy':'Chặn vựa'}</Button>
                   {d.blockedByDepot && <p>Kho đang chặn giao dịch.</p>}{d.legacyBlocked && <p>Trạng thái chặn cũ cần đối chiếu với quản trị viên.</p>}
                 </div>
                 {d.comment && <p className="review">Đánh giá gần nhất: {d.comment}</p>}
+                {d.contractStatus && <p className="muted">Hợp đồng {d.contractCode || ""}: {{ PENDING_DEPOT: "Chờ chủ vựa ký", ACTIVE: "Đang hiệu lực", REJECTED: "Đã bị từ chối", TERMINATED: "Đã chấm dứt" }[d.contractStatus] || d.contractStatus}</p>}
+                {d.terminationStatus === "PENDING_DEPOT" && <p className="info-box warning">Đang chờ chủ vựa xác nhận đề nghị chấm dứt.</p>}
+                {d.terminationStatus === "PENDING_FACTORY" && <p className="info-box warning">Chủ vựa đề nghị chấm dứt: {d.terminationReason}</p>}
               </Card>
             );
           })}
@@ -712,6 +722,40 @@ export function Partners({ navigate }) {
               setChange(null);
           }}
         />
+      )}
+      {contract && (
+        <Modal title={`Hợp đồng điện tử • ${contract.name}`} onClose={() => setContract(null)}>
+          <form onSubmit={async (e) => {
+            e.preventDefault();
+            if (await act("PROPOSE_CONTRACT", { id: contract.id, terms: contract.terms, validMonths: contract.validMonths, confirmElectronicSignature: contract.confirmed }, "Đã ký và gửi hợp đồng cho chủ vựa.")) setContract(null);
+          }}>
+            <div className="info-box">Đây là xác nhận điện tử trong hệ thống, lưu phiên bản, thời gian và mã băm nội dung. Chủ vựa phải ký thì hợp đồng mới có hiệu lực.</div>
+            <Field label="Nội dung hợp đồng">
+              <textarea required minLength={50} maxLength={10000} rows={14} value={contract.terms} onChange={(e) => setContract({ ...contract, terms: e.target.value })} />
+            </Field>
+            <Field label="Thời hạn (tháng)" type="number" min="1" max="120" required value={contract.validMonths} onChange={(e) => setContract({ ...contract, validMonths: e.target.value })} />
+            <label className="checkbox-line"><input type="checkbox" required checked={contract.confirmed} onChange={(e) => setContract({ ...contract, confirmed: e.target.checked })} />Tôi đã đọc, đồng ý nội dung và xác nhận ký điện tử với tư cách đại diện nhà máy.</label>
+            <div className="form-actions"><Button secondary onClick={() => setContract(null)}>Hủy</Button><Button type="submit" disabled={!contract.confirmed}>Ký và gửi chủ vựa</Button></div>
+          </form>
+        </Modal>
+      )}
+      {contractView && (
+        <Modal title={`Xem hợp đồng • ${contractView.contractCode || contractView.name}`} onClose={() => setContractView(null)}>
+          <ContractDocument contract={contractView} depotName={contractView.name} />
+          <div className="form-actions"><Button secondary onClick={() => window.print()}>In / Lưu PDF</Button><Button onClick={() => setContractView(null)}>Đóng</Button></div>
+        </Modal>
+      )}
+      {termination && (
+        <Modal title={termination.mode === "request" ? "Đề nghị chấm dứt hợp đồng" : "Xử lý đề nghị chấm dứt"} onClose={() => setTermination(null)}>
+          {termination.mode === "request" ? <form onSubmit={async (e) => { e.preventDefault(); if (await act("REQUEST_CONTRACT_TERMINATION", { id: termination.id, reason: termination.reason }, "Đã gửi đề nghị chấm dứt cho chủ vựa.")) setTermination(null); }}>
+            <div className="info-box warning">Chỉ gửi được khi không còn lô đang vận chuyển, KCS hoặc chờ quyết toán.</div>
+            <Field label="Lý do chấm dứt"><textarea required minLength={10} maxLength={2000} value={termination.reason} onChange={(e) => setTermination({ ...termination, reason: e.target.value })} /></Field>
+            <div className="form-actions"><Button secondary onClick={() => setTermination(null)}>Đóng</Button><Button type="submit" danger>Gửi đề nghị</Button></div>
+          </form> : <div>
+            <div className="info-box warning">Chủ vựa đề nghị chấm dứt: <strong>{termination.terminationReason}</strong></div>
+            <div className="form-actions"><Button secondary onClick={async () => { if (await act("DECIDE_CONTRACT_TERMINATION", { id: termination.id, decision: "REJECT" }, "Đã từ chối đề nghị chấm dứt.")) setTermination(null); }}>Từ chối</Button><Button danger onClick={async () => { if (await act("DECIDE_CONTRACT_TERMINATION", { id: termination.id, decision: "ACCEPT" }, "Hợp đồng đã chấm dứt.")) setTermination(null); }}>Chấp thuận chấm dứt</Button></div>
+          </div>}
+        </Modal>
       )}
     </>
   );
