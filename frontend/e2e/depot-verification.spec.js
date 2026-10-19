@@ -51,7 +51,7 @@ test('Owner tạo kho, nộp hồ sơ, Admin yêu cầu bổ sung rồi duyệt 
   expect((await allowedButEmptyStock.json()).message).toContain('Tồn kho');
   for (const width of [390, 1440]) {
     await owner.setViewportSize({ width, height: 900 });
-    if (width < 1024) await expect.poll(async () => { const box = await owner.getByRole('complementary', { name: 'Menu kho vựa' }).boundingBox(); return box.x + box.width; }).toBeLessThanOrEqual(1);
+    if (width < 1024) await expect.poll(async () => { const box = await owner.locator('aside[aria-label="Menu kho vựa"]').boundingBox(); return box.x + box.width; }).toBeLessThanOrEqual(1);
     await owner.screenshot({ path: test.info().outputPath(`ho-so-${width}.png`) });
     expect(await owner.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
     expect(await owner.locator('main h1, main dd').evaluateAll(elements => elements.every(el => el.scrollWidth <= el.clientWidth + 1))).toBe(true);

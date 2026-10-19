@@ -90,6 +90,8 @@ builder.Services.AddScoped<Retrack.API.Services.Interfaces.ISellerService, Retra
 builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IDepotOwnerRepository, DepotOwnerRepository>();
 builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IDepotVerificationRepository, DepotVerificationRepository>();
 builder.Services.AddScoped<Retrack.API.Services.Depot.DepotVerificationService>();
+builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IDepotOperationsRepository, DepotOperationsRepository>();
+builder.Services.AddScoped<Retrack.API.Services.Depot.DepotOperationsService>();
 
 builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IDepotPaymentReadRepository, DepotPaymentReadRepository>();
 

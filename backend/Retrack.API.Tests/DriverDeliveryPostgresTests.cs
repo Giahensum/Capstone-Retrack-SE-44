@@ -31,6 +31,8 @@ public sealed class DriverDeliveryPostgresTests
             await using var db = Open();
             await db.Database.ExecuteSqlRawAsync(db.Database.GenerateCreateScript());
             // Bảng fixture còn rỗng: tạo lại bằng SQL triển khai để kiểm chứng cả constraints.
+            // Bảng theo dõi Owner còn rỗng phụ thuộc event; chỉ dọn trong schema UUID riêng của fixture này.
+            await db.Database.ExecuteSqlRawAsync("DROP TABLE depot_incident_followups");
             await db.Database.ExecuteSqlRawAsync("DROP TABLE driver_delivery_events");
             // Kiểm tra cả SQL triển khai thực tế trên schema fixture mới, không chỉ EF model.
             var root = new DirectoryInfo(AppContext.BaseDirectory);

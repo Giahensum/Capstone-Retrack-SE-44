@@ -9,6 +9,11 @@ namespace Retrack.API.Services.Depot;
 
 public sealed class DepotReportService(IDepotUnitOfWork work, IDepotReportRepository reports, IDepotStaffRepository staffRepository, IDepotService scope, IInventoryService inventory) : IDepotReportService
 {
+    public async Task<StaffPerformanceSummaryDto> PerformanceSummaryAsync(Guid ownerId, Guid depotId, PeriodQuery period)
+    {
+        await scope.RequireOwnerAsync(ownerId, depotId); var (start, end) = period.Bounds();
+        return await reports.PerformanceSummaryAsync(depotId, start, end);
+    }
     public async Task<CostReportDto> CostReportAsync(Guid ownerId, Guid depotId, PeriodQuery period)
     {
         await scope.RequireOwnerAsync(ownerId, depotId);

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import CreateBatchModal from './components/CreateBatchModal';
 import BatchDetailModal from './components/BatchDetailModal';
 import { materialLabel } from './materialLabels';
@@ -8,7 +9,8 @@ import { MaterialIcon } from './components/DepotIcon';
 
 export default function Batches() {
   const [create, setCreate] = useState(false);
-  const [detail, setDetail] = useState(null);
+  const [params, setParams] = useSearchParams();
+  const [detail, setDetail] = useState(params.get('batchId'));
   const [cancel, setCancel] = useState(null);
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState('');
@@ -35,7 +37,7 @@ export default function Batches() {
       </div>
 
       <CreateBatchModal isOpen={create} onClose={() => setCreate(false)} />
-      {detail && <BatchDetailModal id={detail} onClose={() => setDetail(null)}/>}
+      {detail && <BatchDetailModal id={detail} onClose={() => { setDetail(null); setParams(prev => { prev.delete('batchId'); return prev; }, { replace: true }); }}/>}
       {cancel && (
         <Dialog title={["PENDING_APPROVAL", "PENDING_FACTORY"].includes(cancel.status) ? "Xác nhận rút đề nghị" : "Xác nhận hủy lô hàng"} onClose={() => setCancel(null)} busy={remove.isPending}>
           <div className="bg-red-50 text-red-700 p-4 rounded-xl mb-4">

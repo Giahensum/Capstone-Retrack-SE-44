@@ -21,6 +21,9 @@ public sealed class DepotReportController(IDepotReportService service, IWebHostE
     [HttpGet("staff")]
     public async Task<IActionResult> Staff([FromQuery] Guid depotId, [FromQuery] PeriodQuery period, [FromQuery] DepotQuery query) =>
         Ok(ApiResponse<PagedResult<StaffPerformanceDto>>.Ok(await service.PerformanceAsync(OwnerId, depotId, period, query)));
+    [HttpGet("staff/summary")]
+    public async Task<IActionResult> StaffSummary([FromQuery] Guid depotId, [FromQuery] PeriodQuery period) =>
+        Ok(ApiResponse<StaffPerformanceSummaryDto>.Ok(await service.PerformanceSummaryAsync(OwnerId, depotId, period)));
     [HttpGet("staff/{id:guid}")]
     public async Task<IActionResult> History(Guid id, [FromQuery] Guid depotId, [FromQuery] PeriodQuery period, [FromQuery] DepotQuery query) =>
         Ok(ApiResponse<PagedResult<StaffHistoryDto>>.Ok(await service.HistoryAsync(OwnerId, depotId, id, period, query)));

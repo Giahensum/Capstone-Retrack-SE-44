@@ -6,6 +6,7 @@ import { useState } from 'react';
 import api from '@/lib/axios';
 import { depotError } from '../DepotContext';
 import BatchCostPanel from './BatchCostPanel';
+import DriverEventsPanel from './DriverEventsPanel';
 const missing = 'Chưa cập nhật';
 const kg = (v) => v == null ? missing : `${number(v)} kg`;
 const percent = (v) => v == null ? missing : `${number(v)}%`;
@@ -60,5 +61,6 @@ export default function BatchDetailModal({ id, onClose }) {
     <p className="text-sm text-d-on-surface-variant">Số liệu do nhà máy ghi nhận; chưa phải xác nhận nhận tiền từ phía chủ kho.</p>
     <Proof title="Hóa đơn nhà máy" url={q?.invoiceFileUrl}/><Proof title="Chứng từ thanh toán" url={s?.paymentProofUrl}/>
     <BatchCostPanel id={id} quantity={b.weightKg} />
+    <DriverEventsPanel id={id} />
   </div>}</QueryState></Dialog>;
 }
