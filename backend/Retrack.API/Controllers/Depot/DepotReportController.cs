@@ -12,12 +12,18 @@ namespace Retrack.API.Controllers.Depot;
 public sealed class DepotReportController(IDepotReportService service, IWebHostEnvironment environment) : ControllerBase
 {
     private Guid OwnerId => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    [HttpGet("costs")]
+    public async Task<IActionResult> Costs([FromQuery] Guid depotId, [FromQuery] PeriodQuery period) =>
+        Ok(ApiResponse<CostReportDto>.Ok(await service.CostReportAsync(OwnerId, depotId, period)));
     [HttpGet("revenue")]
     public async Task<IActionResult> Revenue([FromQuery] Guid depotId, [FromQuery] PeriodQuery period) =>
         Ok(ApiResponse<RevenueReportDto>.Ok(await service.RevenueAsync(OwnerId, depotId, period)));
     [HttpGet("staff")]
     public async Task<IActionResult> Staff([FromQuery] Guid depotId, [FromQuery] PeriodQuery period, [FromQuery] DepotQuery query) =>
         Ok(ApiResponse<PagedResult<StaffPerformanceDto>>.Ok(await service.PerformanceAsync(OwnerId, depotId, period, query)));
+    [HttpGet("staff/summary")]
+    public async Task<IActionResult> StaffSummary([FromQuery] Guid depotId, [FromQuery] PeriodQuery period) =>
+        Ok(ApiResponse<StaffPerformanceSummaryDto>.Ok(await service.PerformanceSummaryAsync(OwnerId, depotId, period)));
     [HttpGet("staff/{id:guid}")]
     public async Task<IActionResult> History(Guid id, [FromQuery] Guid depotId, [FromQuery] PeriodQuery period, [FromQuery] DepotQuery query) =>
         Ok(ApiResponse<PagedResult<StaffHistoryDto>>.Ok(await service.HistoryAsync(OwnerId, depotId, id, period, query)));

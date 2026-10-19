@@ -12,11 +12,21 @@ public sealed class DepotOwnerRepository(AppDbContext db) : IDepotOwnerRepositor
     public Task<List<DepotSummaryDto>> ListAsync(Guid ownerId) => db.Depots.AsNoTracking().Where(d => d.OwnerId == ownerId)
         .OrderBy(d => d.Name).ThenBy(d => d.Id).Select(d => new DepotSummaryDto(d.Id, d.Name)).ToListAsync();
     public Task<Models.Depot> FindAsync(Guid depotId) => db.Depots.SingleAsync(d => d.Id == depotId);
+    public async Task<IDepotTransaction> LockProfileAsync(Guid id)
+    {
+        var transaction = await new DepotUnitOfWork(db).BeginAsync();
+        if (db.Database.IsNpgsql())
+        {
+            var depot = await db.Depots.FromSqlInterpolated($"SELECT * FROM depots WHERE id = {id} FOR UPDATE").SingleAsync();
+            await db.Entry(depot).ReloadAsync();
+        }
+        return transaction;
+    }
     public async Task SaveAsync() => await db.SaveChangesAsync();
     public async Task<DepotProfileDto> ProfileAsync(Guid depotId)
     {
         return await db.Depots.AsNoTracking().Where(d => d.Id == depotId).Select(d => new DepotProfileDto(d.Id,
-            d.Name, d.Address, d.TaxCode, d.ContactPhone, d.Description, d.Latitude, d.Longitude, d.Rating, d.Owner.Email)).SingleAsync();
+            d.Name, d.Address, d.TaxCode, d.ContactPhone, d.Description, d.Latitude, d.Longitude, d.Rating, d.Owner.Email, d.VerificationStatus)).SingleAsync();
     }
     public async Task<PagedResult<FactoryPartnerDto>> FactoriesAsync(Guid depotId, FactorySearchQuery query)
     {

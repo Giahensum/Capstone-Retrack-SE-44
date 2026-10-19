@@ -128,6 +128,8 @@ public class EmployeePickupController(AppDbContext db, INotificationService noti
     public async Task<IActionResult> Accept(Guid pickupId, CancellationToken ct)
     {
         var depotId = await GetDepotIdAsync(ct);
+        if (!await db.Depots.AnyAsync(d => d.Id == depotId && d.VerificationStatus == "APPROVED", ct))
+            return Conflict(ApiResponse<object>.Fail("Kho chưa được Admin xác minh hồ sơ để nhận giao dịch mới."));
         var userId = UserId;
         var pickup = await db.PickupRequests.AsNoTracking().Include(p => p.Seller)
             .SingleOrDefaultAsync(p => p.Id == pickupId && (p.TargetDepotId == depotId || p.TargetDepotId == null), ct);
@@ -150,7 +152,8 @@ public class EmployeePickupController(AppDbContext db, INotificationService noti
         // Exactly one concurrent claimant can win this conditional SQL UPDATE.
         var changed = await db.PickupRequests
             .Where(p => p.Id == pickupId && (p.TargetDepotId == depotId || p.TargetDepotId == null)
-                && p.Status == "PENDING" && p.AcceptedCollectorId == null)
+                && p.Status == "PENDING" && p.AcceptedCollectorId == null
+                && db.Depots.Any(d => d.Id == depotId && d.VerificationStatus == "APPROVED"))
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(p => p.AcceptedCollectorId, (Guid?)userId)
                 .SetProperty(p => p.TargetDepotId, depotId)

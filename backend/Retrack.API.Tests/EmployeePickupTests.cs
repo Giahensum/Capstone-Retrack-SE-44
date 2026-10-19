@@ -21,8 +21,8 @@ public sealed class EmployeePickupTests : IAsyncLifetime
     private readonly User employee = NewUser("DEPOT_EMPLOYEE");
     private readonly User colleague = NewUser("DEPOT_EMPLOYEE");
     private readonly User seller = NewUser("SELLER");
-    private readonly Depot depot = new() { Name = "Kho A", Owner = NewUser("DEPOT_OWNER") };
-    private readonly Depot otherDepot = new() { Name = "Kho B", Owner = NewUser("DEPOT_OWNER") };
+    private readonly Depot depot = new() { VerificationStatus = "APPROVED", Name = "Kho A", Owner = NewUser("DEPOT_OWNER") };
+    private readonly Depot otherDepot = new() { VerificationStatus = "APPROVED", Name = "Kho B", Owner = NewUser("DEPOT_OWNER") };
     private static User NewUser(string role) => new() { Email = $"{Guid.NewGuid():N}@test.local", Role = role, FullName = role };
 
     public async Task InitializeAsync()

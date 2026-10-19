@@ -1,5 +1,5 @@
 import {
-  Activity, Archive, ArrowRight, Badge, Banknote, Box, Boxes, Building2,
+  Activity, Archive, ArrowRight, Badge, Banknote, Bell, Box, Boxes, Building2,
   CalendarDays, ChartColumn, ChartNoAxesCombined, ChevronRight, CircleCheck,
   CircleX, ClipboardCheck, ClipboardList, Clock, Eye, Factory,
   Globe, Handshake, Hourglass, LayoutDashboard, Lightbulb, ListFilter,
@@ -22,6 +22,7 @@ const icons = {
   recycling: Recycle, scale: Scale, search: Search, shopping_cart: ShoppingCart,
   star: Star, task_alt: CircleCheck, undo: Undo2, visibility: Eye,
   warehouse: Warehouse, warning: TriangleAlert,
+  notifications: Bell,
   account_balance_wallet: Wallet, schedule: Clock, check_circle_filled: CircleCheck,
 };
 

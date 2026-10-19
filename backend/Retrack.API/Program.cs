@@ -83,8 +83,15 @@ builder.Services.AddScoped<IPickupRequestRepository, PickupRequestRepository>();
 builder.Services.AddScoped<IMarketPriceRepository, MarketPriceRepository>();
 builder.Services.AddScoped<IAuditLogRepository, AuditLogRepository>();
 builder.Services.AddScoped<IPlatformInvoiceRepository, PlatformInvoiceRepository>();
+builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.ISellerRepository, Retrack.API.Repositories.SellerRepository>();
+builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IPasswordResetOtpRepository, Retrack.API.Repositories.PasswordResetOtpRepository>();
+builder.Services.AddScoped<Retrack.API.Services.Interfaces.ISellerService, Retrack.API.Services.Seller.SellerService>();
 
 builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IDepotOwnerRepository, DepotOwnerRepository>();
+builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IDepotVerificationRepository, DepotVerificationRepository>();
+builder.Services.AddScoped<Retrack.API.Services.Depot.DepotVerificationService>();
+builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IDepotOperationsRepository, DepotOperationsRepository>();
+builder.Services.AddScoped<Retrack.API.Services.Depot.DepotOperationsService>();
 
 builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IDepotPaymentReadRepository, DepotPaymentReadRepository>();
 
@@ -111,6 +118,12 @@ builder.Services.AddScoped<Retrack.API.Services.Employee.EmployeeReportingServic
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IDepotService, Retrack.API.Services.Depot.DepotService>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IInventoryService, Retrack.API.Services.Depot.InventoryService>();
 builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IDepotInventoryRepository, DepotInventoryRepository>();
+builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IDepotStockRepository, DepotStockRepository>();
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.ILiquidationRepository, LiquidationRepository>();
+builder.Services.AddScoped<Retrack.API.Services.Interfaces.ILiquidationService, Retrack.API.Services.Liquidation.LiquidationService>();
+builder.Services.AddHostedService<Retrack.API.Services.Liquidation.LiquidationClosingWorker>();
+builder.Services.AddScoped<Retrack.API.Services.Interfaces.IDepotStockService, Retrack.API.Services.Depot.DepotStockService>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IDepotProofService, Retrack.API.Services.Depot.DepotProofService>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IBatchService, Retrack.API.Services.Depot.BatchService>();
 builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IDepotStaffRepository, DepotStaffRepository>();
@@ -193,7 +206,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
-// ===== DB-FIRST: app KHÔNG tự migrate; schema nằm ở db/bootstrap/01-retrack-system.sql =====
+// ===== DB-FIRST: app KHÔNG tự migrate; schema/seed nằm ở db/bootstrap/retrack-system.sql =====
 // Tạo/cập nhật schema bằng script SQL đã review trước khi khởi động ứng dụng.
 // Chỉ seed dữ liệu khi chủ động bật Database__Initialize trong Development.
 if (app.Environment.IsDevelopment() && builder.Configuration.GetValue<bool>("Database:Initialize"))

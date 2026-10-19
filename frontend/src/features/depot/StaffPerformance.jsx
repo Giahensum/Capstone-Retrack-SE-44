@@ -2,22 +2,28 @@ import React, { useState } from 'react';
 import { useDepotQuery, number, money } from './depotApi';
 import { QueryState, Pager } from './components/DepotUI';
 import { MaterialIcon } from './components/DepotIcon';
+import { monthBounds, vietnamMonth } from './reportPeriod';
+import StaffHistoryModal from './components/StaffHistoryModal';
+import { buttonClass } from './components/DepotUI';
 
 export default function StaffPerformance() {
   const [page, setPage] = useState(1);
-  const [period, setPeriod] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM
-  const query = useDepotQuery('reports/staff', { period, page });
+  const [period, setPeriod] = useState(() => vietnamMonth());
+  const bounds = monthBounds(period);
+  const query = useDepotQuery('reports/staff', { ...bounds, page }, !!bounds);
+  const summary = useDepotQuery('reports/staff/summary', bounds ?? {}, !!bounds);
+  const [selected, setSelected] = useState(null);
 
-  const totalCompleted = query.data?.items.reduce((sum, s) => sum + s.completedCount, 0) ?? 0;
-  const totalWeight = query.data?.items.reduce((sum, s) => sum + s.weightKg, 0) ?? 0;
-  const purchaseAmount = query.data?.items.reduce((sum, s) => sum + s.purchaseAmount, 0) ?? 0;
-  const topStaff = [...(query.data?.items ?? [])].filter((s) => s.weightKg > 0).sort((a, b) => b.weightKg - a.weightKg).slice(0, 5);
+  const totalCompleted = summary.data?.completedCount ?? 0;
+  const totalWeight = summary.data?.weightKg ?? 0;
+  const purchaseAmount = summary.data?.purchaseAmount ?? 0;
+  const topStaff = summary.data?.topStaff ?? [];
 
   const kpiCards = [
-    { label: 'Đơn hoàn thành (trang này)', value: number(totalCompleted), icon: 'check_circle', iconColor: 'text-d-secondary', badge: null },
-    { label: 'Khối lượng (trang này)', value: number(totalWeight), unit: 'kg', icon: 'scale', iconColor: 'text-d-primary', badge: null },
-    { label: 'Giá trị thu mua (trang này)', value: money(purchaseAmount), icon: 'payments', iconColor: 'text-[#CD7F32]', badge: null },
-    { label: 'Nhân viên trong trang', value: number(query.data?.items.length ?? 0), icon: 'badge', iconColor: 'text-[#784f85]', badge: null },
+    { label: 'Đơn/chuyến hoàn thành trong tháng', value: number(totalCompleted), icon: 'check_circle', iconColor: 'text-d-secondary', badge: null },
+    { label: 'Khối lượng toàn kho trong tháng', value: number(totalWeight), unit: 'kg', icon: 'scale', iconColor: 'text-d-primary', badge: null },
+    { label: 'Giá trị thu mua trong tháng', value: money(purchaseAmount), icon: 'payments', iconColor: 'text-[#CD7F32]', badge: null },
+    { label: 'Nhân viên của kho', value: number(summary.data?.staffCount ?? 0), icon: 'badge', iconColor: 'text-[#784f85]', badge: null },
   ];
 
   return (
@@ -33,14 +39,16 @@ export default function StaffPerformance() {
           <span>Tháng báo cáo</span>
           <input
             type="month"
+            required min="1900-01" max="9998-12"
             value={period}
-            onChange={e => { setPeriod(e.target.value); setPage(1); }}
+            onChange={e => { if (monthBounds(e.target.value)) { setPeriod(e.target.value); setPage(1); } }}
             className="bg-transparent border-none outline-none cursor-pointer"
           />
         </label>
       </div>
 
       <QueryState query={query}>
+        <QueryState query={summary}>
         {/* KPI Row — 4 cards ngang hàng, cân đối như các trang khác */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 shrink-0">
           {kpiCards.map((k, i) => (
@@ -62,14 +70,14 @@ export default function StaffPerformance() {
 
         {/* Top 5 Bar Chart — full width, compact height */}
         <div className="bg-d-surface-container-lowest rounded-[20px] border border-d-border-subtle p-5 md:p-6 shadow-sm shrink-0">
-          <h3 className="font-d-headline-md text-d-headline-md text-d-on-surface mb-5">5 nhân viên có khối lượng cao nhất trong trang</h3>
+          <h3 className="font-d-headline-md text-d-headline-md text-d-on-surface mb-5">5 nhân viên có khối lượng cao nhất toàn kho trong tháng</h3>
           <div className="flex flex-col gap-3">
             {topStaff.map((staff, idx) => {
               const maxWeight = Math.max(...topStaff.map(s => s.weightKg), 1);
               const percent = (staff.weightKg / maxWeight) * 100;
               return (
                 <div key={staff.id} className="flex items-center gap-4">
-                  <div className="flex items-center gap-3 w-52 shrink-0">
+                  <div className="flex items-center gap-3 w-32 sm:w-52 shrink-0 min-w-0">
                     <span aria-hidden="true" className="w-9 h-9 rounded-full bg-d-surface-container flex items-center justify-center font-bold">{staff.fullName?.charAt(0) || 'N'}</span>
                     <span className="font-d-body-md font-medium text-d-on-surface truncate" title={staff.fullName}>{staff.fullName}</span>
                   </div>
@@ -95,6 +103,7 @@ export default function StaffPerformance() {
           </div>
         </div>
 
+        </QueryState>
         {/* Detail Table */}
         <div className="bg-d-surface-container-lowest rounded-[20px] border border-d-border-subtle overflow-hidden shadow-sm">
           <div className="px-5 py-4 border-b border-d-border-subtle bg-d-surface-accent/30">
@@ -117,12 +126,12 @@ export default function StaffPerformance() {
                   return (
                     <tr key={staff.id} className="hover:bg-d-surface-container-low/50 transition-colors">
                       <td className="p-4 text-center">
-                        <span className="font-bold text-d-on-surface-variant text-sm">{idx + 1}</span>
+                        <span className="font-bold text-d-on-surface-variant text-sm">{(page - 1) * 20 + idx + 1}</span>
                       </td>
                       <td className="p-4">
                         <div className="flex items-center gap-3">
                           <span aria-hidden="true" className="w-8 h-8 rounded-full bg-d-surface-container flex items-center justify-center shrink-0 font-bold">{staff.fullName?.charAt(0) || 'N'}</span>
-                          <span className="font-medium text-d-on-surface truncate">{staff.fullName}</span>
+                          <div className="min-w-0"><span className="font-medium text-d-on-surface truncate">{staff.fullName}</span><button type="button" className={`${buttonClass} block mt-2 text-xs`} onClick={() => setSelected(staff)}>Xem lịch sử</button></div>
                         </div>
                       </td>
                       <td className="p-4">
@@ -151,6 +160,7 @@ export default function StaffPerformance() {
           </div>
         </div>
       </QueryState>
+      {selected && <StaffHistoryModal staff={selected} period={bounds} onClose={() => setSelected(null)} />}
     </div>
   );
 }

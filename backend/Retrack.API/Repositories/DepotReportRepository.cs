@@ -6,7 +6,7 @@ using Retrack.API.Models;
 using Retrack.API.Repositories.Interfaces;
 namespace Retrack.API.Repositories;
 
-public sealed class DepotReportRepository(AppDbContext db) : IDepotReportRepository
+public sealed partial class DepotReportRepository(AppDbContext db) : IDepotReportRepository
 {
     public async Task<PlatformInvoice?> LockInvoiceAsync(Guid id)
     {
@@ -36,16 +36,37 @@ public sealed class DepotReportRepository(AppDbContext db) : IDepotReportReposit
         await db.InventoryBatches.CountAsync(b => b.DepotId == depotId && b.Status != "COMPLETED" && b.Status != "CANCELLED" && b.Status != "REJECTED" && b.Status != "PAID"),
         await db.PickupRequests.CountAsync(p => p.TargetDepotId == depotId && p.Status == "AWAITING_PAYMENT"),
         await db.InventoryBatches.CountAsync(b => b.DepotId == depotId && b.Status == "REJECTED" && b.QualityCheck != null));
-    public async Task<PagedResult<StaffPerformanceDto>> PerformanceAsync(Guid depotId, DateTime start, DateTime end, DepotQuery query)
+    private sealed class StaffRow
     {
-        var source = db.DepotStaffs.AsNoTracking().Where(s => s.DepotId == depotId).Select(s => new { s.Id, s.User.FullName, s.StaffType,
+        public Guid Id { get; set; } public string FullName { get; set; } = ""; public string Role { get; set; } = "";
+        public int CompletedCount { get; set; } public decimal WeightKg { get; set; } public decimal PurchaseAmount { get; set; }
+    }
+    private IQueryable<StaffRow> StaffRows(Guid depotId, DateTime start, DateTime end) =>
+        db.DepotStaffs.AsNoTracking().Where(s => s.DepotId == depotId).Select(s => new { s.Id, s.User.FullName, s.StaffType,
             CompletedCount = s.StaffType == "DRIVER" ? db.TransportJobs.Count(t => t.DriverId == s.UserId && t.Batch.DepotId == depotId && t.Status == "DELIVERED" && t.UpdatedAt >= start && t.UpdatedAt < end)
                 : db.PickupRequests.Count(p => p.AcceptedCollectorId == s.UserId && p.TargetDepotId == depotId && p.Status == "DONE" && p.UpdatedAt >= start && p.UpdatedAt < end),
             WeightKg = s.StaffType == "DRIVER" ? db.TransportJobs.Where(t => t.DriverId == s.UserId && t.Batch.DepotId == depotId && t.Status == "DELIVERED" && t.UpdatedAt >= start && t.UpdatedAt < end).Sum(t => t.Batch.DeclaredWeightKg)
                 : db.PickupRequestItems.Where(i => i.PickupRequest.AcceptedCollectorId == s.UserId && i.PickupRequest.TargetDepotId == depotId && i.PickupRequest.Status == "DONE" && i.PickupRequest.UpdatedAt >= start && i.PickupRequest.UpdatedAt < end).Sum(i => i.WeightKg),
-            Amount = db.PickupRequests.Where(p => p.AcceptedCollectorId == s.UserId && p.TargetDepotId == depotId && p.Status == "DONE" && p.UpdatedAt >= start && p.UpdatedAt < end).Sum(p => p.GrossAmount) });
-        return await DepotRepositoryPage.ReadAsync(source.OrderByDescending(s => s.CompletedCount).ThenBy(s => s.Id)
-            .Select(s => new StaffPerformanceDto(s.Id, s.FullName, s.StaffType, s.CompletedCount, s.WeightKg, s.Amount)), query);
+            Amount = db.PickupRequests.Where(p => p.AcceptedCollectorId == s.UserId && p.TargetDepotId == depotId && p.Status == "DONE" && p.UpdatedAt >= start && p.UpdatedAt < end).Sum(p => p.GrossAmount) })
+        .Select(s => new StaffRow { Id = s.Id, FullName = s.FullName, Role = s.StaffType, CompletedCount = s.CompletedCount, WeightKg = s.WeightKg, PurchaseAmount = s.Amount });
+    public Task<PagedResult<StaffPerformanceDto>> PerformanceAsync(Guid depotId, DateTime start, DateTime end, DepotQuery query) =>
+        DepotRepositoryPage.ReadAsync(StaffRows(depotId, start, end).OrderByDescending(s => s.CompletedCount).ThenBy(s => s.Id)
+            .Select(s => new StaffPerformanceDto(s.Id, s.FullName, s.Role, s.CompletedCount, s.WeightKg, s.PurchaseAmount)), query);
+
+    public async Task<StaffPerformanceSummaryDto> PerformanceSummaryAsync(Guid depotId, DateTime start, DateTime end)
+    {
+        var pickups = db.PickupRequests.Where(p => p.TargetDepotId == depotId && p.Status == "DONE" && p.UpdatedAt >= start && p.UpdatedAt < end &&
+            db.DepotStaffs.Any(s => s.DepotId == depotId && s.UserId == p.AcceptedCollectorId && s.StaffType == "DEPOT_EMPLOYEE"));
+        var trips = db.TransportJobs.Where(t => t.Batch.DepotId == depotId && t.Status == "DELIVERED" && t.UpdatedAt >= start && t.UpdatedAt < end &&
+            db.DepotStaffs.Any(s => s.DepotId == depotId && s.UserId == t.DriverId && s.StaffType == "DRIVER"));
+        var staffCount = await db.DepotStaffs.CountAsync(s => s.DepotId == depotId);
+        var completed = await pickups.CountAsync() + await trips.CountAsync();
+        var weight = await db.PickupRequestItems.Where(i => pickups.Any(p => p.Id == i.PickupRequestId)).SumAsync(i => (decimal?)i.WeightKg) ?? 0;
+        weight += await trips.SumAsync(t => (decimal?)t.Batch.DeclaredWeightKg) ?? 0;
+        var amount = await pickups.SumAsync(p => (decimal?)p.GrossAmount) ?? 0;
+        var top = await StaffRows(depotId, start, end).Where(s => s.WeightKg > 0).OrderByDescending(s => s.WeightKg).ThenBy(s => s.Id).Take(5)
+            .Select(s => new StaffPerformanceDto(s.Id, s.FullName, s.Role, s.CompletedCount, s.WeightKg, s.PurchaseAmount)).ToListAsync();
+        return new(staffCount, completed, weight, amount, top);
     }
     public async Task<PagedResult<StaffHistoryDto>> HistoryAsync(Guid depotId, DepotStaff staff, DateTime start, DateTime end, DepotQuery query)
     {

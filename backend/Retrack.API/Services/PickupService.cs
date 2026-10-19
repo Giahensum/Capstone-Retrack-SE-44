@@ -37,11 +37,33 @@ namespace Retrack.API.Services
 
         public async Task<PickupRequestDto> CreateAsync(Guid sellerId, CreatePickupRequestDto dto)
         {
-            if (dto.TargetDepotId == null)
+            if (string.IsNullOrWhiteSpace(dto.Address))
+                throw new ArgumentException("Địa chỉ thu gom không được để trống.");
+            if (dto.Address.Length > 500)
+                throw new ArgumentException("Địa chỉ thu gom không được vượt quá 500 ký tự.");
+            if (dto.Description != null && dto.Description.Length > 1000)
+                throw new ArgumentException("Mô tả không được vượt quá 1000 ký tự.");
+
+            if (dto.TargetDepotId.HasValue)
+            {
+                var depotExists = await _db.Depots.AnyAsync(d => d.Id == dto.TargetDepotId.Value && d.VerificationStatus == "APPROVED" && d.Owner.IsActive);
+                if (!depotExists)
+                    throw new ArgumentException("Kho vựa chưa xác minh hồ sơ hoặc không còn hoạt động.");
+            }
+            else
             {
                 if (!dto.Latitude.HasValue || !dto.Longitude.HasValue)
                     throw new ArgumentException("Khi chọn hình thức nổ đơn (broadcast), cần cung cấp tọa độ vị trí (kinh độ, vĩ độ) để các kho trong bán kính 20km nhận đơn.");
             }
+
+            if (dto.Latitude.HasValue && (dto.Latitude.Value < -90 || dto.Latitude.Value > 90))
+                throw new ArgumentException("Vĩ độ (latitude) phải nằm trong khoảng từ -90 đến 90.");
+
+            if (dto.Longitude.HasValue && (dto.Longitude.Value < -180 || dto.Longitude.Value > 180))
+                throw new ArgumentException("Kinh độ (longitude) phải nằm trong khoảng từ -180 đến 180.");
+
+            if (dto.PreferredDatetime.HasValue && dto.PreferredDatetime.Value < DateTime.UtcNow.AddMinutes(-30))
+                throw new ArgumentException("Thời gian thu gom mong muốn không thể ở quá khứ.");
 
             // Get platform fee from system config
             var feeConfig = await _db.SystemConfigs.FindAsync("PLATFORM_FEE_PERCENTAGE");
@@ -111,6 +133,8 @@ namespace Retrack.API.Services
             if (req.TargetDepotId != staff.DepotId) throw new DepotForbiddenException();
             if (req.Status != "PENDING" || req.AcceptedCollectorId != null)
                 throw new DepotConflictException("Đơn đã được nhận hoặc không còn chờ nhận.");
+            if (!await _db.Depots.AnyAsync(d => d.Id == staff.DepotId && d.VerificationStatus == "APPROVED"))
+                throw new DepotConflictException("Kho chưa được xác minh hồ sơ để nhận giao dịch mới.");
             req.AcceptedCollectorId = collectorId;
             req.Status = "SCHEDULED";
             await _repo.UpdateAsync(req);
@@ -209,6 +233,7 @@ namespace Retrack.API.Services
             if (req.Status == "DONE") return await MapToDto(req);
             if (req.Status != "PAYMENT_SENT") throw new DepotConflictException("Chủ kho chưa xác nhận chuyển tiền.");
             req.Status = "DONE";
+            req.StockReceivedAt ??= DateTime.UtcNow;
             req.UpdatedAt = DateTime.UtcNow;
             await _repo.UpdateAsync(req);
             await transaction.CommitAsync();

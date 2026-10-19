@@ -1,9 +1,8 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using Retrack.API.Data;
 using Retrack.API.DTOs;
+using Retrack.API.Services.Interfaces;
 
 namespace Retrack.API.Controllers.Seller;
 
@@ -12,11 +11,11 @@ namespace Retrack.API.Controllers.Seller;
 [Authorize(Roles = "SELLER")]
 public class SellerProfileController : ControllerBase
 {
-    private readonly AppDbContext _db;
+    private readonly ISellerService _sellerService;
 
-    public SellerProfileController(AppDbContext db)
+    public SellerProfileController(ISellerService sellerService)
     {
-        _db = db;
+        _sellerService = sellerService;
     }
 
     private Guid GetUserId() => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
@@ -25,42 +24,32 @@ public class SellerProfileController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> GetProfile()
     {
-        var user = await _db.Users.FindAsync(GetUserId());
-        if (user == null) return NotFound(ApiResponse<string>.Fail("Không tìm thấy."));
+        var profile = await _sellerService.GetProfileAsync(GetUserId());
+        if (profile == null) return NotFound(ApiResponse<string>.Fail("Không tìm thấy thông tin tài khoản."));
 
-        return Ok(ApiResponse<object>.Ok(new
-        {
-            user.Id,
-            user.Email,
-            user.FullName,
-            user.Phone,
-            user.Role,
-            user.IsActive,
-            user.CreatedAt,
-            user.BankName,
-            user.BankAccountNumber,
-            user.BankAccountName,
-            user.BankQrUrl,
-        }));
+        return Ok(ApiResponse<SellerProfileDto>.Ok(profile));
     }
 
     /// <summary>Cập nhật profile Seller</summary>
     [HttpPut]
     public async Task<IActionResult> UpdateProfile([FromBody] UpdateSellerProfileDto dto)
     {
-        var user = await _db.Users.FindAsync(GetUserId());
-        if (user == null) return NotFound(ApiResponse<string>.Fail("Không tìm thấy."));
+        if (!ModelState.IsValid)
+        {
+            var firstError = ModelState.Values.SelectMany(v => v.Errors).FirstOrDefault()?.ErrorMessage;
+            return BadRequest(ApiResponse<string>.Fail(firstError ?? "Dữ liệu không hợp lệ."));
+        }
 
-        if (!string.IsNullOrWhiteSpace(dto.FullName)) user.FullName = dto.FullName;
-        if (!string.IsNullOrWhiteSpace(dto.Phone)) user.Phone = dto.Phone;
-        
-        // Cập nhật thông tin ngân hàng (có thể null nếu xoá)
-        if (dto.BankName != null) user.BankName = dto.BankName;
-        if (dto.BankAccountNumber != null) user.BankAccountNumber = dto.BankAccountNumber;
-        if (dto.BankAccountName != null) user.BankAccountName = dto.BankAccountName;
-        if (dto.BankQrUrl != null) user.BankQrUrl = dto.BankQrUrl;
+        try
+        {
+            var updated = await _sellerService.UpdateProfileAsync(GetUserId(), dto);
+            if (!updated) return NotFound(ApiResponse<string>.Fail("Không tìm thấy thông tin tài khoản."));
 
-        await _db.SaveChangesAsync();
-        return Ok(ApiResponse<string>.Ok("Cập nhật thành công."));
+            return Ok(ApiResponse<string>.Ok("Cập nhật thành công."));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(ApiResponse<string>.Fail(ex.Message));
+        }
     }
 }

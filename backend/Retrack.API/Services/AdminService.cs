@@ -205,7 +205,11 @@ namespace Retrack.API.Services
                 await _db.Factories.AnyAsync(f => f.OwnerId == id) ||
                 await _db.DepotStaffs.AnyAsync(s => s.UserId == id) ||
                 await _db.PickupRequests.AnyAsync(p => p.SellerId == id || p.AcceptedCollectorId == id) ||
-                await _db.TransportJobs.AnyAsync(t => t.DriverId == id);
+                await _db.TransportJobs.AnyAsync(t => t.DriverId == id) ||
+                // Giữ người tạo/duyệt trong lịch sử kho kể cả khi liên kết nhân viên đã được gỡ.
+                await _db.DepotStockReceipts.AnyAsync(r => r.CreatedBy == id || r.ReviewedBy == id || r.PostedBy == id) ||
+                await _db.DepotReuseSales.AnyAsync(s => s.CreatedBy == id) ||
+                await _db.DepotBatchExpenses.AnyAsync(e => e.CreatedBy == id);
 
             if (hasDependents)
                 throw new InvalidOperationException("Không thể xóa: tài khoản có dữ liệu liên quan. Hãy vô hiệu hóa thay vì xóa.");

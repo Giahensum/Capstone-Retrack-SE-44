@@ -7,6 +7,7 @@ public interface IDepotService
 {
     Task<List<DepotSummaryDto>> GetDepotsAsync(Guid ownerId);
     Task RequireOwnerAsync(Guid ownerId, Guid depotId);
+    Task RequireTradingAsync(Guid ownerId, Guid depotId);
     Task<PagedResult<DepotPaymentDto>> GetPaymentsAsync(Guid ownerId, Guid depotId, DepotQuery query);
     Task<DepotPaymentDto> GetPaymentAsync(Guid ownerId, Guid depotId, Guid requestId);
     Task<PaymentSummaryDto> GetPaymentSummaryAsync(Guid ownerId, Guid depotId);
