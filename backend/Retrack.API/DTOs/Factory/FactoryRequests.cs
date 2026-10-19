@@ -57,7 +57,7 @@ public class DemandRequest
 
 public class WeighRequest
 {
-    [Range(0.01, 1000000000)] public decimal GrossWeightKg { get; set; }
+    [Range(0.001, 1000000000)] public decimal GrossWeightKg { get; set; }
     [Range(0, 1000000000)] public decimal TareWeightKg { get; set; }
     [StringLength(100)] public string? TicketNumber { get; set; }
     [StringLength(1000000)] public string? TicketImageUrl { get; set; }

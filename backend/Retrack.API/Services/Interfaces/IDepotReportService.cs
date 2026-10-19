@@ -4,6 +4,8 @@ using Retrack.API.DTOs.Depot;
 namespace Retrack.API.Services.Interfaces;
 public interface IDepotReportService
 {
+    Task<StaffPerformanceSummaryDto> PerformanceSummaryAsync(Guid ownerId, Guid depotId, PeriodQuery period);
+    Task<CostReportDto> CostReportAsync(Guid ownerId, Guid depotId, PeriodQuery period);
     Task<DashboardDto> DashboardAsync(Guid ownerId, Guid depotId);
     Task<RevenueReportDto> RevenueAsync(Guid ownerId, Guid depotId, PeriodQuery period);
     Task<PagedResult<StaffPerformanceDto>> PerformanceAsync(Guid ownerId, Guid depotId, PeriodQuery period, DepotQuery query);

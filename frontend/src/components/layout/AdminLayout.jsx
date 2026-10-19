@@ -11,6 +11,7 @@ const NAV_ITEMS = [
   { iconName: 'sell', label: 'Bảng giá thị trường', to: '/admin/market-prices' },
   { iconName: 'payments', label: 'Phí & Doanh thu', to: '/admin/billing' },
   { iconName: 'history_edu', label: 'Audit logs', to: '/admin/audit-logs' },
+  { iconName: 'verified_user', label: 'Hồ sơ kho vựa', to: '/admin/depot-verifications' },
 ];
 
 function SidebarItem({ iconName, label, to, active }) {

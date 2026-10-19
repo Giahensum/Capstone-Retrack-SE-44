@@ -70,6 +70,9 @@ namespace Retrack.API.Models
         [Column("updated_at")]
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
+        [Column("stock_received_at")]
+        public DateTime? StockReceivedAt { get; set; }
+
         // Navigation
         [ForeignKey("SellerId")]
         public User Seller { get; set; } = null!;

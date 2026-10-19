@@ -22,6 +22,7 @@ public record RevenueReportDto(decimal Revenue, decimal PurchaseCost, List<Reven
 public record DashboardDto(int NewRequestsToday, decimal AvailableKg, int ActiveBatches, int PendingPayments, decimal Revenue, decimal PurchaseCost, int RejectedQualityBatches = 0);
 public record StaffPerformanceDto(Guid Id, string FullName, string Role, int CompletedCount, decimal WeightKg, decimal PurchaseAmount);
 public record StaffHistoryDto(Guid Id, string Type, string Status, decimal WeightKg, decimal Amount, DateTime Date);
+public record StaffPerformanceSummaryDto(int StaffCount, int CompletedCount, decimal WeightKg, decimal PurchaseAmount, List<StaffPerformanceDto> TopStaff);
 public record FeeEntryDto(Guid Id, Guid SourceId, decimal FeeAmount, DateTime Date);
 public record FeeSummaryDto(decimal AccruedAmount, decimal UnpaidInvoiceAmount, decimal SubmittedInvoiceAmount);
 public record FeeInvoiceDto(Guid Id, DateOnly PeriodStart, decimal Amount, string Status, string? PaymentProofUrl, DateTime? SubmittedAt);

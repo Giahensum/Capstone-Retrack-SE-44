@@ -27,19 +27,24 @@ namespace Retrack.API.Services
     {
         private readonly IUserRepository _userRepo;
         private readonly IConfiguration _config;
-        private readonly AppDbContext _db;
-        private readonly IEmailService _emailService;
+        private readonly IEmailService? _emailService;
+        private readonly Repositories.Interfaces.IPasswordResetOtpRepository? _otpRepo;
 
         public AuthService(IUserRepository userRepo, IConfiguration config)
-            : this(userRepo, config, null!, null!)
+            : this(userRepo, config, (Repositories.Interfaces.IPasswordResetOtpRepository)null!, null!)
         {
         }
 
-        public AuthService(IUserRepository userRepo, IConfiguration config, AppDbContext db, IEmailService emailService)
+        [Microsoft.Extensions.DependencyInjection.ActivatorUtilitiesConstructor]
+        public AuthService(
+            IUserRepository userRepo,
+            IConfiguration config,
+            Repositories.Interfaces.IPasswordResetOtpRepository otpRepo,
+            IEmailService emailService)
         {
             _userRepo = userRepo;
             _config = config;
-            _db = db;
+            _otpRepo = otpRepo;
             _emailService = emailService;
         }
 
@@ -142,13 +147,9 @@ namespace Retrack.API.Services
             if (!user.IsActive)
                 throw new UnauthorizedAccessException("Tài khoản đã bị vô hiệu hóa.");
 
-            // Hủy các mã OTP cũ chưa sử dụng của email này
-            var oldOtps = await _db.PasswordResetOtps
-                .Where(x => x.Email.ToLower() == normalizedEmail && !x.IsUsed)
-                .ToListAsync();
-            foreach (var old in oldOtps)
+            if (_otpRepo != null)
             {
-                old.IsUsed = true;
+                await _otpRepo.InvalidateActiveOtpsAsync(normalizedEmail);
             }
 
             // Tạo mã OTP ngẫu nhiên 6 chữ số
@@ -162,23 +163,22 @@ namespace Retrack.API.Services
                 IsUsed = false,
                 CreatedAt = DateTime.UtcNow
             };
-            _db.PasswordResetOtps.Add(otpEntity);
-            await _db.SaveChangesAsync();
+            if (_otpRepo != null)
+            {
+                await _otpRepo.CreateAsync(otpEntity);
+            }
 
             // Gửi email OTP
-            await _emailService.SendPasswordResetOtpAsync(user.Email, otpCode, user.FullName);
+            if (_emailService != null)
+            {
+                await _emailService.SendPasswordResetOtpAsync(user.Email, otpCode, user.FullName);
+            }
         }
 
         public async Task<bool> VerifyOtpAsync(string email, string otp)
         {
-            var normalizedEmail = email.Trim().ToLowerInvariant();
-            var cleanOtp = otp.Trim();
-
-            var validOtp = await _db.PasswordResetOtps
-                .Where(x => x.Email.ToLower() == normalizedEmail && x.OtpCode == cleanOtp && !x.IsUsed && x.ExpiresAt > DateTime.UtcNow)
-                .OrderByDescending(x => x.CreatedAt)
-                .FirstOrDefaultAsync();
-
+            if (_otpRepo == null) return false;
+            var validOtp = await _otpRepo.GetValidOtpAsync(email, otp);
             return validOtp != null;
         }
 
@@ -187,13 +187,11 @@ namespace Retrack.API.Services
             if (string.IsNullOrWhiteSpace(newPassword) || newPassword.Length < 6 || Encoding.UTF8.GetByteCount(newPassword) > 72)
                 throw new ArgumentException("Mật khẩu mới phải có ít nhất 6 ký tự và tối đa 72 byte.");
 
-            var normalizedEmail = email.Trim().ToLowerInvariant();
-            var cleanOtp = otp.Trim();
+            if (_otpRepo == null)
+                throw new InvalidOperationException("OTP repository is not configured.");
 
-            var validOtp = await _db.PasswordResetOtps
-                .Where(x => x.Email.ToLower() == normalizedEmail && x.OtpCode == cleanOtp && !x.IsUsed && x.ExpiresAt > DateTime.UtcNow)
-                .OrderByDescending(x => x.CreatedAt)
-                .FirstOrDefaultAsync();
+            var normalizedEmail = email.Trim().ToLowerInvariant();
+            var validOtp = await _otpRepo.GetValidOtpAsync(normalizedEmail, otp);
 
             if (validOtp == null)
                 throw new ArgumentException("Mã OTP không hợp lệ hoặc đã hết hạn.");
@@ -208,7 +206,7 @@ namespace Retrack.API.Services
 
             // Đánh dấu mã OTP đã được dùng
             validOtp.IsUsed = true;
-            await _db.SaveChangesAsync();
+            await _otpRepo.SaveChangesAsync();
         }
 
         // ── Helpers ─────────────────────────────────────────────────────

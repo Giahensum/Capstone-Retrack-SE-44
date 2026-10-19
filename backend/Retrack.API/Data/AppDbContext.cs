@@ -33,10 +33,49 @@ namespace Retrack.API.Data
         public DbSet<PlatformInvoice> PlatformInvoices { get; set; }
         public DbSet<Notification> Notifications { get; set; }
         public DbSet<PasswordResetOtp> PasswordResetOtps { get; set; }
+        public DbSet<DepotStockReceipt> DepotStockReceipts { get; set; }
+        public DbSet<DepotStockLine> DepotStockLines { get; set; }
+        public DbSet<DepotStockExpense> DepotStockExpenses { get; set; }
+        public DbSet<DepotReuseSale> DepotReuseSales { get; set; }
+        public DbSet<DepotBatchCostSource> DepotBatchCostSources { get; set; }
+        public DbSet<DepotBatchExpense> DepotBatchExpenses { get; set; }
+        public DbSet<DepotVerificationSubmission> DepotVerificationSubmissions { get; set; }
+        public DbSet<DepotVerificationDocument> DepotVerificationDocuments { get; set; }
+        public DbSet<DepotStockCostAdjustment> DepotStockCostAdjustments { get; set; }
+        public DbSet<DepotCostReconciliation> DepotCostReconciliations { get; set; }
+        public DbSet<DepotIncidentFollowup> DepotIncidentFollowups { get; set; }
+
+        public DbSet<LiquidationLot> LiquidationLots { get; set; }
+        public DbSet<LiquidationParticipation> LiquidationParticipations { get; set; }
+        public DbSet<LiquidationBid> LiquidationBids { get; set; }
+        public DbSet<LiquidationAgreement> LiquidationAgreements { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+            modelBuilder.Entity<LiquidationParticipation>().HasIndex(x => new { x.LotId, x.OwnerId }).IsUnique();
+            modelBuilder.Entity<LiquidationAgreement>().HasIndex(x => x.LotId).IsUnique();
+            modelBuilder.Entity<LiquidationAgreement>().HasIndex(x => x.WinningBidId).IsUnique();
+            modelBuilder.Entity<LiquidationBid>().HasIndex(x => new { x.LotId, x.CreatedAt });
+            modelBuilder.Entity<LiquidationLot>().HasOne(x => x.Seller).WithMany().OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<LiquidationAgreement>().HasOne(x => x.Lot).WithMany().OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<LiquidationAgreement>().HasOne(x => x.WinningBid).WithMany().OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<LiquidationAgreement>().HasOne(x => x.Depot).WithMany().OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<LiquidationParticipation>().HasOne(x => x.Depot).WithMany().OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<DepotStockReceipt>().HasIndex(x => x.BulkAgreementId).IsUnique()
+                .HasFilter("bulk_agreement_id IS NOT NULL AND status NOT IN ('VOIDED','REJECTED')");
+
+            modelBuilder.Entity<DepotIncidentFollowup>().HasOne(x => x.Event).WithMany().HasForeignKey(x => x.EventId).OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<DepotCostReconciliation>().HasOne(x => x.BatchSource).WithMany().HasForeignKey(x => x.BatchSourceId).OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<DepotCostReconciliation>().HasOne(x => x.ReuseSale).WithMany().HasForeignKey(x => x.ReuseSaleId).OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<DepotVerificationSubmission>().HasOne(x => x.Depot).WithMany().OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<DepotVerificationDocument>().HasOne(x => x.Submission).WithMany(x => x.Documents).HasForeignKey(x => x.SubmissionId).OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<DepotStockReceipt>().HasIndex(x => new { x.DepotId, x.CreatedAt });
+            modelBuilder.Entity<DepotStockLine>().HasIndex(x => new { x.ReceiptId, x.Position }).IsUnique();
+            modelBuilder.Entity<DepotBatchCostSource>().HasIndex(x => new { x.BatchId, x.SourceType, x.SourceId }).IsUnique();
+            modelBuilder.Entity<DepotReuseSale>().HasIndex(x => x.LineId);
+            modelBuilder.Entity<DepotStockReceipt>().HasOne(x => x.Depot).WithMany().OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<DepotReuseSale>().HasOne(x => x.Line).WithMany().OnDelete(DeleteBehavior.Restrict);
             modelBuilder.Entity<DriverDeliveryEvent>().HasOne(e => e.Job).WithMany()
                 .HasForeignKey(e => e.JobId).OnDelete(DeleteBehavior.Restrict);
             modelBuilder.Entity<DriverDeliveryEvent>().HasOne(e => e.Driver).WithMany()

@@ -10,6 +10,7 @@ import UserManagement from './UserManagement';
 import MarketPrices from './MarketPrices';
 import Billing from './Billing';
 import AuditLogs from './AuditLogs';
+import DepotVerifications from './DepotVerifications';
 
 function sevenDaysAgoISO() {
   const d = new Date();
@@ -115,6 +116,7 @@ export default function AdminDashboard() {
       <Route path="market-prices" element={<MarketPrices />} />
       <Route path="billing" element={<Billing />} />
       <Route path="audit-logs" element={<AuditLogs />} />
+      <Route path="depot-verifications" element={<DepotVerifications />} />
       <Route path="*" element={<Navigate to="/admin" replace />} />
     </Routes>
   );

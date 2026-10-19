@@ -2,9 +2,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '@/lib/axios';
 import { useDepot } from './DepotContext';
 
-export function useDepotQuery(path, params = {}, enabled = true) {
+export function useDepotQuery(path, params = {}, enabled = true, refetchInterval = false) {
   const { depotId, userId } = useDepot();
-  return useQuery({ queryKey: ['depot', userId, depotId, path, params], enabled: !!depotId && enabled,
+  return useQuery({ queryKey: ['depot', userId, depotId, path, params], enabled: !!depotId && enabled, refetchInterval,
     queryFn: async () => (await api.get(`/depot/${path}`, { params: { depotId, ...params } })).data.data });
 }
 export function useDepotMutation(method, path, onSuccess) {

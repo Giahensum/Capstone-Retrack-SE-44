@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import '../../features/depot/styles/depot-theme.css';
 import clsx from 'clsx';
@@ -6,6 +6,9 @@ import { DepotSelector, useDepot } from '@/features/depot/DepotContext';
 import { useAuthStore } from '@/app/store/useAuthStore';
 import { MaterialIcon } from '@/features/depot/components/DepotIcon';
 import DepotBrandLogo from '@/features/depot/components/DepotBrandLogo';
+import CreateDepotModal from '@/features/depot/components/CreateDepotModal';
+import { useDepotQuery } from '@/features/depot/depotApi';
+import { verificationLabels } from '@/features/depot/components/VerificationPanel';
 
 const SidebarItem = ({ iconName, label, to, active }) => (
   <Link
@@ -25,14 +28,25 @@ const SidebarItem = ({ iconName, label, to, active }) => (
 const DepotLayout = () => {
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [desktop, setDesktop] = useState(() => window.matchMedia('(min-width: 1024px)').matches);
+  useEffect(() => {
+    const media = window.matchMedia('(min-width: 1024px)');
+    const change = () => { setDesktop(media.matches); setMenuOpen(false); };
+    media.addEventListener('change', change); return () => media.removeEventListener('change', change);
+  }, []);
+  const [createDepot, setCreateDepot] = useState(false);
   const { depotId } = useDepot();
+  const profile = useDepotQuery('profile');
+  const unread = useDepotQuery('notifications/unread-count', {}, true, 30000);
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
 
   const navItems = [
     { iconName: 'dashboard', label: 'Tổng quan', to: '/depot/dashboard' },
+    { iconName: 'notifications', label: `Thông báo${unread.data > 0 ? ` (${Number(unread.data).toLocaleString('vi-VN')})` : ''}`, to: '/depot/notifications' },
     { iconName: 'inventory_2', label: 'Hồ sơ kho vựa', to: '/depot/profile' },
     { iconName: 'warehouse', label: 'Quản lý kho', to: '/depot/inventory' },
+    { iconName: 'gavel', label: 'Lô lớn mua vào', to: '/depot/liquidations' },
     { iconName: 'local_shipping', label: 'Lô xuất hàng', to: '/depot/batches' },
     { iconName: 'factory', label: 'Nhà máy đối tác', to: '/depot/partners' },
     { iconName: 'badge', label: 'Quản lý nhân sự', to: '/depot/staff' },
@@ -46,7 +60,7 @@ const DepotLayout = () => {
     <div className="bg-d-background flex h-screen overflow-hidden font-d-body-md text-d-on-background">
       {/* SideNavBar */}
       {menuOpen && <button aria-label="Đóng menu" className="fixed inset-0 bg-black/30 z-40 lg:hidden" onClick={() => setMenuOpen(false)} />}
-      <aside aria-label="Menu kho vựa" className={clsx("w-64 bg-d-surface-container-lowest border-r border-d-border-subtle h-screen fixed top-0 left-0 flex flex-col z-50 transition-transform lg:translate-x-0", menuOpen ? "translate-x-0" : "-translate-x-full")}>
+      <aside aria-label="Menu kho vựa" inert={!desktop && !menuOpen} aria-hidden={!desktop && !menuOpen} onKeyDown={e => { if (e.key === 'Escape') setMenuOpen(false); }} className={clsx("w-64 bg-d-surface-container-lowest border-r border-d-border-subtle h-screen fixed top-0 left-0 flex flex-col z-50 transition-transform lg:translate-x-0", menuOpen ? "translate-x-0" : "-translate-x-full")}>
         <div className="h-16 flex items-center px-6 border-b border-d-border-subtle">
           <Link to="/depot/dashboard" className="inline-flex items-center gap-2 font-d-headline-md text-d-headline-md font-bold tracking-tighter text-d-primary" aria-label="ReTrack — về tổng quan kho">
             <DepotBrandLogo /> <span>RETRACK</span>
@@ -62,13 +76,14 @@ const DepotLayout = () => {
                 active={location.pathname === item.to || (location.pathname === '/depot' && item.to === '/depot/dashboard')}
               />
             ))}
+            <button className="w-full text-left rounded-xl px-4 py-3 text-d-primary hover:bg-d-surface-container" onClick={() => setCreateDepot(true)}>＋ Thêm kho vựa</button>
           </nav>
         </div>
         
         <div className="p-4 border-t border-d-border-subtle">
           <div className="flex items-center gap-3 px-4 py-2">
             <div className="w-8 h-8 rounded-full bg-d-primary-container text-d-on-primary-container flex items-center justify-center font-d-label-md font-bold">
-              AD
+              {user?.fullName?.trim().split(/\s+/).slice(-2).map(part => part[0]).join('').toLocaleUpperCase('vi-VN') || 'KV'}
             </div>
             <div>
               <p className="font-d-label-md text-d-label-md text-d-on-surface">{user?.fullName}</p>
@@ -97,7 +112,11 @@ const DepotLayout = () => {
 
         {/* Page Content */}
         <div className="flex-1 overflow-y-auto bg-d-background">
-          {depotId ? <Outlet key={depotId} /> : <p role="status" className="p-6">Chọn kho để quản lý dữ liệu.</p>}
+          {profile.data && profile.data.verificationStatus !== 'APPROVED' && <div role="status" className="m-4 rounded-xl border border-d-border-subtle bg-white p-4 text-sm">
+            <strong>{verificationLabels[profile.data.verificationStatus] ?? 'Chưa xác minh kho'}.</strong> Giao dịch mới đang khóa. <Link className="underline text-d-primary" to="/depot/profile">Xem và nộp hồ sơ</Link>.
+          </div>}
+          {depotId ? <Outlet key={depotId} /> : <div className="p-6 space-y-4"><h1 className="text-2xl font-bold">Bắt đầu với kho vựa của bạn</h1><p>Tạo kho đầu tiên, sau đó nộp hồ sơ để Admin xác minh.</p><button className="rounded-full bg-d-primary-container px-5 py-3 font-semibold" onClick={() => setCreateDepot(true)}>Tạo kho đầu tiên</button></div>}
+          {createDepot && <CreateDepotModal onClose={() => setCreateDepot(false)} />}
         </div>
       </main>
     </div>

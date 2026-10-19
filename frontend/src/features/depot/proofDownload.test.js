@@ -1,6 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { proofExtension } from './proofDownload.js';
+import { proofExtension, factoryProofPath } from './proofDownload.js';
+
+test('chỉ gắn JWT cho endpoint chứng từ nội bộ đúng định dạng', () => {
+  const route = `/api/factory/attachments/${'a'.repeat(32)}/${'b'.repeat(32)}`;
+  assert.equal(factoryProofPath(route), route.slice(4));
+  for (const value of [`https://evil.invalid${route}`, `${route}?token=x`, `${route}/../x`, '//evil.invalid/api', undefined])
+    assert.equal(factoryProofPath(value), null);
+});
 
 test('nhận đúng chứng từ PDF/PNG/JPEG có chữ ký tương ứng', () => {
   for (const [mime, bytes, extension] of [

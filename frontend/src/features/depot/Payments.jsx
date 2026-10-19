@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import api from '@/lib/axios';
 import { MaterialIcon } from './components/DepotIcon';
@@ -15,7 +16,8 @@ export default function Payments() {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
   const [sort, setSort] = useState('newest');
-  const [selected, setSelected] = useState(null);
+  const [params, setParams] = useSearchParams();
+  const [selected, setSelected] = useState(() => params.get('requestId') ? { id: params.get('requestId') } : null);
   const query = useQuery({
     queryKey: ['depot', userId, depotId, 'payments', page, search, status, sort],
     queryFn: async () => (await api.get('/depot/payments', { params: { depotId, page, pageSize: 20, search, status, sort } })).data.data,
@@ -32,7 +34,7 @@ export default function Payments() {
     ['check_circle', 'Đã chuyển hôm nay', money(summary.data?.sentTodayAmount)],
   ];
   return <div className="flex-1 p-4 md:p-6 w-full max-w-7xl mx-auto flex flex-col gap-6 min-h-full bg-d-background">
-    {selected && <PaymentDrawer key={selected.id} payment={selected} onClose={() => setSelected(null)} />}
+    {selected && <PaymentDrawer key={selected.id} payment={selected} onClose={() => { setSelected(null); setParams(prev => { prev.delete('requestId'); return prev; }, { replace: true }); }} />}
     <div><h1 className="font-d-headline-xl-mobile md:font-d-headline-xl text-d-headline-xl-mobile md:text-d-headline-xl text-d-on-surface mb-2">Thanh toán cho người bán</h1>
       <p className="font-d-body-md text-d-on-surface-variant">Theo dõi từ khi người bán xác nhận cân. Nhân viên bàn giao xong thì chủ kho mới đối soát và chuyển tiền.</p></div>
     {summary.isError ? <p role="alert">{depotError(summary.error)}</p> : <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-6">

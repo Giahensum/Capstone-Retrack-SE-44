@@ -64,15 +64,29 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
     public async Task<ServiceResult<OrderReceivedResponse>> ReceiveAsync(Guid userId, Guid id, CancellationToken ct)
     {
         var factory = await CurrentFactory(userId, ct);
-        var batch = await Db.InventoryBatches.Include(x => x.TransportJob)
-            .SingleOrDefaultAsync(x => x.Id == id && x.TargetFactoryId == factory.Id, ct);
+        var depotId = await Db.InventoryBatches.AsNoTracking().Where(x => x.Id == id && x.TargetFactoryId == factory.Id)
+            .Select(x => (Guid?)x.DepotId).SingleOrDefaultAsync(ct);
+        if (depotId is null) return ServiceResult<OrderReceivedResponse>.NotFound("Không tìm thấy đơn hàng.");
+        await using var transaction = Db.Database.IsRelational() ? await Db.Database.BeginTransactionAsync(ct) : null;
+        if (Db.Database.IsRelational())
+            await Db.Depots.FromSqlInterpolated($"SELECT * FROM depots WHERE id = {depotId.Value} FOR UPDATE").LoadAsync(ct);
+        var source = Db.Database.IsRelational()
+            ? Db.InventoryBatches.FromSqlInterpolated($"SELECT * FROM inventory_batches WHERE id = {id} AND target_factory_id = {factory.Id} FOR UPDATE")
+            : Db.InventoryBatches.Where(x => x.Id == id && x.TargetFactoryId == factory.Id);
+        var batch = await source.Include(x => x.TransportJob).SingleOrDefaultAsync(ct);
         if (batch is null) return ServiceResult<OrderReceivedResponse>.NotFound("Không tìm thấy đơn hàng.");
-        if (batch.Status == "RECEIVED") return ServiceResult<OrderReceivedResponse>.Conflict("Đơn hàng đã được xác nhận nhận hàng.");
+        await Db.Entry(batch).ReloadAsync(ct);
+        if (batch.TransportJob is not null) await Db.Entry(batch.TransportJob).ReloadAsync(ct);
+        // Không cho nhận lại để mở lại cân/QC hoặc hạ trạng thái lô đã quyết toán.
+        if (batch.FactoryReceivedAt != null || batch.SettledAt != null || batch.Status is not
+            ("DELIVERED" or "ACCEPTED" or "TRANSPORT_READY" or "READY_FOR_PICKUP" or "IN_PROGRESS" or "IN_TRANSIT"))
+            return ServiceResult<OrderReceivedResponse>.Conflict("Lô đã nhận, kiểm định hoặc kết thúc; không thể xác nhận nhận hàng lại.");
         if (batch.TransportJob?.Status != "DELIVERED")
             return ServiceResult<OrderReceivedResponse>.Conflict("Chỉ xác nhận nhận hàng sau khi vận chuyển báo đã giao.");
         batch.Status = "RECEIVED";
         batch.FactoryReceivedAt = DateTime.UtcNow;
         await Db.SaveChangesAsync(ct);
+        if (transaction is not null) await transaction.CommitAsync(ct);
         return ServiceResult<OrderReceivedResponse>.Success(data: new OrderReceivedResponse
         {
             Id = batch.Id,
@@ -85,8 +99,7 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
     {
         var factory = await CurrentFactory(userId, ct);
         await using var transaction = await Db.Database.BeginTransactionAsync(ct);
-        var batch = await Db.InventoryBatches.FromSqlInterpolated($"SELECT * FROM inventory_batches WHERE id = {id} AND target_factory_id = {factory.Id} FOR UPDATE")
-            .Include(x => x.QualityCheck).SingleOrDefaultAsync(ct);
+        var batch = await LockOrderAsync(id, factory.Id, ct);
         if (batch is null) return ServiceResult<OrderSettlementResponse>.NotFound("Không tìm thấy đơn hàng.");
         if (batch.Status is "PAID" or "COMPLETED") return ServiceResult<OrderSettlementResponse>.Conflict("Đơn hàng đã được quyết toán.");
         var qc = batch.QualityCheck;
@@ -180,8 +193,8 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
     public async Task<ServiceResult<InvoiceUpdatedResponse>> InvoiceAsync(Guid userId, Guid id, InvoiceRequest request, CancellationToken ct)
     {
         var factory = await CurrentFactory(userId, ct);
-        var batch = await Db.InventoryBatches.Include(x => x.QualityCheck)
-            .SingleOrDefaultAsync(x => x.Id == id && x.TargetFactoryId == factory.Id, ct);
+        await using var tx = Db.Database.IsRelational() ? await Db.Database.BeginTransactionAsync(ct) : null;
+        var batch = await LockOrderAsync(id, factory.Id, ct);
         if (batch is null) return ServiceResult<InvoiceUpdatedResponse>.NotFound("Không tìm thấy đơn hàng.");
         if (batch.QualityCheck is null || batch.Status is not ("VERIFIED" or "COMPLETED"))
             return ServiceResult<InvoiceUpdatedResponse>.Conflict("Chỉ đính kèm hóa đơn sau khi chốt KCS.");
@@ -195,6 +208,7 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
         batch.QualityCheck.InvoiceFileUrl = request.InvoiceFileUrl.Trim();
         batch.QualityCheck.InvoiceStatus = "UPLOADED";
         await Db.SaveChangesAsync(ct);
+        if (tx != null) await tx.CommitAsync(ct);
         return ServiceResult<InvoiceUpdatedResponse>.Success(data: new InvoiceUpdatedResponse
         {
             Id = batch.Id,

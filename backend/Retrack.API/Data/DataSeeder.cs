@@ -99,6 +99,7 @@ namespace Retrack.API.Data
             {
                 Id = Guid.Parse("00000000-0000-0000-0000-000000000010"),
                 OwnerId = depotOwnerUser.Id,
+                VerificationStatus = "APPROVED", // Chỉ kho demo khi chủ động seed Development.
                 Name = "Kho Vựa Phế Liệu Minh Bình",
                 Address = "Khu vực X7P4+XF9, phường Ngũ Hành Sơn, Đà Nẵng (địa điểm demo)",
                 Latitude = 15.9874125m,

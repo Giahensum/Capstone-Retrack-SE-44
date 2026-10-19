@@ -26,11 +26,10 @@ public sealed class EmployeeCollectionPostgresTests
             || string.IsNullOrWhiteSpace(other) || new NpgsqlConnectionStringBuilder(other).Database != "Retrack_TV2_test")
             throw new InvalidOperationException("Chỉ chạy trên Retrack_TV2_test với cả hai biến kiểm thử PostgreSQL.");
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory != null && !File.Exists(Path.Combine(directory.FullName, "db", "bootstrap", "02-seed-data.sql")))
+        while (directory != null && !File.Exists(Path.Combine(directory.FullName, "db", "bootstrap", "retrack-system.sql")))
             directory = directory.Parent;
         if (directory == null) throw new FileNotFoundException("Không tìm thấy SQL schema/seed chung.");
-        var schemaSql = await File.ReadAllTextAsync(Path.Combine(directory.FullName, "db", "bootstrap", "01-retrack-system.sql"));
-        var seedSql = await File.ReadAllTextAsync(Path.Combine(directory.FullName, "db", "bootstrap", "02-seed-data.sql"));
+        var bootstrapSql = await File.ReadAllTextAsync(Path.Combine(directory.FullName, "db", "bootstrap", "retrack-system.sql"));
         var schema = "collection_test_" + Guid.NewGuid().ToString("N");
         await using var admin = new NpgsqlConnection(connection);
         await admin.OpenAsync();
@@ -47,10 +46,9 @@ public sealed class EmployeeCollectionPostgresTests
         try
         {
             await using var db = Open();
-            // Chạy đúng hai file bàn giao, không dựng fixture chỉ từ model EF.
-            await ExecuteScript(schemaSql);
-            await ExecuteScript(seedSql);
-            await ExecuteScript(seedSql);
+            // Chạy đúng file bàn giao, kiểm tra chạy lại không làm lệch trạng thái liên role.
+            await ExecuteScript(bootstrapSql);
+            await ExecuteScript(bootstrapSql);
             var pickupId = Guid.Parse("00000000-0000-0000-0000-000000001022");
             var pickup = await db.PickupRequests.AsNoTracking().SingleAsync(p => p.Id == pickupId);
             var ownerId = await db.Depots.Where(d => d.Id == pickup.TargetDepotId).Select(d => d.OwnerId).SingleAsync();
@@ -71,7 +69,7 @@ public sealed class EmployeeCollectionPostgresTests
             Assert.Equal(before.PendingAmount + pickup.NetAmount, after.PendingAmount);
             Assert.Equal("PAYMENT_SENT", (await service.MarkPaymentSentAsync(pickupId, ownerId, "https://example.com/proof.png")).Status);
             Assert.Equal("DONE", (await service.MarkDoneAsync(pickupId, pickup.SellerId)).Status);
-            await ExecuteScript(seedSql);
+            await ExecuteScript(bootstrapSql);
             Assert.Equal("DONE", await db.PickupRequests.AsNoTracking().Where(p => p.Id == pickupId).Select(p => p.Status).SingleAsync());
             Assert.Equal(1, await db.PlatformTransactions.CountAsync(t => t.SourceId == pickupId));
             Assert.Equal(2, await db.EmployeeCollectionEvents.CountAsync(e => e.PickupRequestId == pickupId));
