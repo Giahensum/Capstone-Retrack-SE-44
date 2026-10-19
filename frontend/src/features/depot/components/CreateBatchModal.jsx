@@ -43,7 +43,7 @@ function CreateBatchForm({ onClose, initialMaterial, initialFactoryId }) {
         {stock.data?.filter((i) => i.availableKg > 0).map((i) => <option key={i.materialType} value={i.materialType}>{materialLabel(i.materialType)}</option>)}</select></label>
         <p className="text-d-primary mt-2">Tồn kho khả dụng: {number(available)} kg</p>
         {form.materialType && available <= 0 && <p role="status" className="mt-1 text-sm text-d-error">Kho hiện không có tồn khả dụng cho loại này.</p>}</QueryState></div>
-      <label className="block">Khối lượng (kg)<input required type="number" step="any" min="0.000001" max={available} value={form.weightKg} onChange={(e) => field('weightKg', e.target.value)} className={inputClass} /></label>
+      <label className="block">Khối lượng (kg)<input required type="number" step="0.001" min="0.001" max={available} value={form.weightKg} onChange={(e) => field('weightKg', e.target.value)} className={inputClass} /></label>
       <label className="block">Hình thức bán<select value={strategy} onChange={(e) => setStrategy(e.target.value)} className={inputClass}><option value="public">Đăng công khai</option><option value="direct">Chỉ định nhà máy</option></select></label>
       {strategy === 'direct' && <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4"><label className="block">Tìm nhà máy<input className={inputClass} value={factorySearch} onChange={(e) => { setFactorySearch(e.target.value); setPage(1); }} /></label>
         <div><QueryState query={factories}><label className="block">Nhà máy<select required value={form.targetFactoryId} onChange={(e) => field('targetFactoryId', e.target.value)} className={inputClass}>

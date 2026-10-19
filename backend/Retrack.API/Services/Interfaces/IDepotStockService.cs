@@ -15,4 +15,7 @@ public interface IDepotStockService
     Task ReserveCostsAsync(Guid depotId, Guid batchId, string material, decimal quantity);
     Task<BatchCostDto> BatchCostsAsync(Guid ownerId, Guid depotId, Guid batchId);
     Task AddBatchExpenseAsync(Guid ownerId, Guid depotId, Guid batchId, CreateBatchExpenseDto dto);
+    Task AddAdjustmentAsync(Guid ownerId, Guid depotId, Guid receiptId, CreateStockAdjustmentDto dto);
+    Task<PagedResult<StockAdjustmentDto>> AdjustmentsAsync(Guid ownerId, Guid depotId, Guid receiptId, DepotQuery query);
+    Task<List<StockLineCostBalanceDto>> CurrentReceiptCostsAsync(Guid ownerId, Guid depotId, Guid receiptId);
 }

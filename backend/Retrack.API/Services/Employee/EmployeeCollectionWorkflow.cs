@@ -62,6 +62,7 @@ public sealed partial class EmployeeCollectionService
                 || !sent.Items.SequenceEqual(snapshot.Items))
                 throw new DepotConflictException("Kết quả cân không còn khớp bản đã gửi. Liên hệ chủ kho để kiểm tra.");
             pickup.Status = "AWAITING_PAYMENT";
+            pickup.StockReceivedAt ??= DateTime.UtcNow;
             var ownerId = await db.Depots.Where(d => d.Id == pickup.TargetDepotId).Select(d => d.OwnerId).SingleAsync(ct);
             Notify(ownerId, "Đơn thu gom chờ thanh toán", $"Đơn {pickup.Id}: người bán đã đồng ý kết quả cân. Nhân viên đã bàn giao; chủ kho kiểm tra và thanh toán.", pickup.Id);
             Notify(pickup.SellerId, "Đang chờ chủ kho thanh toán", $"Đơn {pickup.Id} đã được bàn giao cho chủ kho. Nhân viên không thu hoặc chi tiền.", pickup.Id);

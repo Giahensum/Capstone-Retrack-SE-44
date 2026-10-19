@@ -54,6 +54,7 @@ test('Owner tạo kho, nộp hồ sơ, Admin yêu cầu bổ sung rồi duyệt 
     if (width < 1024) await expect.poll(async () => { const box = await owner.getByRole('complementary', { name: 'Menu kho vựa' }).boundingBox(); return box.x + box.width; }).toBeLessThanOrEqual(1);
     await owner.screenshot({ path: test.info().outputPath(`ho-so-${width}.png`) });
     expect(await owner.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
+    expect(await owner.locator('main h1, main dd').evaluateAll(elements => elements.every(el => el.scrollWidth <= el.clientWidth + 1))).toBe(true);
   }
   expect(errors).toEqual([]); await ownerContext.close(); await adminContext.close();
 });

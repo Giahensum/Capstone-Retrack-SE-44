@@ -19,7 +19,7 @@ export default function ReusableInventory() {
     </> : <QueryState query={sales}><GridTable headers={['Ngày ghi nhận', 'Món đồ', 'Lượng bán', 'Doanh thu', 'Giá vốn phần bán', 'Chi phí bán', 'Chênh lệch trước thuế', 'Ghi chú']} empty={!sales.data?.items.length}>
       {sales.data?.items.map(x => <tr key={x.id}><td className={cellClass}>{date(x.createdAt)}</td><td className={cellClass}>{x.name}</td><td className={cellClass}>{number(x.quantity)}</td><td className={cellClass}>{money(x.revenue)}</td><td className={cellClass}>{x.costOfGoods == null ? 'Chưa xác định' : money(x.costOfGoods)}</td><td className={cellClass}>{money(x.sellingCost)}</td><td className={cellClass}>{x.pretaxDifference == null ? 'Chưa đủ giá vốn' : money(x.pretaxDifference)}</td><td className={cellClass}>{x.note}</td></tr>)}
     </GridTable><Pager page={page} setPage={setPage} total={sales.data?.totalCount} /></QueryState>}
-    <p className="text-sm text-d-on-surface-variant">Chênh lệch chỉ gồm các khoản đã ghi, trước thuế thu nhập; không phải xác nhận tiền đã về ngân hàng. Hàng chưa bán không được tính doanh thu. Chưa có checkout/đăng tin công khai hay chuyển đồ thành nguyên liệu.</p>
+    <p className="text-sm text-d-on-surface-variant">Lịch sử giữ giá vốn tại lúc ghi bán. Nếu nguồn có điều chỉnh sau bán, xem báo cáo chi phí để đối soát; không chốt chênh lệch từ số lịch sử này. Chênh lệch trước thuế thu nhập, chưa xác nhận tiền về ngân hàng. Hàng chưa bán không tính doanh thu.</p>
     {selected && <ReuseSaleForm item={selected} onClose={() => setSelected(null)} />}
   </section>;
 }

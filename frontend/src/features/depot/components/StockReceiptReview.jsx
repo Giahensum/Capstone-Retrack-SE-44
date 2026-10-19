@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useDepotMutation, money, number } from '../depotApi';
 import { Dialog, MutationError, buttonClass, inputClass } from './DepotUI';
 import { StockExpenseFields } from './StockExpenseFields';
+import StockCostAdjustments from './StockCostAdjustments';
 
 export default function StockReceiptReview({ receipt, onClose }) {
   const [purchaseCost, setPurchaseCost] = useState(receipt.purchaseCost);
@@ -10,16 +11,17 @@ export default function StockReceiptReview({ receipt, onClose }) {
   const [expenses, setExpenses] = useState(receipt.expenses.map(x => ({ ...x, key: crypto.randomUUID() })));
   const [reason, setReason] = useState('');
   const [editing, setEditing] = useState(false);
+  const [adjusting, setAdjusting] = useState(false);
   const save = useDepotMutation('put', `stock/receipts/${receipt.id}/costs`, onClose);
   const post = useDepotMutation('patch', `stock/receipts/${receipt.id}/post`, onClose);
   const reject = useDepotMutation('patch', `stock/receipts/${receipt.id}/reject`, onClose);
   const reverse = useDepotMutation('patch', `stock/receipts/${receipt.id}/void`, onClose);
-  const busy = save.isPending || post.isPending || reject.isPending || reverse.isPending;
+  const busy = save.isPending || post.isPending || reject.isPending || reverse.isPending || adjusting;
   const canReview = ['DRAFT', 'SUBMITTED'].includes(receipt.status);
   return <Dialog title={`Phiếu nhập: ${receipt.reference}`} wide busy={busy} onClose={onClose}>
     <div className="space-y-4">
       <p className="rounded-xl bg-d-surface-accent p-3 text-sm">{canReview ? 'Phiếu chưa ghi sổ, chưa được tính vào tồn khả dụng.' : receipt.status === 'POSTED' ? 'Phiếu đã ghi sổ. Không sửa trực tiếp số lượng hay giá vốn đã duyệt.' : `${receipt.status === 'VOIDED' ? 'Đã đảo phiếu' : 'Phiếu bị từ chối'}: ${receipt.reviewNote ?? ''}`}</p>
-      <dl className="grid sm:grid-cols-2 gap-3"><div><dt>Giá mua cả lô</dt><dd className="font-semibold">{money(receipt.purchaseCost)}</dd></div><div><dt>Tổng chi phí đã ghi</dt><dd className="font-semibold">{money(receipt.totalCost)}</dd></div></dl>
+      <dl className="grid sm:grid-cols-2 gap-3"><div><dt>Giá mua cả lô</dt><dd className="font-semibold">{money(receipt.purchaseCost)}</dd></div><div><dt>Chi phí phiếu gốc</dt><dd className="font-semibold">{money(receipt.totalCost)}</dd></div></dl>
       {receipt.lines.map(x => <div key={x.id} className="rounded-xl bg-white border border-d-border-subtle p-4"><p className="font-semibold">{x.name} · {number(x.quantity)} {x.unit}</p>
         <p className="text-sm mt-1">{x.conditionNote || 'Chưa ghi tình trạng'}</p><p className="text-sm mt-2">Chi phí phân bổ: {x.allocatedCost == null ? 'Chưa xác định' : money(x.allocatedCost)} · Giá vốn / {x.unit}: {x.allocatedCost == null ? 'Chưa xác định' : money(x.allocatedCost / x.quantity)}</p></div>)}
       {receipt.expenses.length > 0 && <ul className="text-sm space-y-2">{receipt.expenses.map((x, i) => <li key={i}>{x.description}: {money(x.amount)}</li>)}</ul>}
@@ -46,6 +48,7 @@ export default function StockReceiptReview({ receipt, onClose }) {
       </>}
       {receipt.status === 'POSTED' && <form className="space-y-3 border-t border-d-border-subtle pt-4" onSubmit={e => { e.preventDefault(); reverse.mutate({ body: { reason } }); }}><p className="text-sm">Chỉ đảo phiếu khi toàn bộ hàng chưa được giữ/xuất/bán. Thao tác loại số lượng khỏi tồn và giữ lịch sử phiếu.</p><label className="block">Lý do đảo phiếu<input required maxLength={1000} disabled={busy} className={inputClass} value={reason} onChange={e => setReason(e.target.value)} /></label><button className="rounded-full border border-d-error text-d-error px-5 py-2.5" disabled={busy}>Xác nhận đảo toàn bộ phiếu nhập</button></form>}
       <MutationError mutation={post} /><MutationError mutation={reject} /><MutationError mutation={reverse} />
+      {receipt.status === 'POSTED' && <StockCostAdjustments receipt={receipt} onBusyChange={setAdjusting} />}
       <p className="text-sm text-d-on-surface-variant">Nguồn do kho tự khai báo. Tài liệu/phiếu nội bộ không thay hóa đơn thuế. Chi phí đã ghi không đồng nghĩa đã gồm mọi thuế và chi phí vận hành.</p>
     </div>
   </Dialog>;

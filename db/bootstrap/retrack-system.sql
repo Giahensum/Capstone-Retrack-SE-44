@@ -572,6 +572,32 @@ CREATE TABLE IF NOT EXISTS depot_batch_expenses (
 CREATE INDEX IF NOT EXISTS ix_depot_batch_expenses_batch ON depot_batch_expenses(batch_id, created_at);
 
 -- RETRACK_DEPOT_VERIFICATION_V1: hồ sơ riêng tư; không tự duyệt các kho đang có.
+CREATE TABLE IF NOT EXISTS depot_stock_cost_adjustments (
+    id UUID PRIMARY KEY, line_id UUID NOT NULL REFERENCES depot_stock_lines(id) ON DELETE CASCADE,
+    kind VARCHAR(30) NOT NULL CHECK (kind IN ('ADDITIONAL_COST','CONFIRM_BASE_COST')),
+    amount NUMERIC(18,0) NOT NULL, reason VARCHAR(1000) NOT NULL CHECK (length(btrim(reason)) > 0),
+    created_by UUID NOT NULL REFERENCES users(id), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS ix_stock_cost_adjustments_line_date ON depot_stock_cost_adjustments(line_id, created_at, id);
+CREATE UNIQUE INDEX IF NOT EXISTS ix_stock_cost_base_once ON depot_stock_cost_adjustments(line_id) WHERE kind = 'CONFIRM_BASE_COST';
+ALTER TABLE depot_reuse_sales ADD COLUMN IF NOT EXISTS unit_cost NUMERIC(30,9);
+-- Dữ liệu cũ có vốn gốc bất biến: lưu snapshot; không tự xác định vốn cho dòng còn thiếu.
+UPDATE depot_reuse_sales x SET unit_cost = l.allocated_cost / l.quantity
+FROM depot_stock_lines l WHERE l.id = x.line_id AND x.unit_cost IS NULL AND l.allocated_cost IS NOT NULL;
+-- Mốc nhận hàng bất biến cho FIFO; đơn cũ thiếu event dùng updated_at làm mốc ước tính.
+ALTER TABLE pickup_requests ADD COLUMN IF NOT EXISTS stock_received_at TIMESTAMPTZ;
+UPDATE pickup_requests p SET stock_received_at = COALESCE(
+    (SELECT MIN(e.created_at) FROM employee_collection_events e WHERE e.pickup_request_id = p.id AND e.kind = 'HANDED_OVER'), p.updated_at)
+WHERE p.status = 'DONE' AND p.stock_received_at IS NULL;
+-- Thống nhất kg đến 0,001 từ nguồn thu gom/phiếu nhập tới lô và cân Factory.
+ALTER TABLE pickup_request_items ALTER COLUMN weight_kg TYPE NUMERIC(18,3);
+ALTER TABLE inventory_batches ALTER COLUMN declared_weight_kg TYPE NUMERIC(18,3);
+ALTER TABLE inventory_batches ALTER COLUMN actual_weight_kg TYPE NUMERIC(18,3);
+ALTER TABLE batch_quality_checks ALTER COLUMN actual_weight_kg TYPE NUMERIC(18,3);
+ALTER TABLE batch_quality_checks ALTER COLUMN gross_weight_kg TYPE NUMERIC(18,3);
+ALTER TABLE batch_quality_checks ALTER COLUMN tare_weight_kg TYPE NUMERIC(18,3);
+ALTER TABLE factory_demands ALTER COLUMN required_weight_kg TYPE NUMERIC(18,3);
+
 ALTER TABLE depots ADD COLUMN IF NOT EXISTS verification_status VARCHAR(20) NOT NULL DEFAULT 'UNVERIFIED';
 CREATE TABLE IF NOT EXISTS depot_verification_submissions (
     id UUID PRIMARY KEY, depot_id UUID NOT NULL REFERENCES depots(id) ON DELETE CASCADE,

@@ -233,6 +233,7 @@ namespace Retrack.API.Services
             if (req.Status == "DONE") return await MapToDto(req);
             if (req.Status != "PAYMENT_SENT") throw new DepotConflictException("Chủ kho chưa xác nhận chuyển tiền.");
             req.Status = "DONE";
+            req.StockReceivedAt ??= DateTime.UtcNow;
             req.UpdatedAt = DateTime.UtcNow;
             await _repo.UpdateAsync(req);
             await transaction.CommitAsync();

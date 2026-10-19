@@ -10,12 +10,13 @@ export default function BatchCostPanel({ id, quantity }) {
   const save = useDepotMutation('post', `stock/batches/${id}/expenses`, () => setExpense({ operationId: crypto.randomUUID(), description: '', amount: '' }));
   const d = query.data;
   const denominator = 1 - Number(fee) / 100 - Number(margin || 0) / 100;
-  const suggestion = d?.hasCompleteCost && quantity > 0 && denominator > 0 && Number(fee) >= 0 && Number(margin || 0) >= 0
+  const suggestion = d?.hasCompleteCost && !d.needsCostReconciliation && quantity > 0 && denominator > 0 && Number(fee) >= 0 && Number(margin || 0) >= 0
     ? Math.ceil((d.costOfGoods + d.sellingCosts) / denominator / quantity) : null;
   return <section className="rounded-2xl border border-d-border-subtle bg-white p-4 space-y-4">
     <h3 className="font-semibold text-d-primary">Nguồn giá vốn và chi phí riêng của kho</h3>
     <QueryState query={query}>{d && <>
       <p className="text-sm text-d-on-surface-variant">{d.note}</p>
+      {d.needsCostReconciliation && <p role="status" className="rounded-xl border border-d-border-subtle p-3 text-d-error">Nguồn hàng có điều chỉnh chi phí sau khi tạo lô. Giá vốn bên dưới là snapshot đã chốt; cần đối soát khoản điều chỉnh trước khi kết luận chênh lệch.</p>}
       {d.sources.length ? <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr>{['Nguồn phân bổ', 'Lượng', 'Giá vốn / kg', 'Thành tiền'].map(x => <th key={x} className="py-2 pr-4 whitespace-nowrap">{x}</th>)}</tr></thead><tbody>{d.sources.map((x, i) => <tr key={i} className="border-t border-d-border-subtle"><td className="py-3 pr-4 break-words">{x.sourceLabel}</td><td className="pr-4 whitespace-nowrap">{number(x.quantity)} kg</td><td className="pr-4 whitespace-nowrap">{x.unitCost == null ? 'Chưa xác định' : money(x.unitCost)}</td><td className="whitespace-nowrap">{x.unitCost == null ? 'Chưa xác định' : money(x.quantity * x.unitCost)}</td></tr>)}</tbody></table></div>
         : <p role="status" className="text-sm">Lô cũ chưa có snapshot nguồn giá vốn; không tự dựng số liệu lịch sử.</p>}
       <dl className="grid sm:grid-cols-2 gap-3"><div><dt className="text-sm">Giá vốn phần xuất</dt><dd className="font-semibold">{d.costOfGoods == null ? 'Chưa đủ dữ liệu' : money(d.costOfGoods)}</dd></div><div><dt className="text-sm">Chi phí bán đã ghi</dt><dd className="font-semibold">{money(d.sellingCosts)}</dd></div><div><dt className="text-sm">Doanh thu quyết toán</dt><dd>{d.revenue == null ? 'Chưa quyết toán' : money(d.revenue)}</dd></div><div><dt className="text-sm">Chênh lệch trước thuế thu nhập</dt><dd className="font-semibold">{d.pretaxDifference == null ? 'Chưa đủ giá vốn / chưa quyết toán' : money(d.pretaxDifference)}</dd></div></dl>

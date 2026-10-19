@@ -11,6 +11,17 @@ namespace Retrack.API.Controllers.Depot;
 public class DepotStockController(IDepotStockService service) : ControllerBase
 {
     private Guid UserId => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    [Authorize(Roles = "DEPOT_OWNER"), HttpGet("receipts/{id:guid}/adjustments")]
+    public async Task<IActionResult> Adjustments(Guid depotId, Guid id, [FromQuery] DepotQuery query) =>
+        Ok(ApiResponse<PagedResult<StockAdjustmentDto>>.Ok(await service.AdjustmentsAsync(UserId, depotId, id, query)));
+    [Authorize(Roles = "DEPOT_OWNER"), HttpGet("receipts/{id:guid}/cost-balance")]
+    public async Task<IActionResult> Balance(Guid depotId, Guid id) =>
+        Ok(ApiResponse<List<StockLineCostBalanceDto>>.Ok(await service.CurrentReceiptCostsAsync(UserId, depotId, id)));
+    [Authorize(Roles = "DEPOT_OWNER"), HttpPost("receipts/{id:guid}/adjustments")]
+    public async Task<IActionResult> AddAdjustment(Guid depotId, Guid id, CreateStockAdjustmentDto dto)
+    {
+        await service.AddAdjustmentAsync(UserId, depotId, id, dto); return Ok(ApiResponse<string>.Ok("Đã ghi khoản điều chỉnh, giữ nguyên lịch sử đã xuất."));
+    }
     [HttpGet("receipts")]
     public async Task<IActionResult> List(Guid depotId, [FromQuery] DepotQuery query) =>
         Ok(ApiResponse<PagedResult<StockReceiptDto>>.Ok(await service.ListAsync(UserId, depotId, query)));
