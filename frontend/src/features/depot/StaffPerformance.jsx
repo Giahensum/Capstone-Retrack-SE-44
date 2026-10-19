@@ -2,11 +2,13 @@ import React, { useState } from 'react';
 import { useDepotQuery, number, money } from './depotApi';
 import { QueryState, Pager } from './components/DepotUI';
 import { MaterialIcon } from './components/DepotIcon';
+import { monthBounds, vietnamMonth } from './reportPeriod';
 
 export default function StaffPerformance() {
   const [page, setPage] = useState(1);
-  const [period, setPeriod] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM
-  const query = useDepotQuery('reports/staff', { period, page });
+  const [period, setPeriod] = useState(() => vietnamMonth());
+  const bounds = monthBounds(period);
+  const query = useDepotQuery('reports/staff', { ...bounds, page }, !!bounds);
 
   const totalCompleted = query.data?.items.reduce((sum, s) => sum + s.completedCount, 0) ?? 0;
   const totalWeight = query.data?.items.reduce((sum, s) => sum + s.weightKg, 0) ?? 0;
@@ -33,8 +35,9 @@ export default function StaffPerformance() {
           <span>Tháng báo cáo</span>
           <input
             type="month"
+            required min="1900-01" max="9998-12"
             value={period}
-            onChange={e => { setPeriod(e.target.value); setPage(1); }}
+            onChange={e => { if (monthBounds(e.target.value)) { setPeriod(e.target.value); setPage(1); } }}
             className="bg-transparent border-none outline-none cursor-pointer"
           />
         </label>
