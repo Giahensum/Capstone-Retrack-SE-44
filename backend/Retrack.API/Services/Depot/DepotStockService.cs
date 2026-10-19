@@ -194,14 +194,16 @@ public sealed partial class DepotStockService(IDepotStockRepository repository, 
         var batch = await repository.FindBatchAsync(depotId, batchId) ?? throw new KeyNotFoundException("Không tìm thấy lô trong kho.");
         var sources = await repository.BatchSourcesAsync(batchId);
         var expenses = await repository.BatchExpensesAsync(batchId);
-        var complete = sources.Count > 0 && sources.All(x => x.UnitCost != null) && sources.Sum(x => x.Quantity) == batch.DeclaredWeightKg;
-        decimal? cost = complete ? decimal.Round(sources.Sum(x => x.Quantity * x.UnitCost!.Value), 0) : null;
+        var originalComplete = sources.Count > 0 && sources.All(x => x.UnitCost != null) && sources.Sum(x => x.Quantity) == batch.DeclaredWeightKg;
+        var complete = sources.Count > 0 && sources.All(x => (x.HasReconciliation ? x.EffectiveUnitCost : x.UnitCost) != null) && sources.Sum(x => x.Quantity) == batch.DeclaredWeightKg;
+        decimal? cost = originalComplete ? decimal.Round(sources.Sum(x => x.Quantity * x.UnitCost!.Value), 0) : null;
+        decimal? adjustedCost = complete ? decimal.Round(sources.Sum(x => x.Quantity * (x.HasReconciliation ? x.EffectiveUnitCost!.Value : x.UnitCost!.Value)), 0) : null;
         var selling = expenses.Sum(x => x.Amount);
         var settled = batch.SettledAt != null;
         var late = await repository.HasLateCostsAsync(batchId);
         return new(sources, expenses, complete, cost, selling, settled ? batch.GrossAmount : null,
-            settled ? batch.PlatformFeeAmount : null, settled && !late ? batch.NetAmount - cost - selling : null, settled,
-            "Phân bổ FIFO theo mốc nhận hàng; dữ liệu pickup cũ thiếu nhật ký nhận dùng mốc ước tính từ lần cập nhật. Snapshot vốn đã xuất giữ nguyên. Nếu nguồn có điều chỉnh sau xuất cần đối soát riêng, không chốt chênh lệch tự động. Chưa gồm thuế thu nhập/hàng trả/chi phí chưa ghi.", late);
+            settled ? batch.PlatformFeeAmount : null, settled && !late ? batch.NetAmount - adjustedCost - selling : null, settled,
+            "FIFO theo nguồn nhận; nguồn pickup cũ thiếu nhật ký dùng mốc ước tính. Snapshot ban đầu giữ nguyên. Vốn sau đối soát cộng các bút toán bổ sung theo tỷ lệ lượng hàng từ nguồn; không thay đổi tiền mua/bán đã thỏa thuận. Chưa gồm thuế thu nhập/hàng trả/chi phí chưa ghi.", late, adjustedCost);
     }
     public async Task AddBatchExpenseAsync(Guid ownerId, Guid depotId, Guid batchId, CreateBatchExpenseDto dto)
     {

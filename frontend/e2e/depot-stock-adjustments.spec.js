@@ -26,7 +26,7 @@ test('chi phí sau ghi sổ có lịch sử, giữ snapshot cũ và áp dụng c
   await page.getByRole('row').filter({ hasText: reference }).getByRole('button', { name: 'Chi tiết / duyệt' }).click();
   await expect(page.getByRole('article').filter({ hasText: 'Chi phí xăng xe đối soát bổ sung' })).toBeVisible();
   const oldCost = (await (await request.get(`/api/depot/stock/batches/${before.id}/costs?depotId=${depotId}`, { headers })).json()).data;
-  expect(oldCost.costOfGoods).toBe(100); expect(oldCost.needsCostReconciliation).toBe(true);
+  expect(oldCost.costOfGoods).toBe(100); expect(oldCost.adjustedCostOfGoods).toBe(150); expect(oldCost.needsCostReconciliation).toBe(false);
   const after = await batch();
   const newCost = (await (await request.get(`/api/depot/stock/batches/${after.id}/costs?depotId=${depotId}`, { headers })).json()).data;
   expect(newCost.costOfGoods).toBe(150); expect(newCost.needsCostReconciliation).toBe(false);

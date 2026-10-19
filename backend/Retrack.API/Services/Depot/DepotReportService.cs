@@ -20,7 +20,7 @@ public sealed class DepotReportService(IDepotUnitOfWork work, IDepotReportReposi
             channels.All(x => x.NetRevenue.HasValue) ? channels.Sum(x => x.NetRevenue) : null,
             channels.Sum(x => x.KnownCostOfGoods), channels.Sum(x => x.SellingCosts),
             channels.All(x => x.PretaxDifference.HasValue) ? channels.Sum(x => x.PretaxDifference) : null, channels,
-            "Theo ngày quyết toán Factory hoặc ngày ghi bán đồ cũ (giờ Việt Nam). Giá vốn đã phân bổ gồm chi phí đầu vào được duyệt; chi phí bán là các khoản đã ghi gắn với giao dịch, kể cả bổ sung sau kỳ. Không trừ lại phí đã nằm trong tiền ròng. Không gồm chi phí chưa nhập, thuế thu nhập hay hàng trả chưa đối soát; pickup cũ chỉ có giá mua. Đây là chênh lệch quản trị trước thuế, chưa xác nhận tiền về ngân hàng. Lô cũ thiếu nguồn giá vốn hoặc nguồn có điều chỉnh sau xuất cần đối soát, chưa chốt chênh lệch tự động. Snapshot lịch sử được giữ nguyên.");
+            "Theo ngày quyết toán Factory hoặc ngày ghi bán đồ cũ (giờ Việt Nam). Giá vốn đã phân bổ gồm chi phí đầu vào được duyệt; chi phí bán là các khoản đã ghi gắn với giao dịch, kể cả bổ sung sau kỳ. Không trừ lại phí đã nằm trong tiền ròng. Không gồm chi phí chưa nhập, thuế thu nhập hay hàng trả chưa đối soát; pickup cũ chỉ có giá mua. Đây là chênh lệch quản trị trước thuế, chưa xác nhận tiền về ngân hàng. Chi phí bổ sung được chuyển theo tỷ lệ lượng nguồn đã xuất bằng bút toán đối soát riêng, giữ snapshot ban đầu. Chênh lệch báo cáo dùng vốn sau đối soát; trường hợp thiếu nguồn hoặc thiếu bút toán đối soát vẫn để trống.");
     }
     public async Task<RevenueReportDto> RevenueAsync(Guid ownerId, Guid depotId, PeriodQuery period)
     {

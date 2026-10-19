@@ -6,6 +6,14 @@ namespace Retrack.API.Repositories;
 
 public sealed partial class DepotStockRepository
 {
+    public async Task ForwardCostAsync(Guid lineId, Guid adjustmentId, decimal? unitCost)
+    {
+        // Ghi bút toán đối soát riêng, không cập nhật snapshot của lô/lần bán đã tồn tại.
+        var sourceIds = await db.DepotBatchCostSources.Where(x => x.SourceType == "RECEIPT" && x.SourceId == lineId).Select(x => x.Id).ToListAsync();
+        var saleIds = await db.DepotReuseSales.Where(x => x.LineId == lineId).Select(x => x.Id).ToListAsync();
+        db.DepotCostReconciliations.AddRange(sourceIds.Select(id => new DepotCostReconciliation { AdjustmentId = adjustmentId, BatchSourceId = id, UnitCost = unitCost }));
+        db.DepotCostReconciliations.AddRange(saleIds.Select(id => new DepotCostReconciliation { AdjustmentId = adjustmentId, ReuseSaleId = id, UnitCost = unitCost }));
+    }
     private sealed class CostedLine { public DepotStockLine Line { get; set; } = null!; public decimal? Cost { get; set; } }
     private IQueryable<CostedLine> CostLines() => db.DepotStockLines.AsNoTracking().Select(x => new CostedLine {
         Line = x,
@@ -21,5 +29,6 @@ public sealed partial class DepotStockRepository
         .Where(x => x.Line.ReceiptId == id).OrderByDescending(x => x.CreatedAt).ThenBy(x => x.Id)
         .Select(x => new StockAdjustmentDto(x.Id, x.LineId, x.Line.Name, x.Kind, x.Amount, x.Reason, x.CreatedBy, x.CreatedAt)), query);
     public Task<bool> HasLateCostsAsync(Guid id) => db.DepotBatchCostSources.AnyAsync(s => s.BatchId == id && s.SourceType == "RECEIPT" &&
-        db.DepotStockCostAdjustments.Any(a => a.LineId == s.SourceId && a.CreatedAt > s.Batch.CreatedAt));
+        db.DepotStockCostAdjustments.Any(a => a.LineId == s.SourceId && a.CreatedAt > s.Batch.CreatedAt &&
+            !db.DepotCostReconciliations.Any(r => r.AdjustmentId == a.Id && r.BatchSourceId == s.Id)));
 }

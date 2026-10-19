@@ -349,13 +349,14 @@ public sealed class StockReceiptTests : IAsyncLifetime
         Assert.Equal(1000, (await Stock(db).CurrentReceiptCostsAsync(owner, depot, receipt.Id)).Single().OriginalCost);
         Assert.Equal(1500, (await Stock(db).CurrentReceiptCostsAsync(owner, depot, receipt.Id)).Single().EffectiveCost);
         Assert.Equal(400, (await Stock(db).BatchCostsAsync(owner, depot, first.Id)).CostOfGoods);
-        Assert.True((await Stock(db).BatchCostsAsync(owner, depot, first.Id)).NeedsCostReconciliation);
+        Assert.False((await Stock(db).BatchCostsAsync(owner, depot, first.Id)).NeedsCostReconciliation);
+        Assert.Equal(600, (await Stock(db).BatchCostsAsync(owner, depot, first.Id)).AdjustedCostOfGoods);
         var next = await Batches(db).CreateAsync(owner, depot, new() { OperationId = Guid.NewGuid(), MaterialType = "IRON", WeightKg = 60 });
         Assert.Equal(900, (await Stock(db).BatchCostsAsync(owner, depot, next.Id)).CostOfGoods);
         var batch = await db.InventoryBatches.SingleAsync(x => x.Id == first.Id);
         batch.Status = "COMPLETED"; batch.SettledAt = DateTime.UtcNow; batch.GrossAmount = 800; batch.NetAmount = 800; await db.SaveChangesAsync();
         var report = await Reports(db).CostReportAsync(owner, depot, new());
-        Assert.Equal(400, report.KnownCostOfGoods); Assert.Equal(1, report.IncompleteCount); Assert.Null(report.PretaxDifference);
+        Assert.Equal(600, report.KnownCostOfGoods); Assert.Equal(0, report.IncompleteCount); Assert.Equal(200, report.PretaxDifference);
         await Assert.ThrowsAsync<ArgumentException>(() => Stock(db).AddAdjustmentAsync(owner, depot, receipt.Id, new(Guid.NewGuid(), line.Id, "ADDITIONAL_COST", -2000, "Không được âm vốn")));
         Assert.Single((await Stock(db).AdjustmentsAsync(owner, depot, receipt.Id, new())).Items);
     }
@@ -369,6 +370,7 @@ public sealed class StockReceiptTests : IAsyncLifetime
         await Stock(db).AddAdjustmentAsync(owner, depot, receipt.Id, new(Guid.NewGuid(), line.Id, "CONFIRM_BASE_COST", 4000, "Đã đối soát giá mua gốc"));
         var next = await Batches(db).CreateAsync(owner, depot, new() { OperationId = Guid.NewGuid(), MaterialType = "IRON", WeightKg = 1 });
         Assert.Null((await Stock(db).BatchCostsAsync(owner, depot, first.Id)).CostOfGoods);
+        Assert.Equal(500, (await Stock(db).BatchCostsAsync(owner, depot, first.Id)).AdjustedCostOfGoods);
         Assert.Equal(500, (await Stock(db).BatchCostsAsync(owner, depot, next.Id)).CostOfGoods);
         await Assert.ThrowsAsync<DepotConflictException>(() => Stock(db).AddAdjustmentAsync(owner, depot, receipt.Id, new(Guid.NewGuid(), line.Id, "CONFIRM_BASE_COST", 5000, "Không được chốt lại")));
     }
@@ -382,8 +384,10 @@ public sealed class StockReceiptTests : IAsyncLifetime
         var next = await Stock(db).SellAsync(owner, depot, line.Id, new(Guid.NewGuid(), 2, 500, 0, "Đã giao lần hai"));
         Assert.Equal(300, next.CostOfGoods);
         db.ChangeTracker.Clear();
-        Assert.Equal(200, (await Stock(db).SalesAsync(owner, depot, new())).Items.Single(x => x.Id == first.Id).CostOfGoods);
-        Assert.Null((await Reports(db).CostReportAsync(owner, depot, new())).PretaxDifference);
+        var history = (await Stock(db).SalesAsync(owner, depot, new())).Items.Single(x => x.Id == first.Id);
+        Assert.Equal(200, history.CostOfGoods); Assert.Equal(300, history.AdjustedCostOfGoods); Assert.True(history.HasReconciliation);
+        Assert.Equal(700, history.PretaxDifference);
+        Assert.NotNull((await Reports(db).CostReportAsync(owner, depot, new())).PretaxDifference);
     }
     [Fact]
     public async Task Concurrent_negative_adjustments_cannot_make_cost_negative_and_staff_cannot_post_costs()
@@ -399,6 +403,19 @@ public sealed class StockReceiptTests : IAsyncLifetime
         }
         Assert.Single(await Task.WhenAll(Adjust(), Adjust()), x => x);
         await using var verify = Open(); Assert.Equal(400, (await Stock(verify).CurrentReceiptCostsAsync(owner, depot, receiptId)).Single().EffectiveCost);
+    }
+    [Fact]
+    public async Task Export_racing_with_cost_adjustment_has_consistent_effective_cost_and_immutable_snapshot()
+    {
+        Guid receiptId, lineId;
+        await using (var db = Open()) { var receipt = await Posted(db, Input(100, 10)); receiptId = receipt.Id; lineId = receipt.Lines.Single().Id; }
+        var operation = Guid.NewGuid();
+        async Task Export() { await using var db = Open(); await Batches(db).CreateAsync(owner, depot, new() { OperationId = operation, MaterialType = "IRON", WeightKg = 10 }); }
+        async Task Adjust() { await using var db = Open(); await Stock(db).AddAdjustmentAsync(owner, depot, receiptId, new(Guid.NewGuid(), lineId, "ADDITIONAL_COST", 100, "Chi phí đầu vào bổ sung")); }
+        await Task.WhenAll(Export(), Adjust());
+        await using var verify = Open(); var costs = await Stock(verify).BatchCostsAsync(owner, depot, operation);
+        Assert.Equal(110, costs.AdjustedCostOfGoods); Assert.Contains(costs.CostOfGoods!.Value, new decimal[] {100,110});
+        Assert.Equal(costs.CostOfGoods, decimal.Round((await verify.DepotBatchCostSources.SingleAsync(x => x.BatchId == operation)).UnitCost!.Value * 10, 0));
     }
     private sealed class NoImages : ICloudinaryService
     {
