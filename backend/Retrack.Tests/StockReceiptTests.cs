@@ -55,6 +55,20 @@ public sealed class StockReceiptTests : IAsyncLifetime
         return await Stock(db).ReviewAsync(owner, depot, draft.Id, "POSTED");
     }
     [Fact]
+    public async Task Stale_tracked_receipt_cannot_adjust_voided_stock_or_trade_after_verification_is_revoked()
+    {
+        await using var stale = Open(); var receipt = await Posted(stale, Input(10, 100, true));
+        // Context đang giữ phiếu POSTED; yêu cầu khác đã đảo phiếu trước khi lấy khóa.
+        await using (var current = Open()) await Stock(current).ReviewAsync(owner, depot, receipt.Id, "VOIDED", "Đảo phiếu thử");
+        await Assert.ThrowsAsync<DepotConflictException>(() => Stock(stale).AddAdjustmentAsync(owner, depot, receipt.Id,
+            new(Guid.NewGuid(), receipt.Lines.Single().Id, "ADDITIONAL_COST", 100, "Không được sửa phiếu đã đảo")));
+        var live = await Posted(stale, Input(10, 100, true));
+        await using (var current = Open())
+        { var warehouse = await current.Depots.SingleAsync(x => x.Id == depot); warehouse.VerificationStatus = "UNVERIFIED"; await current.SaveChangesAsync(); }
+        await Assert.ThrowsAsync<DepotConflictException>(() => Stock(stale).SellAsync(owner, depot, live.Lines.Single().Id, new(Guid.NewGuid(), 1, 200, 0, "Không được bán khi mất xác minh")));
+        await using var check = Open(); Assert.False(await check.DepotStockCostAdjustments.AnyAsync(x => x.Line.Receipt.DepotId == depot)); Assert.False(await check.DepotReuseSales.AnyAsync(x => x.Line.Receipt.DepotId == depot));
+    }
+    [Fact]
     public async Task Cost_report_matches_settled_fifo_and_partial_reuse_sale_without_double_subtracting_fees()
     {
         await using var db = Open(); await Posted(db, Input(50)); await Posted(db, Input(50));
