@@ -45,9 +45,26 @@ namespace Retrack.API.Data
         public DbSet<DepotCostReconciliation> DepotCostReconciliations { get; set; }
         public DbSet<DepotIncidentFollowup> DepotIncidentFollowups { get; set; }
 
+        public DbSet<LiquidationLot> LiquidationLots { get; set; }
+        public DbSet<LiquidationParticipation> LiquidationParticipations { get; set; }
+        public DbSet<LiquidationBid> LiquidationBids { get; set; }
+        public DbSet<LiquidationAgreement> LiquidationAgreements { get; set; }
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+            modelBuilder.Entity<LiquidationParticipation>().HasIndex(x => new { x.LotId, x.OwnerId }).IsUnique();
+            modelBuilder.Entity<LiquidationAgreement>().HasIndex(x => x.LotId).IsUnique();
+            modelBuilder.Entity<LiquidationAgreement>().HasIndex(x => x.WinningBidId).IsUnique();
+            modelBuilder.Entity<LiquidationBid>().HasIndex(x => new { x.LotId, x.CreatedAt });
+            modelBuilder.Entity<LiquidationLot>().HasOne(x => x.Seller).WithMany().OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<LiquidationAgreement>().HasOne(x => x.Lot).WithMany().OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<LiquidationAgreement>().HasOne(x => x.WinningBid).WithMany().OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<LiquidationAgreement>().HasOne(x => x.Depot).WithMany().OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<LiquidationParticipation>().HasOne(x => x.Depot).WithMany().OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<DepotStockReceipt>().HasIndex(x => x.BulkAgreementId).IsUnique()
+                .HasFilter("bulk_agreement_id IS NOT NULL AND status NOT IN ('VOIDED','REJECTED')");
+
             modelBuilder.Entity<DepotIncidentFollowup>().HasOne(x => x.Event).WithMany().HasForeignKey(x => x.EventId).OnDelete(DeleteBehavior.Cascade);
             modelBuilder.Entity<DepotCostReconciliation>().HasOne(x => x.BatchSource).WithMany().HasForeignKey(x => x.BatchSourceId).OnDelete(DeleteBehavior.Cascade);
             modelBuilder.Entity<DepotCostReconciliation>().HasOne(x => x.ReuseSale).WithMany().HasForeignKey(x => x.ReuseSaleId).OnDelete(DeleteBehavior.Cascade);

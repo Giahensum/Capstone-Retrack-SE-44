@@ -70,11 +70,21 @@ public sealed partial class DepotStockService(IDepotStockRepository repository, 
                 throw new DepotConflictException("Mã thao tác đã dùng cho phiếu khác. Hãy tải lại dữ liệu.");
             return Map(old, isOwner);
         }
-        var costs = dto.CostsConfirmed ? DepotCosting.Allocate(dto.PurchaseCost, dto.Expenses.Sum(x => x.Amount),
+        var purchaseCost = dto.PurchaseCost;
+        if (dto.BulkAgreementId.HasValue)
+        {
+            var source = await repository.BulkSourceAsync(dto.BulkAgreementId.Value);
+            if (source == null || source.DepotId != depotId) throw new DepotForbiddenException();
+            if (!source.Ready || dto.SourceType != "BULK_PURCHASE") throw new DepotConflictException("Lô trúng cần xác nhận đủ tiền và hai bên xác nhận giao nhận trước khi lập phiếu nhập.");
+            if (await repository.HasBulkReceiptAsync(dto.BulkAgreementId.Value)) throw new DepotConflictException("Thỏa thuận đã có phiếu nhập đang hoạt động; không được nhập cả lô lần hai.");
+            if (dto.PurchaseCost != 0 && dto.PurchaseCost != source.Amount) throw new ArgumentException("Giá mua phải bằng giá trúng trọn lô, không tính lại theo kg.");
+            purchaseCost = source.Amount;
+        }
+        var costs = dto.CostsConfirmed ? DepotCosting.Allocate(purchaseCost, dto.Expenses.Sum(x => x.Amount),
             dto.Lines.Select(x => new CostingLine(x.Quantity, x.ReferencePrice, x.DirectCost)).ToArray()) : null;
         var receipt = new DepotStockReceipt { Id = dto.OperationId, DepotId = depotId, CreatedBy = userId,
             SourceType = dto.SourceType, Reference = dto.Reference.Trim(), ReceivedAt = dto.ReceivedAt,
-            PurchaseCost = dto.PurchaseCost, CostsConfirmed = dto.CostsConfirmed, RequestHash = hash,
+            PurchaseCost = purchaseCost, CostsConfirmed = dto.CostsConfirmed, RequestHash = hash, BulkAgreementId = dto.BulkAgreementId,
             Lines = dto.Lines.Select((x, i) => new DepotStockLine { Kind = x.Kind, MaterialType = x.MaterialType,
                 Name = x.Name.Trim(), Unit = x.Unit, Quantity = x.Quantity, ReferencePrice = x.ReferencePrice,
                 DirectCost = x.DirectCost, ConditionNote = x.ConditionNote, AllocatedCost = costs?[i], Position = i }).ToList(),
@@ -102,6 +112,8 @@ public sealed partial class DepotStockService(IDepotStockRepository repository, 
         var receipt = await repository.FindReceiptAsync(id);
         if (receipt == null || receipt.DepotId != depotId) throw new KeyNotFoundException("Không tìm thấy phiếu trong kho.");
         if (receipt.Status is not ("DRAFT" or "SUBMITTED")) throw new DepotConflictException("Chỉ cập nhật chi phí trước khi ghi sổ; không sửa ngầm giá vốn đã xuất.");
+        if (receipt.BulkAgreementId.HasValue && dto.PurchaseCost != (await repository.BulkSourceAsync(receipt.BulkAgreementId.Value))?.Amount)
+            throw new ArgumentException("Giá mua lô trúng phải giữ nguyên tổng tiền trong thỏa thuận.");
         if (dto.Lines.Count != receipt.Lines.Count || receipt.Lines.Any(x => !dto.Lines.Any(l => l.Id == x.Id)))
             throw new ArgumentException("Các dòng chi phí phải khớp đủ dòng hàng của phiếu.");
         var ordered = receipt.Lines.OrderBy(x => x.Position).ToList();
@@ -232,7 +244,7 @@ public sealed partial class DepotStockService(IDepotStockRepository repository, 
         includeCost ? x.PurchaseCost + x.Expenses.Sum(e => e.Amount) + x.Lines.Sum(l => l.DirectCost) : 0, x.ReviewNote,
         x.Lines.OrderBy(l => l.Position).Select(l => new StockLineDto(l.Id, l.Kind, l.MaterialType, l.Name, l.Unit,
             l.Quantity, includeCost ? l.ReferencePrice : 0, includeCost ? l.DirectCost : 0, includeCost ? l.AllocatedCost : null, l.ConditionNote)).ToList(),
-        includeCost ? x.Expenses.Select(e => new StockExpenseInput(e.Category, e.Description, e.Amount)).ToList() : []);
+        includeCost ? x.Expenses.Select(e => new StockExpenseInput(e.Category, e.Description, e.Amount)).ToList() : [], x.BulkAgreementId);
     private static ReuseSaleDto Sale(DepotReuseSale x)
     {
         var cost = x.UnitCost * x.Quantity;

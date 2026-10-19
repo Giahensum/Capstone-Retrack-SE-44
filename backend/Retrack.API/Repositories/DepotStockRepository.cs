@@ -24,6 +24,10 @@ public sealed partial class DepotStockRepository(AppDbContext db) : IDepotStockR
             .Include(x => x.Lines).Include(x => x.Expenses).AsSplitQuery(), query);
     }
     public void AddReceipt(DepotStockReceipt receipt) => db.DepotStockReceipts.Add(receipt);
+    public Task<DepotBulkStockSource?> BulkSourceAsync(Guid agreementId) => db.LiquidationAgreements.AsNoTracking()
+        .Where(x => x.Id == agreementId).Select(x => new DepotBulkStockSource(x.DepotId, x.Amount,
+            x.PaymentConfirmedAt != null && x.OwnerCollectedAt != null && x.SellerHandedOverAt != null)).SingleOrDefaultAsync();
+    public Task<bool> HasBulkReceiptAsync(Guid agreementId) => db.DepotStockReceipts.AnyAsync(x => x.BulkAgreementId == agreementId && x.Status != "VOIDED" && x.Status != "REJECTED");
     public void ReplaceExpenses(DepotStockReceipt receipt, List<StockExpenseInput> expenses)
     {
         db.DepotStockExpenses.RemoveRange(receipt.Expenses);
