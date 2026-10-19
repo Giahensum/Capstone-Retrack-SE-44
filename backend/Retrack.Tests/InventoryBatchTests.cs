@@ -56,6 +56,52 @@ public sealed class InventoryBatchTests : IAsyncLifetime
     private static CreateDepotBatchDto Input(decimal kg = 60) => new() { OperationId = Guid.NewGuid(), MaterialType = "PET", WeightKg = kg };
 
     [Fact]
+    public async Task Concurrent_quality_decisions_cannot_overwrite_each_other()
+    {
+        Guid id;
+        await using (var db = Open())
+        {
+            db.Users.Add(new User { Id = factoryOwnerId, Email = $"qc-{factoryOwnerId}@test.invalid", Role = "FACTORY" });
+            var factory = new Retrack.API.Models.Factory { OwnerId = factoryOwnerId, Name = "Factory QC" };
+            db.Factories.Add(factory);
+            var batch = new InventoryBatch { DepotId = depotId, TargetFactory = factory, MaterialType = "PET", DeclaredWeightKg = 10, ActualWeightKg = 10, Status = "WEIGHED" };
+            db.InventoryBatches.Add(batch); db.BatchQualityChecks.Add(new() { Batch = batch, Factory = factory, ActualWeightKg = 10, Grade = "PENDING" });
+            await db.SaveChangesAsync(); id = batch.Id;
+        }
+        async Task<Retrack.API.Services.Shared.ServiceOutcome> Decide(bool accept)
+        {
+            await using var db = Open();
+            var result = await new Retrack.API.Services.Factory.FactoryQCService(db, new ConfigurationBuilder().Build()).QualityAsync(factoryOwnerId, id,
+                new() { Accept = accept, PurityPercent = 99, Grade = "A", Note = "Kết quả kiểm tra", Resolution = accept ? null : "RETURN" }, default);
+            return result.Outcome;
+        }
+        var results = await Task.WhenAll(Decide(true), Decide(false));
+        Assert.Single(results, x => x == Retrack.API.Services.Shared.ServiceOutcome.Success);
+        Assert.Single(results, x => x == Retrack.API.Services.Shared.ServiceOutcome.Conflict);
+        await using var check = Open(); var final = await check.InventoryBatches.Include(x => x.QualityCheck).SingleAsync(x => x.Id == id);
+        Assert.Equal(final.Status == "VERIFIED", final.QualityCheck!.IsAccepted);
+    }
+    [Fact]
+    public async Task Stale_tracked_quality_and_weigh_requests_cannot_reopen_settled_batch()
+    {
+        await using var stale = Open();
+        stale.Users.Add(new User { Id = factoryOwnerId, Email = $"qc-{factoryOwnerId}@test.invalid", Role = "FACTORY" });
+        var factory = new Retrack.API.Models.Factory { OwnerId = factoryOwnerId, Name = "Factory QC" }; stale.Factories.Add(factory);
+        var batch = new InventoryBatch { DepotId = depotId, TargetFactory = factory, MaterialType = "PET", DeclaredWeightKg = 10, ActualWeightKg = 10, Status = "WEIGHED" };
+        stale.InventoryBatches.Add(batch); stale.BatchQualityChecks.Add(new() { Batch = batch, Factory = factory, ActualWeightKg = 10, Grade = "PENDING" }); await stale.SaveChangesAsync();
+        await using (var newer = Open())
+        {
+            var saved = await newer.InventoryBatches.Include(x => x.QualityCheck).SingleAsync(x => x.Id == batch.Id);
+            saved.Status = "COMPLETED"; saved.SettledAt = DateTime.UtcNow; saved.NetAmount = 1234; saved.QualityCheck!.IsAccepted = true;
+            await newer.SaveChangesAsync();
+        }
+        var service = new Retrack.API.Services.Factory.FactoryQCService(stale, new ConfigurationBuilder().Build());
+        Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Conflict, (await service.QualityAsync(factoryOwnerId, batch.Id, new() { Accept = false, Grade = "C", Note = "Cũ", Resolution = "RETURN" }, default)).Outcome);
+        Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Conflict, (await service.WeighAsync(factoryOwnerId, batch.Id, new() { GrossWeightKg = 11, TareWeightKg = 1 }, default)).Outcome);
+        await using var check = Open(); var final = await check.InventoryBatches.Include(x => x.QualityCheck).SingleAsync(x => x.Id == batch.Id);
+        Assert.Equal("COMPLETED", final.Status); Assert.Equal(1234, final.NetAmount); Assert.True(final.QualityCheck!.IsAccepted);
+    }
+    [Fact]
     public async Task Factory_demand_shows_block_status_for_the_selected_depot_only()
     {
         await using var db = Open();
