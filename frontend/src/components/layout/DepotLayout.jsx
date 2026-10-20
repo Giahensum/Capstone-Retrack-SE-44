@@ -9,6 +9,7 @@ import DepotBrandLogo from '@/features/depot/components/DepotBrandLogo';
 import CreateDepotModal from '@/features/depot/components/CreateDepotModal';
 import { useDepotQuery } from '@/features/depot/depotApi';
 import { verificationLabels } from '@/features/depot/components/VerificationPanel';
+import NotificationBell from '@/features/depot/components/NotificationBell';
 
 const SidebarItem = ({ iconName, label, to, active }) => (
   <Link
@@ -99,13 +100,14 @@ const DepotLayout = () => {
         <header className="d-glass-panel flex justify-between gap-3 items-center min-h-16 px-4 lg:px-8 shrink-0 z-30">
           <button aria-label="Mở menu" aria-expanded={menuOpen} className="lg:hidden" onClick={() => setMenuOpen(true)}><MaterialIcon name="menu" /></button>
           <Link to="/depot/dashboard" className="lg:hidden" aria-label="ReTrack — về tổng quan kho"><DepotBrandLogo small /></Link>
-          <div className="flex items-center text-d-on-surface-variant font-d-body-sm text-d-body-sm gap-2">
+          <div className="hidden sm:flex min-w-0 items-center text-d-on-surface-variant font-d-body-sm text-d-body-sm gap-2">
             <Link to="/depot/dashboard" className="hidden sm:inline hover:text-d-primary transition-colors">Trang chủ</Link>
             <MaterialIcon name="chevron_right" className="text-[16px]" />
             <span className="text-d-primary font-bold">{navItems.find((item) => item.to === location.pathname)?.label ?? 'Tổng quan'}</span>
           </div>
           
           <div className="flex items-center min-w-0 gap-3">
+            {depotId && <NotificationBell key={`${depotId}-${location.pathname}`} unread={unread} />}
             <DepotSelector />
           </div>
         </header>
