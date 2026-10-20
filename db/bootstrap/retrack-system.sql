@@ -703,6 +703,17 @@ ALTER TABLE notifications ADD COLUMN IF NOT EXISTS target_type VARCHAR(30);
 ALTER TABLE notifications ADD COLUMN IF NOT EXISTS target_id UUID;
 CREATE INDEX IF NOT EXISTS ix_notifications_depot_unread ON notifications(user_id, depot_id, is_read, created_at DESC, id);
 
+-- RETRACK_AUTH_OTP_V1: luồng quên mật khẩu xác thực OTP
+CREATE TABLE IF NOT EXISTS password_reset_otps (
+    id UUID PRIMARY KEY,
+    email VARCHAR(255) NOT NULL,
+    otp_code VARCHAR(10) NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL,
+    is_used BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS ix_password_reset_otps_email ON password_reset_otps(email, created_at DESC);
+
 -- RETRACK_SCHEMA_END
 
 -- RETRACK_SEED_BEGIN
