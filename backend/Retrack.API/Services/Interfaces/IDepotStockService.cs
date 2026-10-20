@@ -6,6 +6,7 @@ namespace Retrack.API.Services.Interfaces;
 public interface IDepotStockService
 {
     Task<PagedResult<StockReceiptDto>> ListAsync(Guid userId, Guid depotId, DepotQuery query);
+    Task<StockReceiptDto> GetAsync(Guid userId, Guid depotId, Guid receiptId);
     Task<StockReceiptDto> CreateAsync(Guid userId, Guid depotId, CreateStockReceiptDto dto);
     Task<StockReceiptDto> ReviewAsync(Guid userId, Guid depotId, Guid id, string action, string? reason = null);
     Task<StockReceiptDto> UpdateCostsAsync(Guid ownerId, Guid depotId, Guid id, UpdateStockCostsDto dto);

@@ -80,6 +80,8 @@ public sealed class DepotVerificationTests : IAsyncLifetime
         db.ChangeTracker.Clear();
         Assert.Equal("APPROVED", (await Scope(db).GetProfileAsync(owner, depot)).VerificationStatus);
         Assert.Equal(2, (await service.ListAsync(owner, depot, new())).TotalCount);
+        var notices = await db.Notifications.Where(x => x.UserId == owner && x.DepotId == depot).ToListAsync();
+        Assert.Equal(2, notices.Count); Assert.All(notices, x => { Assert.Equal("VERIFICATION", x.Category); Assert.Equal("PROFILE", x.TargetType); });
     }
     [Fact]
     public async Task Identity_changes_are_locked_during_review_and_require_verification_again_after_approval()

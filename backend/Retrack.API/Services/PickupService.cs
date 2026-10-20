@@ -235,6 +235,16 @@ namespace Retrack.API.Services
             req.Status = "DONE";
             req.StockReceivedAt ??= DateTime.UtcNow;
             req.UpdatedAt = DateTime.UtcNow;
+            if (req.TargetDepotId.HasValue)
+            {
+                var owner = await _db.Depots.Where(x => x.Id == req.TargetDepotId.Value).Select(x => (Guid?)x.OwnerId).SingleOrDefaultAsync();
+                if (owner.HasValue)
+                {
+                    var notice = Notification.ForDepot(owner.Value, req.TargetDepotId.Value, "PAYMENT", "Người bán đã xác nhận nhận tiền",
+                        $"Đơn {req.Id} đã hoàn tất sau khi người bán xác nhận nhận tiền. Kho có thể kiểm tra giao dịch và hàng đã nhập.");
+                    notice.PickupRequestId = req.Id; _db.Notifications.Add(notice);
+                }
+            }
             await _repo.UpdateAsync(req);
             await transaction.CommitAsync();
             return await MapToDto(req);

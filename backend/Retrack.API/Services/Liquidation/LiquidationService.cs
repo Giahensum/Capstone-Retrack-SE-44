@@ -93,6 +93,10 @@ public sealed class LiquidationService(ILiquidationRepository repository, IDepot
         if (lot.Status != "PUBLISHED" || now < lot.BiddingStart || now >= lot.BiddingEnd || !await repository.IsActiveSellerAsync(lot.SellerId))
             throw new DepotConflictException("Phiên chưa mở, đã hết hạn hoặc không còn hoạt động.");
         LiquidationRules.CheckBid(lot.StartingPrice, lot.HighestPrice, lot.BidIncrement, dto.Amount);
+        var previous = lot.HighestBidId.HasValue ? await repository.FindBidAsync(lot.HighestBidId.Value) : null;
+        if (previous != null && previous.OwnerId != ownerId)
+            repository.AddNotice(Notification.ForDepot(previous.OwnerId, previous.DepotId, "LIQUIDATION", "Giá của bạn đã bị vượt",
+                $"Lô {lot.Title} có mức giá cao hơn. Xem giá hiện tại và thời gian còn lại trước khi quyết định trả giá tiếp.", targetType: "LIQUIDATION", targetId: lot.Id));
         var bid = new LiquidationBid { Id = dto.OperationId, LotId = lotId, DepotId = depotId, OwnerId = ownerId, Amount = dto.Amount, CreatedAt = now };
         repository.AddBid(bid); lot.HighestPrice = dto.Amount; lot.HighestBidId = bid.Id; lot.BidCount++;
         lot.BiddingEnd = LiquidationRules.Extend(now, lot.BiddingEnd, lot.OriginalEnd.AddMinutes(10));
@@ -110,13 +114,21 @@ public sealed class LiquidationService(ILiquidationRepository repository, IDepot
         await using var tx = await work.BeginAsync();
         var lot = await repository.LockAsync(lotId);
         if (lot == null || lot.Status != "PUBLISHED" || Now < lot.BiddingEnd) return;
-        if (lot.HighestBidId == null) lot.Status = "NO_SALE";
+        if (lot.HighestBidId == null)
+        {
+            lot.Status = "NO_SALE";
+            foreach (var participant in await repository.ParticipantsAsync(lotId))
+                repository.AddNotice(Notification.ForDepot(participant.OwnerId, participant.DepotId, "LIQUIDATION", "Lô lớn đã kết thúc phiên",
+                    $"Lô {lot.Title} kết thúc và chưa có lượt trả giá hợp lệ.", targetType: "LIQUIDATION", targetId: lot.Id));
+        }
         else
         {
             var winning = await repository.FindBidAsync(lot.HighestBidId.Value) ?? throw new InvalidOperationException("Thiếu lượt giá thắng; cần kiểm tra dữ liệu phiên.");
             if (winning.LotId != lot.Id || winning.Amount != lot.HighestPrice) throw new InvalidOperationException("Giá thắng không khớp phiên.");
             lot.Status = "AWARDED";
             repository.AddAgreement(new() { LotId = lot.Id, WinningBidId = winning.Id, DepotId = winning.DepotId, BuyerId = winning.OwnerId, Amount = winning.Amount, CreatedAt = Now });
+            repository.AddNotice(Notification.ForDepot(winning.OwnerId, winning.DepotId, "LIQUIDATION", "Kho của bạn đã trúng lô lớn",
+                $"Bạn đã trúng lô {lot.Title}. Kiểm tra thỏa thuận, hạn thu gom và xác nhận chuyển tiền/giao nhận thực tế.", targetType: "LIQUIDATION", targetId: lot.Id));
         }
         await work.SaveAsync(); await tx.CommitAsync();
     }

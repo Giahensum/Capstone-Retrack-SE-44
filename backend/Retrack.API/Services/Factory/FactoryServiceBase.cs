@@ -8,6 +8,14 @@ public abstract class FactoryServiceBase(AppDbContext db)
 {
     protected AppDbContext Db { get; } = db;
 
+    // Giữ transaction/DbContext hiện hành của Factory; chỉ bổ sung thông báo cho Owner.
+    protected async Task NotifyDepotAsync(Guid depotId, string title, string message, Guid? batchId = null,
+        string? targetType = null, CancellationToken ct = default)
+    {
+        var ownerId = await Db.Depots.Where(x => x.Id == depotId).Select(x => x.OwnerId).SingleAsync(ct);
+        Db.Notifications.Add(Notification.ForDepot(ownerId, depotId, "FACTORY", title, message, batchId, targetType));
+    }
+
     // Các thao tác nhận/cân/KCS/quyết toán dùng cùng thứ tự khóa với Depot.
     protected async Task<InventoryBatch?> LockOrderAsync(Guid id, Guid factoryId, CancellationToken ct)
     {

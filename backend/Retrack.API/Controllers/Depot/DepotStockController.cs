@@ -25,6 +25,8 @@ public class DepotStockController(IDepotStockService service) : ControllerBase
     [HttpGet("receipts")]
     public async Task<IActionResult> List(Guid depotId, [FromQuery] DepotQuery query) =>
         Ok(ApiResponse<PagedResult<StockReceiptDto>>.Ok(await service.ListAsync(UserId, depotId, query)));
+    [HttpGet("receipts/{id:guid}")]
+    public async Task<IActionResult> Detail(Guid depotId, Guid id) => Ok(ApiResponse<StockReceiptDto>.Ok(await service.GetAsync(UserId, depotId, id)));
     [HttpPost("receipts")]
     public async Task<IActionResult> Create(Guid depotId, CreateStockReceiptDto dto) =>
         Ok(ApiResponse<StockReceiptDto>.Ok(await service.CreateAsync(UserId, depotId, dto)));

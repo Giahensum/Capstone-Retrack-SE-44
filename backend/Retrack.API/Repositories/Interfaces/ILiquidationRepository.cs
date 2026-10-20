@@ -15,6 +15,8 @@ public interface ILiquidationRepository
     void AddParticipation(LiquidationParticipation participation);
     Task<LiquidationBid?> FindBidAsync(Guid id);
     void AddBid(LiquidationBid bid);
+    void AddNotice(Notification notice);
+    Task<List<LiquidationParticipation>> ParticipantsAsync(Guid lotId);
     Task<PagedResult<MyLiquidationBidDto>> MyBidsAsync(Guid lotId, Guid ownerId, Guid depotId, int page);
     Task<LiquidationAgreement?> FindAgreementAsync(Guid id);
     Task<LiquidationAgreement?> LotAgreementAsync(Guid lotId);

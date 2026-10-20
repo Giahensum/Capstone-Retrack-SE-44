@@ -5,18 +5,22 @@ using Retrack.API.Services.Interfaces;
 namespace Retrack.API.Services.Depot;
 public sealed class DepotOperationsService(IDepotOperationsRepository repository, IDepotService scope, IDepotBatchRepository batches, IDepotUnitOfWork work)
 {
-    public async Task<PagedResult<DepotNoticeDto>> NoticesAsync(Guid owner, Guid depot, DepotQuery query)
+    public async Task<PagedResult<DepotNoticeDto>> NoticesAsync(Guid owner, Guid depot, DepotNoticeQuery query)
     {
         await scope.RequireOwnerAsync(owner, depot);
         if (query.Status is not (null or "" or "READ" or "UNREAD")) throw new ArgumentException("Trạng thái đọc thông báo không hợp lệ.");
+        if (query.Search?.Length > 255 || query.Category is not (null or "" or "FACTORY" or "PAYMENT" or "TRANSPORT" or "VERIFICATION" or "STOCK" or "LIQUIDATION" or "SYSTEM"))
+            throw new ArgumentException("Nhóm thông báo hoặc từ khóa không hợp lệ.");
         return await repository.NoticesAsync(owner, depot, query);
     }
     public async Task<int> UnreadAsync(Guid owner, Guid depot) { await scope.RequireOwnerAsync(owner, depot); return await repository.UnreadAsync(owner, depot); }
-    public async Task ReadAsync(Guid owner, Guid depot, Guid id)
+    public async Task ReadAsync(Guid owner, Guid depot, Guid id, bool isRead = true)
     {
         await scope.RequireOwnerAsync(owner, depot);
-        if (!await repository.ReadAsync(owner, depot, id)) throw new KeyNotFoundException("Không tìm thấy thông báo trong phạm vi kho.");
+        if (!await repository.ReadAsync(owner, depot, id, isRead)) throw new KeyNotFoundException("Không tìm thấy thông báo trong phạm vi kho.");
     }
+    public async Task<int> ReadAllAsync(Guid owner, Guid depot)
+    { await scope.RequireOwnerAsync(owner, depot); return await repository.ReadAllAsync(owner, depot); }
     public async Task<PagedResult<DepotDriverEventDto>> EventsAsync(Guid owner, Guid depot, Guid batchId, DepotQuery query)
     {
         await scope.RequireOwnerAsync(owner, depot); return await repository.EventsAsync(depot, batchId, query);

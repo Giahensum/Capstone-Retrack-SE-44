@@ -42,6 +42,8 @@ public sealed class LiquidationRepository(AppDbContext db) : ILiquidationReposit
     public void AddParticipation(LiquidationParticipation participation) => db.LiquidationParticipations.Add(participation);
     public Task<LiquidationBid?> FindBidAsync(Guid id) => db.LiquidationBids.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id);
     public void AddBid(LiquidationBid bid) => db.LiquidationBids.Add(bid);
+    public void AddNotice(Notification notice) => db.Notifications.Add(notice);
+    public Task<List<LiquidationParticipation>> ParticipantsAsync(Guid lotId) => db.LiquidationParticipations.AsNoTracking().Where(x => x.LotId == lotId).ToListAsync();
     public async Task<PagedResult<MyLiquidationBidDto>> MyBidsAsync(Guid lotId, Guid ownerId, Guid depotId, int page)
     {
         var source = db.LiquidationBids.AsNoTracking().Where(x => x.LotId == lotId && x.OwnerId == ownerId && x.DepotId == depotId);

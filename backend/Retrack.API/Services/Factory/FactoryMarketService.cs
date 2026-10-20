@@ -122,6 +122,7 @@ public class FactoryMarketService(AppDbContext db) : FactoryServiceBase(db), IFa
         if (directOfferForFactory) batch.DirectOfferFactoryId = null;
         batch.TargetFactoryId = factory.Id;
         batch.Status = "ACCEPTED";
+        await NotifyDepotAsync(batch.DepotId, "Nhà máy đã nhận lô", $"{factory.Name} đã nhận lô {batch.Code ?? batch.Id.ToString()}. Kho có thể theo dõi bước vận chuyển.", batch.Id, ct: ct);
         if (batch.TransportJob is null)
         {
             var job = new TransportJob { BatchId = batch.Id, Status = "PENDING" };
@@ -162,6 +163,7 @@ public class FactoryMarketService(AppDbContext db) : FactoryServiceBase(db), IFa
         batch.Status = "REJECTED";
         batch.RejectionReason = request.Reason.Trim();
         batch.DirectOfferFactoryId = null;
+        await NotifyDepotAsync(batch.DepotId, "Nhà máy từ chối nhận lô", $"{factory.Name} từ chối lô {batch.Code ?? batch.Id.ToString()}: {batch.RejectionReason}", batch.Id, ct: ct);
         await Db.SaveChangesAsync(ct);
         if (transaction != null) await transaction.CommitAsync(ct);
         return ServiceResult.Success(message: "Đã từ chối lời mời.");

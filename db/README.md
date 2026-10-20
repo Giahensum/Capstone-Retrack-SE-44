@@ -59,3 +59,5 @@ Marker giúp test và người nâng cấp chọn đúng phần, không phải f
 Hai file schema/seed cũ đã được gộp và xóa; không cần tìm lại chúng. Lịch sử vẫn có trong Git. Cấu hình PostgreSQL/appsettings/.env riêng của từng thành viên được giữ nguyên.
 
 Khối schema mới cũng có hồ sơ xác minh private, lịch sử điều chỉnh/đối soát vốn, theo dõi sự cố Depot và contract lô lớn. Kho thật mặc định UNVERIFIED, cần nộp hồ sơ và Admin duyệt để mở giao dịch mới; chỉ ba kho demo được duyệt trong seed. Seed có hai lô lớn `[DEMO]` để thử màn Depot; không thay cho API đăng lô Seller của TV1. Máy cũ cần bổ sung toàn khối mới trước khi chạy bản backend tương ứng; chỉ `dotnet run` không tự tạo cột/bảng.
+
+Bổ sung thông báo Depot 20/10/2026: nếu đã cập nhật schema tới bản 19/10, review/chạy riêng đoạn `-- RETRACK_DEPOT_NOTIFICATIONS_V1` đến trước `-- RETRACK_SCHEMA_END` trong cùng file, trong transaction riêng. Đoạn này chỉ thêm 5 cột `depot_id`, `batch_id`, `category`, `target_type`, `target_id` và index vào `notifications`, không seed hoặc thay trạng thái đơn. Cần chạy trước khi dùng backend mới; các thông báo Employee/Driver cũ vẫn đọc được.

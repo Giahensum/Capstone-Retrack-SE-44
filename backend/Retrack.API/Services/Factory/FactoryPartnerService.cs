@@ -63,6 +63,7 @@ public class FactoryPartnerService(AppDbContext db) : FactoryServiceBase(db), IF
         var partner = await Db.FactoryDepotPartnerships.SingleOrDefaultAsync(x => x.FactoryId == factory.Id && x.DepotId == depotId, ct);
         if (partner is null) return ServiceResult<PartnerStatusResponse>.NotFound("Không tìm thấy đối tác.");
         await Db.Entry(partner).ReloadAsync(ct);
+        var previous = (partner.Status, partner.BlockedByFactory, partner.BlockedByDepot);
         if (status is "APPROVED" or "DECLINED")
         {
             if (partner.IsBlocked) return ServiceResult<PartnerStatusResponse>.Conflict("Quan hệ đang bị chặn; quyết định hợp tác không được mở chặn.");
@@ -73,6 +74,8 @@ public class FactoryPartnerService(AppDbContext db) : FactoryServiceBase(db), IF
         }
         else partner.BlockedByFactory = status == "BLOCKED";
         partner.UpdatedAt = DateTime.UtcNow;
+        if (previous != (partner.Status, partner.BlockedByFactory, partner.BlockedByDepot))
+            await NotifyDepotAsync(depotId, "Nhà máy cập nhật quan hệ hợp tác", $"{factory.Name}: {(status == "APPROVED" ? "đồng ý hợp tác" : status == "DECLINED" ? "chưa đồng ý hợp tác, lô sau cần duyệt lại" : status == "BLOCKED" ? "đã chặn giao dịch mới" : "đã bỏ phần chặn của nhà máy")}. Xem trạng thái quan hệ hiện tại trước khi gửi lô.", targetType: "PARTNERS", ct: ct);
         await Db.SaveChangesAsync(ct);
         if (tx != null) await tx.CommitAsync(ct);
         return ServiceResult<PartnerStatusResponse>.Success(data: new PartnerStatusResponse
@@ -99,6 +102,7 @@ public class FactoryPartnerService(AppDbContext db) : FactoryServiceBase(db), IF
         review.Rating = request.Rating;
         review.Comment = request.Comment?.Trim();
         var partner = await Db.FactoryDepotPartnerships.SingleOrDefaultAsync(x => x.FactoryId == factory.Id && x.DepotId == batch.DepotId, ct);
+        var previousStatus = partner?.Status;
         if (request.PartnershipStatus is not null)
         {
             if (partner is null)
@@ -107,6 +111,8 @@ public class FactoryPartnerService(AppDbContext db) : FactoryServiceBase(db), IF
                 return ServiceResult<PartnerRatingResponse>.Conflict("Quan hệ đang bị chặn; hãy xử lý trạng thái chặn trước.");
             partner.Status = request.PartnershipStatus.Value.ToString();
             partner.UpdatedAt = DateTime.UtcNow;
+            if (previousStatus != partner.Status)
+                await NotifyDepotAsync(batch.DepotId, "Nhà máy cập nhật quan hệ hợp tác", $"{factory.Name} đã cập nhật quyết định hợp tác sau đánh giá lô. Xem thông tin đối tác trước khi gửi lô tiếp theo.", targetType: "PARTNERS", ct: ct);
         }
         await Db.SaveChangesAsync(ct);
         if (tx != null) await tx.CommitAsync(ct);

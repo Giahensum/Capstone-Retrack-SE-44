@@ -24,6 +24,8 @@ public sealed partial class DepotStockRepository(AppDbContext db) : IDepotStockR
             .Include(x => x.Lines).Include(x => x.Expenses).AsSplitQuery(), query);
     }
     public void AddReceipt(DepotStockReceipt receipt) => db.DepotStockReceipts.Add(receipt);
+    public void AddNotice(Notification notice) => db.Notifications.Add(notice);
+    public Task<Guid> OwnerIdAsync(Guid depotId) => db.Depots.Where(x => x.Id == depotId).Select(x => x.OwnerId).SingleAsync();
     public Task<DepotBulkStockSource?> BulkSourceAsync(Guid agreementId) => db.LiquidationAgreements.AsNoTracking()
         .Where(x => x.Id == agreementId).Select(x => new DepotBulkStockSource(x.DepotId, x.Amount,
             x.PaymentConfirmedAt != null && x.OwnerCollectedAt != null && x.SellerHandedOverAt != null)).SingleOrDefaultAsync();

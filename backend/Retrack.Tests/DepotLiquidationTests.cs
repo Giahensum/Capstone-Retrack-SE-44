@@ -110,6 +110,21 @@ public sealed class DepotLiquidationTests : IAsyncLifetime
         await Assert.ThrowsAsync<DepotConflictException>(() => Service(db).BidAsync(owner, depot, lotId, new(Guid.NewGuid(), 10000000)));
     }
     [Fact]
+    public async Task Outbid_and_award_notices_are_transactional_and_retries_do_not_duplicate_them()
+    {
+        await using var db = Open(); await Register(db, owner, depot); await Register(db, competitor, rivalDepot);
+        clock.Now = clock.Now.AddHours(2.5);
+        await Service(db).BidAsync(owner, depot, lotId, new(Guid.NewGuid(), 10000000));
+        var input = new LiquidationBidInput(Guid.NewGuid(), 10100000);
+        await Service(db).BidAsync(competitor, rivalDepot, lotId, input); await Service(db).BidAsync(competitor, rivalDepot, lotId, input);
+        await Assert.ThrowsAsync<ArgumentException>(() => Service(db).BidAsync(owner, depot, lotId, new(Guid.NewGuid(), 10100000)));
+        var outbid = Assert.Single(await db.Notifications.Where(x => x.UserId == owner).ToListAsync());
+        Assert.Equal(depot, outbid.DepotId); Assert.Equal("LIQUIDATION", outbid.Category); Assert.Equal(lotId, outbid.TargetId);
+        clock.Now = clock.Now.AddHours(1); await Service(db).FinalizeAsync(lotId); await Service(db).FinalizeAsync(lotId);
+        Assert.Single(await db.Notifications.Where(x => x.UserId == competitor).ToListAsync());
+        Assert.Equal(2, await db.Notifications.CountAsync(x => x.UserId == owner || x.UserId == competitor));
+    }
+    [Fact]
     public async Task Agreement_receipt_requires_both_sides_and_keeps_lump_sum_with_no_duplicate_stock()
     {
         await using var db = Open(); await Register(db, owner, depot); clock.Now = clock.Now.AddHours(2.5);

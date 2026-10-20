@@ -55,12 +55,46 @@ public sealed class DepotOperationsTests : IAsyncLifetime
         await db.SaveChangesAsync();
         var rows = await Service(db).NoticesAsync(owner, depot, new());
         Assert.Equal(visible.Id, Assert.Single(rows.Items).Id); Assert.Equal(batch, rows.Items[0].BatchId);
+        Assert.Equal("TRANSPORT", rows.Items[0].Category);
         Assert.Equal(1, await Service(db).UnreadAsync(owner, depot));
         await Assert.ThrowsAsync<KeyNotFoundException>(() => Service(db).ReadAsync(owner, secondDepot, visible.Id));
         await Assert.ThrowsAsync<DepotForbiddenException>(() => Service(db).NoticesAsync(otherOwner, depot, new()));
         await Service(db).ReadAsync(owner, depot, visible.Id); await Service(db).ReadAsync(owner, depot, visible.Id);
         Assert.Equal(0, await Service(db).UnreadAsync(owner, depot));
         Assert.Empty((await Service(db).NoticesAsync(owner, depot, new() { Status = "UNREAD" })).Items);
+    }
+    [Fact]
+    public async Task Notification_filters_paging_and_bulk_read_remain_scoped_and_preserve_workflow()
+    {
+        await using var db = Open();
+        var own = Notification.ForDepot(owner, depot, "FACTORY", "Nhà máy đã nhận lô", "Mã kiểm thử kho chính", batch);
+        var second = Notification.ForDepot(owner, secondDepot, "VERIFICATION", "Hồ sơ kho khác", "Riêng kho thứ hai");
+        var foreign = Notification.ForDepot(otherOwner, foreignDepot, "FACTORY", "Kho người khác", "Không được đọc");
+        var global = new Notification { UserId = owner, Title = "Thông báo chung của chủ kho" };
+        db.Notifications.AddRange(own, second, foreign, global); await db.SaveChangesAsync();
+        var page = await Service(db).NoticesAsync(owner, depot, new() { Category = "FACTORY", Search = "kiểm thử", PageSize = 1 });
+        Assert.Equal(1, page.TotalCount); Assert.Equal(own.Id, Assert.Single(page.Items).Id); Assert.Equal(batch, page.Items[0].BatchId);
+        Assert.Single((await Service(db).NoticesAsync(owner, depot, new() { Search = "nhà máy" })).Items);
+        Assert.Empty((await Service(db).NoticesAsync(owner, depot, new() { Search = "%" })).Items);
+        Assert.Equal(2, await Service(db).ReadAllAsync(owner, depot)); Assert.Equal(0, await Service(db).ReadAllAsync(owner, depot));
+        Assert.Equal(0, await Service(db).UnreadAsync(owner, depot)); Assert.Equal(1, await Service(db).UnreadAsync(owner, secondDepot));
+        await Service(db).ReadAsync(owner, depot, own.Id, false); Assert.Equal(1, await Service(db).UnreadAsync(owner, depot));
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => Service(db).ReadAsync(owner, depot, second.Id));
+        await Assert.ThrowsAsync<DepotForbiddenException>(() => Service(db).ReadAllAsync(otherOwner, depot));
+        await Assert.ThrowsAsync<ArgumentException>(() => Service(db).NoticesAsync(owner, depot, new() { Category = "INVALID" }));
+        await Assert.ThrowsAsync<ArgumentException>(() => Service(db).NoticesAsync(owner, depot, new() { PageSize = 101 }));
+        Assert.Empty((await Service(db).NoticesAsync(owner, depot, new() { Page = int.MaxValue })).Items);
+        db.ChangeTracker.Clear(); Assert.False((await db.Notifications.SingleAsync(x => x.Id == foreign.Id)).IsRead);
+        Assert.Equal("IN_TRANSIT", (await db.InventoryBatches.SingleAsync(x => x.Id == batch)).Status);
+    }
+    [Fact]
+    public async Task Invoice_notices_are_account_wide_and_link_only_to_internal_fee_page()
+    {
+        await using var db = Open();
+        await new Retrack.API.Services.Shared.NotificationService(db).SendInvoiceAsync(owner, "Hóa đơn phí", "Thông báo kiểm thử, không phải hóa đơn thật");
+        var notice = Assert.Single((await Service(db).NoticesAsync(owner, depot, new() { Category = "PAYMENT" })).Items);
+        Assert.Equal("FEES", notice.TargetType); Assert.Null(notice.PickupId); Assert.Null(notice.BatchId);
+        Assert.Equal(notice.Id, Assert.Single((await Service(db).NoticesAsync(owner, secondDepot, new())).Items).Id);
     }
     [Fact]
     public async Task Incident_followup_preserves_transport_stock_and_history_and_rejects_foreign_owners()

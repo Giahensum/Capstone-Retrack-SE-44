@@ -425,12 +425,16 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         var qc = new Retrack.API.Services.Factory.FactoryQCService(db, new ConfigurationBuilder().Build());
         Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Success, (await qc.WeighAsync(factoryOwnerId, first.Id,
             new() { GrossWeightKg = 70, TareWeightKg = 10, TicketNumber = "VE-TEST-001" }, default)).Outcome);
+        Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Success, (await qc.WeighAsync(factoryOwnerId, first.Id,
+            new() { GrossWeightKg = 70, TareWeightKg = 10, TicketNumber = "VE-TEST-001" }, default)).Outcome);
         Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Success, (await qc.QualityAsync(factoryOwnerId, first.Id,
             new() { Accept = true, PurityPercent = 95, MoisturePercent = 3, ContaminationPercent = 2, Grade = "A", Note = "Đạt KCS" }, default)).Outcome);
 
         var partners = new Retrack.API.Services.Factory.FactoryPartnerService(db);
         Assert.Equal("APPROVED", (await partners.UpdateStatusAsync(factoryOwnerId, depotId,
             new() { Status = Retrack.API.Models.Enums.PartnershipStatus.APPROVED }, default)).Data!.Status);
+        Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Success, (await orders.InvoiceAsync(factoryOwnerId, first.Id,
+            new() { InvoiceNumber = "HD-TEST-001", InvoiceFileUrl = "https://example.com/factory-invoice-test.pdf" }, default)).Outcome);
         Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Success, (await orders.InvoiceAsync(factoryOwnerId, first.Id,
             new() { InvoiceNumber = "HD-TEST-001", InvoiceFileUrl = "https://example.com/factory-invoice-test.pdf" }, default)).Outcome);
         var settled = await orders.SettleAsync(factoryOwnerId, first.Id,
@@ -460,11 +464,31 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         Assert.Equal("COMPLETED", unchanged.Batch.Status);
         Assert.Equal(settledAt, unchanged.Settlement!.SettledAt);
         Assert.Equal(settled.Data.NetPayableAmount, unchanged.Settlement.NetAmount);
+        var notices = await db.Notifications.Where(x => x.UserId == ownerId && x.BatchId == first.Id).ToListAsync();
+        Assert.Equal(6, notices.Count); Assert.All(notices, x => { Assert.Equal(depotId, x.DepotId); Assert.Equal("FACTORY", x.Category); });
 
         var followUp = Input(40); followUp.TargetFactoryId = factory.Id;
         Assert.Equal("TRANSPORT_READY", (await Batches(db).CreateAsync(ownerId, depotId, followUp)).Status);
     }
 
+    [Fact]
+    public async Task Failed_quality_write_rolls_back_both_state_and_owner_notice()
+    {
+        Guid id;
+        await using (var db = Open())
+        {
+            var factory = new Retrack.API.Models.Factory { Owner = new User { Id = factoryOwnerId, Role = "FACTORY", Email = $"rollback-{factoryOwnerId}@test.invalid" }, Name = "Factory rollback" };
+            var batch = new InventoryBatch { DepotId = depotId, TargetFactory = factory, MaterialType = "PET", DeclaredWeightKg = 10, Status = "WEIGHED", ActualWeightKg = 10 };
+            db.InventoryBatches.Add(batch); db.BatchQualityChecks.Add(new() { Batch = batch, Factory = factory, ActualWeightKg = 10, Grade = "PENDING" });
+            await db.SaveChangesAsync(); id = batch.Id;
+        }
+        await using (var failed = Open())
+            await Assert.ThrowsAsync<DbUpdateException>(() => new Retrack.API.Services.Factory.FactoryQCService(failed, new ConfigurationBuilder().Build())
+                .QualityAsync(factoryOwnerId, id, new() { Accept = true, Grade = null!, PurityPercent = 99 }, default));
+        await using var check = Open();
+        Assert.Equal("WEIGHED", (await check.InventoryBatches.SingleAsync(x => x.Id == id)).Status);
+        Assert.False(await check.Notifications.AnyAsync(x => x.UserId == ownerId && x.BatchId == id));
+    }
     [Fact]
     public async Task Legacy_material_and_canonical_stock_share_one_balance()
     {
