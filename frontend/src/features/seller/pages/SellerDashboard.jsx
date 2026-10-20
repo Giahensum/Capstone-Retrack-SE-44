@@ -8,6 +8,7 @@ const RequestList = lazy(() => import('./RequestList'));
 const RequestDetail = lazy(() => import('./RequestDetail'));
 const SellerIncome = lazy(() => import('./SellerIncome'));
 const SellerProfile = lazy(() => import('./SellerProfile'));
+const SellerNotifications = lazy(() => import('./SellerNotifications'));
 
 const PageLoader = () => (
   <div className="flex items-center justify-center h-64">
@@ -24,6 +25,7 @@ export default function SellerDashboard() {
           <Route path="create" element={<CreateRequest />} />
           <Route path="requests" element={<RequestList />} />
           <Route path="requests/:id" element={<RequestDetail />} />
+          <Route path="notifications" element={<SellerNotifications />} />
           <Route path="income" element={<SellerIncome />} />
           <Route path="profile" element={<SellerProfile />} />
           <Route path="*" element={<SellerHome />} />

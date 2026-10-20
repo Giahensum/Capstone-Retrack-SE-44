@@ -3,8 +3,15 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { sellerApi } from '../api';
-import { formatCurrency, formatDate, PICKUP_STATUS_LABEL, PICKUP_STATUS_STEPS, PICKUP_STATUS_STYLE, MATERIAL_TYPE_LABEL } from '@/lib/utils';
-import { ArrowLeft, MapPin, Calendar, Clock, CheckCircle, XCircle, Star, Package, Ban, Banknote, Image as ImageIcon } from 'lucide-react';
+import {
+  formatCurrency,
+  formatDate,
+  PICKUP_STATUS_LABEL,
+  PICKUP_STATUS_STEPS,
+  PICKUP_STATUS_STYLE,
+  MATERIAL_TYPE_LABEL,
+} from '@/lib/utils';
+import { MaterialIcon } from '@/features/depot/components/DepotIcon';
 
 export default function RequestDetail() {
   const { id } = useParams();
@@ -27,254 +34,440 @@ export default function RequestDetail() {
 
   const confirmMutation = useMutation({
     mutationFn: () => sellerApi.confirmWeigh(id),
-    onSuccess: () => { invalidate(); toast.success('Đã xác nhận giá!'); },
+    onSuccess: () => {
+      invalidate();
+      toast.success('Đã xác nhận kết quả cân!');
+    },
   });
 
   const rejectMutation = useMutation({
     mutationFn: () => sellerApi.rejectWeigh(id),
-    onSuccess: () => { invalidate(); toast.success('Đã từ chối. Nhân viên sẽ cân lại.'); },
+    onSuccess: () => {
+      invalidate();
+      toast.success('Đã từ chối kết quả. Nhân viên sẽ tiến hành cân lại.');
+    },
   });
 
   const cancelMutation = useMutation({
     mutationFn: () => sellerApi.cancelRequest(id),
-    onSuccess: () => { invalidate(); toast.success('Đã hủy đơn.'); navigate('/seller/requests'); },
+    onSuccess: () => {
+      invalidate();
+      toast.success('Đã hủy đơn.');
+      navigate('/seller/requests');
+    },
     onError: (err) => toast.error(err?.response?.data?.message || 'Không thể hủy đơn.'),
   });
 
   const confirmPaymentMutation = useMutation({
     mutationFn: () => sellerApi.confirmPayment(id),
-    onSuccess: () => { invalidate(); toast.success('Xác nhận nhận tiền thành công! 🎉'); },
-    onError: (err) => toast.error(err?.response?.data?.message || 'Có lỗi.'),
+    onSuccess: () => {
+      invalidate();
+      toast.success('Xác nhận nhận tiền thành công! 🎉');
+    },
+    onError: (err) => toast.error(err?.response?.data?.message || 'Có lỗi xảy ra.'),
   });
 
   const reviewMutation = useMutation({
     mutationFn: () => sellerApi.reviewDepot(id, review),
-    onSuccess: () => { invalidate(); toast.success('Đánh giá thành công!'); setReviewOpen(false); },
+    onSuccess: () => {
+      invalidate();
+      toast.success('Đánh giá kho vựa thành công!');
+      setReviewOpen(false);
+    },
   });
 
-  if (isLoading) return (
-    <div className="flex justify-center items-center h-64">
-      <div className="w-8 h-8 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin" />
-    </div>
-  );
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <div className="w-8 h-8 border-3 border-d-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
-  if (!req) return <div className="p-8 text-center text-gray-500">Không tìm thấy đơn</div>;
+  if (!req) {
+    return (
+      <div className="p-12 text-center text-d-on-surface-variant">
+        Không tìm thấy thông tin đơn thu gom
+      </div>
+    );
+  }
 
   const currentStep = PICKUP_STATUS_STEPS.indexOf(req.status);
-  const requestImages = req.requestImageUrl ? req.requestImageUrl.split(',').filter(Boolean) : [];
+  const requestImages = req.requestImageUrl
+    ? req.requestImageUrl.split(',').filter(Boolean)
+    : [];
 
   return (
-    <div className="p-4 lg:p-8 max-w-2xl mx-auto space-y-5">
-      {/* Header */}
-      <button onClick={() => navigate('/seller/requests')} className="flex items-center gap-2 text-gray-600 hover:text-gray-800 text-sm font-medium transition-colors">
-        <ArrowLeft size={16} /> Đơn của tôi
-      </button>
-
+    <div className="flex flex-col p-4 md:p-6 gap-6 w-full max-w-4xl mx-auto">
+      {/* Header & Back */}
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-black text-gray-900">Chi tiết đơn</h1>
-        <span className={`text-[10px] font-bold px-3 py-1.5 rounded-full border ${PICKUP_STATUS_STYLE[req.status] ?? 'bg-slate-500/15 text-gray-600 border-slate-500/30'}`}>
+        <button
+          type="button"
+          onClick={() => navigate('/seller/requests')}
+          className="inline-flex items-center gap-1.5 text-sm font-semibold text-d-on-surface-variant hover:text-d-primary transition-colors"
+        >
+          <MaterialIcon name="arrow_forward" className="rotate-180 text-base" />
+          <span>Về danh sách đơn</span>
+        </button>
+
+        <span
+          className={`text-xs font-bold px-3 py-1.5 rounded-full border ${
+            PICKUP_STATUS_STYLE[req.status] ??
+            'bg-d-surface-container text-d-on-surface-variant border-d-border-subtle'
+          }`}
+        >
           {PICKUP_STATUS_LABEL[req.status] ?? req.status}
         </span>
       </div>
 
-      {/* Progress bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <h1 className="font-d-headline-lg text-d-headline-lg text-d-on-surface">
+          Chi tiết đơn thu gom #{req.id?.slice(0, 8)}
+        </h1>
+        {req.depotName && (
+          <span className="text-xs text-d-on-surface-variant bg-d-surface-container px-3 py-1 rounded-full font-medium self-start sm:self-auto">
+            🏢 {req.depotName}
+          </span>
+        )}
+      </div>
+
+      {/* Progress Bar / Stepper */}
       {req.status !== 'CANCELLED' && (
-        <div className="bg-gray-100/50 border border-gray-300/50 rounded-2xl p-5 overflow-x-auto">
-          <div className="min-w-[760px]">
-          <div className="flex items-center justify-between mb-3">
-            {PICKUP_STATUS_STEPS.map((s, i) => (
-              <div key={s} className="flex items-center flex-1 last:flex-initial">
-                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 transition-all ${
-                  i <= currentStep ? 'bg-green-200 text-gray-900' : 'bg-slate-700 text-gray-500'
-                }`}>
-                  {i <= currentStep ? <CheckCircle size={14} /> : i + 1}
+        <div className="bg-d-surface-container-lowest border border-d-border-subtle rounded-2xl p-5 shadow-sm overflow-x-auto">
+          <div className="min-w-[720px]">
+            <div className="flex items-center justify-between mb-3">
+              {PICKUP_STATUS_STEPS.map((s, i) => (
+                <div key={s} className="flex items-center flex-1 last:flex-initial">
+                  <div
+                    className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 transition-all ${
+                      i <= currentStep
+                        ? 'bg-d-primary text-d-on-primary'
+                        : 'bg-d-surface-container text-d-on-surface-variant'
+                    }`}
+                  >
+                    {i <= currentStep ? (
+                      <MaterialIcon name="check_circle" className="text-sm" />
+                    ) : (
+                      i + 1
+                    )}
+                  </div>
+                  {i < PICKUP_STATUS_STEPS.length - 1 && (
+                    <div
+                      className={`flex-1 h-0.5 mx-2 rounded-full ${
+                        i < currentStep ? 'bg-d-primary' : 'bg-d-surface-container'
+                      }`}
+                    />
+                  )}
                 </div>
-                {i < PICKUP_STATUS_STEPS.length - 1 && (
-                  <div className={`flex-1 h-0.5 mx-1 rounded-full ${i < currentStep ? 'bg-green-200' : 'bg-slate-700'}`} />
-                )}
-              </div>
-            ))}
-          </div>
-          <div className="flex justify-between">
-            {PICKUP_STATUS_STEPS.map(s => (
-              <span key={s} className="text-[9px] text-gray-500 font-medium text-center leading-tight px-1" style={{ width: `${100 / PICKUP_STATUS_STEPS.length}%` }}>
-                {PICKUP_STATUS_LABEL[s] ?? s}
-              </span>
-            ))}
-          </div>
+              ))}
+            </div>
+            <div className="flex justify-between">
+              {PICKUP_STATUS_STEPS.map((s) => (
+                <span
+                  key={s}
+                  className="text-[10px] text-d-on-surface-variant font-medium text-center leading-tight px-1"
+                  style={{ width: `${100 / PICKUP_STATUS_STEPS.length}%` }}
+                >
+                  {PICKUP_STATUS_LABEL[s] ?? s}
+                </span>
+              ))}
+            </div>
           </div>
         </div>
       )}
 
-      {/* Images */}
+      {/* Thông tin đơn hàng */}
+      <div className="bg-d-surface-container-lowest border border-d-border-subtle rounded-2xl shadow-sm divide-y divide-d-border-subtle">
+        <InfoRow
+          icon={<MaterialIcon name="inventory_2" className="text-d-primary text-base" />}
+          label="Mô tả phế liệu"
+          value={req.description || '(Không có mô tả chi tiết)'}
+        />
+        <InfoRow
+          icon={<MaterialIcon name="local_shipping" className="text-d-primary text-base" />}
+          label="Địa chỉ thu gom"
+          value={req.address}
+        />
+        <InfoRow
+          icon={<MaterialIcon name="calendar_today" className="text-d-primary text-base" />}
+          label="Thời gian thu gom"
+          value={req.preferredDatetime ? formatDate(req.preferredDatetime) : 'Linh hoạt'}
+        />
+        {req.depotName && (
+          <InfoRow
+            icon={<MaterialIcon name="domain" className="text-d-primary text-base" />}
+            label="Kho vựa tiếp nhận"
+            value={req.depotName}
+          />
+        )}
+        <InfoRow
+          icon={<MaterialIcon name="schedule" className="text-d-primary text-base" />}
+          label="Ngày tạo đơn"
+          value={formatDate(req.createdAt)}
+        />
+      </div>
+
+      {/* Ảnh phế liệu đính kèm */}
       {requestImages.length > 0 && (
-        <div className="bg-gray-100/50 border border-gray-300/50 rounded-2xl overflow-hidden">
-          <button onClick={() => setShowImages(!showImages)} className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-gray-100/50 transition-colors">
+        <div className="bg-d-surface-container-lowest border border-d-border-subtle rounded-2xl shadow-sm overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setShowImages(!showImages)}
+            className="w-full flex items-center justify-between px-6 py-4 hover:bg-d-surface-container-low transition-colors"
+          >
             <div className="flex items-center gap-2">
-              <ImageIcon size={14} className="text-purple-400" />
-              <span className="text-sm font-semibold text-gray-800">Hình ảnh phế liệu ({requestImages.length})</span>
+              <MaterialIcon name="inventory_2" className="text-d-primary text-lg" />
+              <span className="text-sm font-bold text-d-on-surface">
+                Hình ảnh phế liệu ({requestImages.length} ảnh)
+              </span>
             </div>
-            <span className="text-xs text-green-700">{showImages ? 'Ẩn' : 'Xem'}</span>
+            <span className="text-xs text-d-primary font-bold">
+              {showImages ? 'Ẩn ảnh' : 'Xem ảnh'}
+            </span>
           </button>
           {showImages && (
-            <div className="grid grid-cols-3 gap-2 p-4 pt-0">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-5 pt-0">
               {requestImages.map((url, i) => (
-                <img key={i} src={url.trim()} alt={`Ảnh ${i + 1}`} className="w-full aspect-square object-cover rounded-xl border border-gray-300" />
+                <img
+                  key={i}
+                  src={url.trim()}
+                  alt={`Ảnh ${i + 1}`}
+                  className="w-full aspect-square object-cover rounded-xl border border-d-border-subtle shadow-xs"
+                />
               ))}
             </div>
           )}
         </div>
       )}
 
-      {/* Info */}
-      <div className="bg-gray-100/50 border border-gray-300/50 rounded-2xl divide-y divide-slate-700/50">
-        <InfoRow icon={<Package size={14} className="text-blue-400" />} label="Mô tả" value={req.description || '(không có)'} />
-        <InfoRow icon={<MapPin size={14} className="text-green-700" />} label="Địa chỉ" value={req.address} />
-        <InfoRow icon={<Calendar size={14} className="text-purple-400" />} label="Ngày giờ" value={req.preferredDatetime ? formatDate(req.preferredDatetime) : 'Linh hoạt'} />
-        {req.depotName && <InfoRow icon={<Clock size={14} className="text-orange-400" />} label="Kho vựa" value={req.depotName} />}
-        <InfoRow icon={<Clock size={14} className="text-gray-600" />} label="Ngày tạo" value={formatDate(req.createdAt)} />
-      </div>
-
-      {/* Weigh Items */}
+      {/* Kết quả cân phế liệu */}
       {req.items && req.items.length > 0 && (
-        <div className="bg-gray-100/50 border border-gray-300/50 rounded-2xl overflow-hidden">
-          <div className="px-5 py-4 border-b border-gray-300/50">
-            <h3 className="text-sm font-bold text-gray-800">⚖️ Kết quả phân loại & cân</h3>
+        <div className="bg-d-surface-container-lowest border border-d-border-subtle rounded-2xl shadow-sm overflow-hidden">
+          <div className="px-6 py-4 border-b border-d-border-subtle bg-d-surface-container-low">
+            <h3 className="text-sm font-bold text-d-on-surface flex items-center gap-2">
+              <MaterialIcon name="scale" className="text-d-primary text-lg" />
+              <span>Kết quả phân loại và khối lượng cân</span>
+            </h3>
           </div>
-          <div className="divide-y divide-slate-700/30">
+          <div className="divide-y divide-d-border-subtle">
             {req.items.map((item, idx) => (
-              <div key={idx} className="flex items-center justify-between px-5 py-3">
+              <div key={idx} className="flex items-center justify-between px-6 py-3.5 text-sm">
                 <div>
-                  <p className="text-sm font-medium text-gray-800">{MATERIAL_TYPE_LABEL[item.materialType] ?? item.materialType}</p>
-                  <p className="text-xs text-gray-500">{item.weightKg} kg × {formatCurrency(item.pricePerKg)}/kg</p>
+                  <p className="font-semibold text-d-on-surface">
+                    {MATERIAL_TYPE_LABEL[item.materialType] ?? item.materialType}
+                  </p>
+                  <p className="text-xs text-d-on-surface-variant mt-0.5">
+                    {item.weightKg} kg × {formatCurrency(item.pricePerKg)}/kg
+                  </p>
                 </div>
-                <span className="text-sm font-bold text-green-700">{formatCurrency(item.subTotal)}</span>
+                <span className="font-bold text-d-primary">
+                  {formatCurrency(item.subTotal)}
+                </span>
               </div>
             ))}
           </div>
-          <div className="px-5 py-4 bg-green-200/5 border-t border-emerald-500/20">
-            <div className="flex justify-between items-center">
-              <span className="text-sm font-bold text-gray-700">Tổng cộng</span>
-              <span className="text-lg font-black text-green-700">{formatCurrency(req.grossAmount)}</span>
-            </div>
+          <div className="px-6 py-4 bg-d-surface-container-low border-t border-d-border-subtle flex justify-between items-center">
+            <span className="text-sm font-bold text-d-on-surface">Tổng tiền thanh toán</span>
+            <span className="text-xl font-bold text-d-primary">
+              {formatCurrency(req.grossAmount)}
+            </span>
           </div>
         </div>
       )}
 
-      {/* ═══ ACTION: Confirm / Reject weigh (UC-1.8) ═══ */}
+      {/* ═══ ACTION: Xác nhận kết quả cân (WEIGHED) ═══ */}
       {req.status === 'WEIGHED' && (
-        <div className="bg-gradient-to-br from-purple-500/10 to-purple-600/5 border border-purple-500/30 rounded-2xl p-5 space-y-4">
+        <div className="bg-d-surface-container-lowest border-2 border-d-primary/40 rounded-2xl p-6 shadow-sm space-y-4">
           <div>
-            <h3 className="text-base font-bold text-gray-900">⚖️ Xác nhận kết quả cân</h3>
-            <p className="text-xs text-gray-600 mt-1">Nhân viên đã cân xong. Bạn có đồng ý với giá trên không?</p>
+            <h3 className="text-base font-bold text-d-on-surface flex items-center gap-2">
+              <MaterialIcon name="scale" className="text-d-primary text-xl" />
+              <span>Xác nhận kết quả cân phế liệu</span>
+            </h3>
+            <p className="text-xs text-d-on-surface-variant mt-1">
+              Nhân viên thu gom đã cân xong tại chỗ. Vui lòng đối chiếu số liệu ở trên và chọn xác nhận.
+            </p>
           </div>
           <div className="flex gap-3">
             <button
+              type="button"
               onClick={() => confirmMutation.mutate()}
               disabled={confirmMutation.isPending}
-              className="flex-1 bg-green-200 hover:bg-green-300 text-gray-900 font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-60"
+              className="flex-1 rounded-full bg-d-primary hover:bg-[#385500] text-d-on-primary font-semibold py-3 flex items-center justify-center gap-2 transition-all active:scale-95 text-sm shadow-sm disabled:opacity-50"
             >
-              <CheckCircle size={16} /> Đồng ý
+              <MaterialIcon name="check_circle" className="text-base" />
+              <span>Đồng ý kết quả</span>
             </button>
             <button
+              type="button"
               onClick={() => rejectMutation.mutate()}
               disabled={rejectMutation.isPending}
-              className="flex-1 bg-slate-700 hover:bg-slate-600 text-gray-900 font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-60"
+              className="flex-1 rounded-full border border-d-error text-d-error hover:bg-d-error-container/20 font-semibold py-3 flex items-center justify-center gap-2 transition-all active:scale-95 text-sm disabled:opacity-50"
             >
-              <XCircle size={16} /> Từ chối
+              <MaterialIcon name="cancel" className="text-base" />
+              <span>Yêu cầu cân lại</span>
             </button>
           </div>
         </div>
       )}
 
-      {req.status === 'SELLER_CONFIRMED' && <div role="status" className="rounded-2xl border border-cyan-500/30 bg-cyan-500/10 p-5">
-        <h3 className="font-bold text-gray-900">Đã xác nhận cân · chờ nhân viên bàn giao</h3>
-        <p className="mt-2 text-sm text-gray-600">Nhân viên cần gửi đơn cho chủ kho. Sau khi bàn giao, trạng thái chuyển thành “Chờ chủ kho chuyển tiền”.</p>
-      </div>}
-      {req.status === 'AWAITING_PAYMENT' && <div role="status" className="rounded-2xl border border-orange-500/30 bg-orange-500/10 p-5">
-        <h3 className="font-bold text-gray-900">Chờ chủ kho chuyển tiền</h3>
-        <p className="mt-2 text-sm text-gray-600">Nhân viên đã bàn giao. Chủ kho đang đối soát và chuyển tiền; bạn sẽ xác nhận đã nhận tiền sau khi chủ kho gửi chứng từ.</p>
-      </div>}
+      {/* Thông báo trạng thái bàn giao & thanh toán */}
+      {req.status === 'SELLER_CONFIRMED' && (
+        <div className="rounded-2xl border border-d-primary/20 bg-d-surface-container p-5 text-sm text-d-on-surface">
+          <p className="font-bold flex items-center gap-2">
+            <MaterialIcon name="check_circle" className="text-d-primary text-base" />
+            <span>Đã xác nhận cân · Đang chờ bàn giao kho</span>
+          </p>
+          <p className="text-xs text-d-on-surface-variant mt-1">
+            Nhân viên thu gom đang vận chuyển phế liệu về kho vựa để tiến hành nhập kho và duyệt thanh toán.
+          </p>
+        </div>
+      )}
 
-      {/* ═══ ACTION: Confirm Payment Received (UC-1.9) ═══ */}
+      {req.status === 'AWAITING_PAYMENT' && (
+        <div className="rounded-2xl border border-d-primary/20 bg-d-surface-container p-5 text-sm text-d-on-surface">
+          <p className="font-bold flex items-center gap-2">
+            <MaterialIcon name="payments" className="text-d-primary text-base" />
+            <span>Chờ chủ kho vựa chuyển tiền</span>
+          </p>
+          <p className="text-xs text-d-on-surface-variant mt-1">
+            Hàng đã về kho. Chủ kho đang đối soát và thực hiện lệnh chuyển khoản tới tài khoản ngân hàng của bạn.
+          </p>
+        </div>
+      )}
+
+      {/* ═══ ACTION: Xác nhận nhận tiền (PAYMENT_SENT) ═══ */}
       {req.status === 'PAYMENT_SENT' && (
-        <div className="bg-gradient-to-br from-teal-500/10 to-teal-600/5 border border-teal-500/30 rounded-2xl p-5 space-y-4">
+        <div className="bg-d-surface-container-lowest border-2 border-d-secondary/40 rounded-2xl p-6 shadow-sm space-y-4">
           <div>
-            <h3 className="text-base font-bold text-gray-900">💰 Chủ kho đã chuyển tiền</h3>
-            <p className="text-xs text-gray-600 mt-1">
-              Vui lòng kiểm tra tài khoản ngân hàng. Nếu đã nhận được <span className="text-green-700 font-bold">{formatCurrency(req.netAmount)}</span>, hãy bấm xác nhận.
+            <h3 className="text-base font-bold text-d-on-surface flex items-center gap-2">
+              <MaterialIcon name="payments" className="text-d-secondary text-xl" />
+              <span>Chủ kho đã chuyển tiền thanh toán</span>
+            </h3>
+            <p className="text-xs text-d-on-surface-variant mt-1">
+              Vui lòng kiểm tra tài khoản ngân hàng của bạn. Nếu đã nhận đủ số tiền{' '}
+              <strong className="text-d-primary">{formatCurrency(req.netAmount ?? req.grossAmount)}</strong>, hãy bấm xác nhận.
             </p>
           </div>
-          {/^https?:\/\/\S+$/i.test(req.paymentProofUrl ?? '') && <a href={req.paymentProofUrl} target="_blank" rel="noreferrer"
-            className="inline-flex items-center gap-2 rounded-xl border border-teal-500/30 px-4 py-2.5 text-sm font-semibold text-teal-700 hover:bg-teal-500/10">
-            <ImageIcon size={16} /> Xem chứng từ chuyển khoản
-          </a>}
+
+          {/^https?:\/\/\S+$/i.test(req.paymentProofUrl ?? '') && (
+            <a
+              href={req.paymentProofUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-2 rounded-xl border border-d-border-subtle bg-d-surface-container px-4 py-2.5 text-xs font-semibold text-d-primary hover:bg-d-surface-container-high transition-colors"
+            >
+              <MaterialIcon name="visibility" className="text-base" />
+              <span>Xem chứng từ ủy nhiệm chi</span>
+            </a>
+          )}
+
           <button
+            type="button"
             onClick={() => confirmPaymentMutation.mutate()}
             disabled={confirmPaymentMutation.isPending}
-            className="w-full bg-green-200 hover:bg-green-300 text-gray-900 font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-60 shadow-lg shadow-emerald-500/20"
+            className="w-full rounded-full bg-d-secondary hover:bg-[#005a3c] text-d-on-secondary font-bold py-3.5 flex items-center justify-center gap-2 transition-all active:scale-95 shadow-sm text-sm disabled:opacity-50"
           >
-            <Banknote size={18} /> Xác nhận đã nhận tiền
+            <MaterialIcon name="check_circle" className="text-base" />
+            <span>Xác nhận đã nhận tiền thành công</span>
           </button>
         </div>
       )}
 
-      {/* ═══ ACTION: Cancel (UC-1.5) ═══ */}
+      {/* ═══ ACTION: Hủy đơn thu gom (PENDING) ═══ */}
       {req.status === 'PENDING' && (
         <button
-          onClick={() => { if (confirm('Bạn có chắc muốn hủy đơn này?')) cancelMutation.mutate(); }}
+          type="button"
+          onClick={() => {
+            if (confirm('Bạn có chắc chắn muốn hủy đơn thu gom này không?')) {
+              cancelMutation.mutate();
+            }
+          }}
           disabled={cancelMutation.isPending}
-          className="w-full bg-red-500/10 border border-red-500/30 text-red-400 font-bold py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-red-500/20 transition-all disabled:opacity-60"
+          className="w-full rounded-full border border-d-error text-d-error hover:bg-d-error-container/20 font-semibold py-3 flex items-center justify-center gap-2 transition-colors text-sm disabled:opacity-50"
         >
-          <Ban size={16} /> Hủy đơn thu gom
+          <MaterialIcon name="cancel" className="text-base" />
+          <span>Hủy yêu cầu thu gom</span>
         </button>
       )}
 
-      {/* ═══ ACTION: Review depot (UC-1.11) ═══ */}
+      {/* ═══ ACTION: Đánh giá dịch vụ (DONE) ═══ */}
       {req.status === 'DONE' && (
         <div className="space-y-3">
           {req.reviewRating ? (
-            /* Đã đánh giá rồi — hiển thị lại */
-            <div className="bg-gray-100/50 border border-gray-300/50 rounded-2xl p-5 space-y-3">
-              <h3 className="text-sm font-bold text-gray-900">⭐ Đánh giá của bạn</h3>
+            <div className="bg-d-surface-container-lowest border border-d-border-subtle rounded-2xl p-6 shadow-sm space-y-3">
+              <h3 className="text-sm font-bold text-d-on-surface">
+                ⭐ Đánh giá của bạn về kho vựa
+              </h3>
               <div className="flex gap-1 justify-center">
-                {[1, 2, 3, 4, 5].map(n => (
-                  <Star key={n} size={28} className={n <= req.reviewRating ? 'text-yellow-400 fill-yellow-400' : 'text-slate-300'} />
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <span
+                    key={n}
+                    className={`text-2xl ${
+                      n <= req.reviewRating ? 'text-[#eab308]' : 'text-d-outline-variant'
+                    }`}
+                  >
+                    ★
+                  </span>
                 ))}
               </div>
               {req.reviewComment && (
-                <p className="text-sm text-gray-700 bg-white/60 rounded-xl px-4 py-3 border border-gray-200 italic">“{req.reviewComment}”</p>
+                <p className="text-sm text-d-on-surface-variant bg-d-surface-container rounded-xl px-4 py-3 italic text-center">
+                  “{req.reviewComment}”
+                </p>
               )}
-              <p className="text-[10px] text-gray-400 text-center">
-                Đã đánh giá vào {req.reviewCreatedAt ? new Date(req.reviewCreatedAt).toLocaleDateString('vi-VN') : ''}
+              <p className="text-[11px] text-d-on-surface-variant text-center">
+                Đã đánh giá vào {req.reviewCreatedAt ? formatDate(req.reviewCreatedAt) : ''}
               </p>
             </div>
           ) : !reviewOpen ? (
-            <button onClick={() => setReviewOpen(true)} className="w-full bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 font-bold py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-yellow-500/20 transition-all">
-              <Star size={16} /> Đánh giá kho vựa
+            <button
+              type="button"
+              onClick={() => setReviewOpen(true)}
+              className="w-full rounded-full bg-d-surface-container-lowest border border-d-border-subtle hover:border-d-primary text-d-on-surface font-semibold py-3 flex items-center justify-center gap-2 transition-all text-sm shadow-sm"
+            >
+              <MaterialIcon name="star" className="text-[#eab308] text-base" />
+              <span>Đánh giá dịch vụ kho vựa</span>
             </button>
           ) : (
-            <div className="bg-gray-100/50 border border-gray-300/50 rounded-2xl p-5 space-y-4">
-              <h3 className="text-sm font-bold text-gray-900">⭐ Đánh giá dịch vụ</h3>
+            <div className="bg-d-surface-container-lowest border border-d-border-subtle rounded-2xl p-6 shadow-sm space-y-4">
+              <h3 className="text-sm font-bold text-d-on-surface">
+                ⭐ Đánh giá trải nghiệm thu gom
+              </h3>
               <div className="flex gap-2 justify-center">
-                {[1, 2, 3, 4, 5].map(n => (
-                  <button key={n} onClick={() => setReview({ ...review, rating: n })} className="transition-transform hover:scale-110">
-                    <Star size={32} className={n <= review.rating ? 'text-yellow-400 fill-yellow-400' : 'text-slate-600'} />
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setReview({ ...review, rating: n })}
+                    className="text-3xl transition-transform hover:scale-125"
+                  >
+                    <span className={n <= review.rating ? 'text-[#eab308]' : 'text-d-outline-variant'}>
+                      ★
+                    </span>
                   </button>
                 ))}
               </div>
               <textarea
                 value={review.comment}
-                onChange={e => setReview({ ...review, comment: e.target.value })}
-                placeholder="Nhận xét của bạn (tuỳ chọn)..."
+                onChange={(e) => setReview({ ...review, comment: e.target.value })}
+                placeholder="Nhận xét của bạn về thái độ phục vụ, tính chính xác khi cân (tuỳ chọn)..."
                 rows={3}
-                className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-sm text-gray-800 placeholder-slate-600 focus:border-emerald-500 outline-none resize-none"
+                className="w-full rounded-xl border border-d-border-subtle bg-d-surface-container-lowest p-3 text-sm text-d-on-surface focus:border-d-primary focus:ring-1 focus:ring-d-primary outline-none transition-all resize-none"
               />
               <div className="flex gap-3">
-                <button onClick={() => reviewMutation.mutate()} disabled={reviewMutation.isPending} className="flex-1 bg-green-200 hover:bg-green-300 text-gray-900 font-bold py-3 rounded-xl transition-all active:scale-95 disabled:opacity-60">
+                <button
+                  type="button"
+                  onClick={() => reviewMutation.mutate()}
+                  disabled={reviewMutation.isPending}
+                  className="flex-1 rounded-full bg-d-primary hover:bg-[#385500] text-d-on-primary font-bold py-3 transition-all active:scale-95 disabled:opacity-50 text-sm"
+                >
                   Gửi đánh giá
                 </button>
-                <button onClick={() => setReviewOpen(false)} className="px-5 py-3 bg-slate-700 text-gray-900 font-bold rounded-xl hover:bg-slate-600 transition-all">
+                <button
+                  type="button"
+                  onClick={() => setReviewOpen(false)}
+                  className="px-6 py-3 rounded-full bg-d-surface-container hover:bg-d-surface-container-high text-d-on-surface font-semibold transition-all text-sm"
+                >
                   Hủy
                 </button>
               </div>
@@ -288,13 +481,14 @@ export default function RequestDetail() {
 
 function InfoRow({ icon, label, value }) {
   return (
-    <div className="flex items-center justify-between px-5 py-3.5">
-      <div className="flex items-center gap-2">
+    <div className="flex items-center justify-between px-6 py-4">
+      <div className="flex items-center gap-2.5">
         {icon}
-        <span className="text-xs text-gray-500 font-medium">{label}</span>
+        <span className="text-xs text-d-on-surface-variant font-medium">{label}</span>
       </div>
-      <span className="text-sm text-gray-800 font-medium text-right max-w-[60%] truncate">{value}</span>
+      <span className="text-sm text-d-on-surface font-medium text-right max-w-[60%] truncate">
+        {value}
+      </span>
     </div>
   );
 }
-
