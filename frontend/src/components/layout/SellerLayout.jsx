@@ -2,14 +2,18 @@ import { useState, useEffect } from 'react';
 import { useLocation, Link, useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import DepotBrandLogo from '@/features/depot/components/DepotBrandLogo';
 import { MaterialIcon } from '@/features/depot/components/DepotIcon';
+import SellerNotificationBell from '@/features/seller/components/SellerNotificationBell';
+import { sellerApi } from '@/features/seller/api';
 
 const NAV_ITEMS = [
   { iconName: 'dashboard', label: 'Tổng quan', to: '/seller' },
   { iconName: 'add_box', label: 'Tạo đơn thu gom', to: '/seller/create' },
   { iconName: 'receipt_long', label: 'Đơn của tôi', to: '/seller/requests' },
+  { iconName: 'notifications', label: 'Thông báo', to: '/seller/notifications', badge: true },
   { iconName: 'bar_chart', label: 'Thống kê thu nhập', to: '/seller/income' },
   { iconName: 'inventory_2', label: 'Hồ sơ cá nhân', to: '/seller/profile' },
 ];
@@ -19,6 +23,12 @@ export default function SellerLayout({ children }) {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
+
+  const { data: unreadCount = 0 } = useQuery({
+    queryKey: ['seller-notifications-unread'],
+    queryFn: () => sellerApi.getUnreadCount(),
+    refetchInterval: 30000,
+  });
 
   useEffect(() => {
     const media = window.matchMedia('(min-width: 1024px)');
@@ -96,27 +106,24 @@ export default function SellerLayout({ children }) {
                   key={item.to}
                   to={item.to}
                   className={clsx(
-                    "flex items-center gap-3 px-4 py-3 rounded-xl transition-colors font-d-label-md text-d-label-md",
+                    "flex items-center justify-between px-4 py-3 rounded-xl transition-colors font-d-label-md text-d-label-md",
                     active
                       ? "bg-d-primary/10 text-d-primary font-semibold"
                       : "text-d-on-surface-variant hover:bg-d-surface-container"
                   )}
                 >
-                  <MaterialIcon name={item.iconName} className="text-xl shrink-0" />
-                  <span>{item.label}</span>
+                  <div className="flex items-center gap-3 min-w-0">
+                    <MaterialIcon name={item.iconName} className="text-xl shrink-0" />
+                    <span className="truncate">{item.label}</span>
+                  </div>
+                  {item.badge && unreadCount > 0 && (
+                    <span className="min-w-[20px] h-5 rounded-full bg-d-error px-1.5 text-[11px] font-bold text-white flex items-center justify-center shrink-0">
+                      {unreadCount > 99 ? '99+' : unreadCount}
+                    </span>
+                  )}
                 </Link>
               );
             })}
-
-            <div className="pt-2">
-              <Link
-                to="/seller/create"
-                onClick={() => setMenuOpen(false)}
-                className="w-full flex items-center gap-2 rounded-xl px-4 py-3 text-d-primary font-semibold hover:bg-d-surface-container transition-colors text-d-label-md"
-              >
-                <span>＋ Tạo đơn thu gom mới</span>
-              </Link>
-            </div>
           </nav>
         </div>
 
@@ -172,6 +179,8 @@ export default function SellerLayout({ children }) {
           </div>
 
           <div className="flex items-center gap-3">
+            <SellerNotificationBell />
+
             <Link
               to="/seller/create"
               className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-d-primary text-d-on-primary px-4 py-2 text-sm font-semibold hover:bg-[#385500] transition-colors shadow-sm"
