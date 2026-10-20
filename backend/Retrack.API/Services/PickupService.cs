@@ -85,6 +85,18 @@ namespace Retrack.API.Services
             };
 
             await _repo.CreateAsync(request);
+            _db.Notifications.Add(new Notification
+            {
+                UserId = sellerId,
+                PickupRequestId = request.Id,
+                Category = "PICKUP",
+                TargetType = "PICKUP_REQUEST",
+                TargetId = request.Id,
+                Title = "Tạo đơn thu gom thành công",
+                Message = $"Đơn thu gom #{request.Id.ToString()[..8].ToUpper()} đã được tạo và đang chờ kho tiếp nhận.",
+                CreatedAt = DateTime.UtcNow
+            });
+            await _db.SaveChangesAsync();
             return await MapToDto(request);
         }
 
@@ -137,6 +149,17 @@ namespace Retrack.API.Services
                 throw new DepotConflictException("Kho chưa được xác minh hồ sơ để nhận giao dịch mới.");
             req.AcceptedCollectorId = collectorId;
             req.Status = "SCHEDULED";
+            _db.Notifications.Add(new Notification
+            {
+                UserId = req.SellerId,
+                PickupRequestId = req.Id,
+                Category = "PICKUP",
+                TargetType = "PICKUP_REQUEST",
+                TargetId = req.Id,
+                Title = "Đơn thu gom đã được tiếp nhận",
+                Message = $"Kho đã tiếp nhận đơn #{req.Id.ToString()[..8].ToUpper()} và lên lịch thu gom.",
+                CreatedAt = DateTime.UtcNow
+            });
             await _repo.UpdateAsync(req);
             await transaction.CommitAsync();
             return await MapToDto(req);
@@ -201,6 +224,18 @@ namespace Retrack.API.Services
                     req.GrossAmount, req.PlatformFeePercentage, req.PlatformFeeAmount, req.NetAmount))
             });
 
+            _db.Notifications.Add(new Notification
+            {
+                UserId = req.SellerId,
+                PickupRequestId = requestId,
+                Category = "PICKUP",
+                TargetType = "PICKUP_REQUEST",
+                TargetId = requestId,
+                Title = "Đã có kết quả cân phế liệu",
+                Message = $"Đơn #{requestId.ToString()[..8].ToUpper()} đã được cân xong. Tổng thực nhận: {req.NetAmount:N0} đ. Vui lòng kiểm tra và xác nhận.",
+                CreatedAt = DateTime.UtcNow
+            });
+
             await _db.SaveChangesAsync();
             await transaction.CommitAsync();
             return await MapToDto(req);
@@ -219,7 +254,22 @@ namespace Retrack.API.Services
         }
 
         public async Task<PickupRequestDto> MarkPaymentSentAsync(Guid requestId, Guid ownerId, string paymentProofUrl)
-            => await MapToDto(await _payments.MarkSentAsync(requestId, ownerId, paymentProofUrl));
+        {
+            var req = await _payments.MarkSentAsync(requestId, ownerId, paymentProofUrl);
+            _db.Notifications.Add(new Notification
+            {
+                UserId = req.SellerId,
+                PickupRequestId = req.Id,
+                Category = "PAYMENT",
+                TargetType = "PICKUP_REQUEST",
+                TargetId = req.Id,
+                Title = "Kho đã chuyển khoản thanh toán",
+                Message = $"Kho đã gửi thanh toán cho đơn #{req.Id.ToString()[..8].ToUpper()}. Vui lòng kiểm tra tài khoản và xác nhận nhận tiền.",
+                CreatedAt = DateTime.UtcNow
+            });
+            await _db.SaveChangesAsync();
+            return await MapToDto(req);
+        }
 
         public async Task<PickupRequestDto> MarkDoneAsync(Guid requestId, Guid sellerId)
         {

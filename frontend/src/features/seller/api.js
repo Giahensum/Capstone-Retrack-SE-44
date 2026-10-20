@@ -32,4 +32,12 @@ export const sellerApi = {
   // ── Profile ──
   getProfile: () => api.get('/seller/profile').then(r => r.data.data),
   updateProfile: (data) => api.put('/seller/profile', data).then(r => r.data),
+
+  // ── Notifications ──
+  getNotifications: (params) => api.get('/seller/notifications', { params }).then(r => r.data.data),
+  getUnreadCount: () => api.get('/seller/notifications/unread-count').then(r => r.data.data),
+  markRead: (id) => api.patch(`/seller/notifications/${id}/read`).then(r => r.data),
+  markUnread: (id) => api.patch(`/seller/notifications/${id}/unread`).then(r => r.data),
+  markAllRead: () => api.patch('/seller/notifications/read-all').then(r => r.data),
 };
+
