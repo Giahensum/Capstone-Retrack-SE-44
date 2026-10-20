@@ -695,6 +695,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS ix_receipt_active_bulk_agreement ON depot_stoc
     WHERE bulk_agreement_id IS NOT NULL AND status NOT IN ('VOIDED','REJECTED');
 
 
+-- RETRACK_DEPOT_NOTIFICATIONS_V1: tương thích thông báo Employee/Driver đã có.
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS depot_id UUID;
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS batch_id UUID;
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS category VARCHAR(30) NOT NULL DEFAULT 'SYSTEM';
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS target_type VARCHAR(30);
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS target_id UUID;
+CREATE INDEX IF NOT EXISTS ix_notifications_depot_unread ON notifications(user_id, depot_id, is_read, created_at DESC, id);
+
 -- RETRACK_SCHEMA_END
 
 -- RETRACK_SEED_BEGIN

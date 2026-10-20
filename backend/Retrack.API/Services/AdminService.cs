@@ -472,7 +472,7 @@ namespace Retrack.API.Services
                 };
                 await _invoiceRepo.CreateAsync(invoice);
 
-                await _notificationService.SendAsync(group.PayerId,
+                await _notificationService.SendInvoiceAsync(group.PayerId,
                     $"Hóa đơn phí nền tảng tháng {month}/{year}",
                     $"Bạn có hóa đơn phí nền tảng {group.Total:N0}đ cho tháng {month}/{year}. Vui lòng thanh toán.");
 
@@ -519,7 +519,7 @@ namespace Retrack.API.Services
             var invoice = await _invoiceRepo.GetByIdAsync(id)
                 ?? throw new KeyNotFoundException("Không tìm thấy hóa đơn.");
 
-            await _notificationService.SendAsync(invoice.PayerId,
+            await _notificationService.SendInvoiceAsync(invoice.PayerId,
                 $"Nhắc thanh toán hóa đơn phí nền tảng tháng {invoice.PeriodMonth}/{invoice.PeriodYear}",
                 $"Hóa đơn {invoice.TotalFeeAmount:N0}đ vẫn chưa được thanh toán. Vui lòng thanh toán sớm.");
         }

@@ -16,6 +16,11 @@ public class NotificationService : INotificationService
         _db.Notifications.Add(new Notification { UserId = userId, Title = title, Message = message });
         await _db.SaveChangesAsync();
     }
+    public async Task SendInvoiceAsync(Guid userId, string title, string message)
+    {
+        _db.Notifications.Add(new Notification { UserId = userId, Title = title, Message = message, Category = "PAYMENT", TargetType = "FEES" });
+        await _db.SaveChangesAsync();
+    }
 
     public async Task<IEnumerable<object>> GetByUserIdAsync(Guid userId)
         => await _db.Notifications

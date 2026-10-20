@@ -14,6 +14,7 @@ public interface IDepotVerificationRepository
     Task<bool> HasPendingAsync(Guid depotId);
     Task<int> RecentCountAsync(Guid depotId);
     void Add(DepotVerificationSubmission submission);
+    void AddNotice(Notification notice);
     Task<PagedResult<VerificationSubmissionDto>> ListAsync(Guid? depotId, DepotQuery query);
     Task<(Guid OwnerId, DepotVerificationDocument Document)?> FileAsync(Guid id);
 }

@@ -69,6 +69,19 @@ public sealed class StockReceiptTests : IAsyncLifetime
         await using var check = Open(); Assert.False(await check.DepotStockCostAdjustments.AnyAsync(x => x.Line.Receipt.DepotId == depot)); Assert.False(await check.DepotReuseSales.AnyAsync(x => x.Line.Receipt.DepotId == depot));
     }
     [Fact]
+    public async Task Employee_receipt_submission_notifies_owner_once_with_safe_scoped_detail()
+    {
+        await using var db = Open(); var input = Input(); input.PurchaseCost = 0; input.CostsConfirmed = false; input.Lines[0].ReferencePrice = 0;
+        var receipt = await Stock(db).CreateAsync(employee, depot, input);
+        await Stock(db).ReviewAsync(employee, depot, receipt.Id, "SUBMITTED"); await Stock(db).ReviewAsync(employee, depot, receipt.Id, "SUBMITTED");
+        var notice = Assert.Single(await db.Notifications.Where(x => x.UserId == owner).ToListAsync());
+        Assert.Equal("STOCK", notice.Category); Assert.Equal(receipt.Id, notice.TargetId); Assert.Equal(depot, notice.DepotId);
+        Assert.Equal(receipt.Id, (await Stock(db).GetAsync(owner, depot, receipt.Id)).Id);
+        Assert.False((await Stock(db).GetAsync(employee, depot, receipt.Id)).CostsConfirmed);
+        await Assert.ThrowsAsync<DepotForbiddenException>(() => Stock(db).GetAsync(Guid.NewGuid(), depot, receipt.Id));
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => Stock(db).GetAsync(owner, depot, Guid.NewGuid()));
+    }
+    [Fact]
     public async Task Cost_report_matches_settled_fifo_and_partial_reuse_sale_without_double_subtracting_fees()
     {
         await using var db = Open(); await Posted(db, Input(50)); await Posted(db, Input(50));

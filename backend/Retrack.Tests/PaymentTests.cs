@@ -128,6 +128,8 @@ public sealed class PaymentTests : IAsyncLifetime
 
         await using var verify = Open();
         Assert.Equal(1, await verify.PlatformTransactions.CountAsync(t => t.SourceId == seed.Request));
+        var notice = Assert.Single(await verify.Notifications.Where(x => x.UserId == seed.Owner && x.PickupRequestId == seed.Request).ToListAsync());
+        Assert.Equal("PAYMENT", notice.Category); Assert.Equal(depotId, notice.DepotId);
         var inventory = new InventoryService(new DepotInventoryRepository(verify),
             new DepotService(new DepotOwnerRepository(verify), new DepotPaymentReadRepository(verify)));
         Assert.Equal(10m, Assert.Single(await inventory.GetAsync(seed.Owner, depotId)).ReceivedKg);

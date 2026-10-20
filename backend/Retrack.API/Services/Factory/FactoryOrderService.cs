@@ -84,6 +84,7 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
         if (batch.TransportJob?.Status != "DELIVERED")
             return ServiceResult<OrderReceivedResponse>.Conflict("Chỉ xác nhận nhận hàng sau khi vận chuyển báo đã giao.");
         batch.Status = "RECEIVED";
+        await NotifyDepotAsync(batch.DepotId, "Nhà máy xác nhận hàng đã đến", $"{factory.Name} đã xác nhận nhận hàng lô {batch.Code ?? batch.Id.ToString()}; chờ cân và KCS.", batch.Id, ct: ct);
         batch.FactoryReceivedAt = DateTime.UtcNow;
         await Db.SaveChangesAsync(ct);
         if (transaction is not null) await transaction.CommitAsync(ct);
@@ -126,6 +127,7 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
         batch.PaymentReference = request.PaymentReference.Trim();
         batch.SettledAt = DateTime.UtcNow;
         batch.Status = "COMPLETED";
+        await NotifyDepotAsync(batch.DepotId, "Nhà máy đã ghi nhận quyết toán", $"Lô {batch.Code ?? batch.Id.ToString()} đã được {factory.Name} quyết toán. Vui lòng đối chiếu đơn giá, phí và chứng từ; đây chưa phải xác nhận nhận tiền từ kho.", batch.Id, ct: ct);
         Db.PlatformTransactions.Add(new Retrack.API.Models.PlatformTransaction
         {
             SourceType = "BATCH_ORDER", SourceId = batch.Id, FeeAmount = fee,
@@ -158,9 +160,11 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
             return ServiceResult<InvoiceUpdatedResponse>.Invalid("Chọn tệp hóa đơn trước khi lưu.");
         if (attachments is not null && request.InvoiceFileUrl != batch.QualityCheck.InvoiceFileUrl && !attachments.IsOwnedUrl(request.InvoiceFileUrl, userId))
             return ServiceResult<InvoiceUpdatedResponse>.Invalid("Hóa đơn phải được tải lên qua chức năng đính kèm của nhà máy.");
+        var changed = batch.QualityCheck.InvoiceNumber != request.InvoiceNumber?.Trim() || batch.QualityCheck.InvoiceFileUrl != request.InvoiceFileUrl.Trim();
         batch.QualityCheck.InvoiceNumber = request.InvoiceNumber?.Trim();
         batch.QualityCheck.InvoiceFileUrl = request.InvoiceFileUrl.Trim();
         batch.QualityCheck.InvoiceStatus = "UPLOADED";
+        if (changed) await NotifyDepotAsync(batch.DepotId, "Nhà máy đã bổ sung hóa đơn", $"{factory.Name} đã cập nhật hóa đơn lô {batch.Code ?? batch.Id.ToString()}. Kho có thể tải chứng từ trong chi tiết lô.", batch.Id, ct: ct);
         if (request.VatAmount.HasValue) batch.QualityCheck.QualityNote = $"VAT:{request.VatAmount.Value}";
         await Db.SaveChangesAsync(ct);
         if (tx != null) await tx.CommitAsync(ct);

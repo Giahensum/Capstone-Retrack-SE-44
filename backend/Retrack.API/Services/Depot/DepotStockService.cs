@@ -32,6 +32,13 @@ public sealed partial class DepotStockService(IDepotStockRepository repository, 
         return new() { Page = page.Page, PageSize = page.PageSize, TotalCount = page.TotalCount,
             Items = page.Items.Select(x => Map(x, isOwner)).ToList() };
     }
+    public async Task<StockReceiptDto> GetAsync(Guid userId, Guid depotId, Guid receiptId)
+    {
+        var isOwner = await RequireAccessAsync(userId, depotId);
+        var receipt = await repository.FindReceiptAsync(receiptId);
+        if (receipt == null || receipt.DepotId != depotId) throw new KeyNotFoundException("Không tìm thấy phiếu nhập trong kho.");
+        return Map(receipt, isOwner);
+    }
     public async Task<StockReceiptDto> CreateAsync(Guid userId, Guid depotId, CreateStockReceiptDto dto)
     {
         var isOwner = await RequireAccessAsync(userId, depotId);
@@ -155,6 +162,9 @@ public sealed partial class DepotStockService(IDepotStockRepository repository, 
             throw new DepotConflictException("Phiếu đã chốt, không được ghi sổ lại hoặc sửa lịch sử.");
         if (action == "POSTED") { receipt.PostedAt = DateTime.UtcNow; receipt.PostedBy = userId; }
         receipt.Status = action; receipt.ReviewedBy = userId; receipt.ReviewedAt = DateTime.UtcNow; receipt.ReviewNote = reason?.Trim();
+        if (action == "SUBMITTED" && !isOwner)
+            repository.AddNotice(Notification.ForDepot(await repository.OwnerIdAsync(depotId), depotId, "STOCK",
+                "Phiếu nhập kho đang chờ duyệt", $"Nhân viên đã gửi phiếu {receipt.Reference}. Vui lòng kiểm tra hàng thực nhận và chi phí trước khi ghi sổ.", targetType: "RECEIPT", targetId: receipt.Id));
         await work.SaveAsync(); await tx.CommitAsync();
         return Map(receipt, isOwner);
     }
