@@ -1,0 +1,33 @@
+﻿
+FullName                                                                                            Length 
+--------                                                                                            ------ 
+D:\Ky 9\AI_test\Pytorch-Garbage-Classification\.gradio                                                     
+D:\Ky 9\AI_test\Pytorch-Garbage-Classification\Utils                                                       
+D:\Ky 9\AI_test\Pytorch-Garbage-Classification\.gitignore                                           198    
+D:\Ky 9\AI_test\Pytorch-Garbage-Classification\app.py                                               3041   
+D:\Ky 9\AI_test\Pytorch-Garbage-Classification\Create_requirements.cmd                              520    
+D:\Ky 9\AI_test\Pytorch-Garbage-Classification\Create_tensorboard_i.cmd                             81     
+D:\Ky 9\AI_test\Pytorch-Garbage-Classification\dir_tree.txt                                         0      
+D:\Ky 9\AI_test\Pytorch-Garbage-Classification\Exi.jpg                                              1607044
+D:\Ky 9\AI_test\Pytorch-Garbage-Classification\LICENSE                                              1090   
+D:\Ky 9\AI_test\Pytorch-Garbage-Classification\Main.ipynb                                           2511632
+D:\Ky 9\AI_test\Pytorch-Garbage-Classification\nb_out.txt                                           2871   
+D:\Ky 9\AI_test\Pytorch-Garbage-Classification\notebook_analysis.txt                                2494   
+D:\Ky 9\AI_test\Pytorch-Garbage-Classification\README.md                                            2310   
+D:\Ky 9\AI_test\Pytorch-Garbage-Classification\requirements.txt                                     220    
+D:\Ky 9\AI_test\Pytorch-Garbage-Classification\ruff.toml                                            460    
+D:\Ky 9\AI_test\Pytorch-Garbage-Classification\Ruff_Auto.cmd                                        202    
+D:\Ky 9\AI_test\Pytorch-Garbage-Classification\.gradio\flagged                                             
+D:\Ky 9\AI_test\Pytorch-Garbage-Classification\.gradio\flagged\image                                       
+D:\Ky 9\AI_test\Pytorch-Garbage-Classification\.gradio\flagged\output                                      
+D:\Ky 9\AI_test\Pytorch-Garbage-Classification\.gradio\flagged\dataset1.csv                         732    
+D:\Ky 9\AI_test\Pytorch-Garbage-Classification\.gradio\flagged\image\63a539f16bebfdacc402                  
+D:\Ky 9\AI_test\Pytorch-Garbage-Classification\.gradio\flagged\image\af5f4d69c8420b9dc0b3                  
+D:\Ky 9\AI_test\Pytorch-Garbage-Classification\.gradio\flagged\image\63a539f16bebfdacc402\image.png 1255250
+D:\Ky 9\AI_test\Pytorch-Garbage-Classification\.gradio\flagged\image\af5f4d69c8420b9dc0b3\image.png 1255250
+D:\Ky 9\AI_test\Pytorch-Garbage-Classification\Utils\adabound.py                                    11573  
+D:\Ky 9\AI_test\Pytorch-Garbage-Classification\Utils\print_color_V1_OLD.py                          3939   
+D:\Ky 9\AI_test\Pytorch-Garbage-Classification\Utils\print_color_V2_NEW.py                          2986   
+D:\Ky 9\AI_test\Pytorch-Garbage-Classification\Utils\README.md                                      546    
+
+

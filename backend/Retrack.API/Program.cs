@@ -86,6 +86,10 @@ builder.Services.AddScoped<IPlatformInvoiceRepository, PlatformInvoiceRepository
 builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.ISellerRepository, Retrack.API.Repositories.SellerRepository>();
 builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IPasswordResetOtpRepository, Retrack.API.Repositories.PasswordResetOtpRepository>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.ISellerService, Retrack.API.Services.Seller.SellerService>();
+builder.Services.AddHttpClient<Retrack.API.Services.Interfaces.ISellerAiService, Retrack.API.Services.Seller.SellerAiService>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(60);
+});
 
 builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IDepotOwnerRepository, DepotOwnerRepository>();
 builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IDepotVerificationRepository, DepotVerificationRepository>();
