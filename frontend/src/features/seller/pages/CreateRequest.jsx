@@ -1,12 +1,12 @@
 import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { sellerApi } from '../api';
 import GoongAutocomplete from '@/components/ui/GoongAutocomplete';
 import { MaterialIcon } from '@/features/depot/components/DepotIcon';
 import { APIProvider, Map, Marker, InfoWindow } from '@vis.gl/react-google-maps';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Sparkles, Wand2 } from 'lucide-react';
 
 const TIME_SLOTS = [
   '07:00 - 09:00', '09:00 - 11:00', '11:00 - 13:00',
@@ -61,14 +61,18 @@ const SCRAP_RECOMMENDATIONS = [
 
 export default function CreateRequest() {
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
   const fileInputRef = useRef(null);
+  const aiFileInputRef = useRef(null);
 
   const [step, setStep] = useState(1);
   const [mode, setMode] = useState(null);
   const [showPricesId, setShowPricesId] = useState(null);
   const [inputMethod, setInputMethod] = useState('recommend'); // 'recommend' | 'manual'
   const [selectedPresetId, setSelectedPresetId] = useState(null);
+  const [isAiScanning, setIsAiScanning] = useState(false);
+  const [detectedAiData, setDetectedAiData] = useState(null);
 
   const [form, setForm] = useState({
     description: '',
@@ -81,6 +85,73 @@ export default function CreateRequest() {
   });
 
   const [images, setImages] = useState([]); // { file, preview, url, uploading }
+
+  // ── Auto-apply AI result if redirected from AI Scanner ──
+  useEffect(() => {
+    if (location.state?.aiResult) {
+      const ai = location.state.aiResult;
+      setDetectedAiData(ai);
+      setInputMethod('manual');
+      setForm((prev) => ({
+        ...prev,
+        description: ai.suggested_description || `Phế liệu ${ai.name_vi} (AI nhận diện: ${ai.confidence}%), tình trạng khô ráo cần kho thu gom.`,
+      }));
+
+      if (ai.imagePreview || ai.annotated_image) {
+        setImages((prev) => {
+          if (prev.length === 0) {
+            return [{
+              file: ai.imageFile || null,
+              preview: ai.annotated_image || ai.imagePreview,
+              url: ai.uploaded_url || null,
+              uploading: false,
+            }];
+          }
+          return prev;
+        });
+      }
+      toast.success(`✨ Đã áp dụng thông tin AI: ${ai.name_vi} (${ai.confidence}%)`);
+    }
+  }, [location.state]);
+
+  // ── Inline AI scan file handler ──
+  const handleAiScanFile = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsAiScanning(true);
+    try {
+      const res = await sellerApi.classifyAiImage(file, false);
+      if (res && res.primary_class) {
+        setDetectedAiData(res);
+        setInputMethod('manual');
+        setForm((prev) => ({
+          ...prev,
+          description: res.suggested_description || `Phế liệu ${res.name_vi} (AI nhận diện: ${res.confidence}%), tình trạng khô ráo cần kho thu gom.`,
+        }));
+        setImages((prev) => {
+          if (prev.length < 5) {
+            return [
+              ...prev,
+              {
+                file,
+                preview: res.annotated_image || URL.createObjectURL(file),
+                url: null,
+                uploading: false,
+              },
+            ];
+          }
+          return prev;
+        });
+        toast.success(`✨ AI đã nhận diện: ${res.name_vi} (${res.confidence}%) và tự động điền mô tả!`);
+      }
+    } catch (err) {
+      console.error('AI scan error:', err);
+      toast.error(err?.response?.data?.message || 'Có lỗi khi phân tích ảnh bằng AI.');
+    } finally {
+      setIsAiScanning(false);
+      if (aiFileInputRef.current) aiFileInputRef.current.value = '';
+    }
+  };
   const [selectedDepot, setSelectedDepot] = useState(null);
 
   const [viewport, setViewport] = useState({
@@ -375,6 +446,90 @@ export default function CreateRequest() {
       ══════════════════════════════════════════════════════ */}
       {step === 1 && (
         <div className="space-y-6">
+          {/* Card: Trợ lý AI Phân loại Phế liệu thông minh */}
+          <div className="bg-gradient-to-r from-d-primary-container/30 via-d-surface-container-lowest to-d-surface-container-lowest border border-d-primary/30 rounded-2xl p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-start gap-3.5">
+              <div className="w-11 h-11 rounded-2xl bg-d-primary text-d-on-primary flex items-center justify-center shrink-0 shadow-sm">
+                <Sparkles size={22} />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-bold text-d-on-surface text-sm">
+                    Trợ lý AI Phân loại Phế liệu & Định giá tức thì
+                  </h3>
+                  <span className="text-[10px] font-bold text-d-primary bg-d-primary/10 px-2 py-0.5 rounded-full shrink-0">
+                    ✨ AI Vision
+                  </span>
+                </div>
+                <p className="text-xs text-d-on-surface-variant mt-1 leading-relaxed">
+                  Chụp hoặc tải ảnh để mô hình AI tự động nhận diện loại phế liệu, tra cứu giá thị trường và tự động điền mô tả đơn.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                disabled={isAiScanning}
+                onClick={() => aiFileInputRef.current?.click()}
+                className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-d-primary text-d-on-primary font-bold text-xs shadow-xs hover:bg-[#385500] transition-colors cursor-pointer disabled:opacity-50"
+              >
+                {isAiScanning ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" />
+                    <span>Đang quét AI...</span>
+                  </>
+                ) : (
+                  <>
+                    <Wand2 size={14} />
+                    <span>Quét ảnh điền tự động</span>
+                  </>
+                )}
+              </button>
+              <Link
+                to="/seller/ai-scanner"
+                className="inline-flex items-center gap-1 px-3.5 py-2.5 rounded-xl border border-d-border-subtle bg-d-surface-container-lowest hover:bg-d-surface-container text-xs font-semibold text-d-on-surface transition-colors"
+              >
+                <span>Mở máy quét Camera</span>
+                <MaterialIcon name="chevron_right" className="text-base" />
+              </Link>
+              <input
+                ref={aiFileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleAiScanFile}
+                className="hidden"
+              />
+            </div>
+          </div>
+
+          {/* AI Detection Result Toast/Card if active */}
+          {detectedAiData && (
+            <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-emerald-500 text-white flex items-center justify-center shrink-0">
+                  <MaterialIcon name={detectedAiData.icon || 'check_circle'} className="text-lg" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 font-bold text-d-on-surface">
+                    <span>✨ Đã áp dụng phân loại AI: {detectedAiData.name_vi}</span>
+                    <span className="text-emerald-700 dark:text-emerald-400 font-mono">({detectedAiData.confidence}%)</span>
+                  </div>
+                  <p className="text-d-on-surface-variant text-[11px] mt-0.5">
+                    Giá tham khảo: <strong className="text-d-on-surface">{detectedAiData.price_range}</strong> — {detectedAiData.recycling_tip}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDetectedAiData(null)}
+                className="self-end sm:self-center text-xs font-bold text-d-on-surface-variant hover:text-d-on-surface px-2 py-1 rounded"
+              >
+                ✕ Đóng
+              </button>
+            </div>
+          )}
+
           {/* Card: Mô tả phế liệu (Có lựa chọn gợi ý mẫu hoặc nhập tay) */}
           <div className="bg-d-surface-container-lowest border border-d-border-subtle rounded-2xl p-6 shadow-sm space-y-5">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-d-border-subtle pb-4">
