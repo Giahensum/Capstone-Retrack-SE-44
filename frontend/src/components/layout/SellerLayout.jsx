@@ -11,6 +11,7 @@ import { sellerApi } from '@/features/seller/api';
 
 const NAV_ITEMS = [
   { iconName: 'dashboard', label: 'Tổng quan', to: '/seller' },
+  { iconName: 'document_scanner', label: 'AI Nhận diện phế liệu', to: '/seller/ai-scanner' },
   { iconName: 'add_box', label: 'Tạo đơn thu gom', to: '/seller/create' },
   { iconName: 'receipt_long', label: 'Đơn của tôi', to: '/seller/requests' },
   { iconName: 'notifications', label: 'Thông báo', to: '/seller/notifications', badge: true },

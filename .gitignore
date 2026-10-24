@@ -90,3 +90,13 @@ npm-debug.log*
 # Bản sao giao diện Depot giữ local để đối chiếu, không đưa vào build/lint/Git.
 frontend/src/features/depot/*_old*.jsx
 backend/Retrack.API/uploads/
+
+# ── AI Service & Python Cache ──
+__pycache__/
+*.py[cod]
+*$py.class
+.ipynb_checkpoints/
+.gradio/
+AI_Garbage_Classification/**/__pycache__/
+AI_Garbage_Classification/**/.gradio/
+AI_Garbage_Classification/**/.ipynb_checkpoints/
