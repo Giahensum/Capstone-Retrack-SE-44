@@ -32,6 +32,7 @@ export const pickupStatus = (status) => ({
 })[status] || status;
 
 export function checkInLocationError(location, pickup, now = Date.now()) {
+  if (pickup?.policy?.photoOnly) return "";
   if (!location) return "Hãy lấy vị trí GPS trước khi xác nhận.";
   const policy = pickup.policy;
   if (location.isMocked) return "Không chấp nhận GPS giả lập để check-in.";

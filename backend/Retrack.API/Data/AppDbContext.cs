@@ -8,6 +8,10 @@ namespace Retrack.API.Data
         public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
         // DbSets
+        public DbSet<EmployeeCollectionArea> EmployeeCollectionAreas { get; set; }
+        public DbSet<EmployeeDispatchShift> EmployeeDispatchShifts { get; set; }
+        public DbSet<EmployeeDispatchQueue> EmployeeDispatchQueues { get; set; }
+        public DbSet<EmployeeDispatchEvent> EmployeeDispatchEvents { get; set; }
         public DbSet<SystemConfig> SystemConfigs { get; set; }
         public DbSet<User> Users { get; set; }
         public DbSet<Depot> Depots { get; set; }
@@ -53,6 +57,16 @@ namespace Retrack.API.Data
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+            modelBuilder.Entity<EmployeeCollectionArea>().HasOne<Depot>().WithMany().HasForeignKey(a => a.DepotId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<EmployeeDispatchShift>().HasOne<EmployeeCollectionArea>().WithMany().HasForeignKey(s => s.AreaId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<EmployeeDispatchShift>().HasOne<User>().WithMany().HasForeignKey(s => s.EmployeeId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<EmployeeDispatchShift>().HasIndex(s => new { s.EmployeeId, s.StartsAt, s.EndsAt });
+            modelBuilder.Entity<EmployeeDispatchQueue>().HasOne<PickupRequest>().WithMany().HasForeignKey(q => q.PickupId).OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<EmployeeDispatchEvent>().HasOne<PickupRequest>().WithMany().HasForeignKey(e => e.PickupId).OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<EmployeeDispatchEvent>().HasOne<User>().WithMany().HasForeignKey(e => e.FromEmployeeId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<EmployeeDispatchEvent>().HasOne<User>().WithMany().HasForeignKey(e => e.ToEmployeeId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<EmployeeDispatchEvent>().HasOne<EmployeeDispatchShift>().WithMany().HasForeignKey(e => e.ShiftId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<EmployeeDispatchEvent>().HasIndex(e => new { e.PickupId, e.CreatedAt });
             modelBuilder.Entity<LiquidationParticipation>().HasIndex(x => new { x.LotId, x.OwnerId }).IsUnique();
             modelBuilder.Entity<LiquidationAgreement>().HasIndex(x => x.LotId).IsUnique();
             modelBuilder.Entity<LiquidationAgreement>().HasIndex(x => x.WinningBidId).IsUnique();

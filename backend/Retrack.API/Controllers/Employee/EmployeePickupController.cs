@@ -40,9 +40,21 @@ public class EmployeePickupController(AppDbContext db, INotificationService noti
     }
 
     [HttpGet("/api/employee/pickup-pool")]
-    public async Task<IActionResult> Pool(CancellationToken ct)
+    public async Task<IActionResult> Pool(CancellationToken ct, [FromQuery] int page = 1)
     {
         var depotId = await GetDepotIdAsync(ct);
+        if (page is < 1 or > 100000) return BadRequest(ApiResponse<object>.Fail("Trang không hợp lệ."));
+        if (await db.EmployeeCollectionAreas.AnyAsync(a => a.DepotId == depotId, ct))
+        {
+            var depots = ActiveDepotIds();
+            var own = db.PickupRequests.AsNoTracking().Where(p => p.AcceptedCollectorId == UserId
+                && p.TargetDepotId != null && depots.Contains(p.TargetDepotId.Value) && p.Status == "SCHEDULED");
+            var items = await own.OrderBy(p => p.PreferredDatetime ?? p.CreatedAt).ThenBy(p => p.Id)
+                .Skip((page - 1) * 20).Take(20)
+                .Select(p => new PickupPoolItemDto(p.Id, p.Seller.FullName, p.Seller.Phone, p.Address,
+                    p.Latitude, p.Longitude, p.PreferredDatetime, p.Description, p.RequestImageUrl, p.CreatedAt)).ToListAsync(ct);
+            return Ok(ApiResponse<object>.Ok(new { items, page, pageSize = 20, total = await own.CountAsync(ct), automatic = true }));
+        }
         var depot = await db.Depots.AsNoTracking()
             .Where(d => d.Id == depotId)
             .Select(d => new { d.Latitude, d.Longitude })
@@ -96,7 +108,8 @@ public class EmployeePickupController(AppDbContext db, INotificationService noti
         var depots = ActiveDepotIds();
         var item = await db.PickupRequests.AsNoTracking()
             .Where(p => p.Id == pickupId && ((p.TargetDepotId != null && depots.Contains(p.TargetDepotId.Value)) || p.TargetDepotId == null)
-                && ((p.Status == "PENDING" && p.AcceptedCollectorId == null) || p.AcceptedCollectorId == userId))
+                && ((p.Status == "PENDING" && p.AcceptedCollectorId == null
+                    && !db.EmployeeCollectionAreas.Any(a => a.DepotId == depotId)) || p.AcceptedCollectorId == userId))
             .Select(p => new
             {
                 Detail = new EmployeePickupDetailDto(p.Id, p.Seller.FullName, p.Seller.Phone, p.Address,
@@ -128,6 +141,8 @@ public class EmployeePickupController(AppDbContext db, INotificationService noti
     public async Task<IActionResult> Accept(Guid pickupId, CancellationToken ct)
     {
         var depotId = await GetDepotIdAsync(ct);
+        if (await db.EmployeeCollectionAreas.AnyAsync(a => a.DepotId == depotId, ct))
+            return Conflict(ApiResponse<object>.Fail("Kho đang phân công tự động. Hãy mở danh sách đơn được giao cho bạn."));
         if (!await db.Depots.AnyAsync(d => d.Id == depotId && d.VerificationStatus == "APPROVED", ct))
             return Conflict(ApiResponse<object>.Fail("Kho chưa được Admin xác minh hồ sơ để nhận giao dịch mới."));
         var userId = UserId;
