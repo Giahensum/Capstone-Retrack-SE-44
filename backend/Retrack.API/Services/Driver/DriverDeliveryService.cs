@@ -140,7 +140,7 @@ public sealed class DriverDeliveryService(AppDbContext db, DriverJobService jobs
 
     private async Task Capture(DriverDeliveryEvent entry, decimal? latitude, decimal? longitude, EmployeeCheckInRequest? input, CancellationToken ct)
     {
-        if (input == null) throw new ArgumentException("Cần ảnh camera và GPS tại địa điểm.");
+        if (input == null) throw new ArgumentException("Cần ảnh camera tại địa điểm.");
         var distance = CollectionValidation.ValidateCheckIn(latitude, longitude, input, DateTimeOffset.UtcNow);
         var file = input.ImageFile;
         if (file == null || file.Length is <= 0 or > 5 * 1024 * 1024) throw new ArgumentException("Ảnh phải từ 1 byte đến 5 MB.");
@@ -154,7 +154,7 @@ public sealed class DriverDeliveryService(AppDbContext db, DriverJobService jobs
         entry.ImageUrl = await images.UploadImageAsync(upload, $"driver-{entry.Action}-{entry.OperationId:N}.{(jpeg ? "jpg" : "png")}");
         entry.Latitude = input.Latitude; entry.Longitude = input.Longitude;
         entry.AccuracyMeters = input.AccuracyMeters; entry.DistanceMeters = distance;
-        entry.LocationRecordedAt = input.LocationRecordedAt!.Value.UtcDateTime;
+        entry.LocationRecordedAt = input.LocationRecordedAt?.UtcDateTime;
         entry.PhotoTakenAt = input.PhotoTakenAt!.Value.UtcDateTime;
     }
 }

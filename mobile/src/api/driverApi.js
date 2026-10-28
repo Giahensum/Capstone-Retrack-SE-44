@@ -13,7 +13,7 @@ export const driverApi = {
     body.append("operationId", operationId);
     body.append("imageFile", /** @type {any} */ ({ uri: photo.uri, name: "driver.jpg", type: "image/jpeg" }));
     body.append("photoTakenAt", photo.takenAt);
-    for (const [key, value] of Object.entries(location)) body.append(key, String(value));
+    for (const [key, value] of Object.entries(location || {})) body.append(key, String(value));
     return unwrap(await client.post(`/driver/job/${encodeURIComponent(id)}/${action}`, body, {
       headers: { "Content-Type": "multipart/form-data" }, timeout: 60000,
     }));

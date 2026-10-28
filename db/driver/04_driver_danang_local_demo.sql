@@ -1,5 +1,5 @@
 -- CHỈ CHẠY TRÊN DATABASE PHÁT TRIỂN CÁ NHÂN.
--- Chạy 01_driver_setup.sql và 03_driver_delivery.sql trước.
+-- Cần schema db/bootstrap/retrack-system.sql trước.
 -- 3 lô mới, kho/nhà máy giả lập cùng điểm test Employee X7P4+XF9.
 -- Không đổi địa chỉ cũ, không tạo đơn pickup, không reset chuyến đã test.
 BEGIN;
@@ -22,7 +22,7 @@ DECLARE
     v_batch uuid; v_job uuid; v_notice uuid; i integer;
 BEGIN
     IF to_regclass('driver_delivery_events') IS NULL THEN
-        RAISE EXCEPTION 'Chạy db/driver/03_driver_delivery.sql trước khi seed test check-in.';
+        RAISE EXCEPTION 'Thiếu schema driver_delivery_events từ db/bootstrap/retrack-system.sql.';
     END IF;
     -- Tuần tự hóa các lần chạy cùng fixture, không reset dữ liệu đã tồn tại.
     PERFORM pg_advisory_xact_lock(20261008, 64067);

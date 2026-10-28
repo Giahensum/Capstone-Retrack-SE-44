@@ -112,7 +112,7 @@ public sealed class DriverDeliveryTests : IAsyncLifetime
     [InlineData("photo")]
     [InlineData("format")]
     [InlineData("missing")]
-    public async Task BadEvidenceRejectedBeforeUpload(string kind)
+    public async Task PhotoIsRequiredButGpsIsOptional(string kind)
     {
         var input = Evidence();
         switch (kind) {
@@ -124,8 +124,13 @@ public sealed class DriverDeliveryTests : IAsyncLifetime
             case "format": input.ImageFile = new FormFile(new MemoryStream(new byte[8]), 0, 8, "imageFile", "fake.jpg"); break;
             case "missing": input.Latitude = null; break;
         }
-        await Assert.ThrowsAsync<ArgumentException>(() => Act("checkin", input));
-        Assert.Equal(0, images.UploadCount); Assert.Empty(await db.DriverDeliveryEvents.ToListAsync());
+        if (kind is "photo" or "format") {
+            await Assert.ThrowsAsync<ArgumentException>(() => Act("checkin", input));
+            Assert.Equal(0, images.UploadCount); Assert.Empty(await db.DriverDeliveryEvents.ToListAsync());
+        } else {
+            await Act("checkin", input);
+            Assert.Equal("PICKED_UP", job.Status); Assert.Equal(1, images.UploadCount);
+        }
     }
     [Fact]
     public async Task OtherDriverAndInactiveMembershipCannotMutate()
@@ -152,11 +157,14 @@ public sealed class DriverDeliveryTests : IAsyncLifetime
     public async Task CancellationRequiresReason(string? reason) =>
         await Assert.ThrowsAsync<ArgumentException>(() => Act("cancel", reason: reason));
     [Fact]
-    public async Task CheckoutValidatesFactoryRatherThanDepot()
+    public async Task CheckoutAcceptsPhotoWithoutEnforcingFactoryDistance()
     {
         await Act("checkin", Evidence()); await Act("start");
-        await Assert.ThrowsAsync<ArgumentException>(() => Act("checkout", Evidence()));
-        Assert.Equal("IN_TRANSIT", job.Status); Assert.Equal(1, images.UploadCount);
+        var proof = Evidence(); proof.Latitude = null; proof.Longitude = null;
+        proof.AccuracyMeters = null; proof.LocationRecordedAt = null;
+        await Act("checkout", proof);
+        Assert.Equal("DELIVERED", job.Status); Assert.Equal(2, images.UploadCount);
+        Assert.Null((await db.DriverDeliveryEvents.SingleAsync(e => e.Action == "checkout")).DistanceMeters);
     }
     [Theory]
     [InlineData("CANCELLED")]

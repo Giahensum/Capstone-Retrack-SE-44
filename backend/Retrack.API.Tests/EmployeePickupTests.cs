@@ -148,4 +148,23 @@ public sealed class EmployeePickupTests : IAsyncLifetime
         public Task<IEnumerable<object>> GetByUserIdAsync(Guid userId) => throw new NotSupportedException();
         public Task MarkAsReadAsync(Guid id) => throw new NotSupportedException();
     }
+
+    [Fact]
+    public async Task ManagedPoolIsPersonalPagedAndCannotBeManuallyClaimed()
+    {
+        db.EmployeeCollectionAreas.Add(new EmployeeCollectionArea { DepotId = depot.Id, Name = "Khu demo" });
+        var pending = Add();
+        var other = Add("SCHEDULED", colleague);
+        for (var i = 0; i < 21; i++) Add("SCHEDULED", employee);
+        await db.SaveChangesAsync();
+        var result = System.Text.Json.JsonSerializer.SerializeToElement(Data<object>(await Controller().Pool(default)));
+        Assert.True(result.GetProperty("automatic").GetBoolean());
+        Assert.Equal(21,result.GetProperty("total").GetInt32());
+        Assert.Equal(20,result.GetProperty("items").GetArrayLength());
+        var secondPage = System.Text.Json.JsonSerializer.SerializeToElement(Data<object>(await Controller().Pool(default,2)));
+        Assert.Equal(1,secondPage.GetProperty("items").GetArrayLength());
+        Assert.IsType<NotFoundObjectResult>(await Controller().Detail(pending.Id,default));
+        Assert.IsType<NotFoundObjectResult>(await Controller().Detail(other.Id,default));
+        Assert.IsType<ConflictObjectResult>(await Controller().Accept(pending.Id,default));
+    }
 }

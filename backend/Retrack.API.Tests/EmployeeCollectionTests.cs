@@ -51,7 +51,7 @@ public sealed partial class EmployeeCollectionTests : IAsyncLifetime
     {
         var result = await CheckIn();
         Assert.Equal("IN_PROGRESS", result.Status); Assert.True(result.CanEdit);
-        Assert.NotNull(result.CheckIn); Assert.Equal(0, result.CheckIn.DistanceMeters, 3);
+        Assert.NotNull(result.CheckIn); Assert.Equal(0, result.CheckIn.DistanceMeters!.Value, 3);
         Assert.Equal(employee.Id, (await db.PickupCheckIns.SingleAsync()).EmployeeId);
         Assert.Equal(result.CheckIn.ImageUrl, (await db.PickupRequests.AsNoTracking().SingleAsync()).CheckinImageUrl);
         await CheckIn();
@@ -180,7 +180,7 @@ public sealed partial class EmployeeCollectionTests : IAsyncLifetime
     [Theory]
     [InlineData("far")][InlineData("stale")][InlineData("future")][InlineData("accuracy")]
     [InlineData("mock")][InlineData("nan")][InlineData("missing")][InlineData("photo")]
-    public void InvalidLocationEvidenceIsRejected(string scenario)
+    public void PhotoRequiredAndOptionalGpsDoesNotBlock(string scenario)
     {
         var r = Request(); var now = DateTimeOffset.UtcNow;
         switch (scenario)
@@ -194,7 +194,23 @@ public sealed partial class EmployeeCollectionTests : IAsyncLifetime
             case "missing": r.Latitude = null; break;
             case "photo": r.PhotoTakenAt = now.AddMinutes(-11); break;
         }
-        Assert.Throws<ArgumentException>(() => CollectionValidation.ValidateCheckIn(pickup, r, now));
+        if (scenario == "photo") Assert.Throws<ArgumentException>(() => CollectionValidation.ValidateCheckIn(pickup, r, now));
+        else {
+            var distance = CollectionValidation.ValidateCheckIn(pickup, r, now);
+            if (scenario is "far" or "accuracy") Assert.NotNull(distance);
+            else { Assert.Null(distance); Assert.Null(r.Latitude); }
+        }
+    }
+
+    [Fact]
+    public async Task PhotoWithoutGpsPersistsNullCoordinatesAndStartsCollection()
+    {
+        var input = Request(); input.Latitude = null; input.Longitude = null;
+        input.AccuracyMeters = null; input.LocationRecordedAt = null;
+        var result = await Service.CheckInAsync(employee.Id, pickup.Id, input, default);
+        Assert.Equal("IN_PROGRESS", result.Status);
+        Assert.Null(result.CheckIn!.Latitude); Assert.Null(result.CheckIn.DistanceMeters);
+        Assert.Equal(1, images.UploadCount);
     }
 
     internal sealed class TestImages : ICloudinaryService

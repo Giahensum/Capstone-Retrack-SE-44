@@ -1,35 +1,19 @@
 # SQL cho Depot Employee
 
-Máy mới chỉ chạy `db/bootstrap/retrack-system.sql` trong pgAdmin; file này gồm schema và seed demo cho mọi role. Schema Employee và bảng chung đã có sẵn. Các script bên dưới là fixture kiểm thử mở rộng hoặc bản vá cho database cũ, không chạy lại trên máy mới nếu không có nhu cầu cụ thể.
+Máy mới chỉ cần chạy `db/bootstrap/retrack-system.sql`: schema và seed demo chung đã có trong file này. Không cần chạy thêm các file dưới đây nếu chỉ muốn dùng bộ demo chung.
 
-Khi cần chạy fixture bằng pgAdmin, chọn đúng database backend. Đây là script bổ sung trên schema ReTrack hiện có, không phải schema song song.
+Các file được giữ lại:
 
-## Thứ tự chạy
+| File | Mục đích |
+|---|---|
+| `02_employee_demo.sql` | Bộ 13 đơn Đà Nẵng riêng, UUID `e0000000-0929-*`, chưa có trong bootstrap. Chỉ chạy khi cần fixture này. |
+| `04_employee_dispatch.sql` | Bản nâng cấp phân công và check-in cho DB cũ; giữ riêng theo yêu cầu. Schema tương ứng đã có trong bootstrap. |
+| `05_dispatch_danang_demo.sql` | Bộ 36 đơn, 6 nhân viên, 6 khu vực kiểm thử phân công; giữ riêng theo yêu cầu. |
 
-**Cập nhật chuông thông báo:** DB đã dùng từ trước cần chạy thêm `03_notification_pickup_link.sql` trước khi khởi động backend mới. Chỉ thêm liên kết thông báo → đơn, không cần chạy lại seed. Áp dụng cả máy dùng Driver vì Notification là model chung.
+Đã xóa `01_employee_setup.sql` và `03_notification_pickup_link.sql` vì chức năng đã có trong bootstrap. Phần ghép thông báo Employee cũ với đơn đã được bổ sung vào bootstrap. Cấu hình phí đang có được giữ nguyên, không áp lại giá trị 5% như script setup cũ.
 
-1. `01_employee_setup.sql`: bổ sung cột hồ sơ kho cần cho đăng nhập, bảng check-in, bảng nhật ký gửi cân/bàn giao; đặt cấu hình phí chung thành 5%. Không đổi phí đơn cũ. Chỉ cần chạy một lần sau khi cập nhật code; có thể chạy lại.
-2. `02_employee_demo.sql`: tạo đủ 13 đơn demo Đà Nẵng, gồm điểm check-in tại chỗ; mỗi đơn mới có phí 5%. Cần sẵn tài khoản `employee@retrack.vn`, `seller@retrack.vn` và liên kết nhân viên–kho đang hoạt động.
+Với DB cũ: chỉ chạy khối schema đã rà soát, trong transaction riêng, kết thúc trước `-- RETRACK_SCHEMA_END`; không chạy kèm seed mặc định. Riêng nâng cấp phân công có thể dùng file 04. Không xóa bảng để cập nhật schema.
 
-Mở từng file và chạy toàn bộ bằng F5. Không chỉ chọn riêng đoạn INSERT. Không cần xóa bảng.
+File 02 yêu cầu tài khoản `employee@retrack.vn`, `seller@retrack.vn` và liên kết nhân viên–kho đang hoạt động. Mặc định chỉ bổ sung đơn chưa tồn tại. Tùy chọn `retrack.reset_employee_demo = 'true'` chỉ dành cho DB test cá nhân: từ chối reset đơn đã có thanh toán/tồn kho. Sau khi dùng phải đổi lại `'false'`.
 
-## Làm lại dữ liệu demo
-
-Trong `02_employee_demo.sql`, đổi:
-
-```sql
-SET LOCAL retrack.reset_employee_demo = 'false';
-```
-
-thành `'true'`, dừng backend, rồi chạy toàn bộ file trên DB phát triển cá nhân. Reset và seed nằm trong cùng transaction; nếu seed lỗi thì phần xóa cũng rollback. Sau đó đổi lại `'false'` để lần sau không reset nhầm.
-
-Reset chỉ xóa 13 UUID demo có đúng nhãn: pickup_requests và các dòng con pickup_request_items, pickup_checkins, employee_collection_events; xóa đánh giá liên quan và thông báo có UUID rõ ràng. Không xóa users, depots, depot_staffs hoặc đơn ngoài bộ demo. Script từ chối reset đơn đã phát sinh thanh toán/tồn kho; không tự xóa platform_transactions. Các ảnh Cloudinary cũ không bị xóa bởi SQL.
-
-## Hợp nhất file cũ
-
-- Các script check-in, dashboard, bổ sung cột depot và cấu hình phí đã hợp nhất vào `01_employee_setup.sql`.
-- Script seed và reset demo đã hợp nhất vào `02_employee_demo.sql`, với reset mặc định tắt.
-- Các kho demo dùng chung được tạo bằng `DataSeeder` và `Program.cs` khi bật `Database__Initialize` ở Development. Bản SQL kho TP.HCM cũ đã chuyển sang lưu trữ local trong `.ai-context` và không còn dùng để seed.
-- Schema và seed đầy đủ của hệ thống nằm chung trong `db/bootstrap/retrack-system.sql`.
-
-Các script đã được rà soát cấu trúc và đường dẫn; chưa thực thi trên database của bạn.
+Hướng dẫn luồng phân công mới: `docs/EMPLOYEE_AUTO_DISPATCH_TEST.md`.
