@@ -127,6 +127,8 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.ILiquidationRepository, LiquidationRepository>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.ILiquidationService, Retrack.API.Services.Liquidation.LiquidationService>();
 builder.Services.AddHostedService<Retrack.API.Services.Liquidation.LiquidationClosingWorker>();
+builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.ISellerLiquidationRepository, SellerLiquidationRepository>();
+builder.Services.AddScoped<Retrack.API.Services.Interfaces.ISellerLiquidationService, Retrack.API.Services.Seller.SellerLiquidationService>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IDepotStockService, Retrack.API.Services.Depot.DepotStockService>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IDepotProofService, Retrack.API.Services.Depot.DepotProofService>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IBatchService, Retrack.API.Services.Depot.BatchService>();
