@@ -26,3 +26,5 @@ public record StaffPerformanceSummaryDto(int StaffCount, int CompletedCount, dec
 public record FeeEntryDto(Guid Id, Guid SourceId, decimal FeeAmount, DateTime Date);
 public record FeeSummaryDto(decimal AccruedAmount, decimal UnpaidInvoiceAmount, decimal SubmittedInvoiceAmount);
 public record FeeInvoiceDto(Guid Id, DateOnly PeriodStart, decimal Amount, string Status, string? PaymentProofUrl, DateTime? SubmittedAt);
+
+public record PayOsLinkDto(string CheckoutUrl, long OrderCode);

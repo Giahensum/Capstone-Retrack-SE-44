@@ -62,6 +62,17 @@ public sealed class LiquidationRepository(AppDbContext db) : ILiquidationReposit
     public Task<LiquidationAgreement?> LotAgreementAsync(Guid lotId) => db.LiquidationAgreements.AsNoTracking().SingleOrDefaultAsync(x => x.LotId == lotId);
     public void AddAgreement(LiquidationAgreement agreement) => db.LiquidationAgreements.Add(agreement);
     public Task<DepotStockReceipt?> AgreementReceiptAsync(Guid id) => db.DepotStockReceipts.AsNoTracking().SingleOrDefaultAsync(x => x.BulkAgreementId == id && x.Status != "VOIDED" && x.Status != "REJECTED");
+    public async Task<PagedResult<LiquidationLadderDto>> LadderAsync(Guid lotId, Guid? leadingBidId, Guid ownerId, Guid depotId, int page)
+    {
+        const int pageSize = 20;
+        var source = db.LiquidationBids.AsNoTracking().Where(x => x.LotId == lotId);
+        var total = await source.CountAsync();
+        var offset = (long)(page - 1) * pageSize;
+        var rows = offset > int.MaxValue ? [] : await source.OrderByDescending(x => x.Amount).ThenBy(x => x.CreatedAt).ThenBy(x => x.Id)
+            .Skip((int)offset).Take(pageSize).Select(x => new { x.Id, x.Amount, x.CreatedAt, Mine = x.OwnerId == ownerId && x.DepotId == depotId }).ToListAsync();
+        return new() { Page = page, PageSize = pageSize, TotalCount = total,
+            Items = rows.Select((x, i) => new LiquidationLadderDto((int)offset + i + 1, x.Amount, x.CreatedAt, x.Mine, x.Id == leadingBidId)).ToList() };
+    }
     public Task<List<Guid>> ExpiredAsync(DateTime now) => db.LiquidationLots.AsNoTracking()
         .Where(x => x.Status == "PUBLISHED" && x.BiddingEnd <= now).OrderBy(x => x.BiddingEnd).ThenBy(x => x.Id).Take(100).Select(x => x.Id).ToListAsync();
 }

@@ -1,0 +1,81 @@
+﻿python : Traceback (most recent call last):
+At line:1 char:1
++ python -c "
++ ~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Traceback (most recent call last)::String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  File "<string>", line 9, in <module>
+  File "C:\Users\Admin\AppData\Local\Programs\Python\Python311\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u2502' in position 75: character maps to <undefined>
+CELL 0
+import os
+import zipfile
+import shutil
+
+# Extract the zip file
+try:
+    with zipfile.ZipFile("archive.zip", "r") as zip_ref:
+        zip_ref.extractall()
+except Exception as Err:
+    print(
+        f"Make sure `archive.zip` file exist in the root dir and its not corrupted.\nErr: {Err}"
+    )
+else:
+    # Rename the extracted folder ("TrashType_Image_Dataset") to "Data"
+    os.rename("garbage_classification", "Data")
+
+    # Make the main Dataset dir
+    os.makedirs("Database", exist_ok=True)
+
+    # Moving the dataset
+    shutil.move("Data", "Database/Data")
+
+    # Making the cache dir
+    os.makedirs("Database/cache", exist_ok=True)
+
+    # Removing temp files and vars
+    os.remove("archive.zip")
+
+    # End
+    print("Done!")
+---
+CELL 2
+# Base and torch >>>
+import gc
+import os
+import glob
+import time
+import torch
+import pickle
+import shutil
+import datetime
+import contextlib
+import warnings
+import torchvision
+import numpy as np
+from tqdm import tqdm
+import seaborn as sns
+from numba import cuda
+from zipfile import ZipFile
+from torch import nn, optim
+import matplotlib.pyplot as plt
+from typing import Literal
+from torchsummary import summary
+from numba.cuda.cudadrv import enums
+from torch.nn.functional import one_hot
+from efficientnet_pytorch import EfficientNet
+from torchvision import datasets, transforms
+from torch.cuda.amp import autocast, GradScaler
+from torch.utils.tensorboard import SummaryWriter  # type: ignore
+from sklearn.metrics import confusion_matrix, classification_report
+from torch.utils.data import DataLoader, TensorDataset, random_split, Dataset
+from sklearn.metrics import accuracy_score, f1_score, recall_score, precision_score
+
+# Utils
+# from Utils.Debug import P_Debug  # noqa: F401
+from Utils.print_color
+---
+CELL 4
