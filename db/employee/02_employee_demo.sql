@@ -41,7 +41,7 @@
 -- Vẫn áp dụng GPS thật: cách điểm tối đa 200 m, sai số <= 50 m; không bỏ validation.
 -- Không cần xóa bảng để thêm đơn mới: chạy lại file sẽ chỉ bổ sung UUID thiếu.
 -- Nếu đã xóa pickup_requests, chạy cả file sẽ khôi phục đủ 13 đơn.
--- Trước khi test UC-51/52/53, chạy db/employee/01_employee_setup.sql nếu chưa bổ sung bảng check-in.
+-- Schema check-in nằm trong db/bootstrap/retrack-system.sql.
 BEGIN;
 -- false: chỉ bổ sung UUID thiếu; true: xóa riêng 13 đơn demo rồi tạo lại trong cùng transaction.
 -- Chỉ bật true trên database test cá nhân; dừng backend trước khi reset.

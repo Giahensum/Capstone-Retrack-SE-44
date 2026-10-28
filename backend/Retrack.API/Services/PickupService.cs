@@ -126,7 +126,8 @@ namespace Retrack.API.Services
                 s.IsActive && s.User.IsActive && s.StaffType == "DEPOT_EMPLOYEE");
             if (!owner && !employee) throw new DepotForbiddenException();
             var requests = await _db.PickupRequests.Include(p => p.Seller).Include(p => p.TargetDepot).Include(p => p.Items)
-                .Where(p => p.TargetDepotId == depotId && (owner || p.Status == "PENDING" || p.AcceptedCollectorId == actorId))
+                .Where(p => p.TargetDepotId == depotId && (owner || p.AcceptedCollectorId == actorId
+                    || (p.Status == "PENDING" && !_db.EmployeeCollectionAreas.Any(a => a.DepotId == depotId))))
                 .OrderByDescending(p => p.CreatedAt).ThenBy(p => p.Id).Take(100).ToListAsync();
             var result = new List<PickupRequestDto>();
             foreach (var r in requests) result.Add(await MapToDto(r));
@@ -143,6 +144,9 @@ namespace Retrack.API.Services
             var req = await _repo.GetByIdAsync(requestId)
                 ?? throw new KeyNotFoundException("Không tìm thấy yêu cầu.");
             if (req.TargetDepotId != staff.DepotId) throw new DepotForbiddenException();
+            // Chặn API nhận đơn cũ vượt qua điều phối, chỉ áp dụng kho đã cấu hình khu vực.
+            if (await _db.EmployeeCollectionAreas.AnyAsync(a => a.DepotId == staff.DepotId))
+                throw new DepotConflictException("Kho đang phân công tự động. Hãy mở danh sách đơn được giao.");
             if (req.Status != "PENDING" || req.AcceptedCollectorId != null)
                 throw new DepotConflictException("Đơn đã được nhận hoặc không còn chờ nhận.");
             if (!await _db.Depots.AnyAsync(d => d.Id == staff.DepotId && d.VerificationStatus == "APPROVED"))

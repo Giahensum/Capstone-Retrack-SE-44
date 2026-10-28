@@ -196,6 +196,8 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 // ===== BUILD =====
+builder.Services.AddScoped<Retrack.API.Services.Employee.EmployeeDispatchService>();
+builder.Services.AddHostedService<Retrack.API.Services.Employee.EmployeeDispatchWorker>();
 var app = builder.Build();
 
 // ===== MIDDLEWARE PIPELINE =====

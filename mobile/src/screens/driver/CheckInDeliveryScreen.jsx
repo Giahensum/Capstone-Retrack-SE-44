@@ -78,16 +78,16 @@ export default function CheckInDeliveryScreen({ route, navigation }) {
       {stage && job.isMine ? <>
         <Text style={s.label}>{stage === "checkin" ? "Check-in lấy hàng tại kho" : "Check-out tại nhà máy"}</Text>
         <Text style={s.text}>{destination.name} · {destination.address}</Text>
-        <Text style={s.muted}>Cần ảnh camera mới chụp; GPS trong bán kính {data.policy.radiusMeters} m, sai số tối đa {data.policy.maxAccuracyMeters} m.</Text>
+        <Text style={s.muted}>Cần ảnh camera mới chụp. GPS tùy chọn, không giới hạn khoảng cách.</Text>
         {photo ? <Image source={{ uri: photo.uri }} accessibilityLabel="Ảnh bằng chứng vận chuyển" style={{ width: "100%", height: 260 }} resizeMode="contain" /> : null}
         <Button title={photo ? "Chụp lại ảnh" : "Chụp ảnh tại địa điểm"} disabled={!!busy} loading={busy === "photo"} onPress={() => run("photo", async () => {
           const value = await captureCheckInPhoto();
-          if (value) { setPhoto({ ...value, stage }); setLocation(null); setLocation(await captureCheckInLocation()); }
+          if (value) { setPhoto({ ...value, stage }); setLocation(null);  }
         })} />
         {location ? <Text style={s.text}>Sai số GPS: {Math.round(location.accuracyMeters ?? 0)} m{distance != null ? ` · Cách địa điểm: ${Math.round(distance)} m` : ""}</Text> : null}
         <Button title="Cập nhật GPS chính xác" variant="secondary" disabled={!!busy} loading={busy === "gps"} onPress={() => run("gps", async () => setLocation(await captureCheckInLocation()))} />
         <Button title="Cài đặt quyền camera/GPS" variant="secondary" disabled={!!busy} onPress={() => run("settings", () => Linking.openSettings())} />
-        <Button title={stage === "checkin" ? "Xác nhận đã lấy hàng" : "Xác nhận đã giao hàng"} disabled={!photo || !location || !!busy} loading={busy === stage}
+        <Button title={stage === "checkin" ? "Xác nhận đã lấy hàng" : "Xác nhận đã giao hàng"} disabled={!photo || !!busy} loading={busy === stage}
           onPress={() => confirm(stage, "Xác nhận bàn giao", stage === "checkin" ? "Bạn đã nhận đúng lô và chịu trách nhiệm vận chuyển?" : "Bạn đã bàn giao lô tại nhà máy? Nhà máy vẫn cần xác nhận nhận hàng riêng.")} />
       </> : null}
       {job.isMine && job.status === "PICKED_UP" ? <Button title="Bắt đầu vận chuyển" disabled={!!busy} loading={busy === "start"}

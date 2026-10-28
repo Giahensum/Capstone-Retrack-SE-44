@@ -76,7 +76,7 @@ export default function EmployeeNavigator() {
       <Tabs.Screen
         name="Pool"
         component={PickupStackNavigator}
-        options={{ title: "Đơn chờ", headerShown: false }}
+        options={{ title: "Đơn thu gom", headerShown: false }}
       />
       <Tabs.Screen name="History" component={HistoryStatsScreen} options={{ title: "Lịch sử" }} />
       <Tabs.Screen
