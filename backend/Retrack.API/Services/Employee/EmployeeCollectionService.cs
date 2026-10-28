@@ -73,9 +73,9 @@ public sealed partial class EmployeeCollectionService(AppDbContext db, ICloudina
         var url = await images.UploadImageAsync(upload, $"checkin-{pickupId:N}.{(jpeg ? "jpg" : "png")}");
         db.PickupCheckIns.Add(new PickupCheckIn
         {
-            PickupRequestId = pickupId, EmployeeId = userId, Latitude = input.Latitude!.Value,
-            Longitude = input.Longitude!.Value, AccuracyMeters = input.AccuracyMeters!.Value,
-            DistanceMeters = distance, LocationRecordedAt = input.LocationRecordedAt!.Value.UtcDateTime,
+            PickupRequestId = pickupId, EmployeeId = userId, Latitude = input.Latitude,
+            Longitude = input.Longitude, AccuracyMeters = input.AccuracyMeters,
+            DistanceMeters = distance, LocationRecordedAt = input.LocationRecordedAt?.UtcDateTime,
             PhotoTakenAt = input.PhotoTakenAt!.Value.UtcDateTime, CheckedInAt = DateTime.UtcNow, ImageUrl = url
         });
         pickup.CheckinImageUrl = url;

@@ -1,5 +1,5 @@
 -- CHỈ DÙNG DB PHÁT TRIỂN: 3 lô PET (100/150/200 kg), 3 chuyến PENDING.
--- Chạy 01_driver_setup.sql trước, rồi chạy toàn bộ file này trong pgAdmin.
+-- Cần schema db/bootstrap/retrack-system.sql, rồi chạy toàn bộ file này trong pgAdmin.
 -- Tái sử dụng tài khoản/kho/nhà máy đang có; không sửa mật khẩu hay địa chỉ.
 -- Tạo trực tiếp 3 lô tồn kho tại Depot; không tạo đơn Seller/Employee.
 -- Không xóa/reset dữ liệu: chạy lại bỏ qua bộ đã seed, giữ trạng thái đã test.
