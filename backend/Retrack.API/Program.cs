@@ -136,6 +136,11 @@ builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IDepotStaffReposi
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IStaffService, Retrack.API.Services.Depot.StaffService>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IDepotReportService, Retrack.API.Services.Depot.DepotReportService>();
 builder.Services.AddScoped<IAdminService, AdminService>();
+// PayOS thanh toán phí nền tảng (cấu hình qua PayOS__* trong .env / biến môi trường)
+builder.Services.Configure<Retrack.API.Services.Depot.PayOsOptions>(builder.Configuration.GetSection("PayOS"));
+builder.Services.AddHttpClient<Retrack.API.Services.Depot.IPayOsClient, Retrack.API.Services.Depot.PayOsClient>(c => c.Timeout = TimeSpan.FromSeconds(20));
+builder.Services.AddScoped<Retrack.API.Services.Interfaces.IDepotPayOsService, Retrack.API.Services.Depot.DepotPayOsService>();
+builder.Services.AddHostedService<Retrack.API.Services.Depot.PayOsReconciliationWorker>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.INotificationService, Retrack.API.Services.Shared.NotificationService>();
 builder.Services.AddScoped<Retrack.API.Services.Driver.DriverJobService>();
 builder.Services.AddScoped<Retrack.API.Services.Driver.DriverReportingService>();

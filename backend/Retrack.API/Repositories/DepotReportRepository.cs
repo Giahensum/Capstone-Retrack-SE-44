@@ -14,6 +14,15 @@ public sealed partial class DepotReportRepository(AppDbContext db) : IDepotRepor
         if (invoice != null) await db.Entry(invoice).ReloadAsync();
         return invoice;
     }
+    public Task<List<Guid>> PendingPayosInvoiceIdsAsync(int take) =>
+        db.PlatformInvoices.AsNoTracking().Where(i => i.Status == "PENDING" && i.PaymentProofUrl != null && i.PaymentProofUrl.Contains("orderCode="))
+            .OrderBy(i => i.CreatedAt).ThenBy(i => i.Id).Take(take).Select(i => i.Id).ToListAsync();
+    public async Task<PlatformInvoice?> LockInvoiceByPayosOrderAsync(long orderCode)
+    {
+        var invoice = await db.PlatformInvoices.FromSqlInterpolated($"SELECT * FROM platform_invoices WHERE payment_proof_url LIKE {"%orderCode=" + orderCode} FOR UPDATE").SingleOrDefaultAsync();
+        if (invoice != null) await db.Entry(invoice).ReloadAsync();
+        return invoice;
+    }
     public async Task<(List<DepotDailyAmount> Revenue, List<DepotDailyAmount> Costs)> DailyAmountsAsync(Guid depotId, DateTime start, DateTime end)
     {
         var settled = db.InventoryBatches.AsNoTracking().Where(b => b.DepotId == depotId && b.SettledAt >= start && b.SettledAt < end &&
