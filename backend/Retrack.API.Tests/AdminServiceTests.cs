@@ -189,6 +189,81 @@ public class AdminServiceTests
     }
 
     [Fact]
+    public async Task DeleteUserRefusesToDeleteTheLastActiveAdminAndSelf()
+    {
+        await using var db = NewDb();
+        var admin = new User { Email = "admin@retrack.vn", Role = "ADMIN", IsActive = true };
+        var other = new User { Email = "seller@retrack.vn", Role = "SELLER", IsActive = true };
+        db.Users.AddRange(admin, other);
+        await db.SaveChangesAsync();
+        var service = NewService(db);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.DeleteUserAsync(admin.Id, other.Id));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.DeleteUserAsync(admin.Id, admin.Id));
+        Assert.Equal(2, await db.Users.CountAsync());
+    }
+
+    [Fact]
+    public async Task CreateUserStoresBcryptHashAndWritesAuditLog()
+    {
+        await using var db = NewDb();
+        var actor = Guid.NewGuid();
+        var service = NewService(db);
+
+        var created = await service.CreateUserAsync(
+            new CreateUserDto { Email = "new@retrack.vn", Password = "secret1", FullName = "Người mới", Phone = "0900000000", Role = "SELLER" }, actor);
+
+        var user = await db.Users.SingleAsync();
+        Assert.Equal(created.Id, user.Id);
+        Assert.StartsWith("$2", user.PasswordHash);
+        Assert.NotEqual("secret1", user.PasswordHash);
+        Assert.True(user.IsActive);
+        var log = await db.AuditLogs.SingleAsync();
+        Assert.Equal("CREATE", log.Action);
+        Assert.Equal(actor, log.UserId);
+    }
+
+    [Fact]
+    public async Task CreateUserRejectsDuplicateEmail()
+    {
+        await using var db = NewDb();
+        db.Users.Add(new User { Email = "dup@retrack.vn", Role = "SELLER", IsActive = true });
+        await db.SaveChangesAsync();
+        var service = NewService(db);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.CreateUserAsync(
+            new CreateUserDto { Email = "dup@retrack.vn", Password = "secret1", FullName = "Trùng", Phone = "0900000000", Role = "SELLER" }, Guid.NewGuid()));
+        Assert.Single(db.Users);
+    }
+
+    [Theory]
+    [InlineData("", "secret1", "Tên")]
+    [InlineData("khong-co-a-cong", "secret1", "Tên")]
+    [InlineData("a@b.vn", "123", "Tên")]
+    [InlineData("a@b.vn", "secret1", " ")]
+    public async Task CreateUserRejectsInvalidEmailPasswordOrName(string email, string password, string name)
+    {
+        await using var db = NewDb();
+        var service = NewService(db);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => service.CreateUserAsync(
+            new CreateUserDto { Email = email, Password = password, FullName = name, Phone = "0900000000", Role = "SELLER" }, Guid.NewGuid()));
+        Assert.Empty(db.Users);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-5)]
+    public async Task MarketPriceRejectsNonPositivePrice(int price)
+    {
+        await using var db = NewDb();
+        var service = NewService(db);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => service.CreateMarketPriceAsync(Price("PET", price), Guid.NewGuid()));
+        Assert.Empty(db.MarketPrices);
+    }
+
+    [Fact]
     public async Task SetUserActiveDisablesAdminWhenAnotherActiveAdminRemains()
     {
         await using var db = NewDb();
