@@ -117,7 +117,30 @@ export default function SellerHome() {
       </div>
 
       {/* Quick Action Bento Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <Link
+          to="/seller/ai-scanner"
+          className="d-bento-card flex items-start gap-4 group relative overflow-hidden border-d-primary/30 hover:border-d-primary"
+        >
+          <div className="w-12 h-12 rounded-2xl bg-d-primary-container text-d-on-primary-container flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform shadow-xs">
+            <MaterialIcon name="document_scanner" className="text-2xl text-d-primary" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <h3 className="font-bold text-d-on-surface text-base group-hover:text-d-primary transition-colors truncate">
+                AI Nhận diện phế liệu
+              </h3>
+              <span className="text-[10px] font-bold text-d-primary bg-d-primary/10 px-2 py-0.5 rounded-full shrink-0">
+                ✨ Mới
+              </span>
+            </div>
+            <p className="text-xs text-d-on-surface-variant mt-1 leading-relaxed">
+              Quét camera hoặc tải ảnh để AI phân loại 12 nhóm rác, tra cứu giá thị trường tức thì.
+            </p>
+          </div>
+          <MaterialIcon name="chevron_right" className="text-d-on-surface-variant group-hover:text-d-primary mt-3 text-lg transition-colors shrink-0" />
+        </Link>
+
         <Link
           to="/seller/create"
           className="d-bento-card flex items-start gap-4 group"
@@ -125,33 +148,33 @@ export default function SellerHome() {
           <div className="w-12 h-12 rounded-2xl bg-d-surface-accent text-d-primary flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
             <MaterialIcon name="add_box" className="text-2xl" />
           </div>
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             <h3 className="font-bold text-d-on-surface text-base group-hover:text-d-primary transition-colors">
               Tạo đơn thu gom mới
             </h3>
-            <p className="text-sm text-d-on-surface-variant mt-1">
+            <p className="text-xs text-d-on-surface-variant mt-1 leading-relaxed">
               Chọn mẫu phế liệu gợi ý hoặc nhập tay thông tin, chọn kho vựa hoặc nổ đơn tự động.
             </p>
           </div>
-          <MaterialIcon name="chevron_right" className="text-d-on-surface-variant group-hover:text-d-primary mt-3 text-lg transition-colors" />
+          <MaterialIcon name="chevron_right" className="text-d-on-surface-variant group-hover:text-d-primary mt-3 text-lg transition-colors shrink-0" />
         </Link>
 
         <Link
           to="/seller/requests"
-          className="d-bento-card flex items-start gap-4 group"
+          className="d-bento-card flex items-start gap-4 group sm:col-span-2 lg:col-span-1"
         >
           <div className="w-12 h-12 rounded-2xl bg-d-surface-container text-d-secondary flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
             <MaterialIcon name="fact_check" className="text-2xl" />
           </div>
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             <h3 className="font-bold text-d-on-surface text-base group-hover:text-d-primary transition-colors">
               Quản lý đơn hàng
             </h3>
-            <p className="text-sm text-d-on-surface-variant mt-1">
+            <p className="text-xs text-d-on-surface-variant mt-1 leading-relaxed">
               Theo dõi chi tiết quy trình: đã điều phối xe, xác nhận khối lượng cân và nhận thanh toán.
             </p>
           </div>
-          <MaterialIcon name="chevron_right" className="text-d-on-surface-variant group-hover:text-d-primary mt-3 text-lg transition-colors" />
+          <MaterialIcon name="chevron_right" className="text-d-on-surface-variant group-hover:text-d-primary mt-3 text-lg transition-colors shrink-0" />
         </Link>
       </div>
 

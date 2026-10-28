@@ -11,8 +11,10 @@ import { sellerApi } from '@/features/seller/api';
 
 const NAV_ITEMS = [
   { iconName: 'dashboard', label: 'Tổng quan', to: '/seller' },
+  { iconName: 'document_scanner', label: 'AI Nhận diện phế liệu', to: '/seller/ai-scanner' },
   { iconName: 'add_box', label: 'Tạo đơn thu gom', to: '/seller/create' },
   { iconName: 'receipt_long', label: 'Đơn của tôi', to: '/seller/requests' },
+  { iconName: 'gavel', label: 'Lô thanh lý', to: '/seller/liquidations' },
   { iconName: 'notifications', label: 'Thông báo', to: '/seller/notifications', badge: true },
   { iconName: 'bar_chart', label: 'Thống kê thu nhập', to: '/seller/income' },
   { iconName: 'inventory_2', label: 'Hồ sơ cá nhân', to: '/seller/profile' },

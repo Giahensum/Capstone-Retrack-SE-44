@@ -10,7 +10,9 @@ public class LiquidationQuery : DepotQuery
 public record LiquidationSummaryDto(Guid Id, string Title, string PublicArea, decimal StartingPrice,
     decimal BidIncrement, decimal? HighestPrice, int BidCount, string Phase, string Status,
     DateTime SurveyStart, DateTime SurveyEnd, DateTime BiddingStart, DateTime BiddingEnd,
-    DateTime HardEnd, DateTime CollectionDeadline, string[] ImageUrls, DateTime ServerTime);
+    DateTime HardEnd, DateTime CollectionDeadline, string[] ImageUrls, DateTime ServerTime, decimal DepositPercent);
+// Thang giá ẩn danh: chỉ thứ hạng, số tiền, thời điểm và cờ "của kho đang xem".
+public record LiquidationLadderDto(int Rank, decimal Amount, DateTime CreatedAt, bool Mine, bool Leading);
 public record MyLiquidationBidDto(Guid Id, decimal Amount, DateTime CreatedAt);
 public record LiquidationDetailDto(LiquidationSummaryDto Lot, string Description, string ScopeDetails,
     string CollectionTerms, string? Address, string? ContactPhone, Guid? ParticipationDepotId,
@@ -22,4 +24,5 @@ public record LiquidationAgreementDto(Guid Id, Guid LotId, string Title, Guid De
     string ScopeDetails, string CollectionTerms, string Address, string ContactPhone,
     DateTime CollectionDeadline, string? PaymentReference, DateTime? PaymentReportedAt,
     DateTime? PaymentConfirmedAt, DateTime? OwnerCollectedAt, DateTime? SellerHandedOverAt,
-    Guid? ReceiptId, string? ReceiptStatus);
+    Guid? ReceiptId, string? ReceiptStatus, decimal DepositPercent, decimal DepositAmount, decimal RemainingAmount,
+    DateTime? SellerSignedAt, DateTime? BuyerSignedAt, string? DepositReference, DateTime? DepositReportedAt, DateTime? DepositConfirmedAt);

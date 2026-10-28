@@ -23,7 +23,7 @@ export default function LiquidationDetail({ id, onClose }) {
       <dl className="grid sm:grid-cols-2 gap-4 rounded-xl bg-white border border-d-border-subtle p-4">{[
         ['Khu vực', lot.publicArea], ['Khảo sát từ', localTime(lot.surveyStart)], ['Khảo sát đến', localTime(lot.surveyEnd)],
         ['Mở trả giá', localTime(lot.biddingStart)], ['Kết thúc hiện tại', localTime(lot.biddingEnd)], ['Gia hạn tối đa tới', localTime(lot.hardEnd)],
-        ['Hạn lấy hết hàng', localTime(lot.collectionDeadline)], ['Bước tăng tối thiểu', money(lot.bidIncrement)],
+        ['Hạn lấy hết hàng', localTime(lot.collectionDeadline)], ['Bước tăng tối thiểu', money(lot.bidIncrement)], ['Tiền đặt cọc khi trúng', lot.depositPercent > 0 ? `${lot.depositPercent}% giá trúng` : 'Không đặt cọc'],
         ['Địa chỉ khảo sát', d.address ?? 'Đăng ký khảo sát để xem'], ['Liên hệ bên bán', d.contactPhone ?? 'Chỉ hiện cho kho đã đăng ký']
       ].map(([label, value]) => <div key={label}><dt className="text-sm text-d-on-surface-variant">{label}</dt><dd className="mt-1 font-medium break-words">{value}</dd></div>)}</dl>
       <p className="text-sm text-d-on-surface-variant">Giờ Việt Nam theo dữ liệu server. Mỗi lượt hợp lệ trong 2 phút cuối có thể gia hạn thêm, tổng không quá 10 phút. Giá trọn lô không thay đổi theo cân sau mua. Khảo sát do chủ kho thực hiện và tự xác nhận, chưa phải kiểm định của RETRACK.</p>
@@ -36,6 +36,7 @@ export default function LiquidationDetail({ id, onClose }) {
         <MutationError mutation={register} /><MutationError mutation={survey} />
       </section>}
       {d.canBid && <BidForm id={id} lot={lot} refreshing={query.isFetching || query.isError} />}
+      {d.participationDepotId === scope.depotId && <PriceLadder id={id} lot={lot} />}
       {d.participationDepotId && <MyBids id={id} />}
       {d.agreementId && <button type="button" className={buttonClass} onClick={() => setAgreement(true)}>Xem thỏa thuận lô trúng và giao nhận</button>}
       {agreement && <LiquidationAgreement id={d.agreementId} onClose={() => setAgreement(false)} />}
@@ -47,7 +48,7 @@ function BidForm({ id, lot, refreshing }) {
   const save = useLiquidationMutation('post', `/${id}/bids`, () => setForm({ operationId: crypto.randomUUID(), amount: '', consent: false }));
   const minimum = lot.highestPrice == null ? lot.startingPrice : lot.highestPrice + lot.bidIncrement;
   return <form className="space-y-3 rounded-2xl bg-d-surface-accent p-4" onSubmit={e => { e.preventDefault(); save.mutate({ operationId: form.operationId, amount: Number(form.amount) }); }}>
-    <h3 className="font-semibold">Trả giá mua cả lô</h3><p className="text-sm">Mức tối thiểu hiện tại: {money(minimum)}. Giá server có thể thay đổi khi kho khác trả giá.</p>
+    <h3 className="font-semibold">Trả giá mua cả lô</h3><p className="text-sm">Mức tối thiểu hiện tại: {money(minimum)}. Giá server có thể thay đổi khi kho khác trả giá.{lot.depositPercent > 0 && ` Nếu trúng bạn ký hợp đồng và đặt cọc ${lot.depositPercent}% giá trúng (cọc tối thiểu ≈ ${money(Math.round(minimum * lot.depositPercent / 100))}), chuyển ngoài hệ thống.`}</p>
     <label className="block">Tổng tiền bạn muốn trả (đ)<input required type="number" min={minimum} max="1000000000000" step="1" disabled={save.isPending} className={inputClass} value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} /></label>
     <label className="flex gap-3"><input required type="checkbox" disabled={save.isPending} checked={form.consent} onChange={e => setForm({ ...form, consent: e.target.checked })} /><span>Tôi xác nhận mua cả lô với mức tiền này nếu trúng; không tự rút hoặc sửa lượt giá đã ghi.</span></label>
     <button className={buttonClass} disabled={save.isPending || !form.consent || refreshing}>{save.isPending ? 'Đang ghi nhận giá…' : 'Xác nhận trả giá cả lô'}</button><MutationError mutation={save} />
@@ -59,5 +60,17 @@ function MyBids({ id }) {
   return <section className="space-y-3"><h3 className="font-semibold">Lịch sử trả giá của bạn</h3><QueryState query={query}>
     {query.data?.items.map(x => <p key={x.id} className="flex flex-wrap justify-between gap-2 rounded-xl border border-d-border-subtle bg-white p-3"><span>{localTime(x.createdAt)}</span><strong>{money(x.amount)}</strong></p>)}
     {!query.data?.items.length && <p className="text-sm">Bạn chưa có lượt trả giá nào.</p>}<Pager page={page} setPage={setPage} total={query.data?.totalCount} />
+  </QueryState></section>;
+}
+// Thang giá ẩn danh: thấy mọi mức giá đang có để biết giá đang ở đâu, không thấy kho nào đặt.
+function PriceLadder({ id, lot }) {
+  const [page, setPage] = useState(1);
+  const query = useLiquidationQuery(`/${id}/ladder`, { page }, true, true);
+  const top = query.data?.items[0]?.amount ?? lot.highestPrice ?? lot.startingPrice;
+  return <section className="space-y-3" aria-label="Thang giá"><h3 className="font-semibold">Thang giá hiện tại ({query.data?.totalCount ?? 0} lượt)</h3><QueryState query={query}>
+    {query.data?.items.map(x => <div key={`${x.rank}-${x.createdAt}`} className={`rounded-xl border p-3 ${x.leading ? 'border-d-primary bg-d-surface-accent' : 'border-d-border-subtle bg-white'}`}>
+      <p className="flex flex-wrap justify-between gap-2"><span>#{x.rank} · {localTime(x.createdAt)}{x.mine && <strong className="ml-2 text-d-primary">Của bạn</strong>}{x.leading && <strong className="ml-2">Dẫn đầu</strong>}</span><strong>{money(x.amount)}</strong></p>
+      <div className="mt-2 h-2 rounded-full bg-d-surface overflow-hidden" role="img" aria-label={`${Math.round(x.amount / top * 100)}% so với giá cao nhất`}><div className="h-full bg-d-primary" style={{ width: `${Math.min(100, x.amount / top * 100)}%` }} /></div></div>)}
+    {!query.data?.items.length && <p className="text-sm">Chưa có lượt trả giá. Giá đang ở mức khởi điểm {money(lot.startingPrice)}.</p>}<Pager page={page} setPage={setPage} total={query.data?.totalCount} />
   </QueryState></section>;
 }

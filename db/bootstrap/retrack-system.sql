@@ -705,6 +705,25 @@ CREATE UNIQUE INDEX IF NOT EXISTS ix_receipt_active_bulk_agreement ON depot_stoc
     WHERE bulk_agreement_id IS NOT NULL AND status NOT IN ('VOIDED','REJECTED');
 
 
+
+-- RETRACK_LIQUIDATION_DEPOSIT_V1: hợp đồng đặt cọc điện tử cho lô thanh lý; tiền cọc chuyển ngoài hệ thống.
+-- Lô/thỏa thuận cũ giữ deposit = 0 nên luồng cũ không đổi.
+ALTER TABLE liquidation_lots ADD COLUMN IF NOT EXISTS deposit_percent NUMERIC(5,2) NOT NULL DEFAULT 0;
+ALTER TABLE liquidation_lots DROP CONSTRAINT IF EXISTS ck_liquidation_deposit_percent;
+ALTER TABLE liquidation_lots ADD CONSTRAINT ck_liquidation_deposit_percent CHECK (deposit_percent >= 0 AND deposit_percent <= 50);
+ALTER TABLE liquidation_agreements ADD COLUMN IF NOT EXISTS deposit_amount NUMERIC(18,0) NOT NULL DEFAULT 0;
+ALTER TABLE liquidation_agreements ADD COLUMN IF NOT EXISTS seller_signed_at TIMESTAMPTZ;
+ALTER TABLE liquidation_agreements ADD COLUMN IF NOT EXISTS buyer_signed_at TIMESTAMPTZ;
+ALTER TABLE liquidation_agreements ADD COLUMN IF NOT EXISTS deposit_reference VARCHAR(255);
+ALTER TABLE liquidation_agreements ADD COLUMN IF NOT EXISTS deposit_reported_at TIMESTAMPTZ;
+ALTER TABLE liquidation_agreements ADD COLUMN IF NOT EXISTS deposit_confirmed_at TIMESTAMPTZ;
+ALTER TABLE liquidation_agreements DROP CONSTRAINT IF EXISTS ck_liquidation_deposit_flow;
+ALTER TABLE liquidation_agreements ADD CONSTRAINT ck_liquidation_deposit_flow CHECK (
+    deposit_amount >= 0 AND deposit_amount < amount
+    AND (deposit_reported_at IS NULL OR (seller_signed_at IS NOT NULL AND buyer_signed_at IS NOT NULL))
+    AND (deposit_confirmed_at IS NULL OR deposit_reported_at IS NOT NULL)
+    AND (payment_reported_at IS NULL OR deposit_amount = 0 OR deposit_confirmed_at IS NOT NULL));
+
 -- RETRACK_DEPOT_NOTIFICATIONS_V1: tương thích thông báo Employee/Driver đã có.
 ALTER TABLE notifications ADD COLUMN IF NOT EXISTS depot_id UUID;
 ALTER TABLE notifications ADD COLUMN IF NOT EXISTS batch_id UUID;
