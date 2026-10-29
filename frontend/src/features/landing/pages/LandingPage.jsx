@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Recycle, Menu, X, ArrowRight, TrendingUp, TrendingDown, Minus, Star, CheckCircle2, Info, ArrowUpRight } from 'lucide-react';
+import { BrandMark } from '@/components/brand/BrandLogo';
 // ── Data ─────────────────────────────────────────────────────────────────────
 const PRICE_TABLE = [
     { type: 'Sắt đặc', icon: 'hardware', price: '12.000 - 15.000', unit: 'VNĐ/kg', trend: 'up', trendLabel: 'Tăng nhẹ' },
@@ -64,9 +65,7 @@ export default function LandingPage() {
         <div className="flex justify-between items-center px-10 py-0 max-w-[1280px] mx-auto h-20">
           {/* Logo */}
           <Link to="/seller" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-            <div className="w-10 h-10 bg-[#446900] rounded-xl flex items-center justify-center">
-              <Recycle size={22} className="text-[#a3e635]"/>
-            </div>
+            <BrandMark size={44} />
             <span className="font-black text-[#446900] text-xl tracking-tight">RETRACK</span>
           </Link>
 

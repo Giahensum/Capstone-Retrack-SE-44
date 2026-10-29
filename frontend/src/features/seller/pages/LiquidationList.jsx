@@ -4,7 +4,9 @@ import { Link } from 'react-router-dom';
 import { sellerApi } from '../api';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { MaterialIcon } from '@/features/depot/components/DepotIcon';
-import { LIQUIDATION_FILTERS, LIQUIDATION_PHASE_LABEL, LIQUIDATION_PHASE_STYLE } from '../liquidationLabels';
+import { LIQUIDATION_FILTERS, LIQUIDATION_PHASE_LABEL } from '../liquidationLabels';
+import { MapPin, Coins, TrendingUp, Users, Timer } from 'lucide-react';
+import { Badge, PHASE_TONE } from '@/components/liquidation/LiquidationUI';
 
 export default function LiquidationList() {
   const [status, setStatus] = useState('');
@@ -95,18 +97,16 @@ export default function LiquidationList() {
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
-                  <span className={`inline-block text-[11px] font-bold px-3 py-1 rounded-full border mb-2 ${LIQUIDATION_PHASE_STYLE[lot.phase] ?? ''}`}>
+                  <Badge tone={PHASE_TONE[lot.phase] ?? 'slate'} className="mb-2">
                     {LIQUIDATION_PHASE_LABEL[lot.phase] ?? lot.phase}
-                  </span>
-                  <p className="text-sm font-bold text-d-on-surface truncate group-hover:text-d-primary transition-colors">{lot.title}</p>
-                  <p className="text-xs text-d-on-surface-variant mt-1 truncate">📍 {lot.publicArea}</p>
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 text-xs text-d-on-surface-variant">
-                    <span>Khởi điểm {formatCurrency(lot.startingPrice)}</span>
-                    <span className="font-bold text-d-primary">
-                      {lot.highestPrice ? `Cao nhất ${formatCurrency(lot.highestPrice)}` : 'Chưa có lượt trả giá'}
-                    </span>
-                    <span>{lot.bidCount} lượt • {lot.participantCount} kho đăng ký</span>
-                    <span>🕒 Đóng {formatDate(lot.biddingEnd)}</span>
+                  </Badge>
+                  <p className="text-base font-bold text-d-on-surface truncate group-hover:text-d-primary transition-colors">{lot.title}</p>
+                  <p className="mt-1 flex items-center gap-1.5 truncate text-xs text-d-on-surface-variant"><MapPin size={13} />{lot.publicArea}</p>
+                  <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-d-surface-container px-3 py-1 text-d-on-surface-variant"><Coins size={13} />Khởi điểm {formatCurrency(lot.startingPrice)}</span>
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-d-primary/10 px-3 py-1 font-bold text-d-primary"><TrendingUp size={13} />{lot.highestPrice ? `Cao nhất ${formatCurrency(lot.highestPrice)}` : 'Chưa có lượt trả giá'}</span>
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-blue-700"><Users size={13} />{lot.bidCount} lượt • {lot.participantCount} kho</span>
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-amber-700"><Timer size={13} />Đóng {formatDate(lot.biddingEnd)}</span>
                   </div>
                 </div>
                 <MaterialIcon name="chevron_right" className="text-d-on-surface-variant group-hover:text-d-primary text-xl transition-colors self-center" />

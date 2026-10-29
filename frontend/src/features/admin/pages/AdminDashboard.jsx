@@ -1,11 +1,12 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { LayoutDashboard, Users, Truck, Package, Banknote, TrendingUp, PieChart, ShieldCheck, Tags, ScrollText, ArrowRight } from 'lucide-react';
 import AdminLayout from '@/components/layout/AdminLayout';
-import { MaterialIcon } from '@/components/ui/MaterialIcon';
 import { adminApi } from '../api';
 import { formatCurrency, ROLE_LABEL } from '@/lib/utils';
 import RevenueAreaChart from '../components/RevenueAreaChart';
 import RoleDonutChart, { ROLE_COLORS } from '../components/RoleDonutChart';
+import { PageHeader, StatCard, Panel } from '../components/AdminUI';
 import UserManagement from './UserManagement';
 import MarketPrices from './MarketPrices';
 import Billing from './Billing';
@@ -20,10 +21,17 @@ function sevenDaysAgoISO() {
 }
 
 const KPI = [
-  { key: 'totalUsers', label: 'Tổng người dùng', icon: 'group', tone: 'bg-d-primary/10 text-d-primary' },
-  { key: 'totalPickupRequests', label: 'Yêu cầu thu gom', icon: 'local_shipping', tone: 'bg-d-secondary/10 text-d-secondary', hint: (d) => `${d.completedPickupRequests} đã hoàn tất` },
-  { key: 'totalInventoryBatches', label: 'Lô hàng trong kho', icon: 'inventory_2', tone: 'bg-[#f59e0b]/10 text-[#b45309]' },
-  { key: 'totalPlatformRevenue', label: 'Doanh thu nền tảng', icon: 'payments', tone: 'bg-d-primary-container text-d-on-primary-container', format: formatCurrency, hint: (d) => `${formatCurrency(d.revenueThisMonth)} tháng này` },
+  { key: 'totalUsers', label: 'Tổng người dùng', icon: Users, tone: 'primary' },
+  { key: 'totalPickupRequests', label: 'Yêu cầu thu gom', icon: Truck, tone: 'teal', hint: (d) => `${d.completedPickupRequests} đã hoàn tất` },
+  { key: 'totalInventoryBatches', label: 'Lô hàng trong kho', icon: Package, tone: 'amber' },
+  { key: 'totalPlatformRevenue', label: 'Doanh thu nền tảng', icon: Banknote, tone: 'lime', format: formatCurrency, hint: (d) => `${formatCurrency(d.revenueThisMonth)} tháng này` },
+];
+
+const SHORTCUTS = [
+  { to: '/admin/users', icon: Users, label: 'Quản lý người dùng', desc: 'Tìm kiếm, tạo mới, khóa tài khoản', tone: 'bg-d-primary/10 text-d-primary' },
+  { to: '/admin/depot-verifications', icon: ShieldCheck, label: 'Duyệt hồ sơ kho vựa', desc: 'Đối soát giấy tờ trước khi mở giao dịch', tone: 'bg-teal-50 text-teal-700' },
+  { to: '/admin/market-prices', icon: Tags, label: 'Bảng giá thị trường', desc: 'Giá tham khảo theo vật liệu', tone: 'bg-amber-50 text-amber-700' },
+  { to: '/admin/audit-logs', icon: ScrollText, label: 'Nhật ký hệ thống', desc: 'Lịch sử hành động quản trị', tone: 'bg-blue-50 text-blue-700' },
 ];
 
 function StatsOverview() {
@@ -39,69 +47,67 @@ function StatsOverview() {
 
   return (
     <AdminLayout crumb="Tổng quan">
-      <div className="p-4 md:p-6 w-full flex flex-col gap-8">
-        <section>
-          <h2 className="font-d-headline-xl text-d-headline-xl text-d-on-surface">Admin Dashboard</h2>
-          <p className="font-d-body-md text-d-body-md text-d-on-surface-variant mt-2">Tổng quan số liệu toàn hệ thống RETRACK.</p>
-        </section>
+      <div className="flex w-full flex-col gap-6 p-4 md:p-6">
+        <PageHeader icon={LayoutDashboard} title="Dashboard" description="Tổng quan số liệu toàn hệ thống RETRACK." />
 
-        {/* KPI Cards */}
-        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Chỉ số chính">
           {KPI.map((k) => (
-            <div key={k.key} className="bg-white border border-d-border-subtle rounded-[20px] p-6 shadow-sm flex flex-col gap-4 relative overflow-hidden group hover:shadow-md transition-shadow">
-              <div className="absolute -right-4 -top-4 w-24 h-24 bg-d-primary/5 rounded-full blur-2xl group-hover:bg-d-primary/10 transition-colors duration-500" />
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center relative z-10 ${k.tone}`}>
-                <MaterialIcon name={k.icon} />
-              </div>
-              <div className="relative z-10">
-                <p className="font-d-label-md text-d-label-md text-d-on-surface-variant mb-1">{k.label}</p>
-                <p className="font-d-headline-lg text-d-headline-lg text-d-on-surface">
-                  {!data ? '—' : k.format ? k.format(data[k.key]) : data[k.key]}
-                </p>
-                {data && k.hint && <p className="font-d-body-sm text-d-body-sm text-d-on-surface-variant mt-1">{k.hint(data)}</p>}
-              </div>
-            </div>
+            <StatCard key={k.key} label={k.label} icon={k.icon} tone={k.tone} loading={isLoading}
+              value={!data ? '—' : k.format ? k.format(data[k.key]) : data[k.key]} hint={data && k.hint ? k.hint(data) : undefined} />
           ))}
         </section>
+        {isError && <p role="alert" className="text-sm text-d-error">Không tải được số liệu tổng quan.</p>}
 
-        <section className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-          <div className="xl:col-span-2 bg-white border border-d-border-subtle rounded-[20px] shadow-sm p-6">
-            <h3 className="font-d-headline-md text-d-headline-md text-d-on-background mb-4">Doanh thu 7 ngày gần nhất</h3>
-            {revenueLoading ? (
-              <p className="font-d-body-sm text-d-body-sm text-d-on-surface-variant">Đang tải...</p>
-            ) : revenueError ? (
-              <p className="font-d-body-sm text-d-body-sm text-d-error">Không tải được dữ liệu doanh thu.</p>
-            ) : !revenue?.points?.length ? (
-              <div className="h-[240px] flex flex-col items-center justify-center text-d-on-surface-variant">
-                <MaterialIcon name="trending_up" className="text-[32px] mb-2 opacity-30" />
-                <p className="font-d-body-sm text-d-body-sm">Chưa có doanh thu trong 7 ngày qua.</p>
-              </div>
-            ) : (
-              <RevenueAreaChart points={revenue.points} />
-            )}
-          </div>
-
-          <div className="bg-white border border-d-border-subtle rounded-[20px] shadow-sm p-6">
-            <h3 className="font-d-headline-md text-d-headline-md text-d-on-background mb-4">Phân bổ người dùng theo vai trò</h3>
-            {isLoading ? (
-              <p className="font-d-body-sm text-d-body-sm text-d-on-surface-variant">Đang tải...</p>
-            ) : isError || !data ? (
-              <p className="font-d-body-sm text-d-body-sm text-d-error">Không tải được số liệu người dùng.</p>
-            ) : (
-              <>
-                <RoleDonutChart usersByRole={data.usersByRole} />
-                <div className="grid grid-cols-2 gap-x-3 gap-y-2 mt-4">
-                  {Object.entries(data.usersByRole).map(([role, count]) => (
-                    <div key={role} className="flex items-center gap-1.5 font-d-body-sm text-d-body-sm">
-                      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: ROLE_COLORS[role] ?? '#727a64' }} />
-                      <span className="text-d-on-surface-variant truncate">{ROLE_LABEL[role] ?? role}</span>
-                      <span className="text-d-on-surface font-medium ml-auto">{count}</span>
-                    </div>
-                  ))}
+        <section className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+          <Panel icon={TrendingUp} title="Doanh thu 7 ngày gần nhất" className="xl:col-span-2">
+            <div className="p-5">
+              {revenueLoading ? (
+                <div className="h-[240px] animate-pulse rounded-2xl bg-d-surface-container" />
+              ) : revenueError ? (
+                <p className="text-sm text-d-error">Không tải được dữ liệu doanh thu.</p>
+              ) : !revenue?.points?.length ? (
+                <div className="flex h-[240px] flex-col items-center justify-center text-d-on-surface-variant">
+                  <TrendingUp size={34} className="mb-2 opacity-30" />
+                  <p className="text-sm">Chưa có doanh thu trong 7 ngày qua.</p>
                 </div>
-              </>
-            )}
-          </div>
+              ) : (
+                <RevenueAreaChart points={revenue.points} />
+              )}
+            </div>
+          </Panel>
+
+          <Panel icon={PieChart} title="Người dùng theo vai trò">
+            <div className="p-5">
+              {isLoading ? (
+                <div className="h-[200px] animate-pulse rounded-2xl bg-d-surface-container" />
+              ) : isError || !data ? (
+                <p className="text-sm text-d-error">Không tải được số liệu người dùng.</p>
+              ) : (
+                <>
+                  <RoleDonutChart usersByRole={data.usersByRole} />
+                  <div className="mt-4 grid grid-cols-2 gap-x-3 gap-y-2">
+                    {Object.entries(data.usersByRole).map(([role, count]) => (
+                      <div key={role} className="flex items-center gap-1.5 text-sm">
+                        <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: ROLE_COLORS[role] ?? '#727a64' }} />
+                        <span className="truncate text-d-on-surface-variant">{ROLE_LABEL[role] ?? role}</span>
+                        <span className="ml-auto font-bold text-d-on-surface">{count}</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          </Panel>
+        </section>
+
+        <section aria-label="Lối tắt" className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {SHORTCUTS.map(({ to, icon: Icon, label, desc, tone }) => (
+            <Link key={to} to={to} className="group flex items-center gap-3.5 rounded-2xl border border-d-border-subtle bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-d-primary/40 hover:shadow-md">
+              <span className={`flex size-11 shrink-0 items-center justify-center rounded-xl ${tone}`}><Icon size={21} /></span>
+              <span className="min-w-0 flex-1"><span className="block truncate text-sm font-bold text-d-on-surface">{label}</span><span className="block truncate text-xs text-d-on-surface-variant">{desc}</span></span>
+              <ArrowRight size={17} className="shrink-0 text-d-outline transition group-hover:translate-x-1 group-hover:text-d-primary" />
+            </Link>
+          ))}
         </section>
       </div>
     </AdminLayout>
