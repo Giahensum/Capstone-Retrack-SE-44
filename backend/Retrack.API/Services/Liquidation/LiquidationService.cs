@@ -157,7 +157,7 @@ public sealed class LiquidationService(ILiquidationRepository repository, IDepot
             x.Lot.Address, x.Lot.ContactPhone, x.Lot.CollectionDeadline, x.PaymentReference, x.PaymentReportedAt,
             x.PaymentConfirmedAt, x.OwnerCollectedAt, x.SellerHandedOverAt, receipt?.Id, receipt?.Status,
             x.Lot.DepositPercent, x.DepositAmount, x.Amount - x.DepositAmount, x.SellerSignedAt, x.BuyerSignedAt,
-            x.DepositReference, x.DepositReportedAt, x.DepositConfirmedAt);
+            x.DepositReference, x.DepositReportedAt, x.DepositConfirmedAt, x.CreatedAt, await repository.ContractPartiesAsync(x));
     }
     public async Task AgreementActionAsync(Guid userId, Guid? depotId, Guid agreementId, string action, string? reference = null)
     {
