@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using Retrack.API.DTOs.Liquidation;
 
 namespace Retrack.API.DTOs.Seller;
 
@@ -49,7 +50,8 @@ public record SellerLiquidationAgreementDto(Guid Id, Guid LotId, string Title, s
     string Stage, string? PaymentReference, DateTime? PaymentReportedAt, DateTime? PaymentConfirmedAt,
     DateTime? OwnerCollectedAt, DateTime? SellerHandedOverAt, DateTime CollectionDeadline,
     decimal DepositPercent, decimal DepositAmount, decimal RemainingAmount, DateTime? SellerSignedAt, DateTime? BuyerSignedAt,
-    string? DepositReference, DateTime? DepositReportedAt, DateTime? DepositConfirmedAt);
+    string? DepositReference, DateTime? DepositReportedAt, DateTime? DepositConfirmedAt,
+    DateTime CreatedAt, ContractPartiesDto Parties);
 
 public record SellerLiquidationDetailDto(SellerLiquidationSummaryDto Lot, string Description, string ScopeDetails,
     string CollectionTerms, string Address, string ContactPhone, string? CancelReason, bool CanCancel,

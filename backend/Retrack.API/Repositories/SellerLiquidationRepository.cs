@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Retrack.API.Data;
 using Retrack.API.DTOs;
 using Retrack.API.DTOs.Seller;
+using Retrack.API.DTOs.Liquidation;
 using Retrack.API.Models;
 using Retrack.API.Repositories.Interfaces;
 
@@ -63,5 +64,6 @@ public sealed class SellerLiquidationRepository(AppDbContext db) : ISellerLiquid
         if (agreement != null) await db.Entry(agreement).ReloadAsync();
         return agreement;
     }
+    public Task<ContractPartiesDto> ContractPartiesAsync(LiquidationAgreement agreement) => db.ContractPartiesAsync(agreement);
     public async Task<string> DepotNameAsync(Guid depotId) => await db.Depots.AsNoTracking().Where(x => x.Id == depotId).Select(x => x.Name).SingleOrDefaultAsync() ?? "";
 }

@@ -1,4 +1,4 @@
-import { FileSignature, BadgePercent, Banknote, CalendarClock, ShieldAlert, CheckCircle2, Clock } from 'lucide-react';
+import { FileSignature, BadgePercent, Banknote, CalendarClock, ShieldAlert, CheckCircle2, Clock, Printer } from 'lucide-react';
 import { formatCurrency, formatDate } from '@/lib/utils';
 
 function Signature({ label, signedAt }) {
@@ -17,7 +17,7 @@ function Signature({ label, signedAt }) {
 
 // Hợp đồng đặt cọc điện tử lập từ snapshot thỏa thuận (giá, cọc, hạn). Không tự thêm điều khoản ngoài dữ liệu server.
 // Ký = mỗi bên bấm xác nhận, hệ thống ghi thời điểm; không phải chữ ký số có giá trị pháp lý riêng.
-export default function DepositContract({ title, depotName, amount, depositPercent, depositAmount, remainingAmount, collectionDeadline, sellerSignedAt, buyerSignedAt }) {
+export default function DepositContract({ title, depotName, amount, depositPercent, depositAmount, remainingAmount, collectionDeadline, sellerSignedAt, buyerSignedAt, onOpenDocument }) {
   return (
     <article aria-label="Hợp đồng đặt cọc" className="overflow-hidden rounded-2xl border border-d-border-subtle bg-white">
       <div className="flex items-center gap-3 bg-gradient-to-r from-[#446900] to-[#5c8a00] px-4 py-3 text-white">
@@ -26,6 +26,7 @@ export default function DepositContract({ title, depotName, amount, depositPerce
           <h3 className="text-sm font-black">Hợp đồng đặt cọc mua trọn lô</h3>
           <p className="text-xs text-white/80">Xác nhận điện tử của hai bên</p>
         </div>
+        {onOpenDocument && <button type="button" onClick={onOpenDocument} className="ml-auto inline-flex shrink-0 items-center gap-2 rounded-full bg-white px-4 py-2 text-xs font-black text-[#446900] shadow-sm transition hover:bg-[#a3e635] active:scale-95"><Printer size={15} />Xem / In / Tải PDF</button>}
       </div>
       <div className="space-y-4 p-4 text-sm">
         <p className="leading-relaxed">

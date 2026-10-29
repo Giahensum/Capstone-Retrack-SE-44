@@ -11,6 +11,9 @@ public record LiquidationSummaryDto(Guid Id, string Title, string PublicArea, de
     decimal BidIncrement, decimal? HighestPrice, int BidCount, string Phase, string Status,
     DateTime SurveyStart, DateTime SurveyEnd, DateTime BiddingStart, DateTime BiddingEnd,
     DateTime HardEnd, DateTime CollectionDeadline, string[] ImageUrls, DateTime ServerTime, decimal DepositPercent);
+// Thông tin hai bên ghi trên hợp đồng; thông tin chưa có trong hệ thống (CCCD, MST cá nhân…) để trống cho hai bên tự điền khi in.
+public record ContractPartiesDto(string SellerName, string SellerPhone, string BuyerRepresentative, string BuyerPhone,
+    string DepotName, string DepotAddress, string? DepotTaxCode);
 // Thang giá ẩn danh: chỉ thứ hạng, số tiền, thời điểm và cờ "của kho đang xem".
 public record LiquidationLadderDto(int Rank, decimal Amount, DateTime CreatedAt, bool Mine, bool Leading);
 public record MyLiquidationBidDto(Guid Id, decimal Amount, DateTime CreatedAt);
@@ -25,4 +28,5 @@ public record LiquidationAgreementDto(Guid Id, Guid LotId, string Title, Guid De
     DateTime CollectionDeadline, string? PaymentReference, DateTime? PaymentReportedAt,
     DateTime? PaymentConfirmedAt, DateTime? OwnerCollectedAt, DateTime? SellerHandedOverAt,
     Guid? ReceiptId, string? ReceiptStatus, decimal DepositPercent, decimal DepositAmount, decimal RemainingAmount,
-    DateTime? SellerSignedAt, DateTime? BuyerSignedAt, string? DepositReference, DateTime? DepositReportedAt, DateTime? DepositConfirmedAt);
+    DateTime? SellerSignedAt, DateTime? BuyerSignedAt, string? DepositReference, DateTime? DepositReportedAt, DateTime? DepositConfirmedAt,
+    DateTime CreatedAt, ContractPartiesDto Parties);

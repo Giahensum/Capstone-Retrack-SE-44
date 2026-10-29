@@ -23,5 +23,6 @@ public interface ILiquidationRepository
     void AddAgreement(LiquidationAgreement agreement);
     Task<DepotStockReceipt?> AgreementReceiptAsync(Guid id);
     Task<PagedResult<LiquidationLadderDto>> LadderAsync(Guid lotId, Guid? leadingBidId, Guid ownerId, Guid depotId, int page);
+    Task<ContractPartiesDto> ContractPartiesAsync(LiquidationAgreement agreement);
     Task<List<Guid>> ExpiredAsync(DateTime now);
 }

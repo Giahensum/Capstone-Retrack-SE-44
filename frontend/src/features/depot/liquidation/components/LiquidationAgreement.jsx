@@ -8,6 +8,8 @@ import { QueryState, MutationError, inputClass } from '@/features/depot/componen
 import { money } from '@/features/depot/depotApi';
 import StockReceiptForm from '@/features/depot/components/StockReceiptForm';
 import DepositContract from '@/components/liquidation/DepositContract';
+import ContractViewer from '@/components/liquidation/ContractViewer';
+import { toContract } from '@/components/liquidation/ContractDocument';
 import { Modal, Section, Tile, Notice, Steps, Badge } from '@/components/liquidation/LiquidationUI';
 import { useLiquidationQuery, useLiquidationMutation, localTime } from '../liquidationApi';
 
@@ -21,6 +23,7 @@ export default function LiquidationAgreement({ id, onClose }) {
   const [depositRef, setDepositRef] = useState('');
   const [confirmed, setConfirmed] = useState(false);
   const [receiving, setReceiving] = useState(false);
+  const [docOpen, setDocOpen] = useState(false);
   const reset = () => setConfirmed(false);
   const report = useLiquidationMutation('patch', `/agreements/${id}/report-payment`, reset);
   const handover = useLiquidationMutation('patch', `/agreements/${id}/confirm-collected`, reset);
@@ -136,6 +139,7 @@ export default function LiquidationAgreement({ id, onClose }) {
               <DepositContract
                 title={d.title} amount={d.amount} depositPercent={d.depositPercent} depositAmount={d.depositAmount} remainingAmount={d.remainingAmount}
                 collectionDeadline={d.collectionDeadline} sellerSignedAt={d.sellerSignedAt} buyerSignedAt={d.buyerSignedAt}
+                onOpenDocument={() => setDocOpen(true)}
               />
             )}
 
@@ -163,6 +167,7 @@ export default function LiquidationAgreement({ id, onClose }) {
           </>
         )}</QueryState>
       </Modal>
+      {docOpen && d && <ContractViewer contract={toContract(d, d)} onClose={() => setDocOpen(false)} />}
       {receiving && <StockReceiptForm agreement={d} onClose={() => { setReceiving(false); query.refetch(); }} />}
     </>
   );

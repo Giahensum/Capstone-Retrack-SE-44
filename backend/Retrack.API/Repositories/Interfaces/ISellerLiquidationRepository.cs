@@ -1,5 +1,6 @@
 using Retrack.API.DTOs;
 using Retrack.API.DTOs.Seller;
+using Retrack.API.DTOs.Liquidation;
 using Retrack.API.Models;
 
 namespace Retrack.API.Repositories.Interfaces;
@@ -22,4 +23,5 @@ public interface ISellerLiquidationRepository
     Task<LiquidationAgreement?> LotAgreementAsync(Guid lotId);
     Task<LiquidationAgreement?> FindAgreementAsync(Guid id);
     Task<string> DepotNameAsync(Guid depotId);
+    Task<ContractPartiesDto> ContractPartiesAsync(LiquidationAgreement agreement);
 }
