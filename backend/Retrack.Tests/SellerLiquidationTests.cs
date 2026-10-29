@@ -237,6 +237,7 @@ public sealed class SellerLiquidationTests : IAsyncLifetime
         var agreement = (await Seller(db).DetailAsync(seller, lot)).Agreement!;
         Assert.Equal(10m, agreement.DepositPercent); Assert.Equal(1_000_000m, agreement.DepositAmount); Assert.Equal(9_000_000m, agreement.RemainingAmount);
         Assert.Equal(1_000_000m, (await Depot(db).AgreementAsync(owner, depot, agreementId)).DepositAmount);
+        Assert.Equal("Kho A", agreement.Parties.DepotName); Assert.Equal("Kho A", (await Depot(db).AgreementAsync(owner, depot, agreementId)).Parties.DepotName);
         // Chưa ký thì chưa báo cọc, chưa xác nhận cọc, chưa báo phần còn lại.
         await Assert.ThrowsAsync<DepotConflictException>(() => Depot(db).AgreementActionAsync(owner, depot, agreementId, "REPORT_DEPOSIT", "COC"));
         await Assert.ThrowsAsync<DepotConflictException>(() => Seller(db).ConfirmDepositAsync(seller, agreementId));

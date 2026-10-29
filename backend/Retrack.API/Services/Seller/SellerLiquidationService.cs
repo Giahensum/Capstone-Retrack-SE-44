@@ -189,7 +189,7 @@ public sealed class SellerLiquidationService(ISellerLiquidationRepository reposi
     private async Task<SellerLiquidationAgreementDto> AgreementDtoAsync(LiquidationAgreement x) => new(x.Id, x.LotId, x.Lot.Title,
         await repository.DepotNameAsync(x.DepotId), x.Amount, Stage(x), x.PaymentReference, x.PaymentReportedAt, x.PaymentConfirmedAt,
         x.OwnerCollectedAt, x.SellerHandedOverAt, x.Lot.CollectionDeadline, x.Lot.DepositPercent, x.DepositAmount, x.Amount - x.DepositAmount,
-        x.SellerSignedAt, x.BuyerSignedAt, x.DepositReference, x.DepositReportedAt, x.DepositConfirmedAt);
+        x.SellerSignedAt, x.BuyerSignedAt, x.DepositReference, x.DepositReportedAt, x.DepositConfirmedAt, x.CreatedAt, await repository.ContractPartiesAsync(x));
 
     // Giai đoạn thỏa thuận theo góc nhìn Seller; tiền đi ngoài hệ thống, nền tảng chỉ ghi nhận xác nhận.
     private static string Stage(LiquidationAgreement x) =>
