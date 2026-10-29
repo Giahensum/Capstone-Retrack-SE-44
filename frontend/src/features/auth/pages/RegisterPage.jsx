@@ -6,7 +6,8 @@ import toast from 'react-hot-toast';
 import { Input } from '@/components/ui/CommonUI';
 import { useAuth } from '@/hooks/useAuth';
 import api from '@/lib/axios';
-import { Eye, EyeOff, Recycle, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { Eye, EyeOff, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { BrandMark } from '@/components/brand/BrandLogo';
 const ROLE_HOME = {
     SELLER: '/seller',
     DEPOT_OWNER: '/depot',
@@ -74,8 +75,8 @@ export default function RegisterPage() {
         <div className="absolute bottom-0 left-0 w-64 h-64 bg-[#a4f1b2]/10 rounded-full translate-y-1/2 -translate-x-1/2"/>
 
         <div className="relative z-10 text-white">
-          <div className="w-20 h-20 bg-[#a4f1b2] rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-2xl">
-            <Recycle size={40} className="text-[#1f6c3a]"/>
+          <div className="w-24 h-24 bg-white rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-2xl">
+            <BrandMark size={72} />
           </div>
           <h2 className="text-3xl font-black text-center mb-6">Tham gia RETRACK</h2>
           <div className="space-y-4">
@@ -95,9 +96,7 @@ export default function RegisterPage() {
       {/* Right panel */}
       <div className="flex-1 flex flex-col items-center justify-center p-6 lg:p-12 overflow-y-auto">
         <div className="flex items-center gap-3 mb-8 lg:hidden">
-          <div className="w-10 h-10 bg-[#446900] rounded-xl flex items-center justify-center">
-            <Recycle size={20} className="text-[#a3e635]"/>
-          </div>
+          <BrandMark size={44} />
           <span className="text-xl font-black text-[#1f2937]">RETRACK</span>
         </div>
 

@@ -83,12 +83,8 @@
 .brand-mark {
   height: 40px;
   width: 40px;
-  background: #17694e;
-  color: #fff;
-  border-radius: 12px;
-  display: grid;
-  place-items: center;
-  font-size: 26px;
+  object-fit: contain;
+  flex: none;
 }
 .brand-sub {
   display: block;
