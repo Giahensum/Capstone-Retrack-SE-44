@@ -47,9 +47,9 @@ function Workspace() {
             navigate("dashboard");
           }}
         >
-          <span className="brand-mark">R</span>
+          <img className="brand-mark" src="/brand/logo_mark.png" alt="" aria-hidden="true" />
           <span>
-            retrack<span className="brand-sub">FACTORY WORKSPACE</span>
+            RETRACK<span className="brand-sub">FACTORY WORKSPACE</span>
           </span>
         </a>
         <div className="workspace-name">

@@ -1,7 +1,8 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { ROLES } from '@/lib/utils';
-import { LayoutDashboard, Package, Truck, BarChart3, Factory, Users, Settings, LogOut, Menu, X, Recycle } from 'lucide-react';
+import { LayoutDashboard, Package, Truck, BarChart3, Factory, Users, Settings, LogOut, Menu, X } from 'lucide-react';
+import { BrandMark } from '@/components/brand/BrandLogo';
 import { useState } from 'react';
 import { cn } from '@/lib/cn';
 import toast from 'react-hot-toast';
@@ -52,9 +53,7 @@ export function Sidebar() {
     return (<aside className={cn('flex flex-col h-screen bg-slate-900 border-r border-slate-800 transition-all duration-300', collapsed ? 'w-16' : 'w-60')}>
       {/* Logo */}
       <div className="flex items-center gap-3 px-4 py-5 border-b border-slate-800">
-        <div className="w-8 h-8 bg-emerald-500 rounded-lg flex items-center justify-center flex-shrink-0">
-          <Recycle size={18} className="text-white"/>
-        </div>
+        <BrandMark size={32} />
         {!collapsed && (<span className="font-bold text-slate-100 text-lg tracking-tight">ReTrack</span>)}
         <button onClick={() => setCollapsed(!collapsed)} className="ml-auto text-slate-400 hover:text-slate-100 transition-colors">
           {collapsed ? <Menu size={18}/> : <X size={18}/>}
