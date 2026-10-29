@@ -62,6 +62,7 @@ public sealed class LiquidationRepository(AppDbContext db) : ILiquidationReposit
     public Task<LiquidationAgreement?> LotAgreementAsync(Guid lotId) => db.LiquidationAgreements.AsNoTracking().SingleOrDefaultAsync(x => x.LotId == lotId);
     public void AddAgreement(LiquidationAgreement agreement) => db.LiquidationAgreements.Add(agreement);
     public Task<DepotStockReceipt?> AgreementReceiptAsync(Guid id) => db.DepotStockReceipts.AsNoTracking().SingleOrDefaultAsync(x => x.BulkAgreementId == id && x.Status != "VOIDED" && x.Status != "REJECTED");
+    public Task<ContractPartiesDto> ContractPartiesAsync(LiquidationAgreement agreement) => db.ContractPartiesAsync(agreement);
     public async Task<PagedResult<LiquidationLadderDto>> LadderAsync(Guid lotId, Guid? leadingBidId, Guid ownerId, Guid depotId, int page)
     {
         const int pageSize = 20;

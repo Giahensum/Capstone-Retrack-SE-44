@@ -10,6 +10,8 @@ import {
 import { sellerApi } from '../api';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import DepositContract from '@/components/liquidation/DepositContract';
+import ContractViewer from '@/components/liquidation/ContractViewer';
+import { toContract } from '@/components/liquidation/ContractDocument';
 import {
   Modal, ConfirmModal, Section, Tile, Notice, Steps, Badge, PriceHero, PriceBar, RankIcon, PHASE_TONE,
 } from '@/components/liquidation/LiquidationUI';
@@ -39,6 +41,7 @@ export default function LiquidationDetail() {
   const [cancelOpen, setCancelOpen] = useState(false);
   const [reason, setReason] = useState('');
   const [confirming, setConfirming] = useState(null);
+  const [docOpen, setDocOpen] = useState(false);
 
   const { data, isLoading, isError, refetch, dataUpdatedAt } = useQuery({
     queryKey: ['seller-liquidation', id],
@@ -161,6 +164,7 @@ export default function LiquidationDetail() {
                 title={agreement.title} depotName={agreement.depotName} amount={agreement.amount}
                 depositPercent={agreement.depositPercent} depositAmount={agreement.depositAmount} remainingAmount={agreement.remainingAmount}
                 collectionDeadline={agreement.collectionDeadline} sellerSignedAt={agreement.sellerSignedAt} buyerSignedAt={agreement.buyerSignedAt}
+                onOpenDocument={() => setDocOpen(true)}
               />
             </div>
           )}
@@ -250,6 +254,7 @@ export default function LiquidationDetail() {
         </Section>
       )}
 
+      {docOpen && agreement && <ContractViewer contract={toContract(agreement, { scopeDetails: data.scopeDetails, collectionTerms: data.collectionTerms, address: data.address })} onClose={() => setDocOpen(false)} />}
       {confirming && canAct && (
         <ConfirmModal
           icon={action.icon} title={action.title} description={action.ask} confirmLabel={action.button}
