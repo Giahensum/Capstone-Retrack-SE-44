@@ -23,6 +23,7 @@ const icons = {
   star: Star, task_alt: CircleCheck, undo: Undo2, visibility: Eye,
   warehouse: Warehouse, warning: TriangleAlert,
   notifications: Bell,
+  assignment: ClipboardList,
   account_balance_wallet: Wallet, schedule: Clock, check_circle_filled: CircleCheck,
 };
 

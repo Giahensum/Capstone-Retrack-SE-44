@@ -111,6 +111,14 @@ public sealed class EmployeeDispatchService(AppDbContext db)
         if (pickup.Status is not ("PENDING" or "SCHEDULED")
             || !string.IsNullOrEmpty(pickup.CheckinImageUrl)
             || await db.PickupCheckIns.AnyAsync(c => c.PickupRequestId == id, ct)) return;
+        // Owner xử lý ngoại lệ (ví dụ thiếu tọa độ). Giữ phân công tay khi ca/membership còn hợp lệ;
+        // không giữ khi nhân viên báo đầy/ngừng ca hoặc hết giờ để TV3 tiếp tục điều phối lại.
+        if (pickup.AcceptedCollectorId.HasValue && pickup.TargetDepotId.HasValue &&
+            await db.EmployeeDispatchQueues.AnyAsync(q => q.PickupId == id && q.Reason == "ASSIGNED_MANUAL", ct) &&
+            await db.EmployeeDispatchShifts.AnyAsync(s => s.EmployeeId == pickup.AcceptedCollectorId && s.Availability == "AVAILABLE" && s.StartsAt <= now && s.EndsAt > now &&
+                (pickup.PreferredDatetime == null || pickup.PreferredDatetime < s.EndsAt) &&
+                db.EmployeeCollectionAreas.Any(a => a.Id == s.AreaId && a.DepotId == pickup.TargetDepotId && a.IsActive), ct) &&
+            await db.DepotStaffs.AnyAsync(s => s.DepotId == pickup.TargetDepotId && s.UserId == pickup.AcceptedCollectorId && s.IsActive && s.StaffType == "DEPOT_EMPLOYEE" && s.User.IsActive && s.User.Role == "DEPOT_EMPLOYEE" && s.Depot.Owner.IsActive && s.Depot.VerificationStatus == "APPROVED", ct)) return;
         var areas = await db.EmployeeCollectionAreas.Where(a => a.IsActive
             && (pickup.TargetDepotId == null || a.DepotId == pickup.TargetDepotId)
             && db.Depots.Any(d => d.Id == a.DepotId && d.Owner.IsActive && d.VerificationStatus == "APPROVED"))
