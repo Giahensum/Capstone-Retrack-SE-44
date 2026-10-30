@@ -227,17 +227,33 @@ def load_model_for_finetuning(device):
         model = models.efficientnet_b4(weights=models.EfficientNet_B4_Weights.DEFAULT)
         model.classifier[1] = nn.Linear(model.classifier[1].in_features, 12)
 
-    # Freeze backbone
-    for param in model.features.parameters():
+    # Freeze toan bo tham so ban dau
+    for param in model.parameters():
         param.requires_grad = False
 
-    # Unfreeze block cuoi cung de model hoc sau hon dac trung moi
-    for param in model.features[-2:].parameters():
-        param.requires_grad = True
-
-    # Classifier luon luon can duoc train
-    for param in model.classifier.parameters():
-        param.requires_grad = True
+    # Unfreeze cac tang cuoi tuy theo kien truc model
+    if hasattr(model, '_blocks'):
+        # efficientnet_pytorch architecture
+        for param in model._blocks[-2:].parameters():
+            param.requires_grad = True
+        if hasattr(model, '_conv_head'):
+            for param in model._conv_head.parameters():
+                param.requires_grad = True
+        if hasattr(model, '_fc'):
+            for param in model._fc.parameters():
+                param.requires_grad = True
+    elif hasattr(model, 'features'):
+        # torchvision architecture
+        for param in model.features[-2:].parameters():
+            param.requires_grad = True
+        if hasattr(model, 'classifier'):
+            for param in model.classifier.parameters():
+                param.requires_grad = True
+    else:
+        # Fallback: unfreeze 15% cuoi cac parameters
+        all_params = list(model.parameters())
+        for p in all_params[-int(len(all_params) * 0.15):]:
+            p.requires_grad = True
 
     model = model.to(device)
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
