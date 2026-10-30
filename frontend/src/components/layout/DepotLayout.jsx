@@ -51,6 +51,7 @@ const DepotLayout = () => {
     { iconName: 'local_shipping', label: 'Lô xuất hàng', to: '/depot/batches' },
     { iconName: 'factory', label: 'Nhà máy đối tác', to: '/depot/partners' },
     { iconName: 'badge', label: 'Quản lý nhân sự', to: '/depot/staff' },
+    { iconName: 'assignment', label: 'Điều phối thu gom', to: '/depot/dispatch' },
     { iconName: 'monitoring', label: 'Hiệu suất nhân sự', to: '/depot/staff/performance' },
     { iconName: 'payments', label: 'Thanh toán chờ duyệt', to: '/depot/payments' },
     { iconName: 'receipt', label: 'Phí nền tảng', to: '/depot/payments/fees' },

@@ -14,3 +14,8 @@ test('không mở URL tùy ý hoặc identifier chèn đường dẫn', () => {
   assert.equal(notificationTarget({ targetType: 'LIQUIDATION', targetId: '../admin' }), null);
   assert.equal(notificationTarget({ batchId: 'javascript:alert(1)' }), null);
 });
+test('thông báo điều phối đi tới đơn chờ, thông báo thanh toán giữ màn thanh toán', () => {
+  assert.equal(notificationTarget({ category: 'PICKUP', pickupId: id }).to, `/depot/dispatch?pickupId=${id}`);
+  assert.equal(notificationTarget({ category: 'PICKUP' }).to, '/depot/dispatch');
+  assert.equal(notificationTarget({ category: 'PAYMENT', pickupId: id }).to, `/depot/payments?requestId=${id}`);
+});
