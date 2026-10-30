@@ -1,5 +1,16 @@
 # Khởi tạo database ReTrack bằng một file SQL
 
+## Đồng bộ đặt cọc và điều phối — 30/10/2026
+
+Máy mới vẫn chạy toàn bộ `bootstrap/retrack-system.sql` một lần. Nếu DB đã có dữ liệu và đã cập nhật thông báo bản 20/10, cần review/chạy riêng các khối mới sau trong transaction, trước khi chạy backend:
+
+- `-- RETRACK_LIQUIDATION_DEPOSIT_V1` đến trước `-- RETRACK_DEPOT_NOTIFICATIONS_V1`: phần trăm cọc, mốc ký/chuyển/xác nhận cọc trên thỏa thuận Seller–Depot.
+- `-- RETRACK_EMPLOYEE_DISPATCH_BEGIN` đến `-- RETRACK_EMPLOYEE_DISPATCH_END`: khu vực, ca, hàng chờ và lịch sử điều phối của Employee/Depot.
+
+Không chạy kèm seed demo khi nâng cấp DB có dữ liệu thật. `dotnet run` không tự thêm các bảng/cột này. Có thể kiểm tra marker trong cùng file; không cần tìm file SQL bootstrap khác. Thay đổi giao diện điều phối Owner không tạo thêm bảng riêng.
+
+Trong Depot → **Điều phối thu gom**, tạo vùng và bố trí ca cho nhân viên đang hoạt động. Worker kiểm tra mỗi 15 giây; Owner xử lý đơn ngoại lệ bằng phân công thủ công kèm lý do. Ca đã ngừng không mở lại, hãy tạo ca mới. Đơn đã check-in/đang giữ hàng không chuyển người qua màn này. Tải kg mới là thông tin khai báo, thuật toán hiện giới hạn số đơn và tâm khu vực, chưa phải định vị xe/GPS hay tính tải thực tế.
+
 ## Hồ sơ xác minh kho (bổ sung 19/10/2026)
 
 - Kho mới mặc định `UNVERIFIED`. Chủ kho tạo kho và nộp 1–3 hồ sơ PDF/PNG/JPEG (tối đa 2 MB mỗi tệp) trong Hồ sơ kho vựa; Admin đối soát tại Hồ sơ kho vựa trên giao diện Admin.
