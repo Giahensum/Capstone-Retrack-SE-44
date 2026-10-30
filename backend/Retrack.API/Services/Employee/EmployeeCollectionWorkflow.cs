@@ -83,8 +83,8 @@ public sealed partial class EmployeeCollectionService
         return result;
     }
 
-    private void Notify(Guid userId, string title, string message, Guid pickupId) => db.Notifications.Add(new Notification
-        { UserId = userId, Title = title, Message = message, PickupRequestId = pickupId });
+    private void Notify(Guid userId, string title, string message, Guid pickupId) =>
+        db.Notifications.Add(Notification.ForPickup(userId, pickupId, title, message));
 }
 
 public sealed record CollectionSubmissionSnapshot(IReadOnlyList<ClassificationItemDto> Items,

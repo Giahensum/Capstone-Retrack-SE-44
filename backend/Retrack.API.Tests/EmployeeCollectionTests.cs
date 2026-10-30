@@ -55,7 +55,10 @@ public sealed partial class EmployeeCollectionTests : IAsyncLifetime
         Assert.Equal(employee.Id, (await db.PickupCheckIns.SingleAsync()).EmployeeId);
         Assert.Equal(result.CheckIn.ImageUrl, (await db.PickupRequests.AsNoTracking().SingleAsync()).CheckinImageUrl);
         await CheckIn();
-        Assert.Equal(1, images.UploadCount); Assert.Single(await db.Notifications.ToListAsync());
+        Assert.Equal(1, images.UploadCount);
+        var notice = Assert.Single(await db.Notifications.AsNoTracking().ToListAsync());
+        Assert.Equal(seller.Id, notice.UserId); Assert.Equal("PICKUP", notice.Category);
+        Assert.Equal(pickup.Id, notice.PickupRequestId); Assert.Equal("PICKUP_REQUEST", notice.TargetType); Assert.Equal(pickup.Id, notice.TargetId);
     }
 
     [Fact]

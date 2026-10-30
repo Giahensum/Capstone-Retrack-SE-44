@@ -8,10 +8,12 @@ namespace Retrack.API.Services.Seller
     public class SellerService : ISellerService
     {
         private readonly ISellerRepository _sellerRepo;
+        private readonly IDepotUnitOfWork _work;
 
-        public SellerService(ISellerRepository sellerRepo)
+        public SellerService(ISellerRepository sellerRepo, IDepotUnitOfWork work)
         {
             _sellerRepo = sellerRepo;
+            _work = work;
         }
 
         public async Task<SellerProfileDto?> GetProfileAsync(Guid sellerId)
@@ -120,7 +122,8 @@ namespace Retrack.API.Services.Seller
 
         public async Task<(bool Success, string Message, int StatusCode)> CancelRequestAsync(Guid requestId, Guid sellerId)
         {
-            var req = await _sellerRepo.GetPickupRequestByIdAsync(requestId);
+            await using var tx = await _work.BeginAsync();
+            var req = await _sellerRepo.LockPickupAsync(requestId);
             if (req == null)
                 return (false, "Không tìm thấy.", 404);
 
@@ -131,13 +134,16 @@ namespace Retrack.API.Services.Seller
                 return (false, "Chỉ hủy được đơn ở trạng thái chờ xử lý.", 400);
 
             req.Status = "CANCELLED";
+            _sellerRepo.AddNotice(Notification.ForPickup(sellerId, req.Id, "Đã hủy đơn thu gom", "Đơn thu gom của bạn đã được hủy."));
             await _sellerRepo.UpdatePickupRequestAsync(req);
+            await tx.CommitAsync();
             return (true, "Đã hủy đơn thành công.", 200);
         }
 
         public async Task<(bool Success, string Message, int StatusCode)> RejectWeighAsync(Guid requestId, Guid sellerId)
         {
-            var req = await _sellerRepo.GetPickupRequestByIdAsync(requestId);
+            await using var tx = await _work.BeginAsync();
+            var req = await _sellerRepo.LockPickupAsync(requestId);
             if (req == null)
                 return (false, "Không tìm thấy.", 404);
 
@@ -148,7 +154,11 @@ namespace Retrack.API.Services.Seller
                 return (false, "Đơn chưa ở trạng thái chờ xác nhận.", 400);
 
             req.Status = "SCHEDULED"; // Trả về cho nhân viên cân lại
+            _sellerRepo.AddNotice(Notification.ForPickup(sellerId, req.Id, "Đã yêu cầu cân lại", "Bạn đã từ chối kết quả cân. Đơn đã được trả về cho nhân viên xử lý lại."));
+            if (req.AcceptedCollectorId.HasValue)
+                _sellerRepo.AddNotice(Notification.ForPickup(req.AcceptedCollectorId.Value, req.Id, "Người bán yêu cầu cân lại", "Người bán đã từ chối kết quả cân. Hãy mở lại đơn và kiểm tra kết quả với người bán."));
             await _sellerRepo.UpdatePickupRequestAsync(req);
+            await tx.CommitAsync();
             return (true, "Đã từ chối. Nhân viên sẽ cân lại.", 200);
         }
 

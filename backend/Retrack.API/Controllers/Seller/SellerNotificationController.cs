@@ -40,10 +40,12 @@ public class SellerNotificationController(AppDbContext db) : ControllerBase
         }
 
         var total = await source.CountAsync(ct);
+        // Dùng long để không tràn số; trang vượt tổng dữ liệu phải trả danh sách rỗng.
+        var offset = (int)Math.Min((long)(page - 1) * pageSize, total);
         var items = await source
             .OrderByDescending(n => n.CreatedAt)
             .ThenBy(n => n.Id)
-            .Skip((page - 1) * pageSize)
+            .Skip(offset)
             .Take(pageSize)
             .Select(n => new SellerNotificationDto
             {

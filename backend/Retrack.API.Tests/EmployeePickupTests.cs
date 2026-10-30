@@ -94,6 +94,8 @@ public sealed class EmployeePickupTests : IAsyncLifetime
         Assert.Equal("SCHEDULED", pickup.Status); Assert.Equal(employee.Id, pickup.AcceptedCollectorId);
         var notification = Assert.Single(await db.Notifications.ToListAsync());
         Assert.Equal(seller.Id, notification.UserId);
+        Assert.Equal("PICKUP", notification.Category); Assert.Equal(pickup.Id, notification.PickupRequestId);
+        Assert.Equal("PICKUP_REQUEST", notification.TargetType); Assert.Equal(pickup.Id, notification.TargetId);
         Assert.Empty(Data<List<PickupPoolItemDto>>(await Controller().Pool(default)));
         Assert.True(Data<EmployeePickupDetailDto>(await Controller().Detail(pickup.Id, default)).IsAcceptedByMe);
         Assert.IsType<NotFoundObjectResult>(await Controller(colleague).Detail(pickup.Id, default));
