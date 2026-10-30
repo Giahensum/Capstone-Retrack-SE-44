@@ -1,3 +1,5 @@
+> Cập nhật 30/10/2026: nội dung dưới là lịch sử diễn tập. Máy mới chỉ chạy `db/bootstrap/retrack-system.sql`; SQL dọn legacy đã rút khỏi bản setup, khi cần tra cứu dùng lịch sử Git trước commit hợp nhất. Xem `db/README.md` cho quy trình hiện hành.
+
 # Diễn tập nâng cấp schema Factory
 
 Chỉ chạy trên bản sao PostgreSQL dùng riêng để kiểm thử. Không áp dụng migration trực tiếp lên database dùng chung.

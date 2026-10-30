@@ -69,6 +69,13 @@ public sealed class SchemaScriptTests
             await setup.ExecuteNonQueryAsync();
         await using (var create = new NpgsqlCommand(sql, db, tx) { CommandTimeout = 120 })
             await create.ExecuteNonQueryAsync();
+        // Chạy lại bootstrap không bật lại ca đã ngừng, phục hồi đơn/chuyến đã hủy hoặc đổi mật khẩu đã sửa.
+        await using (var changedDemo = new NpgsqlCommand("""
+            UPDATE employee_dispatch_shifts SET availability='STOPPED',reason='Chủ kho ngừng ca trong kiểm thử';
+            UPDATE pickup_requests SET status='CANCELLED' WHERE id='e0000000-0929-4000-8000-000000000013';
+            UPDATE transport_jobs SET status='CANCELLED' WHERE id='d8600000-0000-4000-8000-000000000001';
+            UPDATE users SET password_hash='fixture-custom-hash' WHERE email='employee.dispatch01@retrack.test';
+            """, db, tx)) await changedDemo.ExecuteNonQueryAsync();
         await using (var repeat = new NpgsqlCommand(sql, db, tx) { CommandTimeout = 120 })
             await repeat.ExecuteNonQueryAsync();
 
@@ -94,11 +101,11 @@ public sealed class SchemaScriptTests
         {
             await using var reader = await verify.ExecuteReaderAsync();
             Assert.True(await reader.ReadAsync());
-            Assert.Equal(13L, reader.GetInt64(0));
-            Assert.Equal(3L, reader.GetInt64(1));
-            Assert.Equal(3L, reader.GetInt64(2));
-            Assert.Equal(8L, reader.GetInt64(3));
-            Assert.Equal(16L, reader.GetInt64(4));
+            Assert.Equal(26L, reader.GetInt64(0));
+            Assert.Equal(5L, reader.GetInt64(1));
+            Assert.Equal(4L, reader.GetInt64(2));
+            Assert.Equal(15L, reader.GetInt64(3));
+            Assert.Equal(65L, reader.GetInt64(4));
             Assert.Equal(10L, reader.GetInt64(5));
             Assert.Equal(2L, reader.GetInt64(6));
             Assert.Equal(2L, reader.GetInt64(7));
@@ -108,8 +115,27 @@ public sealed class SchemaScriptTests
             Assert.StartsWith("$2a$", depotHash);
             Assert.True(BCrypt.Net.BCrypt.Verify("Depot@123", depotHash));
             Assert.Equal(2L, reader.GetInt64(11));
-            Assert.Equal(6L, reader.GetInt64(12));
-            Assert.Equal(1L, reader.GetInt64(13));
+            Assert.Equal(12L, reader.GetInt64(12));
+            Assert.Equal(7L, reader.GetInt64(13));
+        }
+
+        await using (var mergedRoles = new NpgsqlCommand("""
+            SELECT
+                (SELECT count(*) FROM employee_collection_areas),
+                (SELECT count(*) FROM employee_dispatch_shifts WHERE availability='STOPPED'),
+                (SELECT status FROM pickup_requests WHERE id='e0000000-0929-4000-8000-000000000013'),
+                (SELECT status FROM transport_jobs WHERE id='d8600000-0000-4000-8000-000000000001'),
+                (SELECT password_hash FROM users WHERE email='employee.dispatch01@retrack.test'),
+                (SELECT count(*) FROM depot_stock_receipts WHERE id IN ('d8800000-0000-4000-8000-000000000001','d8800000-0000-4000-8000-000000000002') AND status='POSTED' AND NOT costs_confirmed),
+                (SELECT sum(quantity) FROM depot_stock_lines WHERE receipt_id IN ('d8800000-0000-4000-8000-000000000001','d8800000-0000-4000-8000-000000000002')),
+                (SELECT verification_status FROM depots WHERE id='d8100000-0000-4000-8000-000000000001')
+            """, db, tx))
+        {
+            await using var reader=await mergedRoles.ExecuteReaderAsync();Assert.True(await reader.ReadAsync());
+            Assert.Equal(6L,reader.GetInt64(0));Assert.Equal(6L,reader.GetInt64(1));
+            Assert.Equal("CANCELLED",reader.GetString(2));Assert.Equal("CANCELLED",reader.GetString(3));
+            Assert.Equal("fixture-custom-hash",reader.GetString(4));Assert.Equal(2L,reader.GetInt64(5));
+            Assert.Equal(900m,reader.GetDecimal(6));Assert.Equal("APPROVED",reader.GetString(7));
         }
 
         await tx.RollbackAsync();
