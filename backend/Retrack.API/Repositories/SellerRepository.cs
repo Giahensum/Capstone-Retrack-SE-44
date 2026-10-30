@@ -40,6 +40,15 @@ namespace Retrack.API.Repositories
             await _db.SaveChangesAsync();
         }
 
+        public async Task<PickupRequest?> LockPickupAsync(Guid requestId)
+        {
+            var request = await _db.PickupRequests.FromSqlInterpolated($"SELECT * FROM pickup_requests WHERE id = {requestId} FOR UPDATE").SingleOrDefaultAsync();
+            if (request != null) await _db.Entry(request).ReloadAsync();
+            return request;
+        }
+
+        public void AddNotice(Notification notice) => _db.Notifications.Add(notice);
+
         public async Task<bool> HasSellerReviewedRequestAsync(Guid requestId)
         {
             return await _db.SellerDepotReviews.AnyAsync(r => r.PickupRequestId == requestId);

@@ -28,6 +28,7 @@ public sealed class PaymentTests : IAsyncLifetime
     public async Task DisposeAsync()
     {
         await using var db = Open();
+        await db.Notifications.Where(n => userIds.Contains(n.UserId)).ExecuteDeleteAsync();
         await db.PlatformTransactions.Where(t => requestIds.Contains(t.SourceId)).ExecuteDeleteAsync();
         await db.InventoryBatches.Where(b => depotIds.Contains(b.DepotId)).ExecuteDeleteAsync();
         await db.PickupRequests.Where(r => requestIds.Contains(r.Id)).ExecuteDeleteAsync();
@@ -94,6 +95,11 @@ public sealed class PaymentTests : IAsyncLifetime
         var fee = Assert.Single(await verify.PlatformTransactions.Where(t => t.SourceId == seed.Request).ToListAsync());
         Assert.Equal("PICKUP_REQUEST", fee.SourceType);
         Assert.Equal(10m, fee.FeeAmount);
+        var notice = Assert.Single(await verify.Notifications.Where(n => n.PickupRequestId == seed.Request).ToListAsync());
+        Assert.Equal(request.SellerId, notice.UserId);
+        Assert.Equal("PAYMENT", notice.Category);
+        Assert.Equal("PICKUP_REQUEST", notice.TargetType);
+        Assert.Equal(seed.Request, notice.TargetId);
     }
 
     [Fact]
@@ -130,6 +136,7 @@ public sealed class PaymentTests : IAsyncLifetime
         Assert.Equal(1, await verify.PlatformTransactions.CountAsync(t => t.SourceId == seed.Request));
         var notice = Assert.Single(await verify.Notifications.Where(x => x.UserId == seed.Owner && x.PickupRequestId == seed.Request).ToListAsync());
         Assert.Equal("PAYMENT", notice.Category); Assert.Equal(depotId, notice.DepotId);
+        Assert.Single(await verify.Notifications.Where(n => n.UserId == sellerId && n.PickupRequestId == seed.Request && n.Title == "Đơn thu gom đã hoàn tất").ToListAsync());
         var inventory = new InventoryService(new DepotInventoryRepository(verify),
             new DepotService(new DepotOwnerRepository(verify), new DepotPaymentReadRepository(verify)));
         Assert.Equal(10m, Assert.Single(await inventory.GetAsync(seed.Owner, depotId)).ReceivedKg);
@@ -191,12 +198,14 @@ public sealed class PaymentTests : IAsyncLifetime
             var request = (await db.PickupRequests.FindAsync(seed.Request))!;
             request.Status = state;
             await db.SaveChangesAsync();
+            await db.Entry(request).ReloadAsync(); // Trigger PostgreSQL cập nhật updated_at khi fixture đổi trạng thái.
             updated = request.UpdatedAt;
         }
         await using (var db = Open()) Assert.Equal(state, (await Pay(db, seed.Request, seed.Owner)).Status);
         await using var verify = Open();
         Assert.Equal(updated, (await verify.PickupRequests.FindAsync(seed.Request))!.UpdatedAt);
         Assert.Equal(1, await verify.PlatformTransactions.CountAsync(t => t.SourceId == seed.Request));
+        Assert.Single(await verify.Notifications.Where(n => n.PickupRequestId == seed.Request).ToListAsync());
     }
 
     [Fact]
@@ -230,6 +239,7 @@ public sealed class PaymentTests : IAsyncLifetime
         await Task.WhenAll(attempts);
         await using var verify = Open();
         Assert.Equal(1, await verify.PlatformTransactions.CountAsync(t => t.SourceId == seed.Request));
+        Assert.Single(await verify.Notifications.Where(n => n.PickupRequestId == seed.Request).ToListAsync());
     }
 
     [Fact]
@@ -358,6 +368,109 @@ public sealed class PaymentTests : IAsyncLifetime
         Assert.Equal(status, request.Status);
         Assert.Null(request.PaymentProofUrl);
         Assert.Equal(0, await db.PlatformTransactions.CountAsync(t => t.SourceId == id));
+        Assert.False(await db.Notifications.AnyAsync(n => n.PickupRequestId == id));
+    }
+
+    [Fact]
+    public async Task Notification_write_failure_rolls_back_payment_and_fee()
+    {
+        var seed = await Seed();
+        await using (var db = Open(new FailNotificationSave()))
+            await Assert.ThrowsAsync<InjectedFeeFailure>(() => Pay(db, seed.Request, seed.Owner));
+        await AssertUnchanged(seed.Request, "AWAITING_PAYMENT");
+    }
+
+    [Theory]
+    [InlineData(true)] [InlineData(false)]
+    public async Task Seller_weigh_decision_notifies_assigned_employee_and_rejects_foreign_seller(bool accept)
+    {
+        var seed = await Seed("WEIGHED");
+        Guid employeeId, sellerId;
+        await using (var db = Open())
+        {
+            var req = (await db.PickupRequests.FindAsync(seed.Request))!;
+            var employee = new User { Email = $"notice-{Guid.NewGuid()}@test.invalid", Role = "DEPOT_EMPLOYEE" };
+            db.Users.Add(employee); employeeId = employee.Id; userIds.Add(employee.Id);
+            req.AcceptedCollectorId = employee.Id; sellerId = req.SellerId;
+            await db.SaveChangesAsync();
+        }
+        async Task Decide(AppDbContext db, Guid actor)
+        {
+            if (accept)
+                await new PickupService(new PickupRequestRepository(db), db, new DepotPaymentService(new DepotOwnerRepository(db), new DepotPaymentRepository(db), new DepotUnitOfWork(db)))
+                    .ConfirmBySellerAsync(seed.Request, actor);
+            else
+            {
+                var result = await new Retrack.API.Services.Seller.SellerService(new SellerRepository(db), new DepotUnitOfWork(db)).RejectWeighAsync(seed.Request, actor);
+                Assert.Equal(actor == sellerId ? 200 : 403, result.StatusCode);
+            }
+        }
+        await using (var db = Open())
+        {
+            if (accept) await Assert.ThrowsAsync<DepotForbiddenException>(() => Decide(db, seed.Owner));
+            else await Decide(db, seed.Owner);
+        }
+        await using (var db = Open()) Assert.False(await db.Notifications.AnyAsync(n => n.PickupRequestId == seed.Request));
+        await using (var db = Open()) await Decide(db, sellerId);
+        await using var verify = Open();
+        Assert.Equal(accept ? "SELLER_CONFIRMED" : "SCHEDULED", (await verify.PickupRequests.FindAsync(seed.Request))!.Status);
+        var notice = Assert.Single(await verify.Notifications.Where(n => n.UserId == employeeId && n.PickupRequestId == seed.Request).ToListAsync());
+        Assert.Equal("PICKUP", notice.Category); Assert.Equal(seed.Request, notice.TargetId);
+        await using (var retry = Open())
+        {
+            if (accept) await Assert.ThrowsAsync<DepotConflictException>(() => Decide(retry, sellerId));
+            else Assert.Equal(400, (await new Retrack.API.Services.Seller.SellerService(new SellerRepository(retry), new DepotUnitOfWork(retry)).RejectWeighAsync(seed.Request, sellerId)).StatusCode);
+        }
+        Assert.Single(await verify.Notifications.Where(n => n.UserId == employeeId && n.PickupRequestId == seed.Request).ToListAsync());
+    }
+
+    [Theory]
+    [InlineData("PENDING", 200)] [InlineData("SCHEDULED", 400)] [InlineData("IN_PROGRESS", 400)]
+    [InlineData("WEIGHED", 400)] [InlineData("SELLER_CONFIRMED", 400)] [InlineData("AWAITING_PAYMENT", 400)]
+    [InlineData("PAYMENT_SENT", 400)] [InlineData("DONE", 400)] [InlineData("CANCELLED", 400)]
+    public async Task Seller_cancel_only_notifies_for_pending_pickup_and_retry_never_duplicates(string state, int expected)
+    {
+        var seed = await Seed(state);
+        await using (var db = Open())
+        {
+            var seller = (await db.PickupRequests.FindAsync(seed.Request))!.SellerId;
+            var service = new Retrack.API.Services.Seller.SellerService(new SellerRepository(db), new DepotUnitOfWork(db));
+            Assert.Equal(expected, (await service.CancelRequestAsync(seed.Request, seller)).StatusCode);
+            Assert.Equal(400, (await service.CancelRequestAsync(seed.Request, seller)).StatusCode);
+        }
+        await using var verify = Open();
+        var request = (await verify.PickupRequests.FindAsync(seed.Request))!;
+        Assert.Equal(expected == 200 ? "CANCELLED" : state, request.Status);
+        var notices = await verify.Notifications.Where(n => n.PickupRequestId == seed.Request).ToListAsync();
+        if (expected == 200)
+        {
+            var notice = Assert.Single(notices);
+            Assert.Equal(request.SellerId, notice.UserId); Assert.Equal("PICKUP", notice.Category);
+            Assert.Equal("PICKUP_REQUEST", notice.TargetType); Assert.Equal(seed.Request, notice.TargetId);
+        }
+        else Assert.Empty(notices);
+    }
+
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public async Task Seller_cancel_rejects_foreign_or_missing_pickup_without_notification(bool missing)
+    {
+        var seed = await Seed("PENDING");
+        await using (var db = Open())
+        {
+            var service = new Retrack.API.Services.Seller.SellerService(new SellerRepository(db), new DepotUnitOfWork(db));
+            Assert.Equal(missing ? 404 : 403, (await service.CancelRequestAsync(missing ? Guid.NewGuid() : seed.Request, seed.Owner)).StatusCode);
+        }
+        await AssertUnchanged(seed.Request, "PENDING");
+    }
+
+    private sealed class FailNotificationSave : SaveChangesInterceptor
+    {
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            if (eventData.Context!.ChangeTracker.Entries<Notification>().Any(e => e.State == EntityState.Added)) throw new InjectedFeeFailure();
+            return ValueTask.FromResult(result);
+        }
     }
 
     private sealed class InjectedFeeFailure : Exception { }

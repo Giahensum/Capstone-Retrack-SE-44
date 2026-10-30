@@ -2,6 +2,8 @@ import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { sellerApi } from '../api';
+import { sellerNotificationTarget } from '../notificationTarget';
+import toast from 'react-hot-toast';
 import { MaterialIcon } from '@/features/depot/components/DepotIcon';
 
 export default function SellerNotificationBell() {
@@ -18,10 +20,11 @@ export default function SellerNotificationBell() {
     refetchInterval: 30000,
   });
 
-  const { data: noticesData, isLoading } = useQuery({
+  const { data: noticesData, isLoading, isError, refetch } = useQuery({
     queryKey: ['seller-notifications-dropdown', open],
     queryFn: () => sellerApi.getNotifications({ page: 1, pageSize: 5 }),
     enabled: open,
+    refetchInterval: open ? 30000 : false,
   });
 
   const markReadMutation = useMutation({
@@ -63,14 +66,13 @@ export default function SellerNotificationBell() {
   }, [open]);
 
   const handleOpenNotice = async (notice) => {
-    if (!notice.isRead) {
-      await markReadMutation.mutateAsync(notice.id);
-    }
-    setOpen(false);
-    if (notice.pickupRequestId) {
-      navigate(`/seller/requests/${notice.pickupRequestId}`);
-    } else {
-      navigate('/seller/notifications');
+    if (markReadMutation.isPending) return;
+    try {
+      if (!notice.isRead) await markReadMutation.mutateAsync(notice.id);
+      setOpen(false);
+      navigate(sellerNotificationTarget(notice) || '/seller/notifications');
+    } catch {
+      toast.error('Không thể đánh dấu thông báo đã đọc. Vui lòng thử lại.');
     }
   };
 
@@ -129,20 +131,27 @@ export default function SellerNotificationBell() {
                 <span className="w-5 h-5 border-2 border-d-primary border-t-transparent rounded-full animate-spin" />
                 <span>Đang tải thông báo...</span>
               </div>
+            ) : isError ? (
+              <div className="p-4 text-center text-sm">
+                <p>Không tải được thông báo.</p>
+                <button type="button" onClick={() => refetch()}>Thử lại</button>
+              </div>
             ) : items.length === 0 ? (
               <div className="py-10 text-center text-d-on-surface-variant px-4">
                 <MaterialIcon name="notifications" className="text-3xl text-d-primary mx-auto mb-2 opacity-50" />
                 <p className="font-medium text-sm text-d-on-surface">Không có thông báo mới</p>
                 <p className="text-xs text-d-on-surface-variant mt-1">
-                  Cập nhật về đơn thu gom và thanh toán sẽ xuất hiện ở đây.
+                  Cập nhật về đơn thu gom, đấu giá và thanh toán sẽ xuất hiện ở đây.
                 </p>
               </div>
             ) : (
               items.map((notice) => (
-                <div
+                <button
+                  type="button"
+                  disabled={markReadMutation.isPending}
                   key={notice.id}
                   onClick={() => handleOpenNotice(notice)}
-                  className={`p-3.5 hover:bg-d-surface-container cursor-pointer transition-colors flex items-start gap-3 ${
+                  className={`w-full text-left p-3.5 hover:bg-d-surface-container cursor-pointer transition-colors flex items-start gap-3 ${
                     !notice.isRead ? 'bg-d-primary/5 font-medium' : ''
                   }`}
                 >
@@ -161,7 +170,7 @@ export default function SellerNotificationBell() {
                           ? 'payments'
                           : notice.category === 'PICKUP'
                           ? 'local_shipping'
-                          : 'notifications'
+                          : notice.category === 'LIQUIDATION' ? 'gavel' : 'notifications'
                       }
                       className="text-lg"
                     />
@@ -187,7 +196,7 @@ export default function SellerNotificationBell() {
                       })}
                     </span>
                   </div>
-                </div>
+                </button>
               ))
             )}
           </div>

@@ -3,6 +3,7 @@ namespace Retrack.API.Services.Interfaces;
 public interface INotificationService
 {
     Task SendAsync(Guid userId, string title, string message);
+    Task SendPickupAsync(Guid userId, Guid pickupId, string title, string message) => SendAsync(userId, title, message);
     Task SendInvoiceAsync(Guid userId, string title, string message) => SendAsync(userId, title, message);
     Task<IEnumerable<object>> GetByUserIdAsync(Guid userId);
     Task MarkAsReadAsync(Guid notificationId);

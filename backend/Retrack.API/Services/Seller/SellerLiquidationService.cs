@@ -68,6 +68,8 @@ public sealed class SellerLiquidationService(ISellerLiquidationRepository reposi
             CollectionDeadline = times[4], StartingPrice = dto.StartingPrice, BidIncrement = dto.BidIncrement, DepositPercent = dto.DepositPercent, Status = "PUBLISHED", RequestHash = hash, CreatedAt = now
         };
         repository.AddLot(lot);
+        repository.AddNotice(Notification.ForLiquidation(sellerId, lot.Id, "Đã đăng lô thanh lý",
+            $"Lô {lot.Title} đã được đăng. Bạn có thể theo dõi đăng ký khảo sát và kết quả trả giá trong chi tiết lô."));
         await work.SaveAsync(); await tx.CommitAsync();
         return await BuildDetailAsync(lot, now);
     }
@@ -114,6 +116,7 @@ public sealed class SellerLiquidationService(ISellerLiquidationRepository reposi
         if (lot.Status != "PUBLISHED" || now >= lot.BiddingEnd) throw new DepotConflictException("Phiên đã kết thúc hoặc không còn ở trạng thái mở.");
         if (lot.BidCount > 0) throw new DepotConflictException("Phiên đã có lượt trả giá nên không thể tự hủy; cần Admin xử lý để không bỏ rơi người trả giá.");
         lot.Status = "CANCELLED"; lot.CancelReason = reason;
+        repository.AddNotice(Notification.ForLiquidation(sellerId, lot.Id, "Đã hủy lô thanh lý", $"Lô {lot.Title} đã bị hủy. Lý do: {reason}"));
         foreach (var participant in await repository.ParticipantsAsync(lotId))
             repository.AddNotice(Notification.ForDepot(participant.OwnerId, participant.DepotId, "LIQUIDATION", "Lô thanh lý đã bị hủy",
                 $"Seller đã hủy lô {lot.Title}. Lý do: {reason}", targetType: "LIQUIDATION", targetId: lot.Id));

@@ -22,6 +22,12 @@ public class NotificationService : INotificationService
         await _db.SaveChangesAsync();
     }
 
+    public async Task SendPickupAsync(Guid userId, Guid pickupId, string title, string message)
+    {
+        _db.Notifications.Add(Notification.ForPickup(userId, pickupId, title, message));
+        await _db.SaveChangesAsync();
+    }
+
     public async Task<IEnumerable<object>> GetByUserIdAsync(Guid userId)
         => await _db.Notifications
             .Where(n => n.UserId == userId)
