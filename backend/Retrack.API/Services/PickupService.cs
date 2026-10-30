@@ -84,6 +84,7 @@ namespace Retrack.API.Services
                 Status = "PENDING"
             };
 
+            await using var transaction = await _db.Database.BeginTransactionAsync();
             await _repo.CreateAsync(request);
             _db.Notifications.Add(new Notification
             {
@@ -97,6 +98,7 @@ namespace Retrack.API.Services
                 CreatedAt = DateTime.UtcNow
             });
             await _db.SaveChangesAsync();
+            await transaction.CommitAsync();
             return await MapToDto(request);
         }
 
@@ -247,31 +249,27 @@ namespace Retrack.API.Services
 
         public async Task<PickupRequestDto> ConfirmBySellerAsync(Guid requestId, Guid sellerId)
         {
+            await using var transaction = await _db.Database.BeginTransactionAsync();
+            var locked = await _db.PickupRequests.FromSqlInterpolated($"SELECT * FROM pickup_requests WHERE id = {requestId} FOR UPDATE")
+                .SingleOrDefaultAsync() ?? throw new KeyNotFoundException("Không tìm thấy yêu cầu.");
+            await _db.Entry(locked).ReloadAsync();
             var req = await _repo.GetByIdAsync(requestId)
                 ?? throw new KeyNotFoundException("Không tìm thấy yêu cầu.");
             if (req.SellerId != sellerId)
                 throw new DepotForbiddenException();
             if (req.Status != "WEIGHED") throw new DepotConflictException("Đơn chưa chờ xác nhận kết quả cân.");
             req.Status = "SELLER_CONFIRMED";
+            if (req.AcceptedCollectorId.HasValue)
+                _db.Notifications.Add(Notification.ForPickup(req.AcceptedCollectorId.Value, req.Id, "Người bán đã xác nhận kết quả cân",
+                    "Người bán đã đồng ý kết quả cân. Hãy kiểm tra và bàn giao đơn cho chủ kho để thanh toán."));
             await _repo.UpdateAsync(req);
+            await transaction.CommitAsync();
             return await MapToDto(req);
         }
 
         public async Task<PickupRequestDto> MarkPaymentSentAsync(Guid requestId, Guid ownerId, string paymentProofUrl)
         {
             var req = await _payments.MarkSentAsync(requestId, ownerId, paymentProofUrl);
-            _db.Notifications.Add(new Notification
-            {
-                UserId = req.SellerId,
-                PickupRequestId = req.Id,
-                Category = "PAYMENT",
-                TargetType = "PICKUP_REQUEST",
-                TargetId = req.Id,
-                Title = "Kho đã chuyển khoản thanh toán",
-                Message = $"Kho đã gửi thanh toán cho đơn #{req.Id.ToString()[..8].ToUpper()}. Vui lòng kiểm tra tài khoản và xác nhận nhận tiền.",
-                CreatedAt = DateTime.UtcNow
-            });
-            await _db.SaveChangesAsync();
             return await MapToDto(req);
         }
 
@@ -287,6 +285,8 @@ namespace Retrack.API.Services
             if (req.Status == "DONE") return await MapToDto(req);
             if (req.Status != "PAYMENT_SENT") throw new DepotConflictException("Chủ kho chưa xác nhận chuyển tiền.");
             req.Status = "DONE";
+            _db.Notifications.Add(Notification.ForPickup(sellerId, req.Id, "Đơn thu gom đã hoàn tất",
+                $"Bạn đã xác nhận nhận tiền cho đơn #{req.Id.ToString()[..8].ToUpper()}. Đơn thu gom đã hoàn tất.", "PAYMENT"));
             req.StockReceivedAt ??= DateTime.UtcNow;
             req.UpdatedAt = DateTime.UtcNow;
             if (req.TargetDepotId.HasValue)

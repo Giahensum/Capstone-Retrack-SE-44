@@ -177,8 +177,8 @@ public class EmployeePickupController(AppDbContext db, INotificationService noti
         if (changed == 0)
             return Conflict(ApiResponse<object>.Fail("Đơn đã được nhận bởi nhân viên khác hoặc không còn khả dụng."));
 
-        // The notification service shares this scoped DbContext and transaction.
-        await notify.SendAsync(pickup.SellerId, "Đơn thu gom đã được nhận",
+        // Dịch vụ thông báo dùng chung DbContext và transaction của thao tác nhận đơn.
+        await notify.SendPickupAsync(pickup.SellerId, pickup.Id, "Đơn thu gom đã được nhận",
             "Nhân viên kho đã nhận đơn của bạn và sẽ đến sớm.");
         await transaction.CommitAsync(ct);
         return Ok(ApiResponse<PickupPoolItemDto>.Ok(Map(pickup), "Đã nhận đơn thành công."));

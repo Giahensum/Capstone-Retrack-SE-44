@@ -81,8 +81,8 @@ public sealed partial class EmployeeCollectionService(AppDbContext db, ICloudina
         pickup.CheckinImageUrl = url;
         pickup.Status = "IN_PROGRESS";
         pickup.UpdatedAt = DateTime.UtcNow;
-        db.Notifications.Add(new Notification { UserId = pickup.SellerId, Title = "Nhân viên đã đến địa điểm",
-            Message = "Nhân viên đã check-in và bắt đầu phân loại, cân phế liệu." });
+        db.Notifications.Add(Notification.ForPickup(pickup.SellerId, pickup.Id, "Nhân viên đã đến địa điểm",
+            "Nhân viên đã check-in và bắt đầu phân loại, cân phế liệu."));
         await db.SaveChangesAsync(ct);
         var result = await Snapshot(pickup, ct);
         await transaction.CommitAsync(ct);

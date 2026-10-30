@@ -26,6 +26,12 @@ namespace Retrack.API.Models
         [Column("target_type"), MaxLength(30)] public string? TargetType { get; set; }
         [Column("target_id")] public Guid? TargetId { get; set; }
 
+        public static Notification ForLiquidation(Guid seller, Guid lot, string title, string message) => new()
+            { UserId = seller, Category = "LIQUIDATION", TargetType = "LIQUIDATION", TargetId = lot, Title = title, Message = message };
+
+        public static Notification ForPickup(Guid user, Guid pickup, string title, string message, string category = "PICKUP") => new()
+            { UserId = user, PickupRequestId = pickup, Category = category, TargetType = "PICKUP_REQUEST", TargetId = pickup, Title = title, Message = message };
+
         // Chỉ tạo đích nội bộ có kiểu; không nhận URL hoặc người nhận từ request client.
         public static Notification ForDepot(Guid owner, Guid depot, string category, string title, string message,
             Guid? batch = null, string? targetType = null, Guid? targetId = null) => new()

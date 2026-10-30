@@ -6,4 +6,5 @@ public interface IDepotPaymentRepository
 {
     Task<PickupRequest?> LockAsync(Guid requestId);
     void AddFee(PlatformTransaction fee);
+    void AddNotice(Notification notice);
 }
