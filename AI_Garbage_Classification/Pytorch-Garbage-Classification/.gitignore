@@ -12,3 +12,8 @@
 /archive.zip
 /garbage_classification
 /GPU_Info.txt
+# Model weight files - too large for GitHub (>100MB), download/train locally
+*.pth
+*.pt
+model_backup_*.pth
+weights.pt
