@@ -1,6 +1,6 @@
 namespace Retrack.API.DTOs.Depot;
 
-public record DispatchAreaDto(Guid Id, string Name, double Latitude, double Longitude, double RadiusMeters, bool IsActive);
+public record DispatchAreaDto(Guid Id, string Name, double Latitude, double Longitude, double RadiusMeters, bool IsActive, Guid DepotId);
 public record DispatchAreaInput(string Name, double Latitude, double Longitude, double RadiusMeters, bool IsActive);
 public record DispatchShiftInput(Guid AreaId, Guid EmployeeId, DateTimeOffset StartsAt, DateTimeOffset EndsAt,
     string Vehicle, decimal CapacityKg, int MaxPendingOrders, Guid? OperationId = null);
@@ -14,3 +14,4 @@ public record DispatchHistoryDto(Guid Id, Guid? FromEmployeeId, string? FromEmpl
 public record DispatchAssignInput(Guid OperationId, Guid ShiftId, string Reason);
 public record DispatchStopInput(string Reason);
 public record DispatchSummaryDto(int AreaCount, int ActiveShiftCount, int WaitingCount);
+public record DispatchEventCompatDto(Guid Id, Guid PickupId, Guid? FromEmployeeId, Guid? ToEmployeeId, Guid? ShiftId, string Reason, DateTime CreatedAt);

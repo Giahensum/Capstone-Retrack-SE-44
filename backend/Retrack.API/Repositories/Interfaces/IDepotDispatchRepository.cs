@@ -6,6 +6,9 @@ namespace Retrack.API.Repositories.Interfaces;
 public interface IDepotDispatchRepository
 {
     Task LockAsync();
+    Task<PagedResult<StaffDto>> EmployeesAsync(Guid depot, DepotQuery query);
+    Task<object> ConfigurationAsync(Guid depot, int page);
+    Task<List<DispatchEventCompatDto>> LegacyHistoryAsync(Guid pickup, int page);
     Task<PagedResult<DispatchAreaDto>> AreasAsync(Guid depot, DepotQuery query);
     Task<PagedResult<DispatchShiftDto>> ShiftsAsync(Guid depot, DepotQuery query, DateTime now, bool availableOnly = false, Guid? excludeEmployeeId = null);
     Task<PagedResult<DispatchPickupDto>> PickupsAsync(Guid depot, DepotQuery query);

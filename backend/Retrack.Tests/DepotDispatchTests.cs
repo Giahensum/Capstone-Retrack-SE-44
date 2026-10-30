@@ -40,6 +40,7 @@ public sealed class DepotDispatchTests : IAsyncLifetime
     {
         await using var db = Open(); var service = Service(db);
         Assert.Single((await service.AreasAsync(owner, depot, new() { PageSize = 1 })).Items);
+        Assert.Equal(employee,Assert.Single((await service.EmployeesAsync(owner,depot,new(){PageSize=1})).Items).UserId);
         await Assert.ThrowsAsync<DepotForbiddenException>(() => service.AreasAsync(other, depot, new()));
         await Assert.ThrowsAsync<ArgumentException>(() => service.AreasAsync(owner, depot, new() { PageSize = 101 }));
         await Assert.ThrowsAsync<ArgumentException>(() => service.SaveAreaAsync(owner, depot, Guid.NewGuid(), new("Lỗi", 90.001, 108, 3000, true)));
@@ -60,6 +61,11 @@ public sealed class DepotDispatchTests : IAsyncLifetime
         Assert.Empty((await service.ShiftsAsync(owner, depot, new(), true, employee)).Items);
         await new Retrack.API.Services.Employee.EmployeeDispatchService(db).DispatchAsync(default);
         Assert.Equal(employee, (await service.DetailAsync(owner, depot, pickup)).EmployeeId);
+        Assert.Equal(pickup, Assert.Single(await service.LegacyHistoryAsync(owner, depot, pickup, 1)).PickupId);
+        using var configuration = System.Text.Json.JsonDocument.Parse(System.Text.Json.JsonSerializer.Serialize(await service.ConfigurationAsync(owner, depot, 1), new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)));
+        Assert.Equal(depot, configuration.RootElement.GetProperty("areas")[0].GetProperty("depotId").GetGuid());
+        Assert.Equal(0, configuration.RootElement.GetProperty("waitingCount").GetInt32());
+        Assert.Equal(shift.Id, configuration.RootElement.GetProperty("shifts")[0].GetProperty("id").GetGuid());
         await Assert.ThrowsAsync<DepotForbiddenException>(() => service.AssignAsync(other, depot, pickup, dto));
         await Assert.ThrowsAsync<DepotConflictException>(() => service.AssignAsync(owner, depot, pickup, dto with { Reason = "Nội dung khác không được ghi đè" }));
     }

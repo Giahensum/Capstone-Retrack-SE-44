@@ -10,6 +10,7 @@ namespace Retrack.API.Controllers.Depot;
 public sealed class DepotDispatchController(DepotDispatchService service) : ControllerBase
 {
     private Guid Owner => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    [HttpGet("employees")] public async Task<IActionResult> Employees(Guid depotId,[FromQuery]DepotQuery query)=>Ok(ApiResponse<PagedResult<StaffDto>>.Ok(await service.EmployeesAsync(Owner,depotId,query)));
     [HttpGet("areas")] public async Task<IActionResult> Areas(Guid depotId, [FromQuery] DepotQuery query) => Ok(ApiResponse<PagedResult<DispatchAreaDto>>.Ok(await service.AreasAsync(Owner, depotId, query)));
     [HttpGet("shifts")] public async Task<IActionResult> Shifts(Guid depotId, [FromQuery] DepotQuery query, bool availableOnly = false, Guid? excludeEmployeeId = null) => Ok(ApiResponse<PagedResult<DispatchShiftDto>>.Ok(await service.ShiftsAsync(Owner, depotId, query, availableOnly, excludeEmployeeId)));
     [HttpGet("pickups")] public async Task<IActionResult> Pickups(Guid depotId, [FromQuery] DepotQuery query) => Ok(ApiResponse<PagedResult<DispatchPickupDto>>.Ok(await service.PickupsAsync(Owner, depotId, query)));
@@ -20,15 +21,12 @@ public sealed class DepotDispatchController(DepotDispatchService service) : Cont
     [HttpPatch("shifts/{id:guid}/stop")]
     public async Task<IActionResult> Stop(Guid depotId, Guid id, DispatchStopInput input)
     { await service.StopShiftAsync(Owner, depotId, id, input.Reason); return Ok(ApiResponse<string>.Ok("Đã ngừng ca. Đơn chưa check-in được điều phối lại ở lượt kế tiếp; đơn đang giữ hàng giữ nguyên người.")); }
-    [HttpGet("pickups/{id:guid}/history")] public async Task<IActionResult> History(Guid depotId, Guid id, [FromQuery] DepotQuery query) => Ok(ApiResponse<PagedResult<DispatchHistoryDto>>.Ok(await service.HistoryAsync(Owner, depotId, id, query)));
+    [HttpGet("pickups/{id:guid}/events")] public async Task<IActionResult> History(Guid depotId, Guid id, [FromQuery] DepotQuery query) => Ok(ApiResponse<PagedResult<DispatchHistoryDto>>.Ok(await service.HistoryAsync(Owner, depotId, id, query)));
+    [HttpGet("pickups/{id:guid}/history")] public async Task<IActionResult> LegacyHistory(Guid depotId, Guid id, int page = 1) => Ok(ApiResponse<List<DispatchEventCompatDto>>.Ok(await service.LegacyHistoryAsync(Owner, depotId, id, page)));
     [HttpPost("pickups/{id:guid}/assign")]
     public async Task<IActionResult> Assign(Guid depotId, Guid id, DispatchAssignInput input)
     { await service.AssignAsync(Owner, depotId, id, input); return Ok(ApiResponse<string>.Ok("Đã lưu phân công và thông báo cho người liên quan.")); }
     // Giữ đường dẫn cấu hình cũ; client mới dùng từng danh sách phân trang ở trên.
     [HttpGet]
-    public async Task<IActionResult> Legacy(Guid depotId, int page = 1)
-    {
-        var areas = await service.AreasAsync(Owner, depotId, new() { PageSize = 100 }); var shifts = await service.ShiftsAsync(Owner, depotId, new() { Page = page }); var waiting = await service.PickupsAsync(Owner, depotId, new() { Page = page });
-        return Ok(ApiResponse<object>.Ok(new { areas = areas.Items, shifts = shifts.Items, waiting = waiting.Items, waitingCount = waiting.TotalCount, page, pageSize = 20 }));
-    }
+    public async Task<IActionResult> Legacy(Guid depotId, int page = 1) => Ok(ApiResponse<object>.Ok(await service.ConfigurationAsync(Owner, depotId, page)));
 }
