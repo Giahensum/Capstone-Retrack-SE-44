@@ -781,7 +781,29 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         Assert.Equal(new DateOnly(2026, 9, 28), Assert.Single(report.Points).Date);
         Assert.Equal(0, (await service.RevenueAsync(ownerId, depotId, new() { From = new(2026, 9, 27), To = new(2026, 9, 27) })).Revenue);
     }
-    [Fact] public async Task Profile_update_persists_and_rejects_invalid_coordinates()
+      [Theory]
+      [InlineData("90.001", "0")]
+      [InlineData("-90.001", "0")]
+      [InlineData("0", "180.001")]
+      [InlineData("0", "-180.001")]
+      public async Task Profile_rejects_fractional_coordinates_outside_bounds_without_persisting(string latitude, string longitude)
+      {
+          await using var db = Open(); var scope = new DepotService(new Retrack.API.Repositories.DepotOwnerRepository(db), new Retrack.API.Repositories.DepotPaymentReadRepository(db));
+          var before = await scope.GetProfileAsync(ownerId, depotId);
+          var dto = new UpdateDepotProfileDto { Name = "Không được lưu", Address = "Địa chỉ", Latitude = decimal.Parse(latitude, System.Globalization.CultureInfo.InvariantCulture), Longitude = decimal.Parse(longitude, System.Globalization.CultureInfo.InvariantCulture) };
+          await Assert.ThrowsAsync<System.ComponentModel.DataAnnotations.ValidationException>(() => scope.UpdateProfileAsync(ownerId, depotId, dto));
+          Assert.Equal(before, await scope.GetProfileAsync(ownerId, depotId));
+      }
+      [Theory]
+      [InlineData("90", "180")]
+      [InlineData("-90", "-180")]
+      public async Task Profile_accepts_exact_coordinate_bounds(string latitude, string longitude)
+      {
+          await using var db = Open(); var scope = new DepotService(new Retrack.API.Repositories.DepotOwnerRepository(db), new Retrack.API.Repositories.DepotPaymentReadRepository(db));
+          var dto = new UpdateDepotProfileDto { Name = "Kho biên tọa độ", Address = "Địa chỉ", Latitude = decimal.Parse(latitude, System.Globalization.CultureInfo.InvariantCulture), Longitude = decimal.Parse(longitude, System.Globalization.CultureInfo.InvariantCulture) };
+          var saved = await scope.UpdateProfileAsync(ownerId, depotId, dto); Assert.Equal(dto.Latitude, saved.Latitude); Assert.Equal(dto.Longitude, saved.Longitude);
+      }
+      [Fact] public async Task Profile_update_persists_and_rejects_invalid_coordinates()
     {
         await using var db = Open(); var service = new DepotService(new Retrack.API.Repositories.DepotOwnerRepository(db), new Retrack.API.Repositories.DepotPaymentReadRepository(db));
         var dto = new UpdateDepotProfileDto { Name = "Updated", Address = "Address", ContactPhone = "0901234567", Latitude = 10, Longitude = 106 };
