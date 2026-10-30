@@ -9,7 +9,7 @@ public sealed class DepotOperationsService(IDepotOperationsRepository repository
     {
         await scope.RequireOwnerAsync(owner, depot);
         if (query.Status is not (null or "" or "READ" or "UNREAD")) throw new ArgumentException("Trạng thái đọc thông báo không hợp lệ.");
-        if (query.Search?.Length > 255 || query.Category is not (null or "" or "FACTORY" or "PAYMENT" or "TRANSPORT" or "VERIFICATION" or "STOCK" or "LIQUIDATION" or "SYSTEM"))
+        if (query.Search?.Length > 255 || query.Category is not (null or "" or "FACTORY" or "PAYMENT" or "PICKUP" or "TRANSPORT" or "VERIFICATION" or "STOCK" or "LIQUIDATION" or "SYSTEM"))
             throw new ArgumentException("Nhóm thông báo hoặc từ khóa không hợp lệ.");
         return await repository.NoticesAsync(owner, depot, query);
     }

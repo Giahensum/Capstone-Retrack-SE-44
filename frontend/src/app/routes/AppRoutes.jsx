@@ -27,6 +27,7 @@ import DepotStaffPerformance from '@/features/depot/StaffPerformance';
 import DepotProfile from '@/features/depot/Profile';
 const DepotLiquidations = lazy(() => import('@/features/depot/liquidation/LiquidationMarket'));
 const DepotNotifications = lazy(() => import('@/features/depot/Notifications'));
+const DepotDispatch = lazy(() => import('@/features/depot/dispatch/DispatchPage'));
 import { DepotProvider } from '@/features/depot/DepotContext';
 // Employee
 const StaffMobilePage = lazy(() => import('@/features/auth/pages/StaffMobilePage'));
@@ -70,6 +71,7 @@ export function AppRoutes() {
               <Route path="profile" element={<DepotProfile />} />
               <Route path="liquidations" element={<DepotLiquidations />} />
               <Route path="notifications" element={<DepotNotifications />} />
+              <Route path="dispatch" element={<DepotDispatch />} />
               <Route path="*" element={<Navigate to="dashboard" replace />} />
           </Route>
 
