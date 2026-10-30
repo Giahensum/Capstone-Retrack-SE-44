@@ -10,11 +10,14 @@ public sealed class DepotDispatchRepository(AppDbContext db) : IDepotDispatchRep
 {
     // Cùng khóa với EmployeeDispatchService TV3; Owner không tạo nguồn phân công song song.
     public Task LockAsync() => db.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock(62051001)");
+    public Task<PagedResult<StaffDto>> EmployeesAsync(Guid depot,DepotQuery query)=>DepotRepositoryPage.ReadAsync(
+        db.DepotStaffs.AsNoTracking().Where(s=>s.DepotId==depot&&s.IsActive&&s.StaffType=="DEPOT_EMPLOYEE"&&s.User.IsActive&&s.User.Role=="DEPOT_EMPLOYEE")
+            .OrderBy(s=>s.User.FullName).ThenBy(s=>s.Id).Select(s=>new StaffDto(s.Id,s.UserId,s.User.FullName,s.User.Email,s.User.Phone,s.StaffType,true)),query);
     public Task<PagedResult<DispatchAreaDto>> AreasAsync(Guid depot, DepotQuery query)
     {
         var rows = db.EmployeeCollectionAreas.AsNoTracking().Where(x => x.DepotId == depot);
         if (!string.IsNullOrWhiteSpace(query.Search)) rows = rows.Where(x => x.Name.Contains(query.Search));
-        return DepotRepositoryPage.ReadAsync(rows.OrderBy(x => x.Name).ThenBy(x => x.Id).Select(x => new DispatchAreaDto(x.Id, x.Name, x.Latitude, x.Longitude, x.RadiusMeters, x.IsActive)), query);
+        return DepotRepositoryPage.ReadAsync(rows.OrderBy(x => x.Name).ThenBy(x => x.Id).Select(x => new DispatchAreaDto(x.Id, x.Name, x.Latitude, x.Longitude, x.RadiusMeters, x.IsActive, x.DepotId)), query);
     }
     public Task<PagedResult<DispatchShiftDto>> ShiftsAsync(Guid depot, DepotQuery query, DateTime now, bool availableOnly = false, Guid? excludeEmployeeId = null)
     {
@@ -77,4 +80,24 @@ public sealed class DepotDispatchRepository(AppDbContext db) : IDepotDispatchRep
     public void AddEvent(EmployeeDispatchEvent entry) => db.EmployeeDispatchEvents.Add(entry);
     public void AddQueue(EmployeeDispatchQueue queue) => db.EmployeeDispatchQueues.Add(queue);
     public void AddNotice(Notification notice) => db.Notifications.Add(notice);
+    // Giữ dữ liệu trả về đã công bố cho client TV3; chỉ chiếu trường đơn giản, không serialize entity graph.
+    public async Task<object> ConfigurationAsync(Guid depot, int page)
+    {
+        var areas = db.EmployeeCollectionAreas.AsNoTracking().Where(a => a.DepotId == depot);
+        var waiting = db.EmployeeDispatchQueues.AsNoTracking().Where(q => q.Reason != "ASSIGNED" && q.Reason != "ASSIGNED_MANUAL" &&
+            db.PickupRequests.Any(p => p.Id == q.PickupId && p.TargetDepotId == depot && p.Status == "PENDING"));
+        return new
+        {
+            areas = await areas.OrderBy(a => a.Name).ThenBy(a => a.Id).Take(100).Select(a => new DispatchAreaDto(a.Id, a.Name, a.Latitude, a.Longitude, a.RadiusMeters, a.IsActive, a.DepotId)).ToListAsync(),
+            shifts = await db.EmployeeDispatchShifts.AsNoTracking().Where(s => areas.Any(a => a.Id == s.AreaId)).OrderByDescending(s => s.StartsAt).ThenBy(s => s.Id).Skip((page - 1) * 20).Take(20)
+                .Select(s => new { s.Id, s.AreaId, s.EmployeeId, s.StartsAt, s.EndsAt, s.Availability, s.Reason, s.Vehicle, s.CapacityKg, s.MaxPendingOrders, s.UpdatedAt }).ToListAsync(),
+            waiting = await waiting.OrderBy(q => q.UpdatedAt).ThenBy(q => q.PickupId).Skip((page - 1) * 20).Take(20).Select(q => new { q.PickupId, q.Reason, q.UpdatedAt }).ToListAsync(),
+            waitingCount = await waiting.CountAsync(),
+            page,
+            pageSize = 20
+        };
+    }
+    public Task<List<DispatchEventCompatDto>> LegacyHistoryAsync(Guid pickup, int page) => db.EmployeeDispatchEvents.AsNoTracking().Where(e => e.PickupId == pickup)
+        .OrderByDescending(e => e.CreatedAt).ThenBy(e => e.Id).Skip((page - 1) * 20).Take(20)
+        .Select(e => new DispatchEventCompatDto(e.Id, e.PickupId, e.FromEmployeeId, e.ToEmployeeId, e.ShiftId, e.Reason, e.CreatedAt)).ToListAsync();
 }

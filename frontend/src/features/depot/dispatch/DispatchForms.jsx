@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { useDepotQuery } from '../depotApi';
 import { Dialog, QueryState, MutationError, Pager, inputClass, buttonClass } from '../components/DepotUI';
 import { useDispatchQuery, useDispatchMutation, initialLocalTime, vehicleLabels } from './dispatchApi';
 
@@ -23,14 +22,14 @@ export function AreaForm({ area, onClose }) {
 export function ShiftForm({ onClose }) {
   const [areaPage, setAreaPage] = useState(1), [staffPage, setStaffPage] = useState(1);
   const areas = useDispatchQuery('areas', { page: areaPage });
-  const staff = useDepotQuery('staff', { page: staffPage, status: 'ACTIVE' });
+  const staff = useDispatchQuery('employees', { page: staffPage });
   const [form, setForm] = useState(() => ({ operationId: crypto.randomUUID(), areaId: '', employeeId: '', startsAt: initialLocalTime(0), endsAt: initialLocalTime(8), vehicle: 'motorcycle', capacityKg: '100', maxPendingOrders: '10' }));
   const save = useDispatchMutation('post', 'shifts', onClose), field = (key, value) => setForm({ ...form, [key]: value });
   return <Dialog title="Bố trí ca thu gom" onClose={onClose} busy={save.isPending} wide>
     <form className="space-y-4" onSubmit={e => { e.preventDefault(); save.mutate({ ...form, startsAt: new Date(`${form.startsAt}:00+07:00`).toISOString(), endsAt: new Date(`${form.endsAt}:00+07:00`).toISOString(), capacityKg: Number(form.capacityKg), maxPendingOrders: Number(form.maxPendingOrders) }); }}>
       <fieldset disabled={save.isPending} className="space-y-4">
         <QueryState query={areas}><label className="block">Khu vực thu gom<select required className={inputClass} value={form.areaId} onChange={e => field('areaId', e.target.value)}><option value="">Chọn khu vực đang hoạt động</option>{areas.data?.items.filter(a => a.isActive).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></label><Pager page={areaPage} setPage={value => { setAreaPage(value); field('areaId', ''); }} total={areas.data?.totalCount} /></QueryState>
-        <QueryState query={staff}><label className="block">Nhân viên thu gom<select required className={inputClass} value={form.employeeId} onChange={e => field('employeeId', e.target.value)}><option value="">Chọn nhân viên kho đang hoạt động</option>{staff.data?.items.filter(s => s.role === 'DEPOT_EMPLOYEE').map(s => <option key={s.id} value={s.userId}>{s.fullName} — {s.phone}</option>)}</select></label><Pager page={staffPage} setPage={value => { setStaffPage(value); field('employeeId', ''); }} total={staff.data?.totalCount} /></QueryState>
+        <QueryState query={staff}><label className="block">Nhân viên thu gom<select required className={inputClass} value={form.employeeId} onChange={e => field('employeeId', e.target.value)}><option value="">Chọn nhân viên kho đang hoạt động</option>{staff.data?.items.map(s => <option key={s.id} value={s.userId}>{s.fullName} — {s.phone}</option>)}</select></label><Pager page={staffPage} setPage={value => { setStaffPage(value); field('employeeId', ''); }} total={staff.data?.totalCount} /></QueryState>
         <div className="grid sm:grid-cols-2 gap-4"><label>Bắt đầu ca (giờ Việt Nam)<input required type="datetime-local" className={inputClass} value={form.startsAt} onChange={e => field('startsAt', e.target.value)} /></label><label>Kết thúc ca (giờ Việt Nam)<input required type="datetime-local" className={inputClass} value={form.endsAt} min={form.startsAt} onChange={e => field('endsAt', e.target.value)} /></label>
           <label>Phương tiện<select className={inputClass} value={form.vehicle} onChange={e => field('vehicle', e.target.value)}>{Object.entries(vehicleLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label><label>Tải trọng khai báo (kg)<input required type="number" min="0.01" step="0.01" max="20000" className={inputClass} value={form.capacityKg} onChange={e => field('capacityKg', e.target.value)} /></label>
           <label>Giới hạn đơn đang phụ trách<input required type="number" min="1" max="50" step="1" className={inputClass} value={form.maxPendingOrders} onChange={e => field('maxPendingOrders', e.target.value)} /></label></div>

@@ -7,6 +7,8 @@ namespace Retrack.API.Services.Depot;
 
 public sealed class DepotDispatchService(IDepotDispatchRepository repository, IDepotService scope, IDepotUnitOfWork work)
 {
+    public async Task<PagedResult<StaffDto>> EmployeesAsync(Guid owner,Guid depot,DepotQuery query)
+    {await scope.RequireOwnerAsync(owner,depot);Page(query);return await repository.EmployeesAsync(depot,query);}
     private static void Page(DepotQuery query)
     { if (query.Page < 1 || query.PageSize is < 1 or > 100 || query.Search?.Length > 255) throw new ArgumentException("Phân trang hoặc từ khóa không hợp lệ."); }
     public async Task<PagedResult<DispatchAreaDto>> AreasAsync(Guid owner, Guid depot, DepotQuery query)
@@ -40,7 +42,7 @@ public sealed class DepotDispatchService(IDepotDispatchRepository repository, ID
         if (area != null && area.DepotId != depot) throw new KeyNotFoundException("Không tìm thấy khu vực.");
         if (area == null) { area = new() { Id = id, DepotId = depot }; repository.AddArea(area); }
         area.Name = input.Name.Trim(); area.Latitude = input.Latitude; area.Longitude = input.Longitude; area.RadiusMeters = input.RadiusMeters; area.IsActive = input.IsActive;
-        await work.SaveAsync(); await tx.CommitAsync(); return new(area.Id, area.Name, area.Latitude, area.Longitude, area.RadiusMeters, area.IsActive);
+        await work.SaveAsync(); await tx.CommitAsync(); return new(area.Id, area.Name, area.Latitude, area.Longitude, area.RadiusMeters, area.IsActive, area.DepotId);
     }
     public async Task<EmployeeDispatchShift> CreateShiftAsync(Guid owner, Guid depot, DispatchShiftInput input)
     {
@@ -116,4 +118,14 @@ public sealed class DepotDispatchService(IDepotDispatchRepository repository, ID
         await work.SaveAsync(); await tx.CommitAsync();
         // Worker TV3 điều phối lại đơn chưa check-in trong lượt kế tiếp; không bỏ người đang giữ hàng.
     }
+    public async Task<object> ConfigurationAsync(Guid owner, Guid depot, int page)
+    {
+        await scope.RequireOwnerAsync(owner, depot); LegacyPage(page); return await repository.ConfigurationAsync(depot, page);
+    }
+    public async Task<List<DispatchEventCompatDto>> LegacyHistoryAsync(Guid owner, Guid depot, Guid pickup, int page)
+    {
+        await DetailAsync(owner, depot, pickup); LegacyPage(page); return await repository.LegacyHistoryAsync(pickup, page);
+    }
+    private static void LegacyPage(int page)
+    { if (page is < 1 or > 100000) throw new ArgumentException("Trang từ 1 đến 100.000."); }
 }

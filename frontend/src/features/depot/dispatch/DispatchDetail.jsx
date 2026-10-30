@@ -7,7 +7,7 @@ import { PICKUP_STATUS_LABEL } from '@/lib/utils';
 export default function DispatchDetail({ id, onClose }) {
   const query = useDispatchQuery(`pickups/${id}`);
   const [page, setPage] = useState(1), [candidatePage, setCandidatePage] = useState(1);
-  const history = useDispatchQuery(`pickups/${id}/history`, { page });
+  const history = useDispatchQuery(`pickups/${id}/events`, { page });
   const candidates = useDispatchQuery('shifts', { page: candidatePage, availableOnly: true, excludeEmployeeId: query.data?.employeeId });
   const [form, setForm] = useState(() => ({ operationId: crypto.randomUUID(), shiftId: '', reason: '' }));
   const [saved, setSaved] = useState(false);
