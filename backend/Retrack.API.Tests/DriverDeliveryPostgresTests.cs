@@ -36,9 +36,13 @@ public sealed class DriverDeliveryPostgresTests
             await db.Database.ExecuteSqlRawAsync("DROP TABLE driver_delivery_events");
             // Kiểm tra cả SQL triển khai thực tế trên schema fixture mới, không chỉ EF model.
             var root = new DirectoryInfo(AppContext.BaseDirectory);
-            while (root != null && !File.Exists(Path.Combine(root.FullName, "db", "driver", "03_driver_delivery.sql"))) root = root.Parent;
+            while (root != null && !File.Exists(Path.Combine(root.FullName, "db", "bootstrap", "retrack-system.sql"))) root = root.Parent;
             Assert.NotNull(root);
-            await db.Database.ExecuteSqlRawAsync(await File.ReadAllTextAsync(Path.Combine(root!.FullName, "db", "driver", "03_driver_delivery.sql")));
+            var schemaSql = await File.ReadAllTextAsync(Path.Combine(root!.FullName, "db", "bootstrap", "retrack-system.sql"));
+            var start = schemaSql.IndexOf("CREATE TABLE IF NOT EXISTS driver_delivery_events", StringComparison.Ordinal);
+            var end = schemaSql.IndexOf("-- MODULE 8:", start, StringComparison.Ordinal);
+            Assert.True(start >= 0 && end > start, "Thiếu khối SQL driver_delivery_events trong bootstrap.");
+            await db.Database.ExecuteSqlRawAsync(schemaSql[start..end]);
             User NewUser(string role) => new() { Role = role, Email = Guid.NewGuid() + "@test.local" };
             var driver = NewUser("DRIVER");
             var depot = new Depot { Owner = NewUser("DEPOT_OWNER"), Latitude = 16.05m, Longitude = 108.2m };
