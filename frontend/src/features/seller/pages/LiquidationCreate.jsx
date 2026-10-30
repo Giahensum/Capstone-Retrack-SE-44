@@ -62,6 +62,9 @@ export default function LiquidationCreate() {
     mutationFn: (payload) => sellerApi.createLiquidation(payload),
     onSuccess: (lot) => {
       queryClient.invalidateQueries({ queryKey: ['seller-liquidations'] });
+      queryClient.invalidateQueries({ queryKey: ['seller-notifications-unread'] });
+      queryClient.invalidateQueries({ queryKey: ['seller-notifications-list'] });
+      queryClient.invalidateQueries({ queryKey: ['seller-notifications-dropdown'] });
       toast.success('Đã đăng lô thanh lý.');
       navigate(`/seller/liquidations/${lot.lot.id}`);
     },

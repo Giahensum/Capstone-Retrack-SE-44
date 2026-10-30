@@ -17,4 +17,5 @@ public sealed class DepotPaymentRepository(AppDbContext db) : IDepotPaymentRepos
             .SingleAsync(p => p.Id == requestId);
     }
     public void AddFee(PlatformTransaction fee) => db.PlatformTransactions.Add(fee);
+    public void AddNotice(Notification notice) => db.Notifications.Add(notice);
 }

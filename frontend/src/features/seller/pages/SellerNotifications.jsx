@@ -3,52 +3,61 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { sellerApi } from '../api';
+import { sellerNotificationTarget } from '../notificationTarget';
 import { MaterialIcon } from '@/features/depot/components/DepotIcon';
 
 export default function SellerNotifications() {
   const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
-  const [activeTab, setActiveTab] = useState('ALL'); // 'ALL' | 'UNREAD' | 'PICKUP' | 'PAYMENT'
+  const [activeTab, setActiveTab] = useState('ALL');
 
   const queryParams = {
     page,
     pageSize: 15,
     unreadOnly: activeTab === 'UNREAD' ? true : undefined,
-    category: activeTab === 'PICKUP' || activeTab === 'PAYMENT' ? activeTab : undefined,
+    category: ['PICKUP', 'PAYMENT', 'LIQUIDATION'].includes(activeTab) ? activeTab : undefined,
   };
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['seller-notifications-list', queryParams],
     queryFn: () => sellerApi.getNotifications(queryParams),
     staleTime: 10000,
+    refetchInterval: 30000,
   });
 
   const { data: unreadCount = 0 } = useQuery({
     queryKey: ['seller-notifications-unread'],
     queryFn: () => sellerApi.getUnreadCount(),
+    refetchInterval: 30000,
   });
 
   const markReadMutation = useMutation({
     mutationFn: (id) => sellerApi.markRead(id),
+    onError: () => toast.error('Không thể cập nhật thông báo. Vui lòng thử lại.'),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['seller-notifications-unread'] });
       queryClient.invalidateQueries({ queryKey: ['seller-notifications-list'] });
+      queryClient.invalidateQueries({ queryKey: ['seller-notifications-dropdown'] });
     },
   });
 
   const markUnreadMutation = useMutation({
     mutationFn: (id) => sellerApi.markUnread(id),
+    onError: () => toast.error('Không thể cập nhật thông báo. Vui lòng thử lại.'),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['seller-notifications-unread'] });
       queryClient.invalidateQueries({ queryKey: ['seller-notifications-list'] });
+      queryClient.invalidateQueries({ queryKey: ['seller-notifications-dropdown'] });
     },
   });
 
   const markAllMutation = useMutation({
     mutationFn: () => sellerApi.markAllRead(),
+    onError: () => toast.error('Không thể cập nhật thông báo. Vui lòng thử lại.'),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['seller-notifications-unread'] });
       queryClient.invalidateQueries({ queryKey: ['seller-notifications-list'] });
+      queryClient.invalidateQueries({ queryKey: ['seller-notifications-dropdown'] });
       toast.success('Đã đánh dấu tất cả thông báo là đã đọc');
     },
   });
@@ -62,6 +71,7 @@ export default function SellerNotifications() {
     { id: 'UNREAD', label: `Chưa đọc ${unreadCount > 0 ? `(${unreadCount})` : ''}` },
     { id: 'PICKUP', label: 'Đơn thu gom' },
     { id: 'PAYMENT', label: 'Thanh toán' },
+    { id: 'LIQUIDATION', label: 'Đấu giá / Thanh lý' },
   ];
 
   return (
@@ -119,6 +129,11 @@ export default function SellerNotifications() {
             <span className="w-6 h-6 border-2 border-d-primary border-t-transparent rounded-full animate-spin" />
             <span className="text-sm">Đang tải thông báo...</span>
           </div>
+        ) : isError ? (
+          <div role="alert" className="p-6 text-center">
+            <p>Không tải được thông báo. Vui lòng thử lại.</p>
+            <button type="button" onClick={() => refetch()}>Thử lại</button>
+          </div>
         ) : items.length === 0 ? (
           <div className="py-16 text-center bg-d-surface-container-lowest border border-d-border-subtle rounded-2xl p-8">
             <div className="w-16 h-16 rounded-2xl bg-d-surface-container text-d-primary flex items-center justify-center mx-auto mb-4">
@@ -135,6 +150,8 @@ export default function SellerNotifications() {
           items.map((notice) => {
             const isPickup = notice.category === 'PICKUP';
             const isPayment = notice.category === 'PAYMENT';
+            const isLiquidation = notice.category === 'LIQUIDATION';
+            const target = sellerNotificationTarget(notice);
 
             return (
               <div
@@ -156,7 +173,7 @@ export default function SellerNotifications() {
                     }`}
                   >
                     <MaterialIcon
-                      name={isPayment ? 'payments' : isPickup ? 'local_shipping' : 'notifications'}
+                      name={isPayment ? 'payments' : isPickup ? 'local_shipping' : isLiquidation ? 'gavel' : 'notifications'}
                       className="text-2xl"
                     />
                   </div>
@@ -172,7 +189,7 @@ export default function SellerNotifications() {
                         </span>
                       )}
                       <span className="text-[10px] text-d-on-surface-variant bg-d-surface-container px-2 py-0.5 rounded-full uppercase tracking-wider font-semibold">
-                        {isPayment ? 'Thanh toán' : isPickup ? 'Thu gom' : 'Hệ thống'}
+                        {isPayment ? 'Thanh toán' : isPickup ? 'Thu gom' : isLiquidation ? 'Đấu giá / Thanh lý' : 'Hệ thống'}
                       </span>
                     </div>
 
@@ -194,21 +211,22 @@ export default function SellerNotifications() {
 
                 {/* Actions */}
                 <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
-                  {notice.pickupRequestId && (
+                  {target && (
                     <Link
-                      to={`/seller/requests/${notice.pickupRequestId}`}
+                      to={target}
                       onClick={() => {
                         if (!notice.isRead) markReadMutation.mutate(notice.id);
                       }}
                       className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-d-primary-container text-d-on-primary-container text-xs font-bold hover:brightness-95 transition-all shadow-2xs"
                     >
-                      <span>Xem đơn</span>
+                      <span>{isLiquidation ? 'Xem lô' : 'Xem đơn'}</span>
                       <MaterialIcon name="arrow_forward" className="text-sm" />
                     </Link>
                   )}
 
                   <button
                     type="button"
+                    disabled={markReadMutation.isPending || markUnreadMutation.isPending}
                     onClick={() => {
                       if (notice.isRead) {
                         markUnreadMutation.mutate(notice.id);

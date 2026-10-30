@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Npgsql;
 using Retrack.API.Data;
 using Retrack.API.DTOs.Liquidation;
@@ -17,11 +18,11 @@ public sealed class SellerLiquidationTests : IAsyncLifetime
     private readonly Guid seller = Guid.NewGuid(), stranger = Guid.NewGuid(), owner = Guid.NewGuid(), rival = Guid.NewGuid(), depot = Guid.NewGuid(), rivalDepot = Guid.NewGuid();
     private readonly TestClock clock = new(DateTime.UtcNow);
     private sealed class TestClock(DateTime now) : TimeProvider { public DateTime Now = now; public override DateTimeOffset GetUtcNow() => new(Now); }
-    private static AppDbContext Open()
+    private static AppDbContext Open(params IInterceptor[] interceptors)
     {
         var cs = Environment.GetEnvironmentVariable("RETRACK_TEST_CONNECTION")!;
         if (new NpgsqlConnectionStringBuilder(cs).Database != "Retrack_TV2_test") throw new InvalidOperationException("Sai DB test");
-        return new(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(cs).Options);
+        return new(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(cs).AddInterceptors(interceptors).Options);
     }
     private static DepotService Scope(AppDbContext db) => new(new DepotOwnerRepository(db), new DepotPaymentReadRepository(db));
     private SellerLiquidationService Seller(AppDbContext db) => new(new SellerLiquidationRepository(db), new DepotUnitOfWork(db), new DepotBatchRepository(db), clock);
@@ -84,6 +85,8 @@ public sealed class SellerLiquidationTests : IAsyncLifetime
         Assert.Equal(dto.OperationId, first.Lot.Id); Assert.Equal("PUBLISHED", first.Lot.Status); Assert.Equal("SURVEY", first.Lot.Phase); Assert.True(first.CanCancel);
         Assert.Equal(first.Lot.Id, (await Seller(db).CreateAsync(seller, dto)).Lot.Id);
         Assert.Equal(1, await db.LiquidationLots.CountAsync(x => x.Id == dto.OperationId));
+        var notice = Assert.Single(await db.Notifications.Where(n => n.UserId == seller && n.TargetId == dto.OperationId).ToListAsync());
+        Assert.Equal("LIQUIDATION", notice.Category); Assert.Equal("LIQUIDATION", notice.TargetType);
         dto.StartingPrice = 12_000_000;
         await Assert.ThrowsAsync<DepotConflictException>(() => Seller(db).CreateAsync(seller, dto));
         await Assert.ThrowsAsync<DepotConflictException>(() => Seller(db).CreateAsync(stranger, Dto(x => x.OperationId = dto.OperationId)));
@@ -96,6 +99,7 @@ public sealed class SellerLiquidationTests : IAsyncLifetime
         async Task<Guid> Create() { await using var db = Open(); return (await Seller(db).CreateAsync(seller, dto)).Lot.Id; }
         Assert.Single((await Task.WhenAll(Create(), Create(), Create())).Distinct());
         await using var check = Open(); Assert.Equal(1, await check.LiquidationLots.CountAsync(x => x.SellerId == seller));
+        Assert.Single(await check.Notifications.Where(n => n.UserId == seller && n.TargetId == dto.OperationId).ToListAsync());
     }
 
     [Fact]
@@ -167,6 +171,7 @@ public sealed class SellerLiquidationTests : IAsyncLifetime
         var row = await db.LiquidationLots.AsNoTracking().SingleAsync(x => x.Id == lot);
         Assert.Equal("CANCELLED", row.Status); Assert.Equal("Đổi kế hoạch thanh lý", row.CancelReason);
         Assert.Single(await db.Notifications.Where(x => x.UserId == owner && x.TargetId == lot).ToListAsync());
+        Assert.Single(await db.Notifications.Where(x => x.UserId == seller && x.TargetId == lot && x.Title == "Đã hủy lô thanh lý").ToListAsync());
         clock.Now = clock.Now.AddHours(2.5);
         await Assert.ThrowsAsync<DepotConflictException>(() => Depot(db).BidAsync(owner, depot, lot, new(Guid.NewGuid(), 10_000_000)));
         await Assert.ThrowsAsync<DepotConflictException>(() => Seller(db).CancelAsync(seller, lot, "Lý do khác hẳn"));
@@ -212,6 +217,9 @@ public sealed class SellerLiquidationTests : IAsyncLifetime
         await Assert.ThrowsAsync<KeyNotFoundException>(() => Seller(db).ConfirmPaymentAsync(stranger, agreementId));
         await SettleDeposit(db, agreementId); Assert.Equal("WAITING_BUYER_PAYMENT", (await Seller(db).DetailAsync(seller, lot)).Agreement!.Stage);
         await Depot(db).AgreementActionAsync(owner, depot, agreementId, "REPORT_PAYMENT", "CK-001");
+        await Depot(db).AgreementActionAsync(owner, depot, agreementId, "REPORT_PAYMENT", "CK-001");
+        await Assert.ThrowsAsync<DepotConflictException>(() => Depot(db).AgreementActionAsync(owner, depot, agreementId, "REPORT_PAYMENT", "CK-khac"));
+        Assert.Single(await db.Notifications.Where(n => n.UserId == seller && n.TargetId == lot && n.Title == "Chủ kho báo đã chuyển tiền thanh toán").ToListAsync());
         Assert.Equal("WAITING_SELLER_CONFIRM", (await Seller(db).DetailAsync(seller, lot)).Agreement!.Stage);
         await Assert.ThrowsAsync<DepotConflictException>(() => Seller(db).ConfirmHandoverAsync(seller, agreementId)); // chưa xác nhận nhận tiền
         var paid = await Seller(db).ConfirmPaymentAsync(seller, agreementId); var again = await Seller(db).ConfirmPaymentAsync(seller, agreementId);
@@ -220,6 +228,8 @@ public sealed class SellerLiquidationTests : IAsyncLifetime
         var handed = await Seller(db).ConfirmHandoverAsync(seller, agreementId); await Seller(db).ConfirmHandoverAsync(seller, agreementId);
         Assert.Equal("WAITING_OWNER_COLLECT", handed.Stage); Assert.Single(await db.Notifications.Where(x => x.UserId == owner && x.Title == "Seller đã xác nhận bàn giao").ToListAsync());
         await Depot(db).AgreementActionAsync(owner, depot, agreementId, "CONFIRM_COLLECTED"); // phía Chủ kho đi tiếp được sau khi Seller xác nhận
+        await Depot(db).AgreementActionAsync(owner, depot, agreementId, "CONFIRM_COLLECTED");
+        Assert.Single(await db.Notifications.Where(n => n.UserId == seller && n.TargetId == lot && n.Title == "Chủ kho đã xác nhận thu gom").ToListAsync());
         Assert.Equal("COMPLETED", (await Seller(db).DetailAsync(seller, lot)).Agreement!.Stage);
     }
 
@@ -292,6 +302,63 @@ public sealed class SellerLiquidationTests : IAsyncLifetime
     }
 
     private Guid competitor() => rival;
+
+    [Fact]
+    public async Task Creating_lot_rolls_back_when_notification_cannot_be_saved()
+    {
+        var dto = Dto();
+        await using (var db = Open(new FailNoticeSave()))
+            await Assert.ThrowsAsync<NoticeSaveException>(() => Seller(db).CreateAsync(seller, dto));
+        await using var verify = Open();
+        Assert.False(await verify.LiquidationLots.AnyAsync(x => x.Id == dto.OperationId));
+        Assert.False(await verify.Notifications.AnyAsync(x => x.TargetId == dto.OperationId));
+    }
+
+    private sealed class NoticeSaveException : Exception { }
+    private sealed class FailNoticeSave : SaveChangesInterceptor
+    {
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            if (eventData.Context!.ChangeTracker.Entries<Notification>().Any(x => x.State == EntityState.Added)) throw new NoticeSaveException();
+            return ValueTask.FromResult(result);
+        }
+    }
+
+    [Fact]
+    public async Task Seller_notices_follow_registration_bid_and_closing_and_survive_reload_without_duplicates()
+    {
+        Guid lot;
+        await using (var db = Open())
+        {
+            lot = await CreateLot(db);
+            await Join(db, lot, owner, depot);
+            await Join(db, lot, owner, depot);
+            clock.Now = clock.Now.AddHours(2.5);
+            var bid = new LiquidationBidInput(Guid.NewGuid(), 10_000_000);
+            await Depot(db).BidAsync(owner, depot, lot, bid);
+            await Depot(db).BidAsync(owner, depot, lot, bid);
+            clock.Now = clock.Now.AddHours(1);
+            await Depot(db).FinalizeAsync(lot);
+            await Depot(db).FinalizeAsync(lot);
+        }
+        await using var verify = Open();
+        var notices = await verify.Notifications.Where(n => n.UserId == seller && n.TargetId == lot).ToListAsync();
+        Assert.Equal(5, notices.Count);
+        Assert.All(notices, n => { Assert.Equal("LIQUIDATION", n.Category); Assert.Equal("LIQUIDATION", n.TargetType); Assert.False(n.IsRead); });
+        Assert.Contains(notices, n => n.Title == "Lô thanh lý đã có kho trúng giá");
+        Assert.False(await verify.Notifications.AnyAsync(n => n.UserId == stranger && n.TargetId == lot));
+    }
+
+    [Fact]
+    public async Task No_sale_notifies_seller_even_without_participants_and_retry_does_not_duplicate()
+    {
+        await using var db = Open(); var lot = await CreateLot(db);
+        clock.Now = clock.Now.AddHours(4);
+        await Depot(db).FinalizeAsync(lot); await Depot(db).FinalizeAsync(lot);
+        await using var verify = Open();
+        Assert.Equal("NO_SALE", (await verify.LiquidationLots.SingleAsync(x => x.Id == lot)).Status);
+        Assert.Single(await verify.Notifications.Where(n => n.UserId == seller && n.TargetId == lot && n.Title == "Lô thanh lý kết thúc chưa bán được").ToListAsync());
+    }
 
     [Fact]
     public async Task Concurrent_payment_confirmations_record_one_timestamp()

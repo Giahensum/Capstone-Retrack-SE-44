@@ -14,24 +14,22 @@ internal static class TestDatabase
         {
             // Chỉ dựng schema trước fixture đầu tiên, không chạy DDL giữa các bài đang truy vấn.
             if (initialized) return;
-            await db.Database.MigrateAsync();
-            // Các kiểm thử dùng migration lịch sử; đồng bộ cột DB-first mới có trong SQL tổng hợp.
-            await db.Database.ExecuteSqlRawAsync("""
-                ALTER TABLE users ADD COLUMN IF NOT EXISTS bank_name VARCHAR(255);
-                ALTER TABLE users ADD COLUMN IF NOT EXISTS bank_account_number VARCHAR(100);
-                ALTER TABLE users ADD COLUMN IF NOT EXISTS bank_account_name VARCHAR(255);
-                ALTER TABLE users ADD COLUMN IF NOT EXISTS bank_qr_url VARCHAR(2048);
-                """);
+            // Chỉ chuẩn bị database kiểm thử riêng bằng schema DB-first, không chạy seed demo.
+            var connection = new Npgsql.NpgsqlConnectionStringBuilder(db.Database.GetConnectionString());
+            var postgres = Environment.GetEnvironmentVariable("RETRACK_TEST_POSTGRES");
+            if (connection.Database != "Retrack_TV2_test" || string.IsNullOrWhiteSpace(postgres)
+                || new Npgsql.NpgsqlConnectionStringBuilder(postgres).Database != "Retrack_TV2_test")
+                throw new InvalidOperationException("Cần cả hai biến kiểm thử trỏ tới Retrack_TV2_test.");
             var schemaPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../db/bootstrap/retrack-system.sql"));
             var schema = await File.ReadAllTextAsync(schemaPath);
-            var stockStart = schema.IndexOf("-- RETRACK_DEPOT_STOCK_V1", StringComparison.Ordinal);
             var schemaEnd = schema.IndexOf("-- RETRACK_SCHEMA_END", StringComparison.Ordinal);
-            if (stockStart < 0 || schemaEnd <= stockStart) throw new InvalidOperationException("Không tìm thấy khối schema nhập kho để kiểm thử.");
+            if (schemaEnd < 0) throw new InvalidOperationException("Không tìm thấy điểm kết thúc schema để kiểm thử.");
             await db.Database.OpenConnectionAsync();
             try
             {
                 await using var command = db.Database.GetDbConnection().CreateCommand();
-                command.CommandText = schema[stockStart..schemaEnd];
+                command.CommandText = schema[..schemaEnd].Replace("SET LOCAL retrack.seed_demo = 'on';", "SET LOCAL retrack.seed_demo = 'off';") + "\nCOMMIT;";
+                command.CommandTimeout = 120;
                 await command.ExecuteNonQueryAsync();
             }
             finally { await db.Database.CloseConnectionAsync(); }
