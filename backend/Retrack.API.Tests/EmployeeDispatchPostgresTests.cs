@@ -31,10 +31,7 @@ public sealed class EmployeeDispatchPostgresTests
                 await cmd.ExecuteNonQueryAsync();
             }
             await Run("db/bootstrap/retrack-system.sql");
-            await Run("db/employee/04_employee_dispatch.sql");
-            await Run("db/employee/05_dispatch_danang_demo.sql");
-            await Run("db/employee/04_employee_dispatch.sql");
-            await Run("db/employee/05_dispatch_danang_demo.sql");
+            await Run("db/bootstrap/retrack-system.sql");
             await using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(scoped).Options);
             var depotId = Guid.Parse("ed200000-0000-4000-8000-000000000001");
             Assert.Equal(36,await db.PickupRequests.CountAsync(p => p.TargetDepotId == depotId));
@@ -50,7 +47,7 @@ public sealed class EmployeeDispatchPostgresTests
             Assert.Equal(completed,await db.PickupRequests.AsNoTracking().Where(p => p.Status == "DONE")
                 .Select(p => new {p.Id,p.AcceptedCollectorId,p.GrossAmount,p.NetAmount}).OrderBy(p => p.Id).ToListAsync());
             var count = await db.EmployeeDispatchEvents.CountAsync();
-            await Run("db/employee/05_dispatch_danang_demo.sql");
+            await Run("db/bootstrap/retrack-system.sql");
             await new EmployeeDispatchService(db).DispatchAsync(default);
             Assert.Equal(count,await db.EmployeeDispatchEvents.CountAsync());
             Assert.Equal(36,await db.PickupRequests.CountAsync(p => p.TargetDepotId == depotId));

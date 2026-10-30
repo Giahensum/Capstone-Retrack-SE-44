@@ -20,6 +20,7 @@ public sealed class BootstrapTests
         // Schema UUID chỉ tồn tại trong transaction này, rollback tự dọn; không drop/reset DB.
         await using (var create = new NpgsqlCommand($"CREATE SCHEMA {schema}; SET LOCAL search_path TO {schema};", connection, tx)) await create.ExecuteNonQueryAsync();
         var file = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../db/bootstrap/retrack-system.sql"));
+        Assert.Equal(file,Assert.Single(Directory.EnumerateFiles(Path.GetDirectoryName(Path.GetDirectoryName(file))!,"*.sql",SearchOption.AllDirectories)));
         var sql = (await File.ReadAllTextAsync(file)).Replace("BEGIN;", "").Replace("COMMIT;", "").Replace("SET LOCAL retrack.seed_demo = 'on';", $"SET LOCAL retrack.seed_demo = '{(demo ? "on" : "off")}';");
         DateTime? before = null;
         for (var i = 0; i < 2; i++)
