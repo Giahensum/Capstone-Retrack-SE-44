@@ -1,74 +1,59 @@
-# Khởi tạo database ReTrack bằng một file SQL
+# Database ReTrack — chỉ chạy một file SQL
 
-## Đồng bộ đặt cọc và điều phối — 30/10/2026
+**File duy nhất: [`bootstrap/retrack-system.sql`](bootstrap/retrack-system.sql).** Gồm schema toàn hệ thống và seed chung cho Admin, Seller, Depot Owner, Employee, Driver, Factory. Không cần chạy thêm SQL theo role.
 
-Máy mới vẫn chạy toàn bộ `bootstrap/retrack-system.sql` một lần. Nếu DB đã có dữ liệu và đã cập nhật thông báo bản 20/10, cần review/chạy riêng các khối mới sau trong transaction, trước khi chạy backend:
+## Máy mới: chạy thủ công trong pgAdmin
 
-- `-- RETRACK_LIQUIDATION_DEPOSIT_V1` đến trước `-- RETRACK_DEPOT_NOTIFICATIONS_V1`: phần trăm cọc, mốc ký/chuyển/xác nhận cọc trên thỏa thuận Seller–Depot.
-- `-- RETRACK_EMPLOYEE_DISPATCH_BEGIN` đến `-- RETRACK_EMPLOYEE_DISPATCH_END`: khu vực, ca, hàng chờ và lịch sử điều phối của Employee/Depot.
+1. Tạo database mới, rỗng, ví dụ `Retrack_DB`.
+2. Nhấp phải đúng database → Query Tool → Open File.
+3. Mở `db/bootstrap/retrack-system.sql` từ source vừa pull.
+4. Bỏ vùng chọn nếu đang chọn một đoạn; nhấn F5 chạy toàn bộ file.
+5. Khi thấy COMMIT/Query returned successfully, Refresh Schemas → public → Tables.
+6. Trỏ backend tới DB đó bằng `ConnectionStrings__DefaultConnection` trong `backend/Retrack.API/.env` local. Giữ tài khoản/mật khẩu PostgreSQL của máy mình.
+7. Giữ `Database__Initialize=false`, rồi chạy backend theo README dự án.
 
-Không chạy kèm seed demo khi nâng cấp DB có dữ liệu thật. `dotnet run` không tự thêm các bảng/cột này. Có thể kiểm tra marker trong cùng file; không cần tìm file SQL bootstrap khác. Thay đổi giao diện điều phối Owner không tạo thêm bảng riêng.
+Không cần terminal để dựng DB, không cần file seed thứ hai hoặc `dotnet ef database update`. Backend không tự migrate khi `dotnet run`.
 
-Trong Depot → **Điều phối thu gom**, tạo vùng và bố trí ca cho nhân viên đang hoạt động. Worker kiểm tra mỗi 15 giây; Owner xử lý đơn ngoại lệ bằng phân công thủ công kèm lý do. Ca đã ngừng không mở lại, hãy tạo ca mới. Đơn đã check-in/đang giữ hàng không chuyển người qua màn này. Tải kg mới là thông tin khai báo, thuật toán hiện giới hạn số đơn và tâm khu vực, chưa phải định vị xe/GPS hay tính tải thực tế.
+## Dữ liệu demo đã gộp
 
-## Hồ sơ xác minh kho (bổ sung 19/10/2026)
+Mặc định file có `SET LOCAL retrack.seed_demo = 'on';` để nạp:
 
-- Kho mới mặc định `UNVERIFIED`. Chủ kho tạo kho và nộp 1–3 hồ sơ PDF/PNG/JPEG (tối đa 2 MB mỗi tệp) trong Hồ sơ kho vựa; Admin đối soát tại Hồ sơ kho vựa trên giao diện Admin.
-- Chưa duyệt: không tạo lô xuất, bán đồ cũ hoặc nhận giao dịch thu gom mới. Các đơn đang xử lý, thanh toán và đối soát nghĩa vụ cũ vẫn được tiếp tục. Thay đổi tên/địa chỉ/mã số thuế sau duyệt cần xác minh lại.
-- File hồ sơ lưu riêng tư trong database, chỉ Owner tương ứng và Admin đang hoạt động được tải; không phải URL công khai. Cần đưa dữ liệu này vào chính sách backup/quyền truy cập DB của nhóm.
-- Chỉ ba kho demo trong khối seed được đánh dấu đã duyệt. Không tự duyệt các kho thật khi nâng cấp. SQL bổ sung nằm trước `-- RETRACK_SCHEMA_END`; review và chạy phần schema cần thiết trên DB cũ, không chạy lại seed để nâng cấp dữ liệu thật.
+| Nhóm | Dữ liệu |
+|---|---|
+| Tài khoản | 26 tài khoản, đủ 6 role; Chủ kho demo Ngô Sỹ Giá. Giữ các email chính admin/seller/depot/employee/driver/factory@retrack.vn và Factory2/3 |
+| Kho/nhà máy | 5 kho, 4 nhà máy, 15 liên kết nhân sự; địa chỉ mô phỏng Đà Nẵng |
+| Thu gom | 65 đơn nhiều trạng thái, gồm 13 đơn Employee `e0000000-0929-*` và 36 đơn điều phối `ed250000-*` |
+| Điều phối | 6 nhân viên, 6 Seller, 6 vùng và ca demo khoảng 20 giờ; đơn hẹn ngày sau chưa được giao từ hôm nay |
+| Vận chuyển | 12 chuyến, gồm 3 lô `DRV-DEMO-01/02/03` và 3 lô `DRV-DN-LOCAL-01/02/03`, giữ UUID cũ để mobile tiếp tục test |
+| Tồn/chi phí | Phiếu sắt+ghế cùng chi phí; thêm 900 kg PET nguồn demo cho hai bộ lô Driver, giá vốn chưa xác định |
+| Liên role | Hợp tác, nhu cầu, lô xuất/cân/KCS, thanh toán/phí/hóa đơn, thông báo, bảng giá và lô thanh lý |
 
-## Máy mới: mở một file và nhấn F5
+- `employee.dispatch01@retrack.test`…`employee.dispatch06@retrack.test` và Seller dispatch sao chép hash từ tài khoản Employee/Seller nguồn khi tạo lần đầu. `factory.driver-local@retrack.test` sao chép hash Factory nguồn khi tạo lần đầu; không đổi mật khẩu tài khoản đã có.
+- Lô Driver tại chỗ dùng điểm `X7P4+XF9 Ngũ Hành Sơn, Đà Nẵng`. Kho và nhà máy cùng tọa độ chỉ để thử camera/giao nhận tại chỗ, không dùng đánh giá thuật toán tuyến đường.
+- Dữ liệu chỉ mô phỏng, không phải yêu cầu thu gom/giao hàng/thanh toán thật. Nguồn Driver chưa khai giá vốn không được coi vốn bằng 0 để báo lãi.
+- Ca demo hết giờ sau khoảng 20 giờ. Hôm khác Owner tạo ca mới ở Điều phối thu gom; chạy lại file không bật ca STOPPED/FULL hoặc kéo dài ca đã dùng.
 
-1. Trong pgAdmin, tạo database **rỗng**, ví dụ `Retrack_DB`.
-2. Nhấp phải đúng database → **Query Tool**.
-3. Chọn **Open File**, mở `db/bootstrap/retrack-system.sql`.
-4. Bỏ vùng chọn nếu đang chọn một đoạn, rồi nhấn **F5** chạy toàn bộ file một lần.
-5. Khi có `COMMIT`/`Query returned successfully`, Refresh **Schemas → public → Tables**.
-6. Trỏ backend tới đúng database qua `.env` local; khởi động backend như README dự án.
+## Chỉ lấy schema
 
-Không cần terminal, không cần chạy file seed thứ hai hoặc `dotnet ef database update`. Ứng dụng không tự migrate. File SQL không đổi tài khoản/mật khẩu PostgreSQL và không chứa token Cloudinary/PayOS/JWT.
+Đổi chính dòng đầu file thành `SET LOCAL retrack.seed_demo = 'off';`, rồi chạy toàn bộ. Tất cả bộ demo cùng tuân theo tùy chọn này. Cấu hình hệ thống mặc định vẫn được tạo để API hoạt động; không tạo tài khoản/đơn demo. Không bật seed demo ở production.
 
-## Dữ liệu demo đi kèm
+## Chạy lại và lỗi thường gặp
 
-Mặc định đầu file có:
+Schema và seed nằm trong một transaction. Chạy lại trên DB demo cùng cấu trúc không nhân đôi UUID, reset đơn/chuyến đã xử lý, thay mật khẩu hoặc mở lại ca đã ngừng. Không có tùy chọn reset dữ liệu trong file chung. Dừng backend trước khi chạy lại trên các đơn demo đang dùng.
 
-```sql
-SET LOCAL retrack.seed_demo = 'on';
-```
+- `NOTICE ... already exists, skipping`: đối tượng đã có, không phải lỗi.
+- Nếu có ERROR, đọc lỗi đầu tiên; chạy `ROLLBACK;` trong cùng Query Tool, sửa nguyên nhân rồi thử lại. Không xóa database để sửa lỗi.
+- Xung đột ID/email/role hoặc fixture dở dang sẽ dừng transaction, không ghi đè dữ liệu để ép seed thành công.
+- Upload/PayOS/Google/Goong cần cấu hình riêng. SQL không chứa token hoặc mật khẩu kết nối PostgreSQL.
 
-Giữ `on` để có dữ liệu test dùng chung ở Đà Nẵng cho Admin, Seller, Depot Owner Ngô Sỹ Giá, Employee, Driver và Factory. File gồm13tài khoản,3kho,3nhà máy, đơn thu gom nhiều trạng thái, lô xuất/nhu cầu/quan hệ hợp tác/KCS, chuyến vận chuyển, giao dịch phí/hóa đơn/thông báo/bảng giá và phiếu nhập hỗn hợp sắt+ghế cùng chi phí công/xăng xe. Địa chỉ demo ở Ngũ Hành Sơn, Hải Châu, Cẩm Lệ; dữ liệu có nhãn `[DEMO]`.
+## DB cũ đã có dữ liệu
 
-Nếu chỉ cần cấu trúc và cấu hình mặc định, đổi **chính dòng đó** thành:
+Pull code không tự sửa PostgreSQL. Sao lưu, kiểm tra `SELECT current_database();` và đối chiếu schema trước khi nâng cấp. Dùng cùng file SQL để chọn khối schema cần thiết, kết thúc trước `-- RETRACK_SCHEMA_END`, chạy trong transaction riêng. Không chọn sang `-- RETRACK_SEED_BEGIN` khi nâng cấp dữ liệu thật.
 
-```sql
-SET LOCAL retrack.seed_demo = 'off';
-```
+Marker chính: `RETRACK_DEPOT_STOCK_V1`, `RETRACK_LIQUIDATION_DEPOSIT_V1`, `RETRACK_DEPOT_NOTIFICATIONS_V1`, `RETRACK_EMPLOYEE_DISPATCH_BEGIN/END`. CREATE TABLE IF NOT EXISTS không tự sửa mọi cột/kiểu/bảng legacy; bootstrap không chuyển đổi mọi DB lịch sử. Không áp EF migration chồng lên SQL để thử hết lỗi.
 
-Khi tắt seed, không tạo tài khoản/đơn/giao dịch demo; các cấu hình hệ thống mặc định vẫn cần để API hoạt động. Không bật seed demo trên môi trường thật. Nếu đã nạp bằng SQL, giữ `Database__Initialize=false` trong cấu hình backend để không cần bộ seed C# bổ sung. Mật khẩu demo chỉ lưu dạng BCrypt hash; không sử dụng các tài khoản demo trong môi trường thật.
+Các SQL cũ đã gộp/xóa khỏi Git. Script kiểm kê/dọn PascalCase lưu local trong `.ai-context`, không chạy kèm bootstrap hoặc tự xóa bảng legacy. Tra lịch sử Git trước commit hợp nhất khi cần đối chiếu. Tệp Factory trên ổ đĩa vẫn phải lưu bền vững và sao lưu cùng DB; SQL không chứa nội dung tệp.
 
-## Chạy lại và xử lý lỗi
+## Khi nhóm thêm bảng/cột hoặc seed
 
-File dùng một transaction cho cả schema và seed. Chạy lại trên database demo cùng cấu trúc không nhân đôi UUID fixture và không đặt lại trạng thái đơn đã thao tác. Email/ID/role demo xung đột sẽ báo lỗi thay vì nối nhầm tài khoản.
-
-Nếu có lỗi, dữ liệu của lượt chạy đó chưa được ghi. Trong cùng Query Tool, chạy `ROLLBACK;`, đọc dòng `ERROR` đầu tiên, sửa nguyên nhân rồi chạy lại toàn bộ file. `NOTICE ... already exists, skipping` là thông báo bỏ qua bảng/cột đã có, không phải lỗi. Không xóa/reset database để thử sửa lỗi.
-
-## Database đã có dữ liệu nghiệp vụ
-
-Bootstrap dành cho database mới/demo; tính chạy lại không biến nó thành công cụ nâng cấp mọi phiên bản database cũ. Trước nâng cấp: sao lưu, đối chiếu cột/bảng thực tế và kiểm `SELECT current_database();` có đúng DB backend đang dùng.
-
-Riêng bổ sung nhập kho đa nguồn cho database đã có nền schema: mở cùng `bootstrap/retrack-system.sql`, chọn **từ `-- RETRACK_DEPOT_STOCK_V1` đến trước `-- RETRACK_SCHEMA_END`**. Đọc/review khối này rồi chạy trong transaction riêng. Không chọn sang `-- RETRACK_SEED_BEGIN` và không chạy seed demo trên dữ liệu thật. Khối này không nhập lại pickup `DONE` hoặc coi lô bị QC từ chối là hàng đã quay về.
-
-Các script trong `db/employee`, `db/driver`, `db/factory` là bản vá/fixture riêng cho database cũ, **không cần chạy khi setup máy mới**. Giữ chúng vì có mục đích riêng của các role, không coi là file khởi tạo hệ thống thứ hai. `cleanup_legacy_pascalcase_tables.sql`/`inspect_legacy_pascalcase_tables.sql` chỉ dùng sau khi đã review nhu cầu chuyển dữ liệu PascalCase cũ.
-
-## Khi nhóm thêm bảng/cột
-
-Cập nhật schema vào **cùng** `bootstrap/retrack-system.sql`, trước marker `-- RETRACK_SCHEMA_END`. Seed chung đặt trong khối `RETRACK_SEED_BEGIN`/`RETRACK_SEED_END`. Không thêm nguồn schema hoặc file seed bootstrap song song.
-
-Marker giúp test và người nâng cấp chọn đúng phần, không phải file thứ hai. Báo trong PR các thay đổi model, SQL, seed và cách nâng cấp database đã có dữ liệu; không sửa migration EF đã chia sẻ hoặc áp EF migration chồng lên DB-first.
-
-Hai file schema/seed cũ đã được gộp và xóa; không cần tìm lại chúng. Lịch sử vẫn có trong Git. Cấu hình PostgreSQL/appsettings/.env riêng của từng thành viên được giữ nguyên.
-
-Khối schema mới cũng có hồ sơ xác minh private, lịch sử điều chỉnh/đối soát vốn, theo dõi sự cố Depot và contract lô lớn. Kho thật mặc định UNVERIFIED, cần nộp hồ sơ và Admin duyệt để mở giao dịch mới; chỉ ba kho demo được duyệt trong seed. Seed có hai lô lớn `[DEMO]` để thử màn Depot; không thay cho API đăng lô Seller của TV1. Máy cũ cần bổ sung toàn khối mới trước khi chạy bản backend tương ứng; chỉ `dotnet run` không tự tạo cột/bảng.
-
-Bổ sung thông báo Depot 20/10/2026: nếu đã cập nhật schema tới bản 19/10, review/chạy riêng đoạn `-- RETRACK_DEPOT_NOTIFICATIONS_V1` đến trước `-- RETRACK_SCHEMA_END` trong cùng file, trong transaction riêng. Đoạn này chỉ thêm 5 cột `depot_id`, `batch_id`, `category`, `target_type`, `target_id` và index vào `notifications`, không seed hoặc thay trạng thái đơn. Cần chạy trước khi dùng backend mới; các thông báo Employee/Driver cũ vẫn đọc được.
+Chỉnh cùng `bootstrap/retrack-system.sql`: schema trước RETRACK_SCHEMA_END, seed giữa RETRACK_SEED_BEGIN/END. Mọi seed phải kiểm retrack.seed_demo, giữ UUID và trạng thái đã dùng. Không thêm bootstrap/seed theo role song song. Giữ các marker mà tests đang dùng; trước push kiểm bootstrap mới, schema-only, chạy lại và rollback khi lỗi.
