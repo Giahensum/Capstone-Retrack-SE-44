@@ -54,6 +54,19 @@ public sealed class StockReceiptTests : IAsyncLifetime
         var draft = await Stock(db).CreateAsync(owner, depot, input);
         return await Stock(db).ReviewAsync(owner, depot, draft.Id, "POSTED");
     }
+    [Theory]
+    [InlineData(false, "DEPOT_OWNER")]
+    [InlineData(true, "SELLER")]
+    public async Task Employee_cannot_access_stock_when_warehouse_owner_is_disabled_or_loses_role(bool active,string role)
+    {
+        await using var db=Open();var receipt=await Stock(db).CreateAsync(owner,depot,Input());
+        await db.Users.Where(x=>x.Id==owner).ExecuteUpdateAsync(x=>x.SetProperty(u=>u.IsActive,active).SetProperty(u=>u.Role,role));
+        await Assert.ThrowsAsync<DepotForbiddenException>(()=>Stock(db).ListAsync(employee,depot,new()));
+        await Assert.ThrowsAsync<DepotForbiddenException>(()=>Stock(db).GetAsync(employee,depot,receipt.Id));
+        await Assert.ThrowsAsync<DepotForbiddenException>(()=>Stock(db).ReviewAsync(employee,depot,receipt.Id,"SUBMITTED"));
+        var input=Input();input.PurchaseCost=0;input.CostsConfirmed=false;input.Lines[0].ReferencePrice=0;
+        await Assert.ThrowsAsync<DepotForbiddenException>(()=>Stock(db).CreateAsync(employee,depot,input));
+    }
     [Fact]
     public async Task Stale_tracked_receipt_cannot_adjust_voided_stock_or_trade_after_verification_is_revoked()
     {
