@@ -12,7 +12,7 @@ public sealed partial class DepotStockRepository(AppDbContext db) : IDepotStockR
 {
     public Task<bool> IsActiveStaffAsync(Guid userId, Guid depotId) => db.DepotStaffs.AnyAsync(x =>
         x.DepotId == depotId && x.UserId == userId && x.IsActive && x.StaffType == "DEPOT_EMPLOYEE" &&
-        x.User.IsActive && x.User.Role == "DEPOT_EMPLOYEE");
+        x.User.IsActive && x.User.Role == "DEPOT_EMPLOYEE" && x.Depot.Owner.IsActive && x.Depot.Owner.Role == "DEPOT_OWNER");
     public Task<DepotStockReceipt?> FindReceiptAsync(Guid id) => db.DepotStockReceipts
         .Include(x => x.Lines).Include(x => x.Expenses).AsSplitQuery().SingleOrDefaultAsync(x => x.Id == id);
     public Task<PagedResult<DepotStockReceipt>> ListAsync(Guid depotId, DepotQuery query)

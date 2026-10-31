@@ -27,7 +27,7 @@ export default function StockReceiptForm({ onClose, agreement }) {
       <fieldset disabled={save.isPending} className="space-y-5">
         <div className="grid sm:grid-cols-2 gap-4">
           <label>Nguồn hàng<select className={inputClass} disabled={!!agreement} value={form.sourceType} onChange={e => update('sourceType', e.target.value)}>
-            <option value="EXTERNAL_PURCHASE">Mua ngoài hệ thống</option><option value="OPENING_BALANCE">Tồn đầu kỳ</option><option value="BULK_PURCHASE">Mua lô thanh lý ngoài phiên giá</option>
+            <option value="EXTERNAL_PURCHASE">Mua ngoài hệ thống</option><option value="OPENING_BALANCE">Tồn đầu kỳ</option><option value="BULK_PURCHASE">{agreement ? 'Mua lô trúng giá — liên kết thỏa thuận' : 'Mua lô thanh lý ngoài phiên giá'}</option>
           </select></label>
           <label>Chứng từ / tham chiếu nguồn<input required maxLength={255} className={inputClass} value={form.reference} onChange={e => update('reference', e.target.value)} placeholder="Ví dụ: Phiếu mua khách sạn, ngày nhận" /></label>
         </div>
