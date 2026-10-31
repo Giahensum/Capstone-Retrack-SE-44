@@ -99,7 +99,7 @@ export default function LiquidationAgreement({ id, onClose }) {
     } else if (collected && !d.receiptId) {
       action = <div className="flex justify-end"><button type="button" className={primaryBtn} onClick={() => setReceiving(true)}><Warehouse size={16} />Lập phiếu nhập từ lô trúng</button></div>;
     } else if (d.receiptId) {
-      action = <div className="flex justify-end"><Link to="/depot/inventory?tab=receipts" className={primaryBtn}><ReceiptText size={16} />Đến phiếu nhập để kiểm tra / duyệt<ArrowRight size={15} /></Link></div>;
+      action = <div className="flex justify-end"><Link to={`/depot/inventory?tab=receipts&receiptId=${d.receiptId}`} className={primaryBtn}><ReceiptText size={16} />Đến phiếu nhập để kiểm tra / duyệt<ArrowRight size={15} /></Link></div>;
     }
   }
   const overdue = d && new Date(d.collectionDeadline).getTime() < Date.now() && !d.receiptId;
