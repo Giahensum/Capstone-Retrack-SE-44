@@ -33,6 +33,9 @@ public class DepotStockController(IDepotStockService service) : ControllerBase
     [HttpPatch("receipts/{id:guid}/submit")]
     public async Task<IActionResult> Submit(Guid depotId, Guid id) =>
         Ok(ApiResponse<StockReceiptDto>.Ok(await service.ReviewAsync(UserId, depotId, id, "SUBMITTED")));
+    [Authorize(Roles = "DEPOT_OWNER"), HttpPut("receipts/{id:guid}/draft")]
+    public async Task<IActionResult> UpdateDraft(Guid depotId, Guid id, UpdateStockReceiptDto dto) =>
+        Ok(ApiResponse<StockReceiptDto>.Ok(await service.UpdateDraftAsync(UserId, depotId, id, dto)));
     [Authorize(Roles = "DEPOT_OWNER"), HttpPut("receipts/{id:guid}/costs")]
     public async Task<IActionResult> UpdateCosts(Guid depotId, Guid id, UpdateStockCostsDto dto) =>
         Ok(ApiResponse<StockReceiptDto>.Ok(await service.UpdateCostsAsync(UserId, depotId, id, dto)));

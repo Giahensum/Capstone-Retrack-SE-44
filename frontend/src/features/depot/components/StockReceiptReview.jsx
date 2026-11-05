@@ -3,6 +3,7 @@ import { useDepotMutation, money, number } from '../depotApi';
 import { Dialog, MutationError, buttonClass, inputClass } from './DepotUI';
 import { StockExpenseFields } from './StockExpenseFields';
 import StockCostAdjustments from './StockCostAdjustments';
+import StockReceiptForm from './StockReceiptForm';
 
 export default function StockReceiptReview({ receipt, onClose }) {
   const [purchaseCost, setPurchaseCost] = useState(receipt.purchaseCost);
@@ -12,12 +13,14 @@ export default function StockReceiptReview({ receipt, onClose }) {
   const [reason, setReason] = useState('');
   const [editing, setEditing] = useState(false);
   const [adjusting, setAdjusting] = useState(false);
+  const [editingDraft, setEditingDraft] = useState(false);
   const save = useDepotMutation('put', `stock/receipts/${receipt.id}/costs`, onClose);
   const post = useDepotMutation('patch', `stock/receipts/${receipt.id}/post`, onClose);
   const reject = useDepotMutation('patch', `stock/receipts/${receipt.id}/reject`, onClose);
   const reverse = useDepotMutation('patch', `stock/receipts/${receipt.id}/void`, onClose);
   const busy = save.isPending || post.isPending || reject.isPending || reverse.isPending || adjusting;
   const canReview = ['DRAFT', 'SUBMITTED'].includes(receipt.status);
+  if (editingDraft) return <StockReceiptForm receipt={receipt} onClose={onClose} />;
   return <Dialog title={`Phiếu nhập: ${receipt.reference}`} wide busy={busy} onClose={onClose}>
     <div className="space-y-4">
       <p className="rounded-xl bg-d-surface-accent p-3 text-sm">{canReview ? 'Phiếu chưa ghi sổ, chưa được tính vào tồn khả dụng.' : receipt.status === 'POSTED' ? 'Phiếu đã ghi sổ. Không sửa trực tiếp số lượng hay giá vốn đã duyệt.' : `${receipt.status === 'VOIDED' ? 'Đã đảo phiếu' : 'Phiếu bị từ chối'}: ${receipt.reviewNote ?? ''}`}</p>
@@ -26,6 +29,7 @@ export default function StockReceiptReview({ receipt, onClose }) {
         <p className="text-sm mt-1">{x.conditionNote || 'Chưa ghi tình trạng'}</p><p className="text-sm mt-2">Chi phí phân bổ: {x.allocatedCost == null ? 'Chưa xác định' : money(x.allocatedCost)} · Giá vốn / {x.unit}: {x.allocatedCost == null ? 'Chưa xác định' : money(x.allocatedCost / x.quantity)}</p></div>)}
       {receipt.expenses.length > 0 && <ul className="text-sm space-y-2">{receipt.expenses.map((x, i) => <li key={i}>{x.description}: {money(x.amount)}</li>)}</ul>}
       {canReview && <>
+        {receipt.status === 'DRAFT' && <button type="button" className={buttonClass} disabled={busy} onClick={() => setEditingDraft(true)}>Sửa hàng thực nhận / phiếu nháp</button>}
         {!editing && <button type="button" className={buttonClass} disabled={busy} onClick={() => setEditing(true)}>Bổ sung / chỉnh chi phí trước ghi sổ</button>}
         {editing && <form className="space-y-4 rounded-2xl border border-d-border-subtle p-4" onSubmit={e => {
           e.preventDefault(); save.mutate({ body: { purchaseCost: Number(purchaseCost), costsConfirmed: confirmed,
