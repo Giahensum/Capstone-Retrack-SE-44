@@ -24,6 +24,22 @@ public sealed partial class DepotStockRepository(AppDbContext db) : IDepotStockR
             .Include(x => x.Lines).Include(x => x.Expenses).AsSplitQuery(), query);
     }
     public void AddReceipt(DepotStockReceipt receipt) => db.DepotStockReceipts.Add(receipt);
+    public Task<DepotStockReceipt?> ReloadReceiptAsync(Guid id)
+    {
+        // Đọc lại sau khi lấy khóa depot, tránh dùng entity cũ trước khi chờ giao dịch khác.
+        foreach (var entry in db.ChangeTracker.Entries().Where(x =>
+            x.Entity is DepotStockLine line && line.ReceiptId == id ||
+            x.Entity is DepotStockExpense expense && expense.ReceiptId == id ||
+            x.Entity is DepotStockReceipt receipt && receipt.Id == id).ToList())
+            entry.State = EntityState.Detached;
+        return FindReceiptAsync(id);
+    }
+    public void ReplaceLines(DepotStockReceipt receipt, List<DepotStockLine> lines)
+    {
+        db.DepotStockLines.RemoveRange(receipt.Lines);
+        receipt.Lines = lines;
+        db.DepotStockLines.AddRange(lines);
+    }
     public void AddNotice(Notification notice) => db.Notifications.Add(notice);
     public Task<Guid> OwnerIdAsync(Guid depotId) => db.Depots.Where(x => x.Id == depotId).Select(x => x.OwnerId).SingleAsync();
     public Task<DepotBulkStockSource?> BulkSourceAsync(Guid agreementId) => db.LiquidationAgreements.AsNoTracking()
@@ -35,6 +51,7 @@ public sealed partial class DepotStockRepository(AppDbContext db) : IDepotStockR
         db.DepotStockExpenses.RemoveRange(receipt.Expenses);
         receipt.Expenses = expenses.Select(x => new DepotStockExpense {
             ReceiptId = receipt.Id, Category = x.Category, Description = x.Description.Trim(), Amount = x.Amount }).ToList();
+        db.DepotStockExpenses.AddRange(receipt.Expenses);
     }
     public Task<PagedResult<ReusableStockDto>> ReusableAsync(Guid depotId, DepotQuery query)
     {
