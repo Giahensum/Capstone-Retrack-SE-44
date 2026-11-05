@@ -10,7 +10,7 @@ using Xunit;
 
 namespace Retrack.Tests;
 
-public sealed class StockReceiptTests : IAsyncLifetime
+public sealed partial class StockReceiptTests : IAsyncLifetime
 {
     private readonly Guid owner = Guid.NewGuid(), depot = Guid.NewGuid(), employee = Guid.NewGuid();
     private static AppDbContext Open()
