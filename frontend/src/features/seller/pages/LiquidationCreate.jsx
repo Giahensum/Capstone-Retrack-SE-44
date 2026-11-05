@@ -4,6 +4,9 @@ import { Link, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { sellerApi } from '../api';
 import { formatCurrency } from '@/lib/utils';
+import VietnamAreaPicker from '@/components/ui/VietnamAreaPicker';
+import StreetAddressSelect from '@/components/ui/StreetAddressSelect';
+import { GOONG_ENABLED } from '@/lib/goongPlaces';
 
 const toLocalInput = (date) => {
   const d = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
@@ -27,8 +30,9 @@ function validate(f) {
   if (f.description.trim().length < 10) errors.description = 'Mô tả tối thiểu 10 ký tự.';
   if (f.scopeDetails.trim().length < 10) errors.scopeDetails = 'Phạm vi tài sản tối thiểu 10 ký tự.';
   if (f.collectionTerms.trim().length < 10) errors.collectionTerms = 'Điều kiện thu gom/thanh toán tối thiểu 10 ký tự.';
-  if (f.publicArea.trim().length < 2) errors.publicArea = 'Nhập khu vực hiển thị công khai.';
-  if (f.address.trim().length < 5) errors.address = 'Nhập địa chỉ khảo sát.';
+  if (!f.area.province) errors.province = 'Chọn tỉnh/thành phố.';
+  if (!f.area.ward) errors.ward = 'Chọn phường/xã.';
+  if (f.street.trim().length < 2) errors.street = 'Nhập số nhà, tên đường.';
   if (!/^[0-9+\-\s]{8,20}$/.test(f.contactPhone.trim())) errors.contactPhone = 'Số điện thoại không hợp lệ.';
   const start = Number(f.startingPrice), step = Number(f.bidIncrement);
   if (!Number.isInteger(start) || start <= 0) errors.startingPrice = 'Giá khởi điểm phải là số nguyên VND dương.';
@@ -49,7 +53,7 @@ export default function LiquidationCreate() {
   // Mã thao tác giữ nguyên khi bấm gửi lại để server không tạo trùng lô.
   const operationId = useRef(newOperationId());
   const [form, setForm] = useState({
-    title: '', description: '', scopeDetails: '', collectionTerms: '', publicArea: '', address: '', contactPhone: '',
+    title: '', description: '', scopeDetails: '', collectionTerms: '', area: { province: null, ward: null }, street: '', contactPhone: '',
     startingPrice: '', bidIncrement: '', depositPercent: '10',
     surveyStart: inHours(0), surveyEnd: inHours(24), biddingStart: inHours(48), biddingEnd: inHours(72), collectionDeadline: inHours(24 * 10),
   });
@@ -97,10 +101,13 @@ export default function LiquidationCreate() {
     const found = validate(form);
     setErrors(found);
     if (Object.keys(found).length) return toast.error('Vui lòng kiểm tra lại các trường được đánh dấu.');
+    // Khu vực công khai chỉ gồm phường/xã + tỉnh/thành; địa chỉ khảo sát thêm số nhà, tên đường (chỉ kho đã đăng ký xem được).
+    const publicArea = `${form.area.ward.name}, ${form.area.province.name}`;
+    const address = `${form.street.trim()}, ${publicArea}`;
     createMutation.mutate({
       operationId: operationId.current,
       title: form.title.trim(), description: form.description.trim(), scopeDetails: form.scopeDetails.trim(),
-      collectionTerms: form.collectionTerms.trim(), publicArea: form.publicArea.trim(), address: form.address.trim(),
+      collectionTerms: form.collectionTerms.trim(), publicArea, address,
       contactPhone: form.contactPhone.trim(), imageUrls: images,
       surveyStart: new Date(form.surveyStart).toISOString(), surveyEnd: new Date(form.surveyEnd).toISOString(),
       biddingStart: new Date(form.biddingStart).toISOString(), biddingEnd: new Date(form.biddingEnd).toISOString(),
@@ -165,20 +172,30 @@ export default function LiquidationCreate() {
 
       <section className="bg-d-surface-container-lowest border border-d-border-subtle rounded-2xl p-5 grid gap-4 md:grid-cols-2">
         <h2 className="text-sm font-bold text-d-on-surface md:col-span-2">Địa điểm</h2>
+        <VietnamAreaPicker
+          idPrefix="lot-area"
+          value={form.area}
+          // Đổi khu vực thì bỏ dòng địa chỉ đã chọn từ gợi ý (gợi ý được thu hẹp theo khu vực cũ).
+          onChange={(area) => setForm((f) => ({ ...f, area, street: GOONG_ENABLED ? '' : f.street }))}
+          errors={errors}
+          fieldClass={field}
+          labelClass={label}
+        />
+        {form.area.province && form.area.ward && (
+          <p className="md:col-span-2 text-xs text-d-on-surface-variant">
+            Khu vực hiển thị công khai: <strong>{form.area.ward.name}, {form.area.province.name}</strong>
+          </p>
+        )}
         <div>
-          <label htmlFor="publicArea" className={label}>Khu vực hiển thị công khai</label>
-          <input id="publicArea" className={field} maxLength={255} value={form.publicArea} onChange={set('publicArea')} placeholder="VD: Ngũ Hành Sơn, Đà Nẵng" />
-          {err("publicArea")}
+          <label htmlFor="street" className={label}>Số nhà, tên đường (chỉ kho đã đăng ký mới xem được)</label>
+          <StreetAddressSelect id="street" className={field} area={form.area} value={form.street} placeholder="VD: 12 Nguyễn Văn Linh"
+            onChange={(street) => setForm((f) => ({ ...f, street }))} />
+          {err("street")}
         </div>
         <div>
           <label htmlFor="contactPhone" className={label}>Số điện thoại liên hệ</label>
           <input id="contactPhone" className={field} maxLength={20} value={form.contactPhone} onChange={set('contactPhone')} />
           {err("contactPhone")}
-        </div>
-        <div className="md:col-span-2">
-          <label htmlFor="address" className={label}>Địa chỉ khảo sát (chỉ kho đã đăng ký mới xem được)</label>
-          <input id="address" className={field} maxLength={1000} value={form.address} onChange={set('address')} />
-          {err("address")}
         </div>
       </section>
 
