@@ -13,6 +13,7 @@ export default function StockReceiptForm({ onClose, agreement, receipt }) {
   const [form, setForm] = useState({ sourceType: receipt?.sourceType ?? (agreement ? 'BULK_PURCHASE' : 'EXTERNAL_PURCHASE'), reference: receipt?.reference ?? (agreement ? `Lô trúng: ${agreement.title}`.slice(0, 255) : ''), purchaseCost: receipt?.purchaseCost ?? agreement?.amount ?? '', costsConfirmed: receipt?.costsConfirmed ?? false });
   const [lines, setLines] = useState(() => receipt ? receipt.lines.map(x => ({ ...x, key: x.id, materialType: x.materialType ?? 'IRON', conditionNote: x.conditionNote ?? '' })) : [emptyLine()]);
   const [expenses, setExpenses] = useState(() => receipt?.expenses.map(x => ({ ...x, key: crypto.randomUUID() })) ?? []);
+  const [stockConfirmed, setStockConfirmed] = useState(false);
   const save = useDepotMutation(receipt ? 'put' : 'post', receipt ? `stock/receipts/${receipt.id}/draft` : 'stock/receipts', onClose);
   const update = (key, value) => setForm({ ...form, [key]: value });
   const lineField = (key, patch) => setLines(lines.map(x => x.key === key ? { ...x, ...patch } : x));
@@ -20,7 +21,9 @@ export default function StockReceiptForm({ onClose, agreement, receipt }) {
     <p className="text-sm text-d-on-surface-variant mb-4">Chỉ ghi hàng đã thực nhận. Phiếu nháp chưa tăng tồn; chủ kho kiểm tra rồi duyệt ghi sổ. Đơn thu gom DONE đã tính tồn, không nhập lại ở đây. {receipt && 'Có thể sửa, thêm hoặc bỏ dòng hàng; nguồn và ngày nhận gốc được giữ nguyên.'}</p>
     <form className="space-y-5" onSubmit={e => {
       e.preventDefault();
-      save.mutate({ body: { ...form, operationId, receivedAt, expectedRevision: receipt?.revision, bulkAgreementId: agreement?.id, purchaseCost: Number(form.purchaseCost || 0),
+      const postImmediately = !receipt && e.nativeEvent.submitter?.value === 'post';
+      if (postImmediately && !stockConfirmed) return;
+      save.mutate({ body: { ...form, operationId, receivedAt, postImmediately, expectedRevision: receipt?.revision, bulkAgreementId: agreement?.id, purchaseCost: Number(form.purchaseCost || 0),
         expenses: expenses.map(({ key: _key, ...x }) => ({ ...x, amount: Number(x.amount || 0) })),
         lines: lines.map(({ key: _key, ...x }) => ({ ...x, materialType: x.kind === 'MATERIAL' ? x.materialType : null,
           quantity: Number(x.quantity), referencePrice: Number(x.referencePrice || 0), directCost: Number(x.directCost || 0) })) } });
@@ -52,9 +55,10 @@ export default function StockReceiptForm({ onClose, agreement, receipt }) {
         <StockExpenseFields expenses={expenses} setExpenses={setExpenses} />
         <label className="flex gap-3 items-start"><input type="checkbox" className="mt-1" checked={form.costsConfirmed} onChange={e => update('costsConfirmed', e.target.checked)} /><span>Đủ dữ liệu chi phí để phân bổ theo giá trị bán tham khảo.<span className="block text-sm text-d-on-surface-variant">Không chọn: giá vốn chưa xác định, hệ thống không báo lợi nhuận bằng cách coi giá vốn là 0.</span></span></label>
         <p className="text-sm text-d-on-surface-variant">Một món đồ chỉ nhập theo cái/bộ hoặc vật liệu thực cân, không nhập trùng cả hai. Chi phí nhân công/xăng xe do kho khai thực tế; thuế chỉ ghi khoản không được thu hồi đã xác định, không tự áp thuế suất.</p>
+        {!receipt && <label className="flex gap-3 items-start rounded-2xl border border-d-border-subtle bg-white p-4"><input type="checkbox" className="mt-1" checked={stockConfirmed} onChange={e => setStockConfirmed(e.target.checked)} /><span>Tôi đã kiểm tra hàng thực nhận và đồng ý ghi nhận vào kho.<span className="block text-sm text-d-on-surface-variant">Ghi nhận sẽ tăng tồn ngay. Nếu cần kiểm tra tiếp, chọn Lưu phiếu nháp; phiếu đã ghi sổ không sửa trực tiếp số lượng.</span></span></label>}
       </fieldset>
       <MutationError mutation={save} />
-      <div className="sticky bottom-0 -mx-4 sm:-mx-6 -mb-4 sm:-mb-6 px-4 sm:px-6 py-3 bg-d-surface flex flex-wrap justify-end gap-3 border-t border-d-border-subtle"><button type="button" disabled={save.isPending} className="rounded-full border border-d-border-subtle px-5 py-2.5" onClick={onClose}>Hủy bỏ</button><button className={buttonClass} disabled={save.isPending}>{save.isPending ? 'Đang lưu…' : receipt ? 'Lưu thay đổi phiếu nháp' : 'Lưu phiếu nháp'}</button></div>
+      <div className="sticky bottom-0 -mx-4 sm:-mx-6 -mb-4 sm:-mb-6 px-4 sm:px-6 py-3 bg-d-surface flex flex-wrap justify-end gap-3 border-t border-d-border-subtle"><button type="button" disabled={save.isPending} className="rounded-full border border-d-border-subtle px-5 py-2.5" onClick={onClose}>Hủy bỏ</button><button type="submit" value="draft" className={receipt ? buttonClass : 'rounded-full border border-d-border-subtle px-5 py-2.5'} disabled={save.isPending}>{save.isPending ? 'Đang lưu…' : receipt ? 'Lưu thay đổi phiếu nháp' : 'Lưu phiếu nháp'}</button>{!receipt && <button type="submit" value="post" className={buttonClass} disabled={save.isPending || !stockConfirmed}>{save.isPending ? 'Đang lưu…' : 'Ghi nhận vào kho'}</button>}</div>
     </form>
   </Dialog>;
 }

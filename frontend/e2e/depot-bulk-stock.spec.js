@@ -63,7 +63,7 @@ test('Lô trúng: nhập sắt/đồ cũ, phân bổ vốn, chặn xuất vượ
             await form.getByLabel('Số tiền (đ)', { exact: true }).nth(i).fill(amount);
             await form.getByLabel('Mô tả / căn cứ phân bổ').nth(i).fill(note);
         }
-        await form.getByRole('checkbox').check();
+        await form.getByRole('checkbox', { name: /Đủ dữ liệu chi phí để phân bổ/ }).check();
         await form.getByLabel('Giá bán tham khảo / kg (đ)').fill('6000');
         await form.getByLabel('Giá bán tham khảo / cái (đ)').fill('500000');
         const saving = page.waitForResponse(r => r.url().includes('/stock/receipts?') && r.request().method() === 'POST');
@@ -82,6 +82,18 @@ test('Lô trúng: nhập sắt/đồ cũ, phân bổ vốn, chặn xuất vượ
         expect((await repeated.json()).data.id).toBe(receipt.id);
         const duplicate = await request.post(`/api/depot/stock/receipts?depotId=${f.DepotId}`, { headers, data: { ...payload, operationId: randomUUID() } });
         expect(duplicate.status()).toBe(409);
+        const editBody = { expectedRevision: receipt.revision, reference: receipt.reference, purchaseCost: receipt.purchaseCost,
+            costsConfirmed: true, expenses: receipt.expenses, lines: payload.lines };
+        const badPrice = await request.put(`/api/depot/stock/receipts/${receipt.id}/draft?depotId=${f.DepotId}`, { headers, data: { ...editBody, purchaseCost: 1 } });
+        expect(badPrice.status()).toBe(400);
+        const changed = await request.put(`/api/depot/stock/receipts/${receipt.id}/draft?depotId=${f.DepotId}`, { headers,
+            data: { ...editBody, lines: [{ ...payload.lines[0], quantity: 900 }, payload.lines[1]] } });
+        expect(changed.status()).toBe(200);
+        const corrected = (await changed.json()).data;
+        expect(corrected.purchaseCost).toBe(10000000);
+        expect((await stock()).receivedKg).toBe(0);
+        const restored = await request.put(`/api/depot/stock/receipts/${receipt.id}/draft?depotId=${f.DepotId}`, { headers, data: { ...editBody, expectedRevision: corrected.revision } });
+        expect(restored.status()).toBe(200);
         await openAgreement();
         await agreement.getByRole('link', { name: 'Đến phiếu nhập để kiểm tra / duyệt' }).click();
         await expect(page).toHaveURL(new RegExp(`receiptId=${receipt.id}`));

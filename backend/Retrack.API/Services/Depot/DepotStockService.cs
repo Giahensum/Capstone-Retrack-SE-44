@@ -72,6 +72,11 @@ public sealed partial class DepotStockService(IDepotStockRepository repository, 
                 Name = x.Name.Trim(), Unit = x.Unit, Quantity = x.Quantity, ReferencePrice = x.ReferencePrice,
                 DirectCost = x.DirectCost, ConditionNote = x.ConditionNote, AllocatedCost = costs?[i], Position = i }).ToList(),
             Expenses = dto.Expenses.Select(x => new DepotStockExpense { Category = x.Category, Description = x.Description.Trim(), Amount = x.Amount }).ToList() };
+        if (dto.PostImmediately)
+        {
+            receipt.Status = "POSTED"; receipt.PostedAt = DateTime.UtcNow; receipt.PostedBy = userId;
+            receipt.ReviewedAt = receipt.PostedAt; receipt.ReviewedBy = userId;
+        }
         repository.AddReceipt(receipt);
         await work.SaveAsync(); await tx.CommitAsync();
         return Map(receipt, isOwner);
@@ -228,7 +233,7 @@ public sealed partial class DepotStockService(IDepotStockRepository repository, 
             dto.ReceivedAt < new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc) || dto.ReceivedAt > DateTime.UtcNow.AddMinutes(5))
             throw new ArgumentException("Cần nguồn, ngày nhận thực tế, mã tham chiếu và từ 1 đến 50 dòng hàng.");
         // Nhân viên chỉ lập số nhận; chủ kho lập/chốt dữ liệu chi phí nội bộ.
-        if (!isOwner && (dto.CostsConfirmed || dto.PurchaseCost != 0 || dto.Expenses.Count != 0 || dto.Lines.Any(x => x.DirectCost != 0 || x.ReferencePrice != 0)))
+        if (!isOwner && (dto.PostImmediately || dto.CostsConfirmed || dto.PurchaseCost != 0 || dto.Expenses.Count != 0 || dto.Lines.Any(x => x.DirectCost != 0 || x.ReferencePrice != 0)))
             throw new DepotForbiddenException();
         Money(dto.PurchaseCost);
         foreach (var x in dto.Lines)
