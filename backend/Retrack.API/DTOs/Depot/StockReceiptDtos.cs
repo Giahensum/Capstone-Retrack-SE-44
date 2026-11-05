@@ -13,6 +13,8 @@ public class CreateStockReceiptDto
     public bool CostsConfirmed { get; set; }
     public List<StockLineInput> Lines { get; set; } = [];
     public List<StockExpenseInput> Expenses { get; set; } = [];
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    public bool PostImmediately { get; set; }
 }
 public class StockLineInput
 {
