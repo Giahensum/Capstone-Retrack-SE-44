@@ -39,7 +39,8 @@ export default function CostAllocationPanel({ purchaseCost, lines, expenses, ena
     queryFn: async () => (await api.post('/depot/stock/cost-preview', JSON.parse(debounced), { params: { depotId } })).data.data,
     retry: false, staleTime: 30000 });
   const d = query.data;
-  return <Section icon={Calculator} title={snapshot ? 'Giải thích giá vốn phiếu gốc' : 'Xem trước phân bổ giá vốn'} action={<CostFormulaHelp />}>
+  return <Section icon={Calculator} title={snapshot ? 'Giải thích giá vốn phiếu gốc' : 'Xem trước phân bổ giá vốn'}>
+    <CostFormulaHelp />
     {!enabled ? <p className="text-sm text-d-on-surface-variant">Giá vốn chưa xác định. Khi có đủ giá tham khảo và chi phí, có thể tính phân bổ; không coi phần thiếu là 0 để báo lãi.</p>
       : !valid ? <p className="text-sm text-d-on-surface-variant">Điền số lượng và giá bán tham khảo dương cho tất cả dòng, cùng mô tả chi phí để xem cách chia tổng tiền.</p>
       : query.isError ? <p role="alert" className="text-sm text-d-error">{depotError(query.error)}</p>
