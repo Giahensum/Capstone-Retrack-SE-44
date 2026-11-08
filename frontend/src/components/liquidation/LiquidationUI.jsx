@@ -1,21 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { useEffect, useState } from 'react';
+import Modal from '@/components/ui/Modal';
+import { TONES } from '@/components/ui/modalTheme';
+export { Modal, TONES };
 import {
-  X, Check, Gavel, Clock, Timer, TrendingUp, Trophy, Wallet, Crown, ChevronRight,
+  Check, Clock, Timer, TrendingUp, Trophy, Wallet, Crown, ChevronRight,
 } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
 
 // ── Màu theo "tông" (dựa trên bảng màu Retrack: xanh lá chủ đạo + vài màu trạng thái) ──
-export const TONES = {
-  primary: { chip: 'bg-d-primary/10 text-d-primary', solid: 'bg-d-primary text-d-on-primary', ring: 'ring-d-primary/30', bar: 'bg-d-primary' },
-  lime: { chip: 'bg-d-primary-container/40 text-d-on-primary-container', solid: 'bg-d-primary-container text-d-on-primary-container', ring: 'ring-d-primary-container', bar: 'bg-d-primary-container' },
-  teal: { chip: 'bg-teal-50 text-teal-700', solid: 'bg-teal-600 text-white', ring: 'ring-teal-200', bar: 'bg-teal-500' },
-  blue: { chip: 'bg-blue-50 text-blue-700', solid: 'bg-blue-600 text-white', ring: 'ring-blue-200', bar: 'bg-blue-500' },
-  amber: { chip: 'bg-amber-50 text-amber-700', solid: 'bg-amber-500 text-white', ring: 'ring-amber-200', bar: 'bg-amber-500' },
-  red: { chip: 'bg-red-50 text-red-700', solid: 'bg-red-600 text-white', ring: 'ring-red-200', bar: 'bg-red-500' },
-  slate: { chip: 'bg-slate-100 text-slate-600', solid: 'bg-slate-600 text-white', ring: 'ring-slate-200', bar: 'bg-slate-400' },
-};
-
 export const PHASE_TONE = {
   UPCOMING: 'slate', SURVEY: 'blue', BIDDING: 'primary', CLOSING: 'amber', AWARDED: 'teal', NO_SALE: 'slate', CANCELLED: 'red',
 };
@@ -31,71 +23,6 @@ export function Badge({ tone = 'slate', icon: Icon, children, className = '' }) 
 
 // ── Modal: header + footer cố định, chỉ phần thân cuộn → nút X luôn nhìn thấy ──
 // Đóng bằng: nút X, phím Esc, bấm vùng nền tối. Khi `busy` (đang gửi) thì khóa việc đóng.
-export function Modal({ icon: Icon = Gavel, tone = 'primary', title, subtitle, badge, onClose, busy = false, footer, size = 'lg', children }) {
-  const panel = useRef(null);
-  const closeRef = useRef(onClose);
-  closeRef.current = onClose;
-
-  useEffect(() => {
-    const previous = document.activeElement;
-    const overflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    panel.current?.focus();
-    const onKey = (e) => { if (e.key === 'Escape' && !busy) { e.stopPropagation(); closeRef.current?.(); } };
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.body.style.overflow = overflow;
-      document.removeEventListener('keydown', onKey);
-      previous?.focus?.();
-    };
-  }, [busy]);
-
-  const width = { sm: 'sm:max-w-md', md: 'sm:max-w-xl', lg: 'sm:max-w-3xl', xl: 'sm:max-w-5xl' }[size];
-  return createPortal(
-    <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center sm:p-4">
-      <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-[2px] animate-[fadeIn_.15s_ease-out]" onMouseDown={() => !busy && onClose?.()} aria-hidden="true" />
-      <div
-        ref={panel}
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-        tabIndex={-1}
-        className={`relative flex w-full ${width} max-h-[94dvh] sm:max-h-[90dvh] flex-col overflow-hidden rounded-t-3xl sm:rounded-3xl bg-d-surface font-d-body-md text-d-on-surface shadow-2xl outline-none animate-[popIn_.18s_ease-out]`}
-      >
-        <header className="shrink-0 border-b border-d-border-subtle bg-white">
-          <div className={`h-1.5 w-full ${TONES[tone].bar}`} />
-          <div className="flex items-start gap-3 px-4 sm:px-6 py-4">
-            <span className={`flex size-11 shrink-0 items-center justify-center rounded-2xl ${TONES[tone].chip}`}>
-              <Icon size={22} aria-hidden="true" />
-            </span>
-            <div className="min-w-0 flex-1">
-              <h2 className="text-lg font-bold leading-snug text-d-on-surface break-words">{title}</h2>
-              {(subtitle || badge) && (
-                <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-d-on-surface-variant">
-                  {badge}
-                  {subtitle && <span className="break-words">{subtitle}</span>}
-                </div>
-              )}
-            </div>
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={busy}
-              aria-label="Đóng"
-              className="flex size-10 shrink-0 items-center justify-center rounded-full bg-d-surface-container text-d-on-surface-variant transition hover:bg-d-error-container hover:text-d-error disabled:opacity-40"
-            >
-              <X size={20} />
-            </button>
-          </div>
-        </header>
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 sm:px-6 py-5 space-y-5">{children}</div>
-        {footer && <footer className="shrink-0 border-t border-d-border-subtle bg-white px-4 sm:px-6 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">{footer}</footer>}
-      </div>
-    </div>,
-    document.body,
-  );
-}
-
 // Hộp xác nhận nhỏ gọn thay cho nút "Đồng ý / Không" nằm rải trong trang.
 export function ConfirmModal({ icon: Icon = Check, tone = 'primary', title, description, confirmLabel = 'Xác nhận', cancelLabel = 'Để sau', onConfirm, onCancel, busy = false, disabled = false, children }) {
   return (
