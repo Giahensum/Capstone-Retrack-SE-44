@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
+import { Wallet } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '@/lib/axios';
 import ProofUpload from './ProofUpload';
 import { MaterialIcon } from './DepotIcon';
-import { buttonClass, inputClass } from './DepotUI';
+import { Dialog, buttonClass, inputClass } from './DepotUI';
 import { depotError, useDepot } from '../DepotContext';
 import { PICKUP_STATUS_LABEL } from '@/lib/utils';
 
@@ -11,7 +12,6 @@ const money = (value) => Number(value ?? 0).toLocaleString('vi-VN') + ' đ';
 const safeUrl = (value) => /^https?:\/\/\S+$/i.test(value ?? '');
 
 export default function PaymentDrawer({ payment, onClose }) {
-  const dialog = useRef(null);
   const { depotId, userId } = useDepot();
   const [proof, setProof] = useState('');
   const [uploading, setUploading] = useState(false);
@@ -24,7 +24,6 @@ export default function PaymentDrawer({ payment, onClose }) {
   });
   const item = detail.data;
   const canSubmit = item?.status === 'AWAITING_PAYMENT' && safeUrl(proof.trim()) && confirmed && !uploading && item.items.length > 0;
-  useEffect(() => { dialog.current.showModal(); }, []);
   const save = useMutation({
     mutationFn: () => api.patch(`/depot/pickup-requests/${payment.id}/payment-sent`, { paymentProofUrl: proof.trim() }),
     onSuccess: async () => { await client.invalidateQueries({ queryKey: ['depot', userId, depotId] }); onClose(); },
@@ -32,19 +31,11 @@ export default function PaymentDrawer({ payment, onClose }) {
   });
   const busy = save.isPending || uploading;
 
-  return <dialog ref={dialog} aria-labelledby="payment-title"
-    onCancel={(event) => { if (busy) event.preventDefault(); else onClose(); }}
-    className="m-auto w-[calc(100%-2rem)] max-w-2xl max-h-[90dvh] overflow-y-auto rounded-[20px] border border-d-border-subtle bg-d-surface p-0 shadow-xl backdrop:bg-black/40">
-    <header className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-d-border-subtle bg-d-surface p-5 sm:p-6">
-      <div><p className="text-xs font-semibold uppercase tracking-wide text-d-primary">Thanh toán cho người bán</p>
-        <h2 id="payment-title" className="mt-1 text-xl font-bold text-d-on-surface">{payment.status === 'AWAITING_PAYMENT' ? 'Đối soát' : 'Chi tiết'} đơn #{payment.id.slice(0, 8)}</h2></div>
-      <button type="button" aria-label="Đóng chi tiết thanh toán" disabled={busy} onClick={onClose}
-        className="flex size-11 shrink-0 items-center justify-center rounded-full text-d-on-surface-variant hover:bg-d-surface-container-high focus-visible:outline-2 focus-visible:outline-d-primary disabled:opacity-40">✕</button>
-    </header>
+  return <Dialog icon={Wallet} title={`${payment.status === "AWAITING_PAYMENT" ? "Đối soát" : "Chi tiết"} đơn #${payment.id.slice(0, 8)}`} subtitle="Thanh toán cho người bán" closeLabel="Đóng chi tiết thanh toán" onClose={onClose} busy={busy} wide>
     {detail.isPending ? <p role="status" className="p-6">Đang tải dữ liệu thanh toán mới nhất…</p>
       : detail.isError ? <div role="alert" className="p-6 text-d-error">{depotError(detail.error)}
         <button type="button" onClick={() => detail.refetch()} className={`${buttonClass} ml-3`}>Thử lại</button></div>
-      : <div className="space-y-5 p-5 sm:p-6">
+      : <div className="space-y-5">
         <div className="rounded-2xl border border-d-border-subtle bg-d-surface-container-low p-4">
           <div className="flex flex-wrap items-center justify-between gap-2"><div>
             <p className="font-semibold text-d-on-surface">{item.sellerName}</p>
@@ -93,5 +84,5 @@ export default function PaymentDrawer({ payment, onClose }) {
           {item.status === 'PAYMENT_SENT' && <p className="mt-3 text-sm text-d-on-surface-variant">Đang chờ người bán xác nhận đã nhận tiền. Tồn kho chỉ tăng khi đơn hoàn tất.</p>}
         </div>}
       </div>}
-  </dialog>;
+  </Dialog>;
 }

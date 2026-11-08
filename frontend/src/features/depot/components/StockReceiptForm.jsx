@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
+import { Warehouse } from 'lucide-react';
+import CostAllocationPanel from './CostAllocationPanel';
 import { useDepotMutation } from '../depotApi';
 import { materialLabel } from '../materialLabels';
 import { Dialog, MutationError, inputClass, buttonClass } from './DepotUI';
@@ -7,6 +9,7 @@ import { StockExpenseFields } from './StockExpenseFields';
 const materials = ['PET', 'HDPE', 'PVC', 'PAPER', 'CARDBOARD', 'ALUMINUM', 'IRON', 'STEEL', 'COPPER', 'OTHER'];
 const emptyLine = () => ({ key: crypto.randomUUID(), kind: 'MATERIAL', materialType: 'IRON', name: 'Sắt', unit: 'kg', quantity: '', referencePrice: '', directCost: '', conditionNote: '' });
 export default function StockReceiptForm({ onClose, agreement, receipt }) {
+  const formId = useId();
   const [operationId] = useState(() => crypto.randomUUID());
   const [receivedAt] = useState(() => receipt?.receivedAt ?? new Date().toISOString());
   const linkedAgreement = !!(agreement || receipt?.bulkAgreementId);
@@ -17,9 +20,10 @@ export default function StockReceiptForm({ onClose, agreement, receipt }) {
   const save = useDepotMutation(receipt ? 'put' : 'post', receipt ? `stock/receipts/${receipt.id}/draft` : 'stock/receipts', onClose);
   const update = (key, value) => setForm({ ...form, [key]: value });
   const lineField = (key, patch) => setLines(lines.map(x => x.key === key ? { ...x, ...patch } : x));
-  return <Dialog title={receipt ? 'Sửa phiếu nhập nháp' : 'Lập phiếu nhập kho đa nguồn'} wide busy={save.isPending} onClose={onClose}>
+  const footer = (<div className="flex flex-wrap justify-end gap-3"><button type="button" disabled={save.isPending} className="rounded-full border border-d-border-subtle px-5 py-2.5" onClick={onClose}>Hủy bỏ</button><button type="submit" form={formId} value="draft" className={receipt ? buttonClass : 'rounded-full border border-d-border-subtle px-5 py-2.5'} disabled={save.isPending}>{save.isPending ? 'Đang lưu…' : receipt ? 'Lưu thay đổi phiếu nháp' : 'Lưu phiếu nháp'}</button>{!receipt && <button type="submit" form={formId} value="post" className={buttonClass} disabled={save.isPending || !stockConfirmed}>{save.isPending ? 'Đang lưu…' : 'Ghi nhận vào kho'}</button>}</div>);
+  return <Dialog icon={Warehouse} footer={footer} title={receipt ? 'Sửa phiếu nhập nháp' : 'Lập phiếu nhập kho đa nguồn'} wide busy={save.isPending} onClose={onClose}>
     <p className="text-sm text-d-on-surface-variant mb-4">Chỉ ghi hàng đã thực nhận. Phiếu nháp chưa tăng tồn; chủ kho kiểm tra rồi duyệt ghi sổ. Đơn thu gom DONE đã tính tồn, không nhập lại ở đây. {receipt && 'Có thể sửa, thêm hoặc bỏ dòng hàng; nguồn và ngày nhận gốc được giữ nguyên.'}</p>
-    <form className="space-y-5" onSubmit={e => {
+    <form id={formId} className="space-y-5" onSubmit={e => {
       e.preventDefault();
       const postImmediately = !receipt && e.nativeEvent.submitter?.value === 'post';
       if (postImmediately && !stockConfirmed) return;
@@ -57,8 +61,9 @@ export default function StockReceiptForm({ onClose, agreement, receipt }) {
         <p className="text-sm text-d-on-surface-variant">Một món đồ chỉ nhập theo cái/bộ hoặc vật liệu thực cân, không nhập trùng cả hai. Chi phí nhân công/xăng xe do kho khai thực tế; thuế chỉ ghi khoản không được thu hồi đã xác định, không tự áp thuế suất.</p>
         {!receipt && <label className="flex gap-3 items-start rounded-2xl border border-d-border-subtle bg-white p-4"><input type="checkbox" className="mt-1" checked={stockConfirmed} onChange={e => setStockConfirmed(e.target.checked)} /><span>Tôi đã kiểm tra hàng thực nhận và đồng ý ghi nhận vào kho.<span className="block text-sm text-d-on-surface-variant">Ghi nhận sẽ tăng tồn ngay. Nếu cần kiểm tra tiếp, chọn Lưu phiếu nháp; phiếu đã ghi sổ không sửa trực tiếp số lượng.</span></span></label>}
       </fieldset>
+      <CostAllocationPanel purchaseCost={form.purchaseCost} lines={lines} expenses={expenses} enabled={form.costsConfirmed} />
       <MutationError mutation={save} />
-      <div className="sticky bottom-0 -mx-4 sm:-mx-6 -mb-4 sm:-mb-6 px-4 sm:px-6 py-3 bg-d-surface flex flex-wrap justify-end gap-3 border-t border-d-border-subtle"><button type="button" disabled={save.isPending} className="rounded-full border border-d-border-subtle px-5 py-2.5" onClick={onClose}>Hủy bỏ</button><button type="submit" value="draft" className={receipt ? buttonClass : 'rounded-full border border-d-border-subtle px-5 py-2.5'} disabled={save.isPending}>{save.isPending ? 'Đang lưu…' : receipt ? 'Lưu thay đổi phiếu nháp' : 'Lưu phiếu nháp'}</button>{!receipt && <button type="submit" value="post" className={buttonClass} disabled={save.isPending || !stockConfirmed}>{save.isPending ? 'Đang lưu…' : 'Ghi nhận vào kho'}</button>}</div>
+
     </form>
   </Dialog>;
 }

@@ -2,6 +2,12 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Retrack.API.DTOs.Depot;
 
+public record StockCostPreviewInput(decimal PurchaseCost, List<StockLineInput> Lines, List<StockExpenseInput> Expenses);
+public record StockCostPreviewLine(string Name, string Unit, decimal Quantity, decimal ReferencePrice,
+    decimal ReferenceValue, decimal SharePercent, decimal SharedCost, decimal DirectCost, decimal AllocatedCost, decimal UnitCost);
+public record StockCostPreviewDto(decimal PurchaseCost, decimal CommonCost, decimal DirectCost, decimal TotalCost,
+    decimal ReferenceTotal, List<StockCostPreviewLine> Lines);
+
 public class CreateStockReceiptDto
 {
     public Guid OperationId { get; set; }
