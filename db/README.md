@@ -56,4 +56,12 @@ Các SQL cũ đã gộp/xóa khỏi Git. Script kiểm kê/dọn PascalCase lưu
 
 ## Khi nhóm thêm bảng/cột hoặc seed
 
+Bổ sung 08/11/2026: bảng giá thu mua riêng của từng kho nằm trong khối
+`-- RETRACK_DEPOT_BUYING_PRICES_V1_BEGIN` đến `-- RETRACK_DEPOT_BUYING_PRICES_V1_END`
+trong chính file SQL chung. DB cũ đã có schema khác đầy đủ chỉ cần chạy khối này
+trong transaction sau khi kiểm tra đúng database; không chọn sang seed.
+Không cần EF update. Máy mới vẫn chạy một file đầy đủ như trên.
+Giá thị trường Admin và giá kho công bố là hai nguồn khác nhau; kho chưa công bố
+thì Seller thấy thông báo chưa có giá, không lấy giá thị trường gán cho tất cả kho.
+
 Chỉnh cùng `bootstrap/retrack-system.sql`: schema trước RETRACK_SCHEMA_END, seed giữa RETRACK_SEED_BEGIN/END. Mọi seed phải kiểm retrack.seed_demo, giữ UUID và trạng thái đã dùng. Không thêm bootstrap/seed theo role song song. Giữ các marker mà tests đang dùng; trước push kiểm bootstrap mới, schema-only, chạy lại và rollback khi lỗi.

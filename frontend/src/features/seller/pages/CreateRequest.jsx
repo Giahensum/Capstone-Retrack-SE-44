@@ -1,3 +1,4 @@
+import { materialLabel } from '@/features/depot/materialLabels';
 import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
@@ -978,6 +979,7 @@ export default function CreateRequest() {
                 return (
                   <div
                     key={depot.id}
+                    data-depot-id={depot.id}
                     className={`bg-d-surface-container-lowest border rounded-2xl p-5 transition-all shadow-sm ${
                       isSelected
                         ? 'border-d-primary ring-1 ring-d-primary'
@@ -1017,7 +1019,7 @@ export default function CreateRequest() {
                           </div>
 
                           {/* Giá thu mua */}
-                          {depot.prices && (
+                          {depot.prices && Object.keys(depot.prices).length > 0 ? (
                             <div className="mt-3">
                               <button
                                 type="button"
@@ -1029,23 +1031,25 @@ export default function CreateRequest() {
                                 <span>{showPricesId === depot.id ? '✕ Đóng bảng giá' : '💰 Xem bảng giá thu mua'}</span>
                               </button>
 
+                              <p className="mt-1 text-xs text-d-on-surface-variant">Giá tham khảo do kho công bố; chốt sau cân và phân loại.{depot.pricesUpdatedAt && ` Cập nhật: ${new Date(depot.pricesUpdatedAt).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}`}</p>
                               {showPricesId === depot.id && (
                                 <div className="mt-2.5 pt-2.5 border-t border-d-border-subtle grid grid-cols-2 sm:grid-cols-3 gap-2">
                                   {Object.entries(depot.prices).map(([mat, price]) => (
                                     <div
                                       key={mat}
-                                      className="flex justify-between items-center text-xs bg-d-surface-container px-2.5 py-1.5 rounded-lg"
+                                      className="flex flex-col gap-1 text-xs bg-d-surface-container px-2.5 py-1.5 rounded-lg"
                                     >
-                                      <span className="font-medium text-d-on-surface-variant">{mat}</span>
+                                      <span className="font-medium text-d-on-surface-variant">{materialLabel(mat)}</span>
                                       <span className="font-bold text-d-primary">
                                         {price.toLocaleString('vi-VN')} đ/kg
                                       </span>
+                                      {depot.priceConditions?.[mat] && <p className="text-d-on-surface-variant break-words">{depot.priceConditions[mat]}</p>}
                                     </div>
                                   ))}
                                 </div>
                               )}
                             </div>
-                          )}
+                          ) : <p className="mt-3 text-xs text-d-on-surface-variant">Kho chưa công bố giá thu mua. Liên hệ để được báo giá.</p>}
                         </div>
                       </div>
 
