@@ -38,6 +38,8 @@ namespace Retrack.API.DTOs
         public double AvgRating { get; set; }
         public int TotalDone { get; set; }
         public Dictionary<string, decimal> Prices { get; set; } = new();
+        public Dictionary<string, string> PriceConditions { get; set; } = new();
+        public DateTime? PricesUpdatedAt { get; set; }
 
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public double? DistanceKm { get; set; }

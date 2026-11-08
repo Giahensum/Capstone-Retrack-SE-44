@@ -810,6 +810,19 @@ ALTER TABLE driver_delivery_events ADD CONSTRAINT ck_driver_evidence CHECK (
     (image_url IS NOT NULL AND length(btrim(image_url)) > 0 AND photo_taken_at IS NOT NULL));
 -- RETRACK_EMPLOYEE_DISPATCH_END
 
+-- RETRACK_DEPOT_BUYING_PRICES_V1_BEGIN
+CREATE TABLE IF NOT EXISTS depot_buying_prices (
+    depot_id UUID NOT NULL REFERENCES depots(id) ON DELETE CASCADE,
+    material_type VARCHAR(100) NOT NULL CHECK (material_type IN
+      ('PET','HDPE','PVC','PAPER','CARDBOARD','ALUMINUM','IRON','STEEL','COPPER','ELECTRONIC_WASTE','OTHER')),
+    price_per_kg NUMERIC(18,0) NOT NULL CHECK (price_per_kg > 0 AND price_per_kg <= 1000000000),
+    condition_note VARCHAR(500) NOT NULL DEFAULT '',
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (depot_id, material_type)
+);
+-- RETRACK_DEPOT_BUYING_PRICES_V1_END
+
 -- RETRACK_SCHEMA_END
 
 -- RETRACK_SEED_BEGIN
@@ -1688,6 +1701,24 @@ END IF;
 END $retrack_driver_stock_seed$;
 -- RETRACK_DRIVER_STOCK_SEED_END
 
+-- Giá thu mua riêng từng kho demo; không ghi đè bảng giá người dùng đã sửa.
+DO $buying_prices_demo$
+BEGIN
+    IF current_setting('retrack.seed_demo', true) = 'on' THEN
+        INSERT INTO depot_buying_prices(depot_id, material_type, price_per_kg, condition_note)
+        SELECT d.id, p.material, p.price, 'Giá demo tham khảo, chốt sau cân và phân loại'
+        FROM depots d
+        JOIN (VALUES
+          ('00000000-0000-0000-0000-000000000010'::uuid,'IRON',6000),
+          ('00000000-0000-0000-0000-000000000010'::uuid,'PET',8500),
+          ('00000000-0000-0000-0000-000000000011'::uuid,'IRON',6500),
+          ('00000000-0000-0000-0000-000000000011'::uuid,'PET',9000),
+          ('00000000-0000-0000-0000-000000000012'::uuid,'IRON',5800),
+          ('00000000-0000-0000-0000-000000000012'::uuid,'PAPER',3000)
+        ) p(depot_id,material,price) ON p.depot_id=d.id
+        ON CONFLICT (depot_id, material_type) DO NOTHING;
+    END IF;
+END $buying_prices_demo$;
 -- RETRACK_SEED_END
 
 COMMIT;

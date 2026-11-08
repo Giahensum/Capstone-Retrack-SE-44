@@ -30,12 +30,19 @@ public sealed class BootstrapTests
             {
                 await using var customFee = new NpgsqlCommand("UPDATE system_configs SET config_value='1.00' WHERE config_key='PLATFORM_FEE_PERCENTAGE'; SELECT MIN(updated_at) FROM pickup_requests WHERE status='DONE'", connection, tx);
                 var value = await customFee.ExecuteScalarAsync(); before = value is DateTime date ? date : null;
+                if (demo)
+                {
+                    await using var customPrice = new NpgsqlCommand("UPDATE depot_buying_prices SET price_per_kg=7777 WHERE depot_id='00000000-0000-0000-0000-000000000010' AND material_type='IRON'", connection, tx);
+                    await customPrice.ExecuteNonQueryAsync();
+                }
             }
         }
         await using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(connection).Options);
         await db.Database.UseTransactionAsync(tx);
         Assert.Equal(demo ? 6 : 0, await db.Users.Select(x => x.Role).Distinct().CountAsync());
         Assert.Equal("1.00", await db.SystemConfigs.Where(x => x.ConfigKey == "PLATFORM_FEE_PERCENTAGE").Select(x => x.ConfigValue).SingleAsync());
+        if (demo) Assert.Equal(7777, await db.DepotBuyingPrices.Where(x => x.DepotId == Guid.Parse("00000000-0000-0000-0000-000000000010") && x.MaterialType == "IRON").Select(x => x.PricePerKg).SingleAsync());
+        else Assert.False(await db.DepotBuyingPrices.AnyAsync());
         if (before != null) Assert.Equal(before, await db.PickupRequests.Where(x => x.Status == "DONE").MinAsync(x => (DateTime?)x.UpdatedAt));
         // SELECT tất cả cột của từng bảng được runtime map; bắt cột thiếu mà COUNT(*) không phát hiện.
         foreach (var entity in db.Model.GetEntityTypes())
