@@ -37,6 +37,7 @@ namespace Retrack.API.Data
         public DbSet<PlatformInvoice> PlatformInvoices { get; set; }
         public DbSet<Notification> Notifications { get; set; }
         public DbSet<PasswordResetOtp> PasswordResetOtps { get; set; }
+        public DbSet<DepotBuyingPrice> DepotBuyingPrices { get; set; }
         public DbSet<DepotStockReceipt> DepotStockReceipts { get; set; }
         public DbSet<DepotStockLine> DepotStockLines { get; set; }
         public DbSet<DepotStockExpense> DepotStockExpenses { get; set; }
@@ -57,6 +58,8 @@ namespace Retrack.API.Data
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+            modelBuilder.Entity<DepotBuyingPrice>().HasKey(x => new { x.DepotId, x.MaterialType });
+            modelBuilder.Entity<DepotBuyingPrice>().HasOne(x => x.Depot).WithMany().HasForeignKey(x => x.DepotId).OnDelete(DeleteBehavior.Cascade);
             modelBuilder.Entity<EmployeeCollectionArea>().HasOne<Depot>().WithMany().HasForeignKey(a => a.DepotId).OnDelete(DeleteBehavior.Restrict);
             modelBuilder.Entity<EmployeeDispatchShift>().HasOne<EmployeeCollectionArea>().WithMany().HasForeignKey(s => s.AreaId).OnDelete(DeleteBehavior.Restrict);
             modelBuilder.Entity<EmployeeDispatchShift>().HasOne<User>().WithMany().HasForeignKey(s => s.EmployeeId).OnDelete(DeleteBehavior.Restrict);
