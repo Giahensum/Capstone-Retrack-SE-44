@@ -21,11 +21,13 @@ public sealed class LiquidationService(ILiquidationRepository repository, IDepot
     {
         await RequireViewerAsync(userId, depotId);
         if (query.Page < 1 || query.PageSize is < 1 or > 100 || query.Search?.Length > 255 ||
+            query.View is not (null or "" or "OPEN" or "PURCHASES" or "HISTORY") ||
             query.Status is not (null or "" or "SURVEY" or "BIDDING" or "UPCOMING" or "CLOSING" or "AWARDED" or "NO_SALE" or "CANCELLED"))
             throw new ArgumentException("Bộ lọc hoặc phân trang không hợp lệ.");
         var now = Now;
         var page = await repository.ListAsync(userId, depotId!.Value, query, now);
-        return new() { Page = page.Page, PageSize = page.PageSize, TotalCount = page.TotalCount, Items = page.Items.Select(x => Summary(x, now)).ToList() };
+        return new() { Page = page.Page, PageSize = page.PageSize, TotalCount = page.TotalCount,
+            Items = page.Items.Select(x => Summary(x.Lot, now) with { PurchaseStatus = x.PurchaseStatus }).ToList() };
     }
     public async Task<LiquidationDetailDto> DetailAsync(Guid userId, Guid? depotId, Guid lotId)
     {
