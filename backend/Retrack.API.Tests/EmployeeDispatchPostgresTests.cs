@@ -33,14 +33,18 @@ public sealed class EmployeeDispatchPostgresTests
             await Run("db/bootstrap/retrack-system.sql");
             await Run("db/bootstrap/retrack-system.sql");
             await using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(scoped).Options);
-            var depotId = Guid.Parse("ed200000-0000-4000-8000-000000000001");
+            var depotId = Guid.Parse("ef200000-0000-4000-8000-000000000001");
             Assert.Equal(36,await db.PickupRequests.CountAsync(p => p.TargetDepotId == depotId));
+            Assert.Equal(12, await db.PickupRequests.Where(p => p.TargetDepotId == depotId)
+                .Select(p => new { p.Latitude, p.Longitude }).Distinct().CountAsync());
+            Assert.Equal(12, await db.PickupRequests.Where(p => p.TargetDepotId == depotId).Select(p => p.SellerId).Distinct().CountAsync());
             Assert.Equal(6,await db.EmployeeCollectionAreas.CountAsync());
             Assert.Equal(6,await db.EmployeeDispatchShifts.CountAsync());
             var completed = await db.PickupRequests.AsNoTracking().Where(p => p.Status == "DONE")
                 .Select(p => new {p.Id,p.AcceptedCollectorId,p.GrossAmount,p.NetAmount}).OrderBy(p => p.Id).ToListAsync();
             var dayEnd = DateTime.UtcNow.AddHours(7).Date.AddDays(1).AddHours(-7);
             var eligible = await db.PickupRequests.CountAsync(p => p.TargetDepotId == depotId
+                && !p.Description!.Contains("[NGOAI-VUNG]")
                 && (p.PreferredDatetime == null || p.PreferredDatetime < dayEnd));
             await new EmployeeDispatchService(db).DispatchAsync(default);
             Assert.Equal(eligible,await db.PickupRequests.CountAsync(p => p.TargetDepotId == depotId && p.Status == "SCHEDULED"));
