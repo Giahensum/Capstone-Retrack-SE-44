@@ -696,6 +696,11 @@ export default function CreateRequest() {
             </div>
 
             {/* Ngày & Khung giờ thu gom */}
+            <p className="text-xs text-d-on-surface-variant">
+              Để trống ngày nếu muốn thu gom sớm nhất có thể, tùy nhân viên và vùng phục vụ của kho.
+              Nếu đặt lịch, hãy chọn cả ngày và khung giờ. Chọn ngày mà không chọn khung giờ sẽ dùng mốc 08:00.
+              Thời gian này là mong muốn của bạn, chưa phải cam kết giờ nhân viên đến.
+            </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
               <div>
                 <label className="text-xs font-semibold text-d-on-surface mb-1.5 block">

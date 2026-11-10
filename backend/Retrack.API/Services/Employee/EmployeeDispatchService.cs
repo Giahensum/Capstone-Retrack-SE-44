@@ -9,6 +9,8 @@ public sealed record AvailabilityInput(string Status, string? Reason);
 
 public sealed class EmployeeDispatchService(AppDbContext db)
 {
+    // Giới hạn hỗ trợ từ địa điểm Seller tới tâm vùng nhận, không phải bán kính check-in.
+    public const double MaxSupportDistanceMeters = 5000;
     // Các tiến trình điều phối dùng cùng khóa; check-in vẫn khóa bản ghi pickup.
     public async Task LockAsync(CancellationToken ct)
     {
@@ -152,8 +154,17 @@ public sealed class EmployeeDispatchService(AppDbContext db)
                 && db.DepotStaffs.Any(st => st.DepotId == depotId && st.UserId == s.EmployeeId && st.IsActive
                     && st.StaffType == "DEPOT_EMPLOYEE" && st.User.IsActive && st.User.Role == "DEPOT_EMPLOYEE"))
                 .OrderBy(s => s.Id).ToListAsync(ct);
+            double DistanceToShift(EmployeeDispatchShift shift)
+            {
+                var recipientArea = areas.Single(a => a.Id == shift.AreaId);
+                return CollectionValidation.Distance((double)pickup.Latitude!.Value,
+                    (double)pickup.Longitude!.Value, recipientArea.Latitude, recipientArea.Longitude);
+            }
+            bool CoversOrSupports(EmployeeDispatchShift shift) => shift.AreaId == home.Id
+                || DistanceToShift(shift) <= MaxSupportDistanceMeters;
             // Giữ phân công ổn định; không chuyển đơn vì một người khác vừa rảnh hơn.
-            if (old.HasValue && shifts.Any(s => s.EmployeeId == old))
+            if (old.HasValue && shifts.Any(s => s.EmployeeId == old && CoversOrSupports(s)
+                && (pickup.PreferredDatetime == null || pickup.PreferredDatetime < s.EndsAt)))
             {
                 await TouchQueue(id, "ASSIGNED", now, ct);
                 return;
@@ -167,18 +178,17 @@ public sealed class EmployeeDispatchService(AppDbContext db)
             var excluded = await db.EmployeeDispatchEvents.Where(e => e.PickupId == id
                 && e.FromEmployeeId != null && e.CreatedAt >= day).Select(e => e.FromEmployeeId!.Value).ToListAsync(ct);
             chosen = shifts.Where(s => s.EmployeeId != old && !excluded.Contains(s.EmployeeId)
+                && CoversOrSupports(s)
                 && counts.GetValueOrDefault(s.EmployeeId) < s.MaxPendingOrders
                 && (pickup.PreferredDatetime == null || pickup.PreferredDatetime < s.EndsAt))
                 .OrderBy(s => s.AreaId == home.Id ? 0 : 1)
-                .ThenBy(s => counts.GetValueOrDefault(s.EmployeeId) * 1500 +
-                    CollectionValidation.Distance(home.Latitude, home.Longitude,
-                        areas.Single(a => a.Id == s.AreaId).Latitude, areas.Single(a => a.Id == s.AreaId).Longitude))
+                .ThenBy(s => counts.GetValueOrDefault(s.EmployeeId) * 1500 + DistanceToShift(s))
                 .ThenBy(s => s.Id).FirstOrDefault();
             if (chosen != null) pickup.TargetDepotId = depotId;
         }
         var next = chosen?.EmployeeId;
         var waitingReason = home == null ? "Chưa có khu vực phục vụ phù hợp hoặc tọa độ hợp lệ."
-            : "Chưa có nhân viên trong ca, còn khả năng nhận đơn.";
+            : "Chưa có nhân viên trong vùng hoặc vùng hỗ trợ cách điểm thu gom tối đa 5 km, còn ca và khả năng nhận đơn.";
         var priorQueue = await db.EmployeeDispatchQueues.FindAsync([id], ct);
         if (next != old)
         {
