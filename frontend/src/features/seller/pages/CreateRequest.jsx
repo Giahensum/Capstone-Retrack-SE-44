@@ -6,7 +6,6 @@ import toast from 'react-hot-toast';
 import { sellerApi } from '../api';
 import GoongAutocomplete from '@/components/ui/GoongAutocomplete';
 import { MaterialIcon } from '@/features/depot/components/DepotIcon';
-import { APIProvider, Map, Marker, InfoWindow } from '@vis.gl/react-google-maps';
 import { Loader2, Sparkles, Wand2 } from 'lucide-react';
 
 const TIME_SLOTS = [
@@ -155,14 +154,6 @@ export default function CreateRequest() {
   };
   const [selectedDepot, setSelectedDepot] = useState(null);
 
-  const [viewport, setViewport] = useState({
-    latitude: 16.07,
-    longitude: 108.15,
-    zoom: 13,
-  });
-
-  const [selectedDepotPopup, setSelectedDepotPopup] = useState(null);
-
   // Fetch recent requests to recommend previously used addresses
   const { data: previousRequests = [] } = useQuery({
     queryKey: ['seller-requests-recent-address'],
@@ -184,56 +175,70 @@ export default function CreateRequest() {
         const GOONG_API_KEY = import.meta.env.VITE_GOONG_API_KEY;
         if (!GOONG_API_KEY) return dbDepots;
 
-        const origins = `${form.latitude},${form.longitude}`;
-        const destinations = dbDepots.map((d) => `${d.latitude},${d.longitude}`).join('|');
+        // Lọc các kho có tọa độ hợp lệ để tính tuyến đường Goong
+        const validDepots = dbDepots.filter((d) => d.latitude != null && d.longitude != null);
+        const invalidDepots = dbDepots.filter((d) => d.latitude == null || d.longitude == null);
 
-        const res = await fetch(
-          `https://rsapi.goong.io/DistanceMatrix?origins=${origins}&destinations=${destinations}&vehicle=bike&api_key=${GOONG_API_KEY}`
-        );
-        const data = await res.json();
+        let hasGoongResult = false;
+        if (validDepots.length > 0) {
+          const origins = `${form.latitude},${form.longitude}`;
+          const destinations = validDepots.map((d) => `${d.latitude},${d.longitude}`).join('|');
 
-        if (data.rows && data.rows[0]?.elements) {
-          const elements = data.rows[0].elements;
-          dbDepots.forEach((depot, idx) => {
-            if (elements[idx]?.status === 'OK') {
-              depot.routingDistanceKm = elements[idx].distance.value / 1000;
-              depot.routingDurationText = elements[idx].duration.text;
-            }
-          });
-
-          return dbDepots.sort(
-            (a, b) =>
-              (a.routingDistanceKm || a.distanceKm || 999) -
-              (b.routingDistanceKm || b.distanceKm || 999)
+          const res = await fetch(
+            `https://rsapi.goong.io/DistanceMatrix?origins=${origins}&destinations=${destinations}&vehicle=bike&api_key=${GOONG_API_KEY}`
           );
+          if (res.ok) {
+            const data = await res.json();
+            if (data.rows && data.rows[0]?.elements) {
+              const elements = data.rows[0].elements;
+              validDepots.forEach((depot, idx) => {
+                if (elements[idx]?.status === 'OK') {
+                  depot.routingDistanceKm = elements[idx].distance.value / 1000;
+                  depot.routingDurationText = elements[idx].duration.text;
+                  hasGoongResult = true;
+                } else {
+                  depot.routingDistanceKm = null;
+                  depot.routingDurationText = null;
+                }
+              });
+            }
+          }
+        }
+
+        if (hasGoongResult) {
+          // Thuật toán chính: Bắt buộc dùng khoảng cách tuyến đường thực tế Goong.io
+          return [...validDepots, ...invalidDepots].sort((a, b) => {
+            const distA = a.routingDistanceKm;
+            const distB = b.routingDistanceKm;
+
+            if (distA != null && distB != null) return distA - distB;
+            if (distA != null) return -1;
+            if (distB != null) return 1;
+
+            return (b.totalDone || 0) - (a.totalDone || 0);
+          });
         }
       } catch (err) {
-        console.error('Goong DistanceMatrix API error:', err);
+        console.warn('Goong DistanceMatrix API gián đoạn, kích hoạt cơ chế backup ước tính:', err);
       }
-      return dbDepots;
+
+      // ── CƠ CHẾ DỰ PHÒNG (BACKUP) NẾU API GOONG.IO KHÔNG HOẠT ĐỘNG ──
+      // Gắn cờ isFallback để thông báo rõ cho người dùng và sắp xếp theo khoảng cách ước tính
+      dbDepots.forEach((d) => {
+        d.isFallback = true;
+      });
+
+      return dbDepots.sort((a, b) => {
+        const distA = a.distanceKm;
+        const distB = b.distanceKm;
+        if (distA != null && distB != null) return distA - distB;
+        if (distA != null) return -1;
+        if (distB != null) return 1;
+        return (b.totalDone || 0) - (a.totalDone || 0);
+      });
     },
     enabled: step === 2 && mode === 'choose',
   });
-
-  useEffect(() => {
-    if (step === 2 && mode === 'choose') {
-      if (selectedDepot && selectedDepot.latitude) {
-        setViewport((v) => ({
-          ...v,
-          latitude: selectedDepot.latitude,
-          longitude: selectedDepot.longitude,
-          zoom: 15,
-        }));
-      } else if (form.latitude && form.longitude) {
-        setViewport((v) => ({
-          ...v,
-          latitude: form.latitude,
-          longitude: form.longitude,
-          zoom: 13,
-        }));
-      }
-    }
-  }, [selectedDepot, form.latitude, form.longitude, step, mode]);
 
   const createMutation = useMutation({
     mutationFn: sellerApi.createRequest,
@@ -696,11 +701,6 @@ export default function CreateRequest() {
             </div>
 
             {/* Ngày & Khung giờ thu gom */}
-            <p className="text-xs text-d-on-surface-variant">
-              Để trống ngày nếu muốn thu gom sớm nhất có thể, tùy nhân viên và vùng phục vụ của kho.
-              Nếu đặt lịch, hãy chọn cả ngày và khung giờ. Chọn ngày mà không chọn khung giờ sẽ dùng mốc 08:00.
-              Thời gian này là mong muốn của bạn, chưa phải cam kết giờ nhân viên đến.
-            </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
               <div>
                 <label className="text-xs font-semibold text-d-on-surface mb-1.5 block">
@@ -873,7 +873,7 @@ export default function CreateRequest() {
       )}
 
       {/* ═════════════════════════════════════════════════════
-          BƯỚC 2b: DANH SÁCH & BẢN ĐỒ KHO VỰA
+          BƯỚC 2b: DANH SÁCH KHO VỰA GẦN BẠN
       ══════════════════════════════════════════════════════ */}
       {step === 2 && mode === 'choose' && (
         <div className="space-y-4">
@@ -884,7 +884,9 @@ export default function CreateRequest() {
               </h2>
               <p className="text-xs text-d-on-surface-variant mt-0.5">
                 {form.latitude
-                  ? 'Được sắp xếp theo khoảng cách di chuyển thực tế gần bạn nhất'
+                  ? depots.some((d) => d.isFallback)
+                    ? '⚠️ Goong.io gián đoạn: Đang xếp theo khoảng cách địa lý ước tính dự phòng'
+                    : 'Được sắp xếp theo khoảng cách di chuyển thực tế (Goong.io) gần bạn nhất'
                   : 'Danh sách các kho vựa đang hoạt động'}
               </p>
             </div>
@@ -896,77 +898,6 @@ export default function CreateRequest() {
               Đổi hình thức
             </button>
           </div>
-
-          {/* Bản đồ Google Maps */}
-          {(form.latitude || viewport.latitude) && (
-            <div className="h-64 w-full rounded-2xl overflow-hidden border border-d-border-subtle relative z-10 shadow-sm">
-              <APIProvider apiKey={import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ''}>
-                <Map
-                  defaultZoom={viewport.zoom}
-                  defaultCenter={{ lat: viewport.latitude, lng: viewport.longitude }}
-                  center={{ lat: viewport.latitude, lng: viewport.longitude }}
-                  onCameraChanged={(ev) =>
-                    setViewport({
-                      latitude: ev.detail.center.lat,
-                      longitude: ev.detail.center.lng,
-                      zoom: ev.detail.zoom,
-                    })
-                  }
-                  disableDefaultUI={true}
-                >
-                  {form.latitude && form.longitude && (
-                    <Marker position={{ lat: form.latitude, lng: form.longitude }} title="Vị trí của bạn" />
-                  )}
-
-                  {depots.map((d) =>
-                    d.latitude && d.longitude ? (
-                      <Marker
-                        key={d.id}
-                        position={{ lat: d.latitude, lng: d.longitude }}
-                        onClick={() => {
-                          setSelectedDepot(d);
-                          setSelectedDepotPopup(d);
-                        }}
-                        title={d.name}
-                      />
-                    ) : null
-                  )}
-
-                  {selectedDepotPopup && (
-                    <InfoWindow
-                      position={{
-                        lat: selectedDepotPopup.latitude,
-                        lng: selectedDepotPopup.longitude,
-                      }}
-                      onCloseClick={() => setSelectedDepotPopup(null)}
-                    >
-                      <div className="text-center min-w-[140px] p-2">
-                        <strong className="text-d-on-surface text-sm block mb-1">
-                          {selectedDepotPopup.name}
-                        </strong>
-                        <span className="text-d-primary font-bold text-xs">
-                          {selectedDepotPopup.routingDistanceKm != null
-                            ? `${selectedDepotPopup.routingDistanceKm.toFixed(1)} km`
-                            : ''}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setForm({ ...form, targetDepotId: selectedDepotPopup.id });
-                            setStep(3);
-                          }}
-                          className="mt-2 bg-d-primary text-d-on-primary px-3 py-1.5 rounded-full text-xs font-bold w-full active:scale-95 transition-transform"
-                        >
-                          Chọn kho này
-                        </button>
-                      </div>
-                    </InfoWindow>
-                  )}
-                </Map>
-              </APIProvider>
-            </div>
-          )}
 
           {/* Danh sách thẻ kho vựa */}
           <div className="space-y-3">
@@ -1014,13 +945,17 @@ export default function CreateRequest() {
                             </span>
                             {depot.routingDistanceKm != null ? (
                               <span className="font-semibold text-d-primary">
-                                • {depot.routingDistanceKm.toFixed(1)} km ({depot.routingDurationText})
+                                • {depot.routingDistanceKm.toFixed(1)} km ({depot.routingDurationText}) · Tuyến Goong
                               </span>
                             ) : depot.distanceKm != null ? (
-                              <span className="font-semibold text-d-primary">
-                                • {depot.distanceKm.toFixed(1)} km
+                              <span className="font-medium text-amber-700 dark:text-amber-400">
+                                • ~{depot.distanceKm.toFixed(1)} km (ước tính dự phòng)
                               </span>
-                            ) : null}
+                            ) : (
+                              <span className="text-d-on-surface-variant text-xs">
+                                • Chưa xác định lộ trình di chuyển
+                              </span>
+                            )}
                           </div>
 
                           {/* Giá thu mua */}
