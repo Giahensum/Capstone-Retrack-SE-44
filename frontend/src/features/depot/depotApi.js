@@ -5,13 +5,14 @@ import { useDepot } from './DepotContext';
 export function useDepotQuery(path, params = {}, enabled = true, refetchInterval = false) {
   const { depotId, userId } = useDepot();
   return useQuery({ queryKey: ['depot', userId, depotId, path, params], enabled: !!depotId && enabled, refetchInterval,
-    queryFn: async () => (await api.get(`/depot/${path}`, { params: { depotId, ...params } })).data.data });
+    queryFn: async ({ signal }) => (await api.get(`/depot/${path}`, { params: { depotId, ...params }, signal, timeout: 30000 })).data.data });
 }
 export function useDepotMutation(method, path, onSuccess) {
   const { depotId } = useDepot();
   const client = useQueryClient();
   return useMutation({ mutationFn: ({ body, id } = {}) => api.request({ method,
     url: `/depot/${typeof path === 'function' ? path(id, body) : path}`, params: { depotId }, data: body,
+    timeout: body instanceof FormData ? 120000 : 60000,
     ...(body instanceof FormData ? { headers: { 'Content-Type': 'multipart/form-data' } } : {}) }),
     onSuccess: async () => { await client.invalidateQueries({ queryKey: ['depot'] }); onSuccess?.(); } });
 }
