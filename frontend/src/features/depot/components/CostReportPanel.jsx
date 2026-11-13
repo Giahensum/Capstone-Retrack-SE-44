@@ -8,21 +8,22 @@ export default function CostReportPanel({ period }) {
   const d = query.data;
   return <QueryState query={query}>{d && <div className="space-y-5">
     <Cards items={[
-      { label: 'Tiền bán ròng đã ghi nhận', value: amount(d.netRevenue), icon: 'payments', description: 'Factory sau phí quyết toán + tiền bán đồ cũ ghi ngoài hệ thống.' },
+      { label: 'Tiền hàng sau phí, chưa VAT', value: amount(d.netRevenue), icon: 'payments', description: 'Tiền theo quyết toán trừ VAT đầu ra đã khai, cộng tiền bán đồ cũ ghi ngoài hệ thống.' },
       { label: 'Giá vốn đã xác định', value: money(d.knownCostOfGoods), icon: 'inventory_2', description: d.incompleteCount ? 'Mới là phần xác định được; còn giao dịch thiếu nguồn vốn hoặc quyết toán.' : 'Nguồn FIFO của lô xuất và phần giá vốn đồ cũ đã bán.' },
       { label: 'Chi phí bán đã ghi', value: money(d.sellingCosts), icon: 'receipt_long', description: 'Chi phí giao/bán gắn với giao dịch, gồm cả khoản bổ sung sau kỳ.' },
-      { label: 'Chênh lệch trước thuế', value: amount(d.pretaxDifference), icon: 'analytics', description: 'Tiền bán ròng − giá vốn − chi phí bán đã ghi. Chưa gồm chi phí chưa nhập.' }
+      { label: 'Chênh lệch tiền hàng', value: amount(d.pretaxDifference), icon: 'analytics', description: 'Tiền hàng sau phí, chưa VAT − giá vốn − chi phí bán. Chưa tính thuế thu nhập.' }
     ]} />
     <section className="rounded-[20px] border border-d-border-subtle bg-white p-4 sm:p-6 space-y-4" aria-labelledby="cost-report-title">
       <h2 id="cost-report-title" className="text-xl font-semibold">Đối chiếu giá vốn theo kênh bán</h2>
       <p className="text-sm">{number(d.transactionCount)} giao dịch trong kỳ · {number(d.incompleteCount)} giao dịch thiếu dữ liệu hoặc cần đối soát chi phí.</p>
       {d.incompleteCount > 0 && <p role="status" className="rounded-xl border border-d-border-subtle bg-d-surface-accent p-3 text-sm">Chưa thể kết luận tổng lãi/lỗ. Lô thiếu snapshot/vốn/tiền ròng hoặc nguồn có điều chỉnh sau xuất cần được đối soát trước.</p>}
       {!d.transactionCount && <p role="status">Chưa có lô Factory đã quyết toán hoặc đồ cũ đã ghi bán trong kỳ.</p>}
-      <GridTable headers={['Kênh bán', 'Giao dịch', 'Tiền bán', 'Giá vốn đã xác định', 'Chi phí bán', 'Chênh lệch trước thuế']}>
+      <p className="rounded-xl bg-d-surface-accent p-3 text-sm">Tiền thanh toán theo quyết toán {amount(d.settlementAmount)} · VAT đầu ra đã khai {amount(d.outputVat)}. Chênh lệch tiền hàng bên dưới đã loại khoản VAT này. Giá vốn vẫn theo số chi phí kho đã ghi.</p>
+      <GridTable headers={['Kênh bán', 'Giao dịch', 'Tiền hàng', 'Giá vốn đã xác định', 'Chi phí bán', 'Chênh lệch tiền hàng']}>
         {d.channels.map(x => <tr key={x.channel}>
           <td className={cellClass}>{x.channel === 'FACTORY' ? 'Lô xuất nhà máy' : 'Đồ tái sử dụng bán ngoài'}</td>
           <td className={cellClass}><p>{number(x.transactionCount)}</p>{x.incompleteCount > 0 && <p className="text-xs text-d-on-surface-variant mt-1">{number(x.incompleteCount)} chưa đủ dữ liệu</p>}</td>
-          <td className={cellClass}><p className="font-semibold">Ròng: {amount(x.netRevenue)}</p><p className="text-xs text-d-on-surface-variant mt-1">Gộp: {amount(x.grossRevenue)}</p><p className="text-xs text-d-on-surface-variant mt-1">Phí: {amount(x.platformFees)}</p></td>
+          <td className={cellClass}><p className="font-semibold">Sau phí, chưa VAT {amount(x.netRevenue)}</p><p className="text-xs text-d-on-surface-variant mt-1">Tiền hàng {amount(x.grossRevenue)}</p><p className="text-xs text-d-on-surface-variant mt-1">Phí {amount(x.platformFees)} · VAT {amount(x.outputVat)}</p><p className="text-xs text-d-on-surface-variant mt-1">Thanh toán theo quyết toán {amount(x.settlementAmount)}</p></td>
           {[x.knownCostOfGoods, x.sellingCosts, x.pretaxDifference].map((value, i) => <td key={i} className={cellClass}>{amount(value)}</td>)}
         </tr>)}
       </GridTable>

@@ -57,7 +57,14 @@ export default function BatchDetailModal({ id, onClose }) {
     <Rows title="Vận chuyển và nhận hàng" items={[["Vận chuyển", transportLabels[d.transportStatus] ?? d.transportStatus], ["Tài xế", d.driverName], ["Nhà máy nhận hàng", time(d.receivedAt)], ["Quyết định chất lượng", time(d.decidedAt)]]}/>
     <Rows title="Cân và kiểm tra chất lượng (KCS)" items={[["Khối lượng thực tế", kg(q?.actualWeightKg)], ["Khối lượng tổng", kg(q?.grossWeightKg)], ["Khối lượng bì", kg(q?.tareWeightKg)], ["Độ lệch", percent(q?.differencePercentage)], ["Phân hạng", q?.grade === 'PENDING' ? 'Chờ kiểm tra' : q?.grade], ["Kết quả", q?.isAccepted == null ? 'Chưa chốt' : q.isAccepted ? 'Chấp nhận' : 'Từ chối'], ["Độ tinh khiết", percent(q?.purityPercent)], ["Độ ẩm", percent(q?.moisturePercent)], ["Tạp chất", percent(q?.contaminationPercent)], ["Biên bản cân", q?.ticketNumber], ["Lý do từ chối", d.rejectionReason], ["Hướng xử lý", q?.resolution], ["Ghi chú nhà máy", q?.note]]}/>
     <Proof title="Phiếu cân" url={q?.ticketImageUrl}/>
-    <Rows title="Quyết toán do nhà máy ghi nhận" items={[["Đơn giá / kg", cash(s?.pricePerKg)], ["Tổng tiền", cash(s?.grossAmount)], ["Phí nền tảng", cash(s?.feeAmount)], ["Tiền thực nhận theo quyết toán", cash(s?.netAmount)], ["Tham chiếu thanh toán", s?.paymentReference], ["Ngày quyết toán", time(s?.settledAt)], ["Số hóa đơn", q?.invoiceNumber]]}/>
+    <Rows title="Quyết toán do nhà máy ghi nhận" items={[["Đơn giá thỏa thuận / kg", cash(s?.pricePerKg)],
+      ["Cơ sở đơn giá", s?.priceIncludesVat == null ? missing : s.priceIncludesVat ? 'Đã gồm VAT' : 'Chưa gồm VAT'],
+      ["Tiền hàng trước VAT", cash(s?.grossAmount)],
+      ["Cách khai VAT", ({ NOT_APPLICABLE: 'Không áp dụng VAT', ZERO_RATE: 'VAT 0%', TAXABLE: 'Có VAT theo hóa đơn' })[s?.vatTreatment] ?? missing],
+      ["Thuế suất VAT", percent(s?.vatPercentage)], ["Tiền VAT theo hóa đơn", cash(s?.vatAmount)],
+      ["Tổng tiền theo hóa đơn", cash(s?.invoiceTotalAmount)], ["Phí trừ trong quyết toán", cash(s?.feeAmount)],
+      ["Tiền thanh toán theo quyết toán, gồm VAT đã khai", cash(s?.netAmount)],
+      ["Tham chiếu thanh toán", s?.paymentReference], ["Ngày quyết toán", time(s?.settledAt)], ["Số hóa đơn", q?.invoiceNumber]]}/>
     <p className="text-sm text-d-on-surface-variant">Số liệu do nhà máy ghi nhận; chưa phải xác nhận nhận tiền từ phía chủ kho.</p>
     <Proof title="Hóa đơn nhà máy" url={q?.invoiceFileUrl}/><Proof title="Chứng từ thanh toán" url={s?.paymentProofUrl}/>
     <BatchCostPanel id={id} quantity={b.weightKg} />
