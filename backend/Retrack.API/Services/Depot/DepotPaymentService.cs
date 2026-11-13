@@ -42,6 +42,9 @@ public sealed class DepotPaymentService(IDepotOwnerRepository owners, IDepotPaym
             SourceType = "PICKUP_REQUEST",
             SourceId = requestId,
             FeeAmount = req.PlatformFeeAmount,
+            PayerId = ownerId,
+            TransactionAmount = req.GrossAmount,
+            FeePercentage = req.PlatformFeePercentage,
             Description = $"Phí thu gom phế liệu #{requestId}"
         });
         await work.SaveAsync();
