@@ -35,6 +35,19 @@ public class DepotLiquidationController(ILiquidationService service) : Controlle
     [HttpGet("agreements/{id:guid}")]
     public async Task<IActionResult> Agreement(Guid depotId, Guid id) =>
         Ok(ApiResponse<LiquidationAgreementDto>.Ok(await service.AgreementAsync(UserId, depotId, id)));
+    [HttpGet("{id:guid}/ladder")]
+    public async Task<IActionResult> Ladder(Guid depotId, Guid id, int page = 1) =>
+        Ok(ApiResponse<PagedResult<LiquidationLadderDto>>.Ok(await service.LadderAsync(UserId, depotId, id, page)));
+    [HttpPatch("agreements/{id:guid}/sign")]
+    public async Task<IActionResult> Sign(Guid depotId, Guid id)
+    {
+        await service.AgreementActionAsync(UserId, depotId, id, "SIGN"); return Ok(ApiResponse<string>.Ok("Đã ký hợp đồng đặt cọc (xác nhận điện tử của chủ kho)."));
+    }
+    [HttpPatch("agreements/{id:guid}/report-deposit")]
+    public async Task<IActionResult> ReportDeposit(Guid depotId, Guid id, LiquidationPaymentInput dto)
+    {
+        await service.AgreementActionAsync(UserId, depotId, id, "REPORT_DEPOSIT", dto.Reference); return Ok(ApiResponse<string>.Ok("Đã báo chuyển cọc ngoài hệ thống, chờ Seller xác nhận."));
+    }
     [HttpPatch("agreements/{id:guid}/report-payment")]
     public async Task<IActionResult> ReportPayment(Guid depotId, Guid id, LiquidationPaymentInput dto)
     {

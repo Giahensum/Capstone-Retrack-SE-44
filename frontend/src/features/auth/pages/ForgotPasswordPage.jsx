@@ -3,7 +3,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { authApi } from '../api';
-import { Mail, KeyRound, Lock, Eye, EyeOff, Recycle, ArrowLeft, ArrowRight, CheckCircle2, Loader2, RefreshCw } from 'lucide-react';
+import { Mail, KeyRound, Lock, Eye, EyeOff, ArrowLeft, ArrowRight, CheckCircle2, Loader2, RefreshCw } from 'lucide-react';
+import { BrandMark } from '@/components/brand/BrandLogo';
 
 export default function ForgotPasswordPage() {
   const navigate = useNavigate();
@@ -94,9 +95,7 @@ export default function ForgotPasswordPage() {
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="flex items-center justify-center gap-3 mb-6">
-          <div className="w-12 h-12 bg-[#446900] rounded-2xl flex items-center justify-center shadow-lg">
-            <Recycle size={26} className="text-[#a3e635]" />
-          </div>
+          <BrandMark size={52} />
           <span className="text-2xl font-black text-[#1f2937] tracking-tight">RETRACK</span>
         </div>
 

@@ -1,0 +1,19 @@
+/ruff_format_results.txt
+/ruff_check_results.txt
+/model.pth
+/Database
+/logs
+/cache
+/.vscode
+/.venv
+/models
+/samples
+/Utils/__pycache__
+/archive.zip
+/garbage_classification
+/GPU_Info.txt
+# Model weight files - too large for GitHub (>100MB), download/train locally
+*.pth
+*.pt
+model_backup_*.pth
+weights.pt

@@ -91,23 +91,13 @@
   font: inherit;
   color: var(--ink);
 }
+.brand-mark {
+  height: 52px;
+  width: 52px;
+  object-fit: contain;
+  flex: none;
+}
 .contract-hash { overflow-wrap: anywhere; }
-.factory-brand-logo {
-  display: block;
-  position: relative;
-  flex: 0 0 66px;
-  width: 66px;
-  height: 66px;
-  overflow: hidden;
-}
-.factory-brand-logo img {
-  position: absolute;
-  top: -20px;
-  left: -76px;
-  width: 215px;
-  max-width: none;
-  height: auto;
-}
 .factory-brand-wordmark { display:flex; flex-direction:column; line-height:1; color:#155f48; font-family:Arial,"Helvetica Neue",sans-serif; }
 .factory-brand-wordmark strong { font-family:Arial,"Helvetica Neue",sans-serif; font-size:27px; line-height:1; letter-spacing:-.025em; font-weight:800; }
 .factory-brand-wordmark small { margin-top:7px; font-family:Arial,"Helvetica Neue",sans-serif; font-size:9px; line-height:1.2; letter-spacing:.12em; font-weight:700; color:#476f61; white-space:nowrap; }
@@ -1125,17 +1115,7 @@
     height: 54px;
     margin: 0 auto 10px;
   }
-  .factory-brand-logo {
-    flex-basis: 52px;
-    width: 52px;
-    height: 52px;
-  }
-  .factory-brand-logo img {
-    top: -16px;
-    left: -60px;
-    width: 170px;
-  }
-  .factory-brand-wordmark strong { font-size:23px; }
+    .factory-brand-wordmark strong { font-size:23px; }
   .factory-brand-wordmark small { font-size:8px; letter-spacing:.1em; }
   .workspace-name,
   .nav-caption,
@@ -1396,6 +1376,39 @@
   cursor: pointer;
 }
 .factory-shell input[type="file"]::file-selector-button:hover { background: #cce9dc; }
+
+.factory-file-picker {
+  align-items: center;
+  background: #f8fcfa;
+  border: 1px dashed #9cc9b6;
+  border-radius: 8px;
+  display: flex;
+  min-height: 54px;
+  overflow: hidden;
+  padding: 6px;
+}
+
+.factory-file-input {
+  height: 1px;
+  opacity: 0;
+  overflow: hidden;
+  position: absolute;
+  width: 1px;
+}
+
+.factory-file-button {
+  background: #dff3e9;
+  border-radius: 7px;
+  color: #075f44;
+  cursor: pointer;
+  flex: 0 0 auto;
+  font-weight: 700;
+  padding: 10px 14px;
+}
+
+.factory-file-button:hover { background: #cce9dc; }
+.factory-file-picker.busy .factory-file-button { cursor: wait; opacity: .65; }
+.factory-file-name { color: #526760; overflow: hidden; padding: 0 12px; text-overflow: ellipsis; white-space: nowrap; }
 
 .detail-grid {
   display: grid;

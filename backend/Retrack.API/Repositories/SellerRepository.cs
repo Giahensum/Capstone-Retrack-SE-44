@@ -40,6 +40,15 @@ namespace Retrack.API.Repositories
             await _db.SaveChangesAsync();
         }
 
+        public async Task<PickupRequest?> LockPickupAsync(Guid requestId)
+        {
+            var request = await _db.PickupRequests.FromSqlInterpolated($"SELECT * FROM pickup_requests WHERE id = {requestId} FOR UPDATE").SingleOrDefaultAsync();
+            if (request != null) await _db.Entry(request).ReloadAsync();
+            return request;
+        }
+
+        public void AddNotice(Notification notice) => _db.Notifications.Add(notice);
+
         public async Task<bool> HasSellerReviewedRequestAsync(Guid requestId)
         {
             return await _db.SellerDepotReviews.AnyAsync(r => r.PickupRequestId == requestId);
@@ -56,7 +65,7 @@ namespace Retrack.API.Repositories
         {
             var rawDepots = await _db.Depots
                 .Include(d => d.Owner)
-                .Where(d => d.Owner.IsActive && d.VerificationStatus == "APPROVED")
+                .Where(d => d.Owner.IsActive && d.Owner.Role == "DEPOT_OWNER" && d.VerificationStatus == "APPROVED")
                 .Select(d => new
                 {
                     d.Id,
@@ -73,15 +82,12 @@ namespace Retrack.API.Repositories
                 })
                 .ToListAsync();
 
-            var prices = await _db.MarketPrices
-                .GroupBy(p => p.MaterialType)
-                .Select(g => g.OrderByDescending(p => p.EffectiveDate).FirstOrDefault())
-                .ToListAsync();
-
-            var priceDict = prices
-                .Where(p => p != null)
-                .ToDictionary(p => p!.MaterialType.ToString(), p => p!.PricePerKg);
-
+            var depotIds = rawDepots.Select(x => x.Id).ToArray();
+            var prices = await _db.DepotBuyingPrices.AsNoTracking()
+                .Where(x => depotIds.Contains(x.DepotId) && x.IsActive).ToListAsync();
+            Dictionary<string, decimal> Prices(Guid id) => prices.Where(x => x.DepotId == id).ToDictionary(x => x.MaterialType, x => x.PricePerKg);
+            Dictionary<string, string> Conditions(Guid id) => prices.Where(x => x.DepotId == id).ToDictionary(x => x.MaterialType, x => x.ConditionNote);
+            DateTime? Updated(Guid id) => prices.Where(x => x.DepotId == id).Select(x => (DateTime?)x.UpdatedAt).Max();
             if (lat.HasValue && lng.HasValue)
             {
                 return rawDepots
@@ -95,7 +101,7 @@ namespace Retrack.API.Repositories
                         OwnerName = d.OwnerName,
                         AvgRating = d.AvgRating,
                         TotalDone = d.TotalDone,
-                        Prices = priceDict,
+                        Prices = Prices(d.Id), PriceConditions = Conditions(d.Id), PricesUpdatedAt = Updated(d.Id),
                         DistanceKm = (d.Latitude.HasValue && d.Longitude.HasValue)
                             ? GeoUtils.CalculateDistanceKm(
                                 (double)lat.Value, (double)lng.Value,
@@ -117,7 +123,7 @@ namespace Retrack.API.Repositories
                     OwnerName = d.OwnerName,
                     AvgRating = d.AvgRating,
                     TotalDone = d.TotalDone,
-                    Prices = priceDict,
+                    Prices = Prices(d.Id), PriceConditions = Conditions(d.Id), PricesUpdatedAt = Updated(d.Id),
                     DistanceKm = null
                 })
                 .ToList();

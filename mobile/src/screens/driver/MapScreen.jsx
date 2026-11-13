@@ -9,11 +9,10 @@ import { driverApi } from "../../api/driverApi";
 import { getRoutes } from "../../helpers/goongDirections";
 import { coordinatesOf } from "../../helpers/coordinates";
 import { selectRoute } from "../../helpers/routeSelection";
-import { ROUTE_MODES } from "../../helpers/routePreferences";
 import { styles as s } from "../../theme";
 export default function MapScreen({ route }) {
   const id = route.params.jobId;
-  const [mode, setMode] = useState("balanced"), [linkError, setLinkError] = useState("");
+  const [linkError, setLinkError] = useState("");
   const loader = useCallback(async signal => {
     const job = await driverApi.detail(id, signal);
     try {
@@ -26,14 +25,14 @@ export default function MapScreen({ route }) {
     { ...data.job.depot, id: "depot", sellerName: `Kho: ${data.job.depot.name}` },
     { ...data.job.factory, id: "factory", sellerName: `Nhà máy: ${data.job.factory.name}` },
   ] : [], [data]);
-  const selected = selectRoute(data?.routes || [], mode);
+  const selected = selectRoute(data?.routes || [], "balanced");
   return <Screen>
     <Text style={s.title}>Kho → Nhà máy</Text>
     <ResourceState loading={loading} error={error} retry={() => reload()} />
     {data && !loading ? <>
       <Text style={s.text}>Chỉ đường xe tải · Goong</Text>
       <Text style={s.muted}>Xuất phát từ kho, không phải GPS điện thoại. Tuyến tham khảo; kiểm tra biển báo và giới hạn tải trọng thực tế.</Text>
-      {ROUTE_MODES.map(m => <Button key={m.value} title={`${mode === m.value ? "✓ " : ""}${m.label}`} variant="secondary" onPress={() => setMode(m.value)} />)}
+      <Text style={s.muted}>Tự động chọn tuyến cân bằng giữa quãng đường và thời gian.</Text>
       <PickupMap pickups={markers} routePoints={selected?.coordinates || []} />
       {!coordinatesOf(data.job.depot) || !coordinatesOf(data.job.factory) ? <Text style={s.error}>Kho hoặc nhà máy chưa có tọa độ hợp lệ. Liên hệ bên quản lý cập nhật địa điểm.</Text> : null}
       {data.routeError ? <Text style={s.error}>{data.routeError}</Text> : null}

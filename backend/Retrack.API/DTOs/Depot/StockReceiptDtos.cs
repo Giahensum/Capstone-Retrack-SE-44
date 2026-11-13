@@ -2,6 +2,12 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Retrack.API.DTOs.Depot;
 
+public record StockCostPreviewInput(decimal PurchaseCost, List<StockLineInput> Lines, List<StockExpenseInput> Expenses);
+public record StockCostPreviewLine(string Name, string Unit, decimal Quantity, decimal ReferencePrice,
+    decimal ReferenceValue, decimal SharePercent, decimal SharedCost, decimal DirectCost, decimal AllocatedCost, decimal UnitCost);
+public record StockCostPreviewDto(decimal PurchaseCost, decimal CommonCost, decimal DirectCost, decimal TotalCost,
+    decimal ReferenceTotal, List<StockCostPreviewLine> Lines);
+
 public class CreateStockReceiptDto
 {
     public Guid OperationId { get; set; }
@@ -13,6 +19,8 @@ public class CreateStockReceiptDto
     public bool CostsConfirmed { get; set; }
     public List<StockLineInput> Lines { get; set; } = [];
     public List<StockExpenseInput> Expenses { get; set; } = [];
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    public bool PostImmediately { get; set; }
 }
 public class StockLineInput
 {
@@ -30,7 +38,16 @@ public record StockLineDto(Guid Id, string Kind, string? MaterialType, string Na
     decimal Quantity, decimal ReferencePrice, decimal DirectCost, decimal? AllocatedCost, string? ConditionNote);
 public record StockReceiptDto(Guid Id, string SourceType, string Reference, string Status, DateTime ReceivedAt,
     decimal PurchaseCost, bool CostsConfirmed, decimal TotalCost, string? ReviewNote,
-    List<StockLineDto> Lines, List<StockExpenseInput> Expenses, Guid? BulkAgreementId = null);
+    List<StockLineDto> Lines, List<StockExpenseInput> Expenses, Guid? BulkAgreementId = null, string Revision = "");
+public class UpdateStockReceiptDto
+{
+    [Required, StringLength(64, MinimumLength = 64)] public string ExpectedRevision { get; set; } = "";
+    [Required, StringLength(255)] public string Reference { get; set; } = "";
+    public decimal PurchaseCost { get; set; }
+    public bool CostsConfirmed { get; set; }
+    public List<StockLineInput> Lines { get; set; } = [];
+    public List<StockExpenseInput> Expenses { get; set; } = [];
+}
 public record ReviewStockReceiptDto([Required, StringLength(1000)] string Reason);
 public record StockLineCostInput(Guid Id, decimal ReferencePrice, decimal DirectCost);
 public record UpdateStockCostsDto(decimal PurchaseCost, bool CostsConfirmed, List<StockLineCostInput> Lines,

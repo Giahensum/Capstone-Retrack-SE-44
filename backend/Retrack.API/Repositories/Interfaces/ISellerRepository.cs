@@ -8,6 +8,8 @@ namespace Retrack.API.Repositories.Interfaces
         Task<User?> GetSellerProfileAsync(Guid sellerId);
         Task UpdateSellerProfileAsync(User user);
         Task<PickupRequest?> GetPickupRequestByIdAsync(Guid requestId);
+        Task<PickupRequest?> LockPickupAsync(Guid requestId);
+        void AddNotice(Notification notice);
         Task UpdatePickupRequestAsync(PickupRequest request);
         Task<bool> HasSellerReviewedRequestAsync(Guid requestId);
         Task AddReviewAsync(SellerDepotReview review);

@@ -10,8 +10,12 @@ public interface IDepotStockRepository
 {
     Task<bool> IsActiveStaffAsync(Guid userId, Guid depotId);
     Task<DepotStockReceipt?> FindReceiptAsync(Guid id);
+    Task<DepotStockReceipt?> ReloadReceiptAsync(Guid id);
+    void ReplaceLines(DepotStockReceipt receipt, List<DepotStockLine> lines);
     Task<PagedResult<DepotStockReceipt>> ListAsync(Guid depotId, DepotQuery query);
     void AddReceipt(DepotStockReceipt receipt);
+    void AddNotice(Notification notice);
+    Task<Guid> OwnerIdAsync(Guid depotId);
     Task<DepotBulkStockSource?> BulkSourceAsync(Guid agreementId);
     Task<bool> HasBulkReceiptAsync(Guid agreementId);
     void ReplaceExpenses(DepotStockReceipt receipt, List<StockExpenseInput> expenses);

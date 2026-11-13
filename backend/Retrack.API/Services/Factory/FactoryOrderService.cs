@@ -84,7 +84,26 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
         if (batch.TransportJob?.Status != "DELIVERED")
             return ServiceResult<OrderReceivedResponse>.Conflict("Chỉ xác nhận nhận hàng sau khi vận chuyển báo đã giao.");
         batch.Status = "RECEIVED";
+        await NotifyDepotAsync(batch.DepotId, "Nhà máy xác nhận hàng đã đến", $"{factory.Name} đã xác nhận nhận hàng lô {batch.Code ?? batch.Id.ToString()}; chờ cân và KCS.", batch.Id, ct: ct);
         batch.FactoryReceivedAt = DateTime.UtcNow;
+        var recipients = new List<Guid>();
+        var depotOwnerId = await Db.Depots.Where(x => x.Id == batch.DepotId).Select(x => x.OwnerId).SingleAsync(ct);
+        recipients.Add(depotOwnerId);
+        if (batch.TransportJob?.DriverId is Guid driverId) recipients.Add(driverId);
+        var uniqueRecipients = recipients.Distinct().ToArray();
+        var existingRecipients = await Db.Notifications.AsNoTracking()
+            .Where(x => uniqueRecipients.Contains(x.UserId) && x.TransportJobId == batch.TransportJob!.Id && x.Title == "Nhà máy đã nhận hàng")
+            .Select(x => x.UserId)
+            .ToListAsync(ct);
+        var recipientsAlreadyNotified = existingRecipients.ToHashSet();
+        foreach (var recipient in uniqueRecipients.Where(x => !recipientsAlreadyNotified.Contains(x)))
+            Db.Notifications.Add(new Notification
+            {
+                UserId = recipient,
+                TransportJobId = batch.TransportJob!.Id,
+                Title = "Nhà máy đã nhận hàng",
+                Message = $"Lô {batch.Code ?? batch.Id.ToString()} đã được nhà máy xác nhận nhận hàng."
+            });
         await Db.SaveChangesAsync(ct);
         if (transaction is not null) await transaction.CommitAsync(ct);
         return ServiceResult<OrderReceivedResponse>.Success(data: new OrderReceivedResponse
@@ -101,7 +120,27 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
         await using var transaction = await Db.Database.BeginTransactionAsync(ct);
         var batch = await LockOrderAsync(id, factory.Id, ct);
         if (batch is null) return ServiceResult<OrderSettlementResponse>.NotFound("Không tìm thấy đơn hàng.");
-        if (batch.Status is "PAID" or "COMPLETED") return ServiceResult<OrderSettlementResponse>.Conflict("Đơn hàng đã được quyết toán.");
+        if (batch.Status is "PAID" or "COMPLETED")
+        {
+            var existing = await Db.PlatformTransactions.AsNoTracking()
+                .SingleOrDefaultAsync(x => x.SourceType == "BATCH_ORDER" && x.SourceId == batch.Id, ct);
+            var savedQc = batch.QualityCheck;
+            var sameRequest = savedQc is not null && existing is not null &&
+                batch.AgreedPricePerKg == request.AgreedPricePerKg &&
+                string.Equals(batch.PaymentReference, request.PaymentReference.Trim(), StringComparison.Ordinal) &&
+                string.Equals(batch.VatTreatment, request.VatTreatment.Trim().ToUpperInvariant(), StringComparison.Ordinal) &&
+                batch.VatPercentage == request.VatPercentage && batch.PriceIncludesVat == request.PriceIncludesVat;
+            if (!sameRequest) return ServiceResult<OrderSettlementResponse>.Conflict("Đơn hàng đã được quyết toán với dữ liệu khác.");
+            return ServiceResult<OrderSettlementResponse>.Success(data: new OrderSettlementResponse
+            {
+                Id = batch.Id, Status = "PAID", TotalAmount = batch.GrossAmount ?? 0,
+                PriceIncludesVat = batch.PriceIncludesVat, VatTreatment = batch.VatTreatment ?? "NOT_APPLICABLE",
+                VatPercentage = batch.VatPercentage ?? 0, VatAmount = batch.VatAmount ?? 0,
+                InvoiceTotalAmount = batch.InvoiceTotalAmount ?? 0, FeeAmount = batch.PlatformFeeAmount ?? 0,
+                NetPayableAmount = batch.NetAmount ?? 0, PaymentReference = batch.PaymentReference,
+                SettledAt = batch.SettledAt, FeePercentage = existing!.FeePercentage ?? 0
+            }, message: "Đơn hàng đã được quyết toán; trả lại kết quả đã lưu.");
+        }
         var qc = batch.QualityCheck;
         if (batch.Status != "VERIFIED" || qc?.IsAccepted != true)
             return ServiceResult<OrderSettlementResponse>.Conflict("Chỉ quyết toán lô đã được KCS chấp nhận.");
@@ -164,6 +203,7 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
         batch.PaymentReference = request.PaymentReference.Trim();
         batch.SettledAt = DateTime.UtcNow;
         batch.Status = "COMPLETED";
+        await NotifyDepotAsync(batch.DepotId, "Nhà máy đã ghi nhận quyết toán", $"Lô {batch.Code ?? batch.Id.ToString()} đã được {factory.Name} quyết toán. Vui lòng đối chiếu đơn giá, phí và chứng từ; đây chưa phải xác nhận nhận tiền từ kho.", batch.Id, ct: ct);
         Db.PlatformTransactions.Add(new Retrack.API.Models.PlatformTransaction
         {
             SourceType = "BATCH_ORDER", SourceId = batch.Id, FeeAmount = fee,
@@ -204,9 +244,11 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
             return ServiceResult<InvoiceUpdatedResponse>.Invalid("Hóa đơn phải được tải lên qua chức năng đính kèm của nhà máy.");
         // Sau quyết toán, giữ số hóa đơn đã được đối soát; tên tệp tải lên không được ghi đè.
         var invoiceNumber = batch.QualityCheck.InvoiceNumber ?? request.InvoiceNumber?.Trim();
+        var changed = batch.QualityCheck.InvoiceNumber != invoiceNumber || batch.QualityCheck.InvoiceFileUrl != request.InvoiceFileUrl.Trim();
         batch.QualityCheck.InvoiceNumber = invoiceNumber;
         batch.QualityCheck.InvoiceFileUrl = request.InvoiceFileUrl.Trim();
         batch.QualityCheck.InvoiceStatus = "UPLOADED";
+        if (changed) await NotifyDepotAsync(batch.DepotId, "Nhà máy đã bổ sung hóa đơn", $"{factory.Name} đã cập nhật hóa đơn lô {batch.Code ?? batch.Id.ToString()}. Kho có thể tải chứng từ trong chi tiết lô.", batch.Id, ct: ct);
         await Db.SaveChangesAsync(ct);
         if (tx != null) await tx.CommitAsync(ct);
         return ServiceResult<InvoiceUpdatedResponse>.Success(data: new InvoiceUpdatedResponse

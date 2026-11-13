@@ -31,6 +31,9 @@ public class FactoryQCService(AppDbContext db, IConfiguration configuration, Fac
         if (Math.Abs(difference) > threshold && string.IsNullOrWhiteSpace(request.Note))
             return ServiceResult<WeighResponse>.Invalid($"Lệch cân trên {threshold}%: cần ghi chú biên bản.");
         var qc = batch.QualityCheck;
+        var notifyWeigh = batch.Status != "WEIGHED" || qc == null || qc.GrossWeightKg != request.GrossWeightKg ||
+            qc.TareWeightKg != request.TareWeightKg || qc.TicketNumber != request.TicketNumber?.Trim() ||
+            qc.TicketImageUrl != request.TicketImageUrl || qc.QualityNote != request.Note?.Trim();
         if (qc is null)
         {
             qc = new BatchQualityCheck
@@ -50,6 +53,7 @@ public class FactoryQCService(AppDbContext db, IConfiguration configuration, Fac
         qc.IsAccepted = false;
         batch.ActualWeightKg = net;
         batch.Status = "WEIGHED";
+        if (notifyWeigh) await NotifyDepotAsync(batch.DepotId, "Nhà máy đã cân lô hàng", $"{factory.Name} đã cập nhật cân lô {batch.Code ?? batch.Id.ToString()}. Xem khối lượng thực tế và độ lệch trong chi tiết lô.", batch.Id, ct: ct);
         await Db.SaveChangesAsync(ct);
         if (tx != null) await tx.CommitAsync(ct);
         return ServiceResult<WeighResponse>.Success(data: new WeighResponse
@@ -88,6 +92,8 @@ public class FactoryQCService(AppDbContext db, IConfiguration configuration, Fac
         batch.Status = request.Accept ? "VERIFIED" : "REJECTED";
         batch.FactoryDecidedAt = DateTime.UtcNow;
         batch.RejectionReason = request.Accept ? null : request.Note?.Trim();
+        await NotifyDepotAsync(batch.DepotId, request.Accept ? "Lô hàng đã đạt KCS" : "Nhà máy từ chối sau KCS",
+            request.Accept ? $"{factory.Name} đã chấp nhận KCS lô {batch.Code ?? batch.Id.ToString()}." : $"Lô {batch.Code ?? batch.Id.ToString()}: {request.Note?.Trim()}. Hướng xử lý: {request.Resolution}. Hàng chưa được tính là đã trả về kho.", batch.Id, ct: ct);
         await Db.SaveChangesAsync(ct);
         if (tx != null) await tx.CommitAsync(ct);
         return ServiceResult<QualityResponse>.Success(data: new QualityResponse

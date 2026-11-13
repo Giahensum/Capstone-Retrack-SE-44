@@ -7,6 +7,15 @@ public static class LiquidationRules
         if (amount <= 0 || amount > 1_000_000_000_000 || decimal.Truncate(amount) != amount)
             throw new ArgumentException("Giá phải là số nguyên VND dương, tối đa 1.000 tỷ.");
     }
+    public const decimal MaxDepositPercent = 50;
+    public static void CheckDepositPercent(decimal percent)
+    {
+        if (percent < 1 || percent > MaxDepositPercent || decimal.Round(percent, 2) != percent)
+            throw new ArgumentException($"Tỷ lệ đặt cọc phải từ 1% đến {MaxDepositPercent}% (tối đa 2 chữ số thập phân).");
+    }
+    // Cọc làm tròn đến đồng; lô cũ (0%) không có cọc nên luồng cũ không đổi.
+    public static decimal Deposit(decimal amount, decimal percent) =>
+        percent <= 0 ? 0 : Math.Max(1, Math.Round(amount * percent / 100, 0, MidpointRounding.AwayFromZero));
     public static void CheckBid(decimal starting, decimal? highest, decimal increment, decimal amount)
     {
         CheckMoney(amount);

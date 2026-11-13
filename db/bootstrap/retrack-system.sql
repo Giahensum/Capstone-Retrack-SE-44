@@ -2,6 +2,7 @@
 -- RETRACK — KHỞI TẠO TOÀN HỆ THỐNG VÀ DỮ LIỆU DEMO
 -- Máy mới: tạo database rỗng bằng pgAdmin, mở Query Tool của đúng DB,
 -- mở file này và nhấn F5 để chạy TOÀN BỘ, không cần lệnh terminal.
+-- Đây là FILE SQL DUY NHẤT của dự án: schema + seed chung + demo Employee/Driver/điều phối.
 -- Mặc định có seed demo các role tại Đà Nẵng. Không dùng cho production.
 -- Muốn chỉ tạo cấu trúc: đổi retrack.seed_demo từ 'on' thành 'off' bên dưới.
 -- Không thay kết nối/mật khẩu PostgreSQL; cấu hình backend bằng .env local.
@@ -411,6 +412,16 @@ ALTER TABLE notifications ADD COLUMN IF NOT EXISTS transport_job_id UUID;
 ALTER TABLE notifications ADD COLUMN IF NOT EXISTS pickup_request_id UUID;
 CREATE INDEX IF NOT EXISTS ix_notifications_user_created ON notifications(user_id, created_at DESC, id);
 
+-- Khôi phục liên kết thông báo Employee cũ; giữ nguyên liên kết đã có.
+-- Chỉ ghép đúng UUID trong mẫu thông báo và đúng nhân viên phụ trách đơn.
+UPDATE notifications n
+SET pickup_request_id = p.id
+FROM pickup_requests p
+WHERE n.pickup_request_id IS NULL
+  AND n.user_id = p.accepted_collector_id
+  AND n.title IN ('Đã gửi kết quả cân', 'Đã mở lại kết quả cân', 'Đã bàn giao cho chủ kho')
+  AND n.message LIKE 'Đơn ' || p.id::text || ' · phiên bản %';
+
 CREATE TABLE IF NOT EXISTS platform_invoices (
     id               UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
     payer_id         UUID         NOT NULL REFERENCES users(id),
@@ -752,6 +763,123 @@ ALTER TABLE depot_stock_receipts ADD COLUMN IF NOT EXISTS bulk_agreement_id UUID
 CREATE UNIQUE INDEX IF NOT EXISTS ix_receipt_active_bulk_agreement ON depot_stock_receipts(bulk_agreement_id)
     WHERE bulk_agreement_id IS NOT NULL AND status NOT IN ('VOIDED','REJECTED');
 
+
+
+-- RETRACK_LIQUIDATION_DEPOSIT_V1: hợp đồng đặt cọc điện tử cho lô thanh lý; tiền cọc chuyển ngoài hệ thống.
+-- Lô/thỏa thuận cũ giữ deposit = 0 nên luồng cũ không đổi.
+ALTER TABLE liquidation_lots ADD COLUMN IF NOT EXISTS deposit_percent NUMERIC(5,2) NOT NULL DEFAULT 0;
+ALTER TABLE liquidation_lots DROP CONSTRAINT IF EXISTS ck_liquidation_deposit_percent;
+ALTER TABLE liquidation_lots ADD CONSTRAINT ck_liquidation_deposit_percent CHECK (deposit_percent >= 0 AND deposit_percent <= 50);
+ALTER TABLE liquidation_agreements ADD COLUMN IF NOT EXISTS deposit_amount NUMERIC(18,0) NOT NULL DEFAULT 0;
+ALTER TABLE liquidation_agreements ADD COLUMN IF NOT EXISTS seller_signed_at TIMESTAMPTZ;
+ALTER TABLE liquidation_agreements ADD COLUMN IF NOT EXISTS buyer_signed_at TIMESTAMPTZ;
+ALTER TABLE liquidation_agreements ADD COLUMN IF NOT EXISTS deposit_reference VARCHAR(255);
+ALTER TABLE liquidation_agreements ADD COLUMN IF NOT EXISTS deposit_reported_at TIMESTAMPTZ;
+ALTER TABLE liquidation_agreements ADD COLUMN IF NOT EXISTS deposit_confirmed_at TIMESTAMPTZ;
+ALTER TABLE liquidation_agreements DROP CONSTRAINT IF EXISTS ck_liquidation_deposit_flow;
+ALTER TABLE liquidation_agreements ADD CONSTRAINT ck_liquidation_deposit_flow CHECK (
+    deposit_amount >= 0 AND deposit_amount < amount
+    AND (deposit_reported_at IS NULL OR (seller_signed_at IS NOT NULL AND buyer_signed_at IS NOT NULL))
+    AND (deposit_confirmed_at IS NULL OR deposit_reported_at IS NOT NULL)
+    AND (payment_reported_at IS NULL OR deposit_amount = 0 OR deposit_confirmed_at IS NOT NULL));
+
+-- RETRACK_DEPOT_NOTIFICATIONS_V1: tương thích thông báo Employee/Driver đã có.
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS depot_id UUID;
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS batch_id UUID;
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS category VARCHAR(30) NOT NULL DEFAULT 'SYSTEM';
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS target_type VARCHAR(30);
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS target_id UUID;
+CREATE INDEX IF NOT EXISTS ix_notifications_depot_unread ON notifications(user_id, depot_id, is_read, created_at DESC, id);
+
+-- RETRACK_AUTH_OTP_V1: luồng quên mật khẩu xác thực OTP
+CREATE TABLE IF NOT EXISTS password_reset_otps (
+    id UUID PRIMARY KEY,
+    email VARCHAR(255) NOT NULL,
+    otp_code VARCHAR(10) NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL,
+    is_used BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS ix_password_reset_otps_email ON password_reset_otps(email, created_at DESC);
+
+-- RETRACK_EMPLOYEE_DISPATCH_BEGIN
+CREATE TABLE IF NOT EXISTS employee_collection_areas (
+    id UUID PRIMARY KEY,
+    depot_id UUID NOT NULL REFERENCES depots(id),
+    name VARCHAR(120) NOT NULL,
+    latitude DOUBLE PRECISION NOT NULL CHECK (latitude BETWEEN -90 AND 90),
+    longitude DOUBLE PRECISION NOT NULL CHECK (longitude BETWEEN -180 AND 180),
+    radius_meters DOUBLE PRECISION NOT NULL CHECK (radius_meters BETWEEN 100 AND 20000),
+    is_active BOOLEAN NOT NULL DEFAULT true
+);
+CREATE TABLE IF NOT EXISTS employee_dispatch_shifts (
+    id UUID PRIMARY KEY,
+    area_id UUID NOT NULL REFERENCES employee_collection_areas(id),
+    employee_id UUID NOT NULL REFERENCES users(id),
+    starts_at TIMESTAMPTZ NOT NULL,
+    ends_at TIMESTAMPTZ NOT NULL,
+    availability VARCHAR(20) NOT NULL CHECK (availability IN ('AVAILABLE','FULL','STOPPED')),
+    reason VARCHAR(1000),
+    vehicle VARCHAR(20) NOT NULL CHECK (vehicle IN ('motorcycle','car','truck')),
+    capacity_kg NUMERIC(10,2) NOT NULL CHECK (capacity_kg > 0 AND capacity_kg <= 20000),
+    max_pending_orders INTEGER NOT NULL CHECK (max_pending_orders BETWEEN 1 AND 50),
+    updated_at TIMESTAMPTZ NOT NULL,
+    CHECK (ends_at > starts_at AND ends_at <= starts_at + interval '24 hours'),
+    CHECK (availability = 'AVAILABLE' OR (reason IS NOT NULL AND char_length(btrim(reason)) BETWEEN 10 AND 1000))
+);
+CREATE INDEX IF NOT EXISTS ix_dispatch_shift_employee ON employee_dispatch_shifts(employee_id, starts_at, ends_at);
+CREATE TABLE IF NOT EXISTS employee_dispatch_queue (
+    pickup_id UUID PRIMARY KEY REFERENCES pickup_requests(id) ON DELETE CASCADE,
+    reason TEXT NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL
+);
+CREATE TABLE IF NOT EXISTS employee_dispatch_events (
+    id UUID PRIMARY KEY,
+    pickup_id UUID NOT NULL REFERENCES pickup_requests(id) ON DELETE CASCADE,
+    from_employee_id UUID REFERENCES users(id),
+    to_employee_id UUID REFERENCES users(id),
+    shift_id UUID REFERENCES employee_dispatch_shifts(id),
+    reason TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_dispatch_event_pickup ON employee_dispatch_events(pickup_id, created_at);
+CREATE INDEX IF NOT EXISTS ix_dispatch_pickup_pending ON pickup_requests(status, preferred_datetime, id);
+
+-- Ảnh vẫn bắt buộc; GPS có thể thiếu và không bị chặn vì khoảng cách/sai số.
+ALTER TABLE pickup_checkins ALTER COLUMN latitude DROP NOT NULL;
+ALTER TABLE pickup_checkins ALTER COLUMN longitude DROP NOT NULL;
+ALTER TABLE pickup_checkins ALTER COLUMN accuracy_meters DROP NOT NULL;
+ALTER TABLE pickup_checkins ALTER COLUMN distance_meters DROP NOT NULL;
+ALTER TABLE pickup_checkins ALTER COLUMN location_recorded_at DROP NOT NULL;
+-- Tên constraint có thể khác nhau giữa bootstrap và schema cũ: chỉ thay kiểm tra hai cột này.
+DO $constraints$
+DECLARE c record;
+BEGIN
+    FOR c IN SELECT conname FROM pg_constraint
+        WHERE conrelid = 'pickup_checkins'::regclass AND contype = 'c'
+          AND (pg_get_constraintdef(oid) LIKE '%accuracy_meters%' OR pg_get_constraintdef(oid) LIKE '%distance_meters%')
+    LOOP EXECUTE format('ALTER TABLE pickup_checkins DROP CONSTRAINT %I', c.conname); END LOOP;
+END $constraints$;
+ALTER TABLE pickup_checkins ADD CONSTRAINT ck_pickup_optional_accuracy CHECK (accuracy_meters >= 0 AND accuracy_meters < 'Infinity'::float8);
+ALTER TABLE pickup_checkins ADD CONSTRAINT ck_pickup_optional_distance CHECK (distance_meters >= 0 AND distance_meters < 'Infinity'::float8);
+ALTER TABLE driver_delivery_events DROP CONSTRAINT IF EXISTS ck_driver_evidence;
+ALTER TABLE driver_delivery_events ADD CONSTRAINT ck_driver_evidence CHECK (
+    action NOT IN ('checkin','checkout') OR
+    (image_url IS NOT NULL AND length(btrim(image_url)) > 0 AND photo_taken_at IS NOT NULL));
+-- RETRACK_EMPLOYEE_DISPATCH_END
+
+-- RETRACK_DEPOT_BUYING_PRICES_V1_BEGIN
+CREATE TABLE IF NOT EXISTS depot_buying_prices (
+    depot_id UUID NOT NULL REFERENCES depots(id) ON DELETE CASCADE,
+    material_type VARCHAR(100) NOT NULL CHECK (material_type IN
+      ('PET','HDPE','PVC','PAPER','CARDBOARD','ALUMINUM','IRON','STEEL','COPPER','ELECTRONIC_WASTE','OTHER')),
+    price_per_kg NUMERIC(18,0) NOT NULL CHECK (price_per_kg > 0 AND price_per_kg <= 1000000000),
+    condition_note VARCHAR(500) NOT NULL DEFAULT '',
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (depot_id, material_type)
+);
+-- RETRACK_DEPOT_BUYING_PRICES_V1_END
 
 -- RETRACK_SCHEMA_END
 
@@ -1223,6 +1351,457 @@ ON CONFLICT DO NOTHING;
 END IF;
 END;
 $retrack_seed$;
+-- RETRACK_EMPLOYEE_POOL_SEED_BEGIN
+DO $retrack_employee_pool_seed$
+DECLARE
+    employee_email text := 'employee@retrack.vn';
+    seller_email text := 'seller@retrack.vn';
+    employee_id uuid;
+    seller_id uuid;
+    depot_id uuid;
+BEGIN
+    IF current_setting('retrack.seed_demo', true) IS DISTINCT FROM 'on' THEN RETURN; END IF;
+    SELECT u.id, s.depot_id INTO employee_id, depot_id
+    FROM users u JOIN depot_staffs s ON s.user_id = u.id
+    WHERE u.email = employee_email AND u.role = 'DEPOT_EMPLOYEE'
+      AND u.is_active AND s.is_active AND s.staff_type = 'DEPOT_EMPLOYEE'
+    ORDER BY s.id LIMIT 1;
+    SELECT u.id INTO seller_id FROM users u
+    WHERE u.email = seller_email AND u.role = 'SELLER' AND u.is_active;
+    IF employee_id IS NULL OR depot_id IS NULL OR seller_id IS NULL THEN
+        RAISE EXCEPTION 'Active demo employee, depot membership or seller is missing; no rows inserted.';
+    END IF;
+
+    INSERT INTO pickup_requests (
+        id, seller_id, target_depot_id, accepted_collector_id,
+        description, address, latitude, longitude, preferred_datetime,
+        status, gross_amount, platform_fee_percentage, platform_fee_amount, net_amount,
+        created_at, updated_at)
+    SELECT v.id::uuid, seller_id, depot_id,
+        CASE WHEN v.status = 'PENDING' THEN NULL ELSE employee_id END,
+        '[DEMO-PICKUP-POOL-20260929] ' || v.description,
+        v.address, v.latitude, v.longitude, v.preferred_datetime,
+        v.status, 0, 5, 0, 0, CURRENT_TIMESTAMP - interval '2 days', v.updated_at
+    FROM (VALUES
+        -- NHÓM A — 3 ĐƠN CHỜ CŨ (giữ nguyên địa chỉ và UUID).
+        ('e0000000-0929-4000-8000-000000000001',
+         'Giấy carton và chai nhựa. Đơn giả lập để thử nhận đơn, không đến thu gom thực tế.',
+         'Chợ Hàn, 119 Trần Phú, Đà Nẵng',
+         16.0683600::numeric, 108.2244300::numeric,
+         CURRENT_TIMESTAMP + interval '2 hours', 'PENDING', CURRENT_TIMESTAMP),
+        ('e0000000-0929-4000-8000-000000000002',
+         'Lon nhôm và giấy báo. Đơn giả lập để thử bản đồ và chỉ đường.',
+         'Bảo tàng Điêu khắc Chăm, 2 đường 2 Tháng 9, Đà Nẵng',
+         16.0602000::numeric, 108.2231700::numeric,
+         CURRENT_TIMESTAMP + interval '4 hours', 'PENDING', CURRENT_TIMESTAMP),
+        ('e0000000-0929-4000-8000-000000000003',
+         'Sắt vụn. Đơn giả lập chưa hẹn giờ, phải nằm cuối danh sách đơn chờ.',
+         'Chợ Cồn, 290 Hùng Vương, Đà Nẵng',
+         16.0681700::numeric, 108.2145300::numeric,
+         NULL::timestamptz, 'PENDING', CURRENT_TIMESTAMP),
+        -- NHÓM B — 1 ĐƠN ĐÃ NHẬN + 2 ĐƠN HOÀN TẤT để test Dashboard.
+        ('e0000000-0929-4000-8000-000000000004',
+         'Đơn giả lập đã nhận để thử nút Xem chi tiết trên Dashboard. Chưa có cân hoặc thanh toán.',
+         'Bảo tàng Điêu khắc Chăm, 2 đường 2 Tháng 9, Đà Nẵng',
+         16.0602000::numeric, 108.2231700::numeric,
+         CURRENT_TIMESTAMP + interval '1 hour', 'SCHEDULED', CURRENT_TIMESTAMP),
+        ('e0000000-0929-4000-8000-000000000005',
+         'Lịch sử giả lập hoàn tất hôm nay UTC, chỉ phục vụ thống kê Dashboard; không phải giao dịch tài chính.',
+         'Chợ Hàn, 119 Trần Phú, Đà Nẵng',
+         16.0683600::numeric, 108.2244300::numeric,
+         NULL::timestamptz, 'DONE', CURRENT_TIMESTAMP),
+        ('e0000000-0929-4000-8000-000000000006',
+         'Lịch sử giả lập hoàn tất hôm qua UTC, chỉ phục vụ thống kê Dashboard; không phải giao dịch tài chính.',
+         'Chợ Cồn, 290 Hùng Vương, Đà Nẵng',
+         16.0681700::numeric, 108.2145300::numeric,
+         NULL::timestamptz, 'DONE',
+         (date_trunc('day', CURRENT_TIMESTAMP AT TIME ZONE 'UTC') - interval '12 hours') AT TIME ZONE 'UTC'),
+        -- NHÓM C — 6 ĐƠN CHỜ MỚI để test tuyến đường ô tô/xe máy.
+        ('e0000000-0929-4000-8000-000000000007',
+         '[TUYEN-01] Bà Nà Hills - ưu tiên test ô tô: đã ghi nhận tuyến ít km hơn nhưng chậm hơn tuyến nhanh nhất; cân bằng chọn tuyến ngắn trong ngưỡng 15%. Đơn giả lập, không đến thu gom thực tế.',
+         'Khu du lịch Bà Nà Hills, thôn An Sơn, Đà Nẵng',
+         16.0259108::numeric, 108.0322546::numeric,
+         CURRENT_TIMESTAMP + interval '30 minutes', 'PENDING', CURRENT_TIMESTAMP),
+        ('e0000000-0929-4000-8000-000000000008',
+         '[TUYEN-02] Đại học Bách khoa - test nhiều tuyến ô tô/xe máy về phía tây bắc; cùng quãng đường có thể khác thời gian theo phương tiện. Đơn giả lập, không đến thu gom thực tế.',
+         'Trung tâm Học liệu và Truyền thông - Đại học Bách khoa, 54 Nguyễn Lương Bằng, Đà Nẵng',
+         16.0746638::numeric, 108.1506880::numeric,
+         CURRENT_TIMESTAMP + interval '45 minutes', 'PENDING', CURRENT_TIMESTAMP),
+        ('e0000000-0929-4000-8000-000000000009',
+         '[TUYEN-03] Trung tâm Hành chính - test nhiều phương án đến khu vực phía bắc sông Hàn. Các tiêu chí có thể cùng chọn một tuyến. Đơn giả lập, không đến thu gom thực tế.',
+         'Trung tâm Hành chính thành phố Đà Nẵng, 24 Trần Phú, Đà Nẵng',
+         16.0770864::numeric, 108.2231701::numeric,
+         CURRENT_TIMESTAMP + interval '60 minutes', 'PENDING', CURRENT_TIMESTAMP),
+        ('e0000000-0929-4000-8000-000000000010',
+         '[TUYEN-04] Bệnh viện Đà Nẵng - test nhiều tuyến nội thành và thay đổi thời gian ước tính khi đổi phương tiện. Đơn giả lập, không đến thu gom thực tế.',
+         'Bệnh viện Đà Nẵng, 124 Hải Phòng, Đà Nẵng',
+         16.0721056::numeric, 108.2156940::numeric,
+         CURRENT_TIMESTAMP + interval '75 minutes', 'PENDING', CURRENT_TIMESTAMP),
+        ('e0000000-0929-4000-8000-000000000011',
+         '[TUYEN-05] Chợ Túy Loan - test nhiều tuyến về phía tây; so sánh số km và thời gian ô tô/xe máy. Đơn giả lập, không đến thu gom thực tế.',
+         'Chợ Túy Loan, Đà Nẵng',
+         15.9903511::numeric, 108.1409952::numeric,
+         CURRENT_TIMESTAMP + interval '90 minutes', 'PENDING', CURRENT_TIMESTAMP),
+        ('e0000000-0929-4000-8000-000000000012',
+         '[TUYEN-06] Đại học Đông Á - test nhiều tuyến ngắn hơn và thay đổi hình tuyến theo phương tiện. Đơn giả lập, không đến thu gom thực tế.',
+         'Đại học Đông Á, 33 Xô Viết Nghệ Tĩnh, Đà Nẵng',
+         16.0321559::numeric, 108.2213119::numeric,
+         CURRENT_TIMESTAMP + interval '105 minutes', 'PENDING', CURRENT_TIMESTAMP),
+        -- NHÓM D — ĐƠN TẠI CHỖ, chưa nhận/chưa check-in/chưa có kết quả cân.
+        ('e0000000-0929-4000-8000-000000000013',
+         '[CHECKIN-LOCAL-01] Test tại chỗ: nhận đơn, chụp ảnh camera + GPS, phân loại, cân và định giá. Đơn giả lập do người test tạo, không phát sinh giao dịch thực tế.',
+         'X7P4+XF9 Ngũ Hành Sơn, Đà Nẵng',
+         15.9874125::numeric, 108.256234375::numeric,
+         CURRENT_TIMESTAMP + interval '5 minutes', 'PENDING', CURRENT_TIMESTAMP)
+    ) AS v(id, description, address, latitude, longitude, preferred_datetime, status, updated_at)
+    ON CONFLICT (id) DO NOTHING;
+END
+$retrack_employee_pool_seed$;
+-- RETRACK_EMPLOYEE_POOL_SEED_END
+
+-- RETRACK_DISPATCH_DEMO_SEED_BEGIN
+DO $retrack_dispatch_demo_seed$
+<<fixture>>
+DECLARE
+    owner_id uuid;
+    employee_source users%ROWTYPE;
+    seller_source users%ROWTYPE;
+    depot_id uuid := 'ef200000-0000-4000-8000-000000000001';
+    area_id uuid; employee_id uuid; seller_id uuid; pickup_id uuid; shift_id uuid;
+    point record; seller_point record; i integer; j integer;
+    shift_start timestamptz := CURRENT_TIMESTAMP;
+    shift_end timestamptz := CURRENT_TIMESTAMP + interval '20 hours';
+BEGIN
+    IF current_setting('retrack.seed_demo', true) IS DISTINCT FROM 'on' THEN RETURN; END IF;
+    SELECT * INTO employee_source FROM users WHERE email = 'employee@retrack.vn' AND role = 'DEPOT_EMPLOYEE' AND is_active;
+    SELECT * INTO seller_source FROM users WHERE email = 'seller@retrack.vn' AND role = 'SELLER' AND is_active;
+    SELECT d.owner_id INTO owner_id FROM depots d JOIN users u ON u.id = d.owner_id
+        WHERE u.is_active AND u.role = 'DEPOT_OWNER' ORDER BY d.id LIMIT 1;
+    IF employee_source.id IS NULL OR seller_source.id IS NULL OR owner_id IS NULL THEN
+        RAISE EXCEPTION 'Cần employee@retrack.vn, seller@retrack.vn và Owner đang hoạt động. Chưa seed gì.';
+    END IF;
+    INSERT INTO depots(id, owner_id, name, address, latitude, longitude, rating, verification_status, created_at)
+    VALUES(depot_id, owner_id, '[DEMO-DISPATCH-V2] Kho điều phối Đà Nẵng',
+        'X7P4+XF9 Ngũ Hành Sơn, Đà Nẵng — kho mô phỏng', 15.9874125, 108.2562344, 0, 'APPROVED', CURRENT_TIMESTAMP)
+    ON CONFLICT(id) DO NOTHING;
+    i := 0;
+    FOR point IN SELECT * FROM (VALUES
+        ('Ngũ Hành Sơn', 'X7P4+XF9 Ngũ Hành Sơn, Đà Nẵng', 15.9874125,108.2562344),
+        ('Hải Châu — Chợ Hàn', 'Chợ Hàn, 119 Trần Phú, Đà Nẵng',16.0683600,108.2244300),
+        ('Hải Châu — Bảo tàng Chăm', 'Bảo tàng Điêu khắc Chăm, 2 đường 2 Tháng 9, Đà Nẵng',16.0602000,108.2231700),
+        ('Thanh Khê — Chợ Cồn', 'Chợ Cồn, 290 Hùng Vương, Đà Nẵng',16.0681700,108.2145300),
+        ('Hải Châu — Trung tâm Hành chính', 'Trung tâm Hành chính thành phố Đà Nẵng, 24 Trần Phú, Đà Nẵng',16.0770864,108.2231701),
+        ('Liên Chiểu — Đại học Bách khoa', 'Trung tâm Học liệu và Truyền thông, 54 Nguyễn Lương Bằng, Đà Nẵng',16.0746638,108.1506880)
+    ) AS v(name,address,lat,lng)
+    LOOP
+        i := i + 1;
+        area_id := ('ef210000-0000-4000-8000-' || lpad(i::text,12,'0'))::uuid;
+        employee_id := ('ef220000-0000-4000-8000-' || lpad(i::text,12,'0'))::uuid;
+        seller_id := ('ef230000-0000-4000-8000-' || lpad(i::text,12,'0'))::uuid;
+        -- UUID cố định/unique email: xung đột với dữ liệu ngoài fixture làm transaction dừng.
+        INSERT INTO users(id,email,password_hash,role,full_name,phone,is_active,created_at,updated_at)
+        VALUES(employee_id,'employee.dispatch.v2.' || lpad(i::text,2,'0') || '@retrack.test',employee_source.password_hash,
+            'DEPOT_EMPLOYEE','Nhân viên điều phối demo ' || i,'090990000' || i,true,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+        ON CONFLICT(id) DO NOTHING;
+        INSERT INTO depot_staffs(id,depot_id,user_id,staff_type,is_active)
+        VALUES(('ef240000-0000-4000-8000-' || lpad(i::text,12,'0'))::uuid,depot_id,employee_id,'DEPOT_EMPLOYEE',true)
+        ON CONFLICT(id) DO NOTHING;
+        INSERT INTO employee_collection_areas(id,depot_id,name,latitude,longitude,radius_meters,is_active)
+        VALUES(area_id,depot_id,point.name,point.lat,point.lng,2500,true) ON CONFLICT(id) DO NOTHING;
+        -- Chạy lại trong ca không bật lại người đã STOPPED/FULL. Ngày khác chỉ thêm ca khi ca cũ đã hết.
+        IF NOT EXISTS(SELECT 1 FROM employee_dispatch_shifts WHERE employee_dispatch_shifts.employee_id = fixture.employee_id
+            AND ends_at > shift_start) THEN
+            shift_id := gen_random_uuid();
+            INSERT INTO employee_dispatch_shifts(id,area_id,employee_id,starts_at,ends_at,availability,vehicle,
+                capacity_kg,max_pending_orders,updated_at)
+            VALUES(shift_id,area_id,employee_id,shift_start,shift_end,'AVAILABLE',
+                CASE WHEN i % 2 = 0 THEN 'car' ELSE 'motorcycle' END,
+                CASE WHEN i % 2 = 0 THEN 500 ELSE 100 END,30,CURRENT_TIMESTAMP);
+        END IF;
+    END LOOP;
+    -- 12 địa điểm riêng; mỗi Seller có 3 tình huống lịch hẹn, không dồn mọi Seller về tâm vùng.
+    -- Tọa độ kế thừa bộ địa điểm dự án; hai điểm bổ sung đối chiếu Mapcarta/OSM:
+    -- https://mapcarta.com/W404714309 ; https://mapcarta.com/W675604354
+    -- Điểm công cộng chỉ dùng mô phỏng, không phải yêu cầu thu gom thực tế.
+    i := 0;
+    FOR seller_point IN SELECT * FROM (VALUES
+        ('Chợ Hàn, 119 Trần Phú, Đà Nẵng',16.0683600,108.2244300),
+        ('Nhà thờ Chính tòa, 156 Trần Phú, Đà Nẵng',16.0666800,108.2230600),
+        ('Bảo tàng Điêu khắc Chăm, 2 đường 2 Tháng 9, Đà Nẵng',16.0602000,108.2231700),
+        ('Công viên APEC, đường 2 Tháng 9, Đà Nẵng',16.0586000,108.2232700),
+        ('Chợ Cồn, đường Hùng Vương, Đà Nẵng',16.0681700,108.2145300),
+        ('Bệnh viện Đà Nẵng, 124 Hải Phòng, Đà Nẵng',16.0721056,108.2156940),
+        ('Trung tâm Hành chính, 24 Trần Phú, Đà Nẵng',16.0770864,108.2231701),
+        ('Đại học Bách khoa, 54 Nguyễn Lương Bằng, Đà Nẵng',16.0746638,108.1506880),
+        ('X7P4+XF9 Ngũ Hành Sơn, Đà Nẵng',15.9874125,108.2562344),
+        ('Đại học Đông Á, 33 Xô Viết Nghệ Tĩnh, Đà Nẵng',16.0321559,108.2213119),
+        ('Chợ Túy Loan, Đà Nẵng',15.9903511,108.1409952),
+        ('Khu du lịch Bà Nà Hills, thôn An Sơn, Đà Nẵng',16.0259108,108.0322546)
+    ) AS v(address,lat,lng)
+    LOOP
+        i := i + 1;
+        seller_id := ('ef230000-0000-4000-8000-' || lpad(i::text,12,'0'))::uuid;
+        INSERT INTO users(id,email,password_hash,role,full_name,phone,is_active,created_at,updated_at)
+        VALUES(seller_id,'seller.dispatch.v2.' || lpad(i::text,2,'0') || '@retrack.test',seller_source.password_hash,
+            'SELLER','Seller địa điểm demo ' || i,'090980' || lpad(i::text,4,'0'),true,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+        ON CONFLICT(id) DO NOTHING;
+        FOR j IN 1..3 LOOP
+            pickup_id := ('ef250000-0000-4000-8000-' || lpad(((i-1)*3+j)::text,12,'0'))::uuid;
+            INSERT INTO pickup_requests(id,seller_id,target_depot_id,description,address,latitude,longitude,preferred_datetime,
+                status,gross_amount,platform_fee_percentage,platform_fee_amount,net_amount,created_at,updated_at)
+            VALUES(pickup_id,seller_id,depot_id,
+                '[DEMO-DISPATCH-V2] Điểm ' || i || ' / lịch ' || j ||
+                CASE WHEN i >= 10 THEN ' [NGOAI-VUNG] Chờ Owner xử lý; không tự giao người gần nhất.' ELSE ' [TRONG-VUNG]' END ||
+                ' Chai nhựa, giấy carton; chưa cân. Không thu gom thực tế.',
+                seller_point.address,seller_point.lat,seller_point.lng,
+                CASE WHEN j = 1 THEN NULL WHEN j = 2 THEN CURRENT_TIMESTAMP + interval '1 hour'
+                     ELSE CURRENT_TIMESTAMP + interval '2 days' END,
+                'PENDING',0,5,0,0,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+            ON CONFLICT(id) DO NOTHING;
+        END LOOP;
+    END LOOP;
+    RAISE NOTICE 'Fixture V2: 36 đơn, 12 Seller/địa điểm, 6 Employee. Điểm 10–12 ngoài vùng; đơn ngày kia chưa phân công. Không reset fixture cũ.';
+END $retrack_dispatch_demo_seed$;
+-- RETRACK_DISPATCH_DEMO_SEED_END
+
+-- RETRACK_DRIVER_POOL_SEED_BEGIN
+DO $retrack_driver_pool_seed$
+DECLARE
+    driver_email text := 'driver@retrack.vn';
+    -- Để NULL: chọn nhà máy hoạt động có tọa độ và nhận PET, ưu tiên gần kho.
+    chosen_factory_id uuid := NULL;
+    v_driver uuid; v_depot uuid; v_factory uuid;
+    v_address text; v_lat numeric; v_lng numeric;
+    v_batch uuid; v_job uuid; v_notice uuid;
+    v_kg numeric; i integer;
+BEGIN
+    IF current_setting('retrack.seed_demo', true) IS DISTINCT FROM 'on' THEN RETURN; END IF;
+    IF to_regclass('notifications') IS NULL THEN
+        RAISE EXCEPTION 'Chưa có schema ReTrack. Dựng schema trước khi seed.';
+    END IF;
+    SELECT u.id, d.id, d.address, d.latitude, d.longitude
+    INTO v_driver, v_depot, v_address, v_lat, v_lng
+    FROM users u JOIN depot_staffs s ON s.user_id = u.id
+    JOIN depots d ON d.id = s.depot_id JOIN users owner_user ON owner_user.id = d.owner_id
+    WHERE u.email = driver_email AND u.role = 'DRIVER' AND u.is_active
+      AND s.staff_type = 'DRIVER' AND s.is_active
+      AND owner_user.role = 'DEPOT_OWNER' AND owner_user.is_active
+    ORDER BY s.id LIMIT 1;
+    IF v_driver IS NULL THEN RAISE EXCEPTION 'Thiếu Driver hoạt động hoặc liên kết kho: %', driver_email; END IF;
+    IF v_lat IS NULL OR v_lng IS NULL OR v_lat NOT BETWEEN -90 AND 90 OR v_lng NOT BETWEEN -180 AND 180 THEN
+        RAISE EXCEPTION 'Kho của Driver chưa có tọa độ hợp lệ để test bản đồ.';
+    END IF;
+    SELECT f.id INTO v_factory FROM factories f JOIN users u ON u.id = f.owner_id
+    WHERE u.is_active AND u.role = 'FACTORY'
+      AND f.latitude BETWEEN -90 AND 90 AND f.longitude BETWEEN -180 AND 180
+      AND (chosen_factory_id IS NULL OR f.id = chosen_factory_id)
+      AND (f.capacity_kg_per_month = 0 OR f.capacity_kg_per_month >= 450)
+      AND 'PET' = ANY(string_to_array(replace(upper(f.accepted_materials), ' ', ''), ','))
+      AND NOT EXISTS (SELECT 1 FROM factory_depot_partnerships p WHERE p.depot_id = v_depot AND p.factory_id = f.id
+          AND (p.status = 'BLOCKED' OR p.blocked_by_depot OR p.blocked_by_factory))
+    ORDER BY power(f.latitude - v_lat, 2) + power(f.longitude - v_lng, 2), f.id LIMIT 1;
+    IF v_factory IS NULL THEN
+        RAISE EXCEPTION 'Cần Factory hoạt động có tọa độ, nhận PET, không bị chặn; sức chứa chưa giới hạn hoặc >=450kg.';
+    END IF;
+    -- Cùng khóa depot với nghiệp vụ tạo/phân bổ lô; tránh seed đồng thời.
+    PERFORM id FROM depots WHERE id = v_depot FOR UPDATE;
+    FOR i IN 1..3 LOOP
+        v_batch := ('d6100000-0000-4000-8000-' || lpad(i::text, 12, '0'))::uuid;
+        v_job := ('d6200000-0000-4000-8000-' || lpad(i::text, 12, '0'))::uuid;
+        v_notice := ('d6500000-0000-4000-8000-' || lpad(i::text, 12, '0'))::uuid;
+        v_kg := 50 + i * 50;
+        IF EXISTS (SELECT 1 FROM inventory_batches WHERE id = v_batch) THEN
+            IF NOT EXISTS (SELECT 1 FROM inventory_batches WHERE id = v_batch AND depot_id = v_depot
+                AND description LIKE '[DEMO-DRIVER-POOL]%' AND code = 'DRV-DEMO-0' || i)
+                OR NOT EXISTS (SELECT 1 FROM transport_jobs WHERE id = v_job AND batch_id = v_batch) THEN
+                RAISE EXCEPTION 'Bộ demo % đã tồn tại nhưng không khớp hoặc thiếu chuyến. Không tự ghi đè.', i;
+            END IF;
+            CONTINUE;
+        END IF;
+        -- INSERT có chủ đích không ON CONFLICT: bộ dữ liệu dở dang phải rollback,
+        -- không tái tạo lô trên nguồn hàng/chuyến cũ đã được sử dụng.
+        INSERT INTO inventory_batches(id, code, depot_id, target_factory_id, material_type, declared_weight_kg, description, status,
+            created_at, updated_at)
+        VALUES(v_batch, 'DRV-DEMO-0' || i, v_depot, v_factory, 'PET', v_kg,
+            '[DEMO-DRIVER-POOL] Lô giả lập ' || i || ' để test nhận chuyến và bản đồ. Không giao hàng thực tế.', 'ACCEPTED',
+            CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+        INSERT INTO transport_jobs(id, batch_id, status, created_at, updated_at)
+        VALUES(v_job, v_batch, 'PENDING', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+        INSERT INTO notifications(id, user_id, title, message, is_read, created_at, transport_job_id)
+        VALUES(v_notice, v_driver, 'Chuyến vận chuyển demo mới', 'Lô DRV-DEMO-0' || i || ' đang chờ nhận. Chỉ dùng kiểm thử.',
+            FALSE, CURRENT_TIMESTAMP, v_job);
+    END LOOP;
+END
+$retrack_driver_pool_seed$;
+-- RETRACK_DRIVER_POOL_SEED_END
+
+-- RETRACK_DRIVER_LOCAL_SEED_BEGIN
+DO $retrack_driver_local_seed$
+DECLARE
+    driver_email text := 'driver@retrack.vn';
+    factory_demo_email text := 'factory.driver-local@retrack.test';
+    v_lat numeric := 15.9874125;
+    v_lng numeric := 108.256234375;
+    v_address text := 'X7P4+XF9 Ngũ Hành Sơn, Đà Nẵng';
+    v_driver uuid; v_owner uuid; v_factory_source uuid;
+    v_depot uuid := 'd8100000-0000-4000-8000-000000000001';
+    v_factory uuid := 'd8200000-0000-4000-8000-000000000001';
+    v_factory_user uuid := 'd8300000-0000-4000-8000-000000000001';
+    v_staff uuid := 'd8400000-0000-4000-8000-000000000001';
+    v_batch uuid; v_job uuid; v_notice uuid; i integer;
+BEGIN
+    IF current_setting('retrack.seed_demo', true) IS DISTINCT FROM 'on' THEN RETURN; END IF;
+    IF to_regclass('driver_delivery_events') IS NULL THEN
+        RAISE EXCEPTION 'Thiếu schema driver_delivery_events từ db/bootstrap/retrack-system.sql.';
+    END IF;
+    -- Tuần tự hóa các lần chạy cùng fixture, không reset dữ liệu đã tồn tại.
+    PERFORM pg_advisory_xact_lock(20261008, 64067);
+    SELECT u.id, d.owner_id INTO v_driver, v_owner
+    FROM users u JOIN depot_staffs s ON s.user_id = u.id
+    JOIN depots d ON d.id = s.depot_id JOIN users owner_user ON owner_user.id = d.owner_id
+    WHERE u.email = driver_email AND u.role = 'DRIVER' AND u.is_active
+      AND s.staff_type = 'DRIVER' AND s.is_active
+      AND owner_user.role = 'DEPOT_OWNER' AND owner_user.is_active
+    ORDER BY s.id LIMIT 1;
+    IF v_driver IS NULL THEN
+        RAISE EXCEPTION 'Thiếu tài xế % và liên kết kho đang hoạt động. Sửa driver_email ở đầu file nếu dùng tài khoản khác.', driver_email;
+    END IF;
+
+    -- Đọc lại tọa độ đơn test tại chỗ nếu đã chạy seed Employee; không ghi vào pickup.
+    SELECT COALESCE(p.latitude, v_lat), COALESCE(p.longitude, v_lng), COALESCE(p.address, v_address)
+    INTO v_lat, v_lng, v_address FROM pickup_requests p
+    WHERE p.id = 'e0000000-0929-4000-8000-000000000013';
+    IF NOT FOUND THEN
+        v_lat := 15.9874125; v_lng := 108.256234375;
+        v_address := 'X7P4+XF9 Ngũ Hành Sơn, Đà Nẵng';
+    END IF;
+    IF v_lat NOT BETWEEN -90 AND 90 OR v_lng NOT BETWEEN -180 AND 180 THEN
+        RAISE EXCEPTION 'Tọa độ test Employee không hợp lệ.';
+    END IF;
+
+    -- Tài khoản Factory demo riêng để không làm dịch vụ Factory chọn nhầm giữa hai nhà máy.
+    -- Sao chép hash đã có trong DB, không nhúng/in mật khẩu hoặc hash vào file/log.
+    IF NOT EXISTS (SELECT 1 FROM users WHERE id = v_factory_user) THEN
+        SELECT id INTO v_factory_source FROM users
+        WHERE role = 'FACTORY' AND is_active AND password_hash <> ''
+        ORDER BY (email = 'factory@retrack.vn') DESC, id LIMIT 1;
+        IF v_factory_source IS NULL THEN RAISE EXCEPTION 'Cần một tài khoản Factory hoạt động để tạo tài khoản demo.'; END IF;
+        INSERT INTO users(id, email, password_hash, role, full_name, phone, is_active, created_at, updated_at)
+        SELECT v_factory_user, factory_demo_email, password_hash, 'FACTORY',
+            '[DEMO-DRIVER-LOCAL] Nhà máy test Đà Nẵng', '', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        FROM users WHERE id = v_factory_source;
+        RAISE NOTICE 'Factory demo: %, dùng mật khẩu hiện tại của tài khoản nguồn % (chỉ sao chép khi tạo lần đầu).',
+            factory_demo_email, (SELECT email FROM users WHERE id = v_factory_source);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM users WHERE id = v_factory_user AND email = factory_demo_email
+        AND role = 'FACTORY' AND is_active AND full_name LIKE '[DEMO-DRIVER-LOCAL]%') THEN
+        RAISE EXCEPTION 'UUID tài khoản demo đã tồn tại nhưng không khớp hoặc bị vô hiệu hóa; không ghi đè.';
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM depots WHERE id = v_depot) THEN
+        INSERT INTO depots(id, owner_id, name, address, latitude, longitude, rating, verification_status, created_at)
+        VALUES(v_depot, v_owner, '[DEMO-DRIVER-LOCAL] Kho test tại chỗ Đà Nẵng',
+            v_address, v_lat, v_lng, 0, 'APPROVED', CURRENT_TIMESTAMP);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM depots WHERE id = v_depot AND owner_id = v_owner
+        AND name LIKE '[DEMO-DRIVER-LOCAL]%' AND address = v_address
+        AND abs(latitude - v_lat) < 0.000001 AND abs(longitude - v_lng) < 0.000001) THEN
+        RAISE EXCEPTION 'Kho fixture không khớp chủ kho/tọa độ; không tự đổi địa điểm hoặc dữ liệu cũ.';
+    END IF;
+    PERFORM id FROM depots WHERE id = v_depot FOR UPDATE;
+    IF NOT EXISTS (SELECT 1 FROM depot_staffs WHERE id = v_staff) THEN
+        INSERT INTO depot_staffs(id, depot_id, user_id, staff_type, is_active)
+        VALUES(v_staff, v_depot, v_driver, 'DRIVER', TRUE);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM depot_staffs WHERE id = v_staff AND depot_id = v_depot
+        AND user_id = v_driver AND staff_type = 'DRIVER' AND is_active) THEN
+        RAISE EXCEPTION 'Liên kết tài xế fixture không khớp hoặc không hoạt động; không ghi đè.';
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM factories WHERE id = v_factory) THEN
+        INSERT INTO factories(id, owner_id, name, address, latitude, longitude, rating,
+            capacity_kg_per_month, minimum_purity_percent, accepted_materials, created_at)
+        VALUES(v_factory, v_factory_user, '[DEMO-DRIVER-LOCAL] Nhà máy test tại chỗ Đà Nẵng',
+            v_address, v_lat, v_lng, 0, 10000, 0, 'PET', CURRENT_TIMESTAMP);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM factories WHERE id = v_factory AND owner_id = v_factory_user
+        AND name LIKE '[DEMO-DRIVER-LOCAL]%' AND address = v_address
+        AND abs(latitude - v_lat) < 0.000001 AND abs(longitude - v_lng) < 0.000001) THEN
+        RAISE EXCEPTION 'Nhà máy fixture không khớp chủ/tọa độ; không tự đổi dữ liệu cũ.';
+    END IF;
+
+    FOR i IN 1..3 LOOP
+        v_batch := ('d8500000-0000-4000-8000-' || lpad(i::text, 12, '0'))::uuid;
+        v_job := ('d8600000-0000-4000-8000-' || lpad(i::text, 12, '0'))::uuid;
+        v_notice := ('d8700000-0000-4000-8000-' || lpad(i::text, 12, '0'))::uuid;
+        IF EXISTS (SELECT 1 FROM inventory_batches WHERE id = v_batch) THEN
+            IF NOT EXISTS (SELECT 1 FROM inventory_batches WHERE id = v_batch AND depot_id = v_depot
+                AND target_factory_id = v_factory AND code = 'DRV-DN-LOCAL-0' || i
+                AND description LIKE '[DEMO-DRIVER-LOCAL]%')
+                OR NOT EXISTS (SELECT 1 FROM transport_jobs WHERE id = v_job AND batch_id = v_batch) THEN
+                RAISE EXCEPTION 'Lô demo % tồn tại nhưng thiếu chuyến hoặc không khớp; không ghi đè.', i;
+            END IF;
+            CONTINUE;
+        END IF;
+        INSERT INTO inventory_batches(id, code, depot_id, target_factory_id, material_type,
+            declared_weight_kg, description, status, image_urls, created_at, updated_at)
+        VALUES(v_batch, 'DRV-DN-LOCAL-0' || i, v_depot, v_factory, 'PET', 50 + i * 50,
+            '[DEMO-DRIVER-LOCAL] Test camera/GPS tại chỗ. Kho và nhà máy giả lập cùng vị trí người test. Không giao hàng hay thanh toán thực tế.',
+            'TRANSPORT_READY', ARRAY[]::TEXT[], CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+        INSERT INTO transport_jobs(id, batch_id, status, created_at, updated_at)
+        VALUES(v_job, v_batch, 'PENDING', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+        INSERT INTO notifications(id, user_id, title, message, is_read, created_at, transport_job_id)
+        VALUES(v_notice, v_driver, 'Chuyến demo tại chỗ Đà Nẵng',
+            'DRV-DN-LOCAL-0' || i || ': thử nhận chuyến, camera/GPS lấy hàng, khởi hành và giao hàng tại chỗ.',
+            FALSE, CURRENT_TIMESTAMP, v_job);
+    END LOOP;
+    RAISE NOTICE 'Đã chuẩn bị 3 lô test tại chỗ. Không cần xóa 3 lô cũ; chuyến đã test không bị reset.';
+END
+$retrack_driver_local_seed$;
+-- RETRACK_DRIVER_LOCAL_SEED_END
+
+-- RETRACK_DRIVER_STOCK_SEED_BEGIN
+-- Nguồn tồn demo khớp 450kg PET của mỗi bộ ba lô Driver; chưa khai giá vốn nên không báo lãi giả.
+DO $retrack_driver_stock_seed$
+BEGIN
+IF current_setting('retrack.seed_demo', true) = 'on' THEN
+INSERT INTO depot_stock_receipts
+ (id,depot_id,created_by,source_type,reference,status,received_at,purchase_cost,costs_confirmed,request_hash,created_at,reviewed_at,reviewed_by)
+SELECT v.id::uuid,d.id,d.owner_id,'OPENING_BALANCE',v.reference,'POSTED',NOW()-interval '3 days',0,FALSE,repeat('0',64),NOW(),NOW(),d.owner_id
+FROM (VALUES
+ ('d8800000-0000-4000-8000-000000000001','00000000-0000-0000-0000-000000000010','[DEMO-DRIVER-POOL] Nguồn PET thử vận chuyển, chưa khai vốn'),
+ ('d8800000-0000-4000-8000-000000000002','d8100000-0000-4000-8000-000000000001','[DEMO-DRIVER-LOCAL] Nguồn PET tại chỗ, chưa khai vốn')
+) AS v(id,depot_id,reference) JOIN depots d ON d.id=v.depot_id::uuid
+ON CONFLICT(id) DO NOTHING;
+INSERT INTO depot_stock_lines(id,receipt_id,kind,material_type,name,unit,quantity,reference_price,direct_cost,allocated_cost,condition_note,position)
+SELECT v.id::uuid,r.id,'MATERIAL','PET','Nhựa PET','kg',450,0,0,NULL,'Nguồn giả lập cho kiểm thử Driver, không phải hàng thực tế',0
+FROM (VALUES
+ ('d8900000-0000-4000-8000-000000000001','d8800000-0000-4000-8000-000000000001'),
+ ('d8900000-0000-4000-8000-000000000002','d8800000-0000-4000-8000-000000000002')
+) AS v(id,receipt_id) JOIN depot_stock_receipts r ON r.id=v.receipt_id::uuid
+ON CONFLICT(id) DO NOTHING;
+END IF;
+END $retrack_driver_stock_seed$;
+-- RETRACK_DRIVER_STOCK_SEED_END
+
+-- Giá thu mua riêng từng kho demo; không ghi đè bảng giá người dùng đã sửa.
+DO $buying_prices_demo$
+BEGIN
+    IF current_setting('retrack.seed_demo', true) = 'on' THEN
+        INSERT INTO depot_buying_prices(depot_id, material_type, price_per_kg, condition_note)
+        SELECT d.id, p.material, p.price, 'Giá demo tham khảo, chốt sau cân và phân loại'
+        FROM depots d
+        JOIN (VALUES
+          ('00000000-0000-0000-0000-000000000010'::uuid,'IRON',6000),
+          ('00000000-0000-0000-0000-000000000010'::uuid,'PET',8500),
+          ('00000000-0000-0000-0000-000000000011'::uuid,'IRON',6500),
+          ('00000000-0000-0000-0000-000000000011'::uuid,'PET',9000),
+          ('00000000-0000-0000-0000-000000000012'::uuid,'IRON',5800),
+          ('00000000-0000-0000-0000-000000000012'::uuid,'PAPER',3000)
+        ) p(depot_id,material,price) ON p.depot_id=d.id
+        ON CONFLICT (depot_id, material_type) DO NOTHING;
+    END IF;
+END $buying_prices_demo$;
 -- RETRACK_SEED_END
 
 COMMIT;

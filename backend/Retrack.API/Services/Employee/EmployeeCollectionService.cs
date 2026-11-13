@@ -73,16 +73,16 @@ public sealed partial class EmployeeCollectionService(AppDbContext db, ICloudina
         var url = await images.UploadImageAsync(upload, $"checkin-{pickupId:N}.{(jpeg ? "jpg" : "png")}");
         db.PickupCheckIns.Add(new PickupCheckIn
         {
-            PickupRequestId = pickupId, EmployeeId = userId, Latitude = input.Latitude!.Value,
-            Longitude = input.Longitude!.Value, AccuracyMeters = input.AccuracyMeters!.Value,
-            DistanceMeters = distance, LocationRecordedAt = input.LocationRecordedAt!.Value.UtcDateTime,
+            PickupRequestId = pickupId, EmployeeId = userId, Latitude = input.Latitude,
+            Longitude = input.Longitude, AccuracyMeters = input.AccuracyMeters,
+            DistanceMeters = distance, LocationRecordedAt = input.LocationRecordedAt?.UtcDateTime,
             PhotoTakenAt = input.PhotoTakenAt!.Value.UtcDateTime, CheckedInAt = DateTime.UtcNow, ImageUrl = url
         });
         pickup.CheckinImageUrl = url;
         pickup.Status = "IN_PROGRESS";
         pickup.UpdatedAt = DateTime.UtcNow;
-        db.Notifications.Add(new Notification { UserId = pickup.SellerId, Title = "Nhân viên đã đến địa điểm",
-            Message = "Nhân viên đã check-in và bắt đầu phân loại, cân phế liệu." });
+        db.Notifications.Add(Notification.ForPickup(pickup.SellerId, pickup.Id, "Nhân viên đã đến địa điểm",
+            "Nhân viên đã check-in và bắt đầu phân loại, cân phế liệu."));
         await db.SaveChangesAsync(ct);
         var result = await Snapshot(pickup, ct);
         await transaction.CommitAsync(ct);

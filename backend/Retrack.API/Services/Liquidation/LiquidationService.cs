@@ -60,12 +60,19 @@ public sealed class LiquidationService(ILiquidationRepository repository, IDepot
         {
             if (participation == null || now < lot.SurveyStart || now >= lot.BiddingEnd)
                 throw new DepotConflictException("Cần đăng ký trước và xác nhận hiện trạng từ lúc bắt đầu khảo sát đến trước hết phiên.");
-            participation.SurveyDeclaredAt ??= now;
+            if (participation.SurveyDeclaredAt == null)
+            {
+                participation.SurveyDeclaredAt = now;
+                repository.AddNotice(Notification.ForLiquidation(lot.SellerId, lot.Id, "Kho đã xác nhận khảo sát",
+                    $"Một kho đã xác nhận hiểu hiện trạng lô {lot.Title} và có thể trả giá khi phiên mở."));
+            }
         }
         else if (participation == null)
         {
             if (now >= lot.SurveyEnd) throw new DepotConflictException("Đã hết thời gian đăng ký khảo sát.");
             repository.AddParticipation(new() { LotId = lotId, DepotId = depotId, OwnerId = ownerId, RegisteredAt = now });
+            repository.AddNotice(Notification.ForLiquidation(lot.SellerId, lot.Id, "Có kho đăng ký khảo sát",
+                $"Một kho đã đăng ký khảo sát lô {lot.Title}. Bạn có thể xem số lượng kho tham gia trong chi tiết lô."));
         }
         await work.SaveAsync(); await tx.CommitAsync();
     }
@@ -93,9 +100,15 @@ public sealed class LiquidationService(ILiquidationRepository repository, IDepot
         if (lot.Status != "PUBLISHED" || now < lot.BiddingStart || now >= lot.BiddingEnd || !await repository.IsActiveSellerAsync(lot.SellerId))
             throw new DepotConflictException("Phiên chưa mở, đã hết hạn hoặc không còn hoạt động.");
         LiquidationRules.CheckBid(lot.StartingPrice, lot.HighestPrice, lot.BidIncrement, dto.Amount);
+        var previous = lot.HighestBidId.HasValue ? await repository.FindBidAsync(lot.HighestBidId.Value) : null;
+        if (previous != null && previous.OwnerId != ownerId)
+            repository.AddNotice(Notification.ForDepot(previous.OwnerId, previous.DepotId, "LIQUIDATION", "Giá của bạn đã bị vượt",
+                $"Lô {lot.Title} có mức giá cao hơn. Xem giá hiện tại và thời gian còn lại trước khi quyết định trả giá tiếp.", targetType: "LIQUIDATION", targetId: lot.Id));
         var bid = new LiquidationBid { Id = dto.OperationId, LotId = lotId, DepotId = depotId, OwnerId = ownerId, Amount = dto.Amount, CreatedAt = now };
         repository.AddBid(bid); lot.HighestPrice = dto.Amount; lot.HighestBidId = bid.Id; lot.BidCount++;
         lot.BiddingEnd = LiquidationRules.Extend(now, lot.BiddingEnd, lot.OriginalEnd.AddMinutes(10));
+        repository.AddNotice(Notification.ForLiquidation(lot.SellerId, lot.Id, "Lô thanh lý có lượt trả giá mới",
+            $"Lô {lot.Title} có giá cao nhất mới {dto.Amount:N0} đ. Thời gian đóng phiên hiện tại: {lot.BiddingEnd:HH:mm dd/MM/yyyy} UTC."));
         await work.SaveAsync(); await tx.CommitAsync(); return new(bid.Id, bid.Amount, bid.CreatedAt);
     }
     public async Task<PagedResult<MyLiquidationBidDto>> MyBidsAsync(Guid ownerId, Guid depotId, Guid lotId, int page)
@@ -104,19 +117,40 @@ public sealed class LiquidationService(ILiquidationRepository repository, IDepot
         if (page < 1) throw new ArgumentException("Trang không hợp lệ.");
         return await repository.MyBidsAsync(lotId, ownerId, depotId, page);
     }
+    public async Task<PagedResult<LiquidationLadderDto>> LadderAsync(Guid ownerId, Guid depotId, Guid lotId, int page)
+    {
+        await scope.RequireOwnerAsync(ownerId, depotId);
+        if (page < 1) throw new ArgumentException("Trang không hợp lệ.");
+        var lot = await repository.FindAsync(lotId) ?? throw new KeyNotFoundException("Không tìm thấy lô thanh lý.");
+        // Chỉ kho đã đăng ký tham gia mới thấy thang giá; không lộ danh tính kho khác.
+        if ((await repository.ParticipationAsync(lotId, ownerId))?.DepotId != depotId) throw new DepotForbiddenException("Đăng ký khảo sát bằng kho này để xem thang giá.");
+        return await repository.LadderAsync(lot.Id, lot.HighestBidId, ownerId, depotId, page);
+    }
     public Task<List<Guid>> ExpiredAsync() => repository.ExpiredAsync(Now);
     public async Task FinalizeAsync(Guid lotId)
     {
         await using var tx = await work.BeginAsync();
         var lot = await repository.LockAsync(lotId);
         if (lot == null || lot.Status != "PUBLISHED" || Now < lot.BiddingEnd) return;
-        if (lot.HighestBidId == null) lot.Status = "NO_SALE";
+        if (lot.HighestBidId == null)
+        {
+            lot.Status = "NO_SALE";
+            repository.AddNotice(Notification.ForLiquidation(lot.SellerId, lot.Id, "Lô thanh lý kết thúc chưa bán được",
+                $"Lô {lot.Title} đã kết thúc mà không có lượt trả giá hợp lệ."));
+            foreach (var participant in await repository.ParticipantsAsync(lotId))
+                repository.AddNotice(Notification.ForDepot(participant.OwnerId, participant.DepotId, "LIQUIDATION", "Lô lớn đã kết thúc phiên",
+                    $"Lô {lot.Title} kết thúc và chưa có lượt trả giá hợp lệ.", targetType: "LIQUIDATION", targetId: lot.Id));
+        }
         else
         {
             var winning = await repository.FindBidAsync(lot.HighestBidId.Value) ?? throw new InvalidOperationException("Thiếu lượt giá thắng; cần kiểm tra dữ liệu phiên.");
             if (winning.LotId != lot.Id || winning.Amount != lot.HighestPrice) throw new InvalidOperationException("Giá thắng không khớp phiên.");
             lot.Status = "AWARDED";
-            repository.AddAgreement(new() { LotId = lot.Id, WinningBidId = winning.Id, DepotId = winning.DepotId, BuyerId = winning.OwnerId, Amount = winning.Amount, CreatedAt = Now });
+            repository.AddNotice(Notification.ForLiquidation(lot.SellerId, lot.Id, "Lô thanh lý đã có kho trúng giá",
+                $"Lô {lot.Title} đã chốt giá {winning.Amount:N0} đ. Hãy mở thỏa thuận để thực hiện ký hợp đồng, nhận tiền và bàn giao theo điều kiện của lô."));
+            repository.AddAgreement(new() { LotId = lot.Id, WinningBidId = winning.Id, DepotId = winning.DepotId, BuyerId = winning.OwnerId, Amount = winning.Amount, DepositAmount = LiquidationRules.Deposit(winning.Amount, lot.DepositPercent), CreatedAt = Now });
+            repository.AddNotice(Notification.ForDepot(winning.OwnerId, winning.DepotId, "LIQUIDATION", "Kho của bạn đã trúng lô lớn",
+                $"Bạn đã trúng lô {lot.Title}. Kiểm tra thỏa thuận, hạn thu gom và xác nhận chuyển tiền/giao nhận thực tế.", targetType: "LIQUIDATION", targetId: lot.Id));
         }
         await work.SaveAsync(); await tx.CommitAsync();
     }
@@ -134,7 +168,9 @@ public sealed class LiquidationService(ILiquidationRepository repository, IDepot
         var receipt = await repository.AgreementReceiptAsync(x.Id);
         return new(x.Id, x.LotId, x.Lot.Title, x.DepotId, x.Amount, x.Lot.ScopeDetails, x.Lot.CollectionTerms,
             x.Lot.Address, x.Lot.ContactPhone, x.Lot.CollectionDeadline, x.PaymentReference, x.PaymentReportedAt,
-            x.PaymentConfirmedAt, x.OwnerCollectedAt, x.SellerHandedOverAt, receipt?.Id, receipt?.Status);
+            x.PaymentConfirmedAt, x.OwnerCollectedAt, x.SellerHandedOverAt, receipt?.Id, receipt?.Status,
+            x.Lot.DepositPercent, x.DepositAmount, x.Amount - x.DepositAmount, x.SellerSignedAt, x.BuyerSignedAt,
+            x.DepositReference, x.DepositReportedAt, x.DepositConfirmedAt, x.CreatedAt, await repository.ContractPartiesAsync(x));
     }
     public async Task AgreementActionAsync(Guid userId, Guid? depotId, Guid agreementId, string action, string? reference = null)
     {
@@ -145,21 +181,54 @@ public sealed class LiquidationService(ILiquidationRepository repository, IDepot
         await repository.LockAsync(initial.LotId);
         var agreement = await RequireAgreementAsync(userId, depotId, agreementId);
         var now = Now;
-        if (action == "REPORT_PAYMENT")
+        if (action == "SIGN")
         {
+            if (agreement.DepositAmount <= 0) throw new DepotConflictException("Thỏa thuận này không có hợp đồng đặt cọc.");
+            if (agreement.BuyerSignedAt == null)
+            {
+                agreement.BuyerSignedAt = now;
+                repository.AddNotice(new Notification { UserId = agreement.Lot.SellerId, Category = "LIQUIDATION", Title = "Chủ kho đã ký hợp đồng đặt cọc",
+                    Message = $"Chủ kho trúng lô {agreement.Lot.Title} đã ký hợp đồng đặt cọc. Hãy kiểm tra và ký nếu bạn chưa ký.", TargetType = "LIQUIDATION", TargetId = agreement.LotId });
+            }
+        }
+        else if (action == "REPORT_DEPOSIT")
+        {
+            if (agreement.SellerSignedAt == null || agreement.BuyerSignedAt == null) throw new DepotConflictException("Cần cả hai bên ký hợp đồng đặt cọc trước khi báo chuyển cọc.");
+            if (string.IsNullOrWhiteSpace(reference) || reference.Length > 255) throw new ArgumentException("Cần tham chiếu chuyển cọc tối đa 255 ký tự.");
+            if (agreement.DepositReportedAt != null && agreement.DepositReference != reference.Trim()) throw new DepotConflictException("Tham chiếu cọc đã ghi, không sửa ngầm bằng retry.");
+            if (agreement.DepositReportedAt == null)
+            {
+                agreement.DepositReference = reference.Trim(); agreement.DepositReportedAt = now;
+                repository.AddNotice(new Notification { UserId = agreement.Lot.SellerId, Category = "LIQUIDATION", Title = "Chủ kho báo đã chuyển tiền cọc",
+                    Message = $"Chủ kho báo đã chuyển cọc lô {agreement.Lot.Title}. Hãy đối chiếu tài khoản và xác nhận nhận cọc.", TargetType = "LIQUIDATION", TargetId = agreement.LotId });
+            }
+        }
+        else if (action == "REPORT_PAYMENT")
+        {
+            if (agreement.DepositAmount > 0 && agreement.DepositConfirmedAt == null) throw new DepotConflictException("Cần Seller xác nhận đã nhận tiền cọc trước khi báo chuyển phần còn lại.");
             if (string.IsNullOrWhiteSpace(reference) || reference.Length > 255) throw new ArgumentException("Cần tham chiếu chuyển tiền tối đa 255 ký tự.");
             if (agreement.PaymentReportedAt != null && agreement.PaymentReference != reference.Trim()) throw new DepotConflictException("Tham chiếu đã ghi, không sửa ngầm bằng retry.");
-            agreement.PaymentReference = reference.Trim(); agreement.PaymentReportedAt ??= now;
+            if (agreement.PaymentReportedAt == null)
+            {
+                agreement.PaymentReference = reference.Trim(); agreement.PaymentReportedAt = now;
+                repository.AddNotice(Notification.ForLiquidation(agreement.Lot.SellerId, agreement.LotId, "Chủ kho báo đã chuyển tiền thanh toán",
+                    $"Chủ kho báo đã chuyển tiền lô {agreement.Lot.Title}. Hãy đối chiếu tài khoản thực tế trước khi xác nhận nhận tiền."));
+            }
         }
         else if (action == "CONFIRM_COLLECTED")
         {
             if (agreement.PaymentConfirmedAt == null) throw new DepotConflictException("Cần Seller xác nhận đã nhận đủ tiền trước giao nhận.");
-            agreement.OwnerCollectedAt ??= now;
+            if (agreement.OwnerCollectedAt == null)
+            {
+                agreement.OwnerCollectedAt = now;
+                repository.AddNotice(Notification.ForLiquidation(agreement.Lot.SellerId, agreement.LotId, "Chủ kho đã xác nhận thu gom",
+                    $"Chủ kho xác nhận đã thu gom lô {agreement.Lot.Title}. Hãy kiểm tra mốc bàn giao của bạn để hoàn tất thỏa thuận."));
+            }
         }
         else throw new DepotForbiddenException();
         await work.SaveAsync(); await tx.CommitAsync();
     }
     private static LiquidationSummaryDto Summary(LiquidationLot x, DateTime now) => new(x.Id, x.Title, x.PublicArea,
         x.StartingPrice, x.BidIncrement, x.HighestPrice, x.BidCount, LiquidationRules.Phase(x.Status, now, x.SurveyStart, x.SurveyEnd, x.BiddingStart, x.BiddingEnd),
-        x.Status, x.SurveyStart, x.SurveyEnd, x.BiddingStart, x.BiddingEnd, x.OriginalEnd.AddMinutes(10), x.CollectionDeadline, x.ImageUrls, now);
+        x.Status, x.SurveyStart, x.SurveyEnd, x.BiddingStart, x.BiddingEnd, x.OriginalEnd.AddMinutes(10), x.CollectionDeadline, x.ImageUrls, now, x.DepositPercent);
 }

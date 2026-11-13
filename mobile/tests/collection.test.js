@@ -27,3 +27,9 @@ test("GPS phải mới, chính xác và nằm gần người bán", () => {
     assert.notEqual(checkInLocationError({ ...location, ...bad }, pickup, now), "");
   assert.notEqual(checkInLocationError(location, { ...pickup, latitude: null }, now), "");
 });
+
+test("chính sách ảnh: thiếu GPS hoặc ở xa vẫn tiếp tục được", () => {
+  const pickup = { policy: { photoOnly: true } };
+  assert.equal(checkInLocationError(null, pickup), "");
+  assert.equal(checkInLocationError({ latitude: 0, longitude: 0, accuracyMeters: 1000 }, pickup), "");
+});

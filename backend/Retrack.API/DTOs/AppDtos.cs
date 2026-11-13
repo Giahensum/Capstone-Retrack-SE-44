@@ -216,6 +216,7 @@ namespace Retrack.API.DTOs
             => new() { Success = false, Message = message };
     }
 
+    // ===== GENERIC PAGED RESULT =====
     public class PagedResult<T>
     {
         public List<T> Items { get; set; } = new();
@@ -223,5 +224,20 @@ namespace Retrack.API.DTOs
         public int Page { get; set; }
         public int PageSize { get; set; }
     }
+
+    // ===== SELLER NOTIFICATION =====
+    public class SellerNotificationDto
+    {
+        public Guid Id { get; set; }
+        public string Title { get; set; } = string.Empty;
+        public string Message { get; set; } = string.Empty;
+        public string Category { get; set; } = "SYSTEM";
+        public Guid? PickupRequestId { get; set; }
+        public string? TargetType { get; set; }
+        public Guid? TargetId { get; set; }
+        public bool IsRead { get; set; }
+        public DateTime CreatedAt { get; set; }
+    }
 }
+
 

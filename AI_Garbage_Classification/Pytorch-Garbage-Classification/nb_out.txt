@@ -1,0 +1,92 @@
+CELL 5
+# Define the data labels
+labels = (
+    "battery",
+    "biological",
+    "brown-glass",
+    "cardboard",
+    "clothes",
+    "green-glass",
+    "metal",
+    "paper",
+    "plastic",
+    "shoes",
+    "trash",
+    "white-glass",
+)
+# Define a data transformer >>>
+transform_load = transforms.Compose(
+    [
+        transforms.Resize(img_res[:-1]),  # Resize images to img_res
+        transforms.ToTensor(),  # Convert image to PyTorch Tensor data type
+        transforms.ConvertImageDtype(dtype),  # ConvertImageDtype
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        transforms.Lambda(
+            lambda x: (x - x.min()) / (x.max() - x.min())
+        ),  # Normalize the normalized data to range 0 to 1
+    ]
+)
+transform_augmentation = transforms.Compose(
+    [
+        transforms.RandomAutocontrast(),
+        transforms.RandomHorizontalFlip(),
+        transforms.RandomVerticalFlip(),
+        transforms.RandomRotation(45),
+        transforms.ElasticTransform(),
+        transforms.ColorJitter(brightness=0.4, contrast=0.38, saturation=0.3, hue=0.2),
+        transforms.RandomCrop(224, padding=32),
+        transforms.RandomPerspective(distortion_scale=0.5),
+---
+CELL 7
+# Load pre-trained EfficientNet-B4
+model = EfficientNet.from_pretrained(
+    "efficientnet-b4",
+    include_top=True,
+    num_classes=num_classes,
+    dropout_rate=0.11,
+)
+
+# Prep
+model = model.to(device)
+
+# Summary
+summary(model, input_size=(3, 224, 224), device=get_device(model))
+---
+CELL 8
+# Conf >>>>>>>>>>>>>>>>>>>>>[
+Max_epoch = 256
+Batch_size = 16
+mixed_precision = False  # Use with cuda (GPU)
+Training_augmentation = (
+    False  # Makes the training slower ⚠️ | but it can improve the results
+)
+Use_profiler = False  # makes it slow | Debug only
+# Conf <<<<<<<<<<<<<<<<<<<<<]
+# Opimaization and ... |fn|
+optimizer = optim.SGD(model.parameters(), lr=0.01, momentum=0.9, weight_decay=1e-4)
+# optimizer = AdaBound(model.parameters(), lr=0.0008, final_lr=0.01, amsbound=False, weight_decay=1e-5) # type: ignore FNT
+
+loss_fn = nn.BCEWithLogitsLoss(weight=class_weights)
+
+TB_log_dir = f"logs\\tensorboard\\{datetime.datetime.now().strftime("y%Y_m%m_d%d-h%H_m%M_s%S")}"
+tensorboard_writer = SummaryWriter(log_dir=TB_log_dir)
+print(f"Tensorboard log dir: {TB_log_dir}")
+
+
+# Prep
+profiler_context_manager = torch.profiler.profile(
+    schedule=torch.profiler.schedule(wait=4, warmup=1, active=3, repeat=2),
+    on_trace_ready=torch.profiler.tensorboard_trace_handler(TB_log_dir),  # specify your directory here
+    record_shapes=True,
+    with_flops=True,
+    with_modules=True,
+    profile_memory=True,
+    with_stack=True,
+    activities=[
+        torch.profiler.ProfilerActivity.CUDA,
+    
+---
+CELL 9
+# Save the model
+torch.save(model, "model.pth")
+---

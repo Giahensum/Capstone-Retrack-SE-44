@@ -1,6 +1,9 @@
 import apiClient, { unwrap } from "./client";
 
 export const pickupApi = {
+  getShifts: async (signal = undefined) => unwrap(await apiClient.get("/employee/dispatch/shifts", { signal })),
+  setAvailability: async (id, status, reason) =>
+    unwrap(await apiClient.put(`/employee/dispatch/shifts/${encodeURIComponent(id)}/availability`, { status, reason })),
   getHistory: async (page = 1, status = undefined, signal = undefined) =>
     unwrap(await apiClient.get("/employee/pickup-history", { params: { page, pageSize: 20, status }, signal })),
   getStats: async (signal = undefined) => unwrap(await apiClient.get("/employee/stats", { signal })),
@@ -22,15 +25,15 @@ export const pickupApi = {
     // React Native nhận file URI; boundary được Axios/native transport tự tạo.
     body.append("imageFile", /** @type {any} */ ({ uri: photo.uri, name: "checkin.jpg", type: "image/jpeg" }));
     body.append("photoTakenAt", photo.takenAt);
-    for (const [key, value] of Object.entries(location)) body.append(key, String(value));
+    for (const [key, value] of Object.entries(location || {})) body.append(key, String(value));
     return unwrap(await apiClient.post(`/employee/pickup/${encodeURIComponent(id)}/checkin`, body, {
       headers: { "Content-Type": "multipart/form-data" }, timeout: 60000,
     }));
   },
   getDashboard: async (signal = undefined) =>
     unwrap(await apiClient.get("/employee/dashboard", { signal })),
-  getPickupPool: async (signal = undefined) =>
-    unwrap(await apiClient.get("/employee/pickup-pool", { signal })),
+  getPickupPool: async (signal = undefined, page = 1) =>
+    unwrap(await apiClient.get("/employee/pickup-pool", { signal, params: { page } })),
   getPickup: async (id, signal = undefined) =>
     unwrap(
       await apiClient.get(`/employee/pickup/${encodeURIComponent(id)}`, {

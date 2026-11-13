@@ -9,6 +9,7 @@ import DepotBrandLogo from '@/features/depot/components/DepotBrandLogo';
 import CreateDepotModal from '@/features/depot/components/CreateDepotModal';
 import { useDepotQuery } from '@/features/depot/depotApi';
 import { verificationLabels } from '@/features/depot/components/VerificationPanel';
+import NotificationBell from '@/features/depot/components/NotificationBell';
 
 const SidebarItem = ({ iconName, label, to, active }) => (
   <Link
@@ -47,9 +48,11 @@ const DepotLayout = () => {
     { iconName: 'inventory_2', label: 'Hồ sơ kho vựa', to: '/depot/profile' },
     { iconName: 'warehouse', label: 'Quản lý kho', to: '/depot/inventory' },
     { iconName: 'gavel', label: 'Lô lớn mua vào', to: '/depot/liquidations' },
+    { iconName: 'payments', label: 'Giá thu mua', to: '/depot/buying-prices' },
     { iconName: 'local_shipping', label: 'Lô xuất hàng', to: '/depot/batches' },
     { iconName: 'factory', label: 'Nhà máy đối tác', to: '/depot/partners' },
     { iconName: 'badge', label: 'Quản lý nhân sự', to: '/depot/staff' },
+    { iconName: 'assignment', label: 'Điều phối thu gom', to: '/depot/dispatch' },
     { iconName: 'monitoring', label: 'Hiệu suất nhân sự', to: '/depot/staff/performance' },
     { iconName: 'payments', label: 'Thanh toán chờ duyệt', to: '/depot/payments' },
     { iconName: 'receipt', label: 'Phí nền tảng', to: '/depot/payments/fees' },
@@ -99,13 +102,14 @@ const DepotLayout = () => {
         <header className="d-glass-panel flex justify-between gap-3 items-center min-h-16 px-4 lg:px-8 shrink-0 z-30">
           <button aria-label="Mở menu" aria-expanded={menuOpen} className="lg:hidden" onClick={() => setMenuOpen(true)}><MaterialIcon name="menu" /></button>
           <Link to="/depot/dashboard" className="lg:hidden" aria-label="ReTrack — về tổng quan kho"><DepotBrandLogo small /></Link>
-          <div className="flex items-center text-d-on-surface-variant font-d-body-sm text-d-body-sm gap-2">
+          <div className="hidden sm:flex min-w-0 items-center text-d-on-surface-variant font-d-body-sm text-d-body-sm gap-2">
             <Link to="/depot/dashboard" className="hidden sm:inline hover:text-d-primary transition-colors">Trang chủ</Link>
             <MaterialIcon name="chevron_right" className="text-[16px]" />
             <span className="text-d-primary font-bold">{navItems.find((item) => item.to === location.pathname)?.label ?? 'Tổng quan'}</span>
           </div>
           
           <div className="flex items-center min-w-0 gap-3">
+            {depotId && <NotificationBell key={`${depotId}-${location.pathname}`} unread={unread} />}
             <DepotSelector />
           </div>
         </header>

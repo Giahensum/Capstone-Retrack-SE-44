@@ -11,8 +11,9 @@ import { useSearchParams } from 'react-router-dom';
 
 const Inventory = () => {
   const { depotId } = useDepot();
-  const [searchParams] = useSearchParams();
-  const [activeTab, setActiveTab] = useState(() => ['receipts', 'reusable', 'history'].includes(searchParams.get('tab')) ? searchParams.get('tab') : 'current');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = ['receipts', 'reusable', 'history'].includes(searchParams.get('tab')) ? searchParams.get('tab') : 'current';
+  const setActiveTab = tab => setSearchParams(previous => { previous.set('tab', tab); previous.delete('receiptId'); return previous; });
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');

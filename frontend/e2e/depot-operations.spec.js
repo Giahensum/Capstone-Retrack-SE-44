@@ -8,7 +8,7 @@ test('Owner đọc thông báo, theo dõi sự cố và xem lịch sử hiệu s
   const notice = page.getByRole('article').filter({ hasText: 'Sự cố vận chuyển UI fixture' }); await expect(notice).toBeVisible();
   await notice.getByRole('button', { name: 'Đánh dấu đã đọc' }).click();
   await expect(notice.getByRole('button', { name: 'Đánh dấu đã đọc' })).toHaveCount(0);
-  await notice.getByRole('link', { name: 'Xem lô / nhật ký xử lý' }).click();
+  await notice.getByRole('button', { name: 'Xem lô / nhật ký xử lý' }).click();
   await page.getByRole('button', { name: 'Theo dõi xử lý' }).click();
   const dialog = page.getByRole('dialog', { name: 'Theo dõi xử lý vận chuyển' });
   await dialog.getByLabel('Trạng thái theo dõi').selectOption('CONTACTING');

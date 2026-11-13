@@ -11,8 +11,8 @@ public sealed class UpdateDepotProfileDto : IValidatableObject
     [Phone(ErrorMessage = "Số điện thoại không hợp lệ."), StringLength(20)]
     public string? ContactPhone { get => contactPhone; set => contactPhone = string.IsNullOrWhiteSpace(value) ? null : value.Trim(); }
     [StringLength(2000)] public string? Description { get; set; }
-    [Range(-90, 90, ErrorMessage = "Vĩ độ phải nằm trong khoảng -90 đến 90.")] public decimal? Latitude { get; set; }
-    [Range(-180, 180, ErrorMessage = "Kinh độ phải nằm trong khoảng -180 đến 180.")] public decimal? Longitude { get; set; }
+    [Range(typeof(decimal), "-90", "90", ErrorMessage = "Vĩ độ phải nằm trong khoảng -90 đến 90.")] public decimal? Latitude { get; set; }
+    [Range(typeof(decimal), "-180", "180", ErrorMessage = "Kinh độ phải nằm trong khoảng -180 đến 180.")] public decimal? Longitude { get; set; }
     public IEnumerable<ValidationResult> Validate(ValidationContext context)
     {
         if (Latitude.HasValue != Longitude.HasValue) yield return new("Cần nhập cả vĩ độ và kinh độ.", [nameof(Latitude), nameof(Longitude)]);

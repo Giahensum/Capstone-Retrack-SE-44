@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { FlatList, Pressable, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useIsFocused } from "@react-navigation/native";
 import Feather from "@expo/vector-icons/Feather";
 import Button from "../../components/common/Button";
 import Screen from "../../components/common/Screen";
+import DispatchAvailability from "../../components/pickup/DispatchAvailability";
 import PickupCard from "../../components/pickup/PickupCard";
 import PickupMap from "../../components/pickup/PickupMap";
 import ResourceState from "../../components/pickup/ResourceState";
@@ -16,16 +17,24 @@ import { pickupApi } from "../../api/pickupApi";
 import { colors, styles as s } from "../../theme";
 
 export default function PickupPoolScreen({ navigation }) {
+  const [page, setPage] = useState(1);
+  const loader = useCallback(signal => pickupApi.getPickupPool(signal, page), [page]);
   const [mode, setMode] = useState("list");
   const [selectedId, setSelectedId] = useState(null);
   const focused = useIsFocused();
   const { data, setData, loading, refreshing, error, reload } =
-    usePickupResource(pickupApi.getPickupPool);
-  const pickups = data || [];
+    usePickupResource(loader);
+  const automatic = Boolean(data?.automatic);
+  const pickups = Array.isArray(data) ? data : data?.items || [];
+  useEffect(() => {
+    if (!focused) return;
+    const timer = setInterval(() => { void reload(true); }, 15000);
+    return () => clearInterval(timer);
+  }, [focused, reload]);
   const gps = useEmployeeLocation(mode === "map" && focused);
   const { acceptingId, confirm } = useAcceptPickup(
     (accepted) => {
-      setData((items) => items?.filter((item) => item.id !== accepted.id));
+      setData((items) => Array.isArray(items) ? items.filter((item) => item.id !== accepted.id) : items);
       setSelectedId(null);
       void reload(true);
     },
@@ -42,7 +51,7 @@ export default function PickupPoolScreen({ navigation }) {
     <PickupCard
       pickup={item}
       onDetail={() => detail(item)}
-      onAccept={confirm}
+      onAccept={automatic ? undefined : confirm}
       busy={acceptingId === item.id}
       disabled={Boolean(acceptingId)}
     />
@@ -56,7 +65,7 @@ export default function PickupPoolScreen({ navigation }) {
   return (
     <SafeAreaView edges={["bottom"]} style={s.page}>
       <View style={{ padding: 20, gap: 12 }}>
-        <Text style={s.title}>Đơn chờ thu gom</Text>
+        <Text style={s.title}>{automatic ? "Đơn được phân công" : "Đơn chờ thu gom"}</Text>
         <View style={s.row}>
           {[
             ["list", "Danh sách"],
@@ -94,7 +103,13 @@ export default function PickupPoolScreen({ navigation }) {
           }}
           refreshing={refreshing}
           onRefresh={() => reload(true)}
+          ListHeaderComponent={<DispatchAvailability onChanged={() => reload(true)} />}
           ListEmptyComponent={empty}
+          ListFooterComponent={automatic ? <View style={s.row}>
+            <Button title="Trước" disabled={page <= 1 || refreshing} onPress={() => setPage(p => p - 1)} />
+            <Text style={s.muted}>Trang {page} · {data.total} đơn</Text>
+            <Button title="Sau" disabled={page * 20 >= data.total || refreshing} onPress={() => setPage(p => p + 1)} />
+          </View> : null}
         />
       ) : null}
       {!loading && !error && mode === "map" ? (
@@ -113,10 +128,10 @@ export default function PickupPoolScreen({ navigation }) {
                 pickups={pickups}
                 employee={gps.location}
                 onSelect={(item) => setSelectedId(item.id)}
-                onAccept={confirm}
+                onAccept={automatic ? undefined : confirm}
               />
               <Text style={s.muted}>
-                Chạm ghim để xem đơn; chạm ô thông tin trên bản đồ để nhận đơn.
+                Chạm ghim để xem đơn. Bản đồ hiển thị các đơn trong trang hiện tại.
               </Text>
               {missingCoordinates > 0 ? (
                 <Text style={s.muted}>

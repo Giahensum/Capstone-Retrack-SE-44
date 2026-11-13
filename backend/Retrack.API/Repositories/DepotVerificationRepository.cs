@@ -26,6 +26,7 @@ public sealed class DepotVerificationRepository(AppDbContext db) : IDepotVerific
     public Task<bool> HasPendingAsync(Guid id) => db.DepotVerificationSubmissions.AnyAsync(x => x.DepotId == id && x.Status == "SUBMITTED");
     public Task<int> RecentCountAsync(Guid id) => db.DepotVerificationSubmissions.CountAsync(x => x.DepotId == id && x.SubmittedAt > DateTime.UtcNow.AddDays(-1));
     public void Add(DepotVerificationSubmission submission) => db.DepotVerificationSubmissions.Add(submission);
+    public void AddNotice(Notification notice) => db.Notifications.Add(notice);
     public Task<PagedResult<VerificationSubmissionDto>> ListAsync(Guid? depotId, DepotQuery query)
     {
         var source = db.DepotVerificationSubmissions.AsNoTracking().Where(x => depotId == null || x.DepotId == depotId);

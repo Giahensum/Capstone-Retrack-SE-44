@@ -39,7 +39,8 @@ public sealed class EmployeeReportingService(AppDbContext db)
             .ThenBy(p => p.PreferredDatetime).ThenBy(p => p.Id)
             .Select(p => new ActivePickupSummaryDto(p.Id, p.Seller.FullName, p.Seller.Phone, p.Address, p.Status, p.PreferredDatetime)).FirstOrDefaultAsync(ct);
         var today = VietnamDayStart(DateTime.UtcNow);
-        return new(await db.PickupRequests.CountAsync(p => p.Status == "PENDING" && p.AcceptedCollectorId == null
+        var automatic = await db.EmployeeCollectionAreas.AnyAsync(a => a.DepotId == poolDepotId, ct);
+        return new(automatic ? await own.CountAsync(p => p.Status == "SCHEDULED", ct) : await db.PickupRequests.CountAsync(p => p.Status == "PENDING" && p.AcceptedCollectorId == null
                 && p.TargetDepotId == poolDepotId, ct), active,
             await own.CountAsync(p => p.Status == "DONE" && p.UpdatedAt >= today && p.UpdatedAt < today.AddDays(1), ct),
             await own.CountAsync(p => p.Status == "DONE", ct),

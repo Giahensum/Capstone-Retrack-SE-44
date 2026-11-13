@@ -34,7 +34,7 @@ export default function DashboardScreen({ navigation }) {
         <>
           <View style={{ flexDirection: "row", gap: 8 }}>
             {[
-              ["Đơn chờ", data.availableCount],
+              ["Chờ thu gom", data.availableCount],
               ["Hôm nay", data.completedToday],
               ["Tổng", data.totalPickupsCompleted],
             ].map(([label, value]) => (

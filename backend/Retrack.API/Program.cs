@@ -86,12 +86,18 @@ builder.Services.AddScoped<IPlatformInvoiceRepository, PlatformInvoiceRepository
 builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.ISellerRepository, Retrack.API.Repositories.SellerRepository>();
 builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IPasswordResetOtpRepository, Retrack.API.Repositories.PasswordResetOtpRepository>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.ISellerService, Retrack.API.Services.Seller.SellerService>();
+builder.Services.AddHttpClient<Retrack.API.Services.Interfaces.ISellerAiService, Retrack.API.Services.Seller.SellerAiService>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(60);
+});
 
 builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IDepotOwnerRepository, DepotOwnerRepository>();
 builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IDepotVerificationRepository, DepotVerificationRepository>();
 builder.Services.AddScoped<Retrack.API.Services.Depot.DepotVerificationService>();
 builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IDepotOperationsRepository, DepotOperationsRepository>();
 builder.Services.AddScoped<Retrack.API.Services.Depot.DepotOperationsService>();
+builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IDepotDispatchRepository, DepotDispatchRepository>();
+builder.Services.AddScoped<Retrack.API.Services.Depot.DepotDispatchService>();
 
 builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IDepotPaymentReadRepository, DepotPaymentReadRepository>();
 
@@ -118,11 +124,15 @@ builder.Services.AddScoped<Retrack.API.Services.Employee.EmployeeReportingServic
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IDepotService, Retrack.API.Services.Depot.DepotService>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IInventoryService, Retrack.API.Services.Depot.InventoryService>();
 builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IDepotInventoryRepository, DepotInventoryRepository>();
+builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IDepotBuyingPriceRepository, DepotBuyingPriceRepository>();
+builder.Services.AddScoped<Retrack.API.Services.Interfaces.IDepotBuyingPriceService, Retrack.API.Services.Depot.DepotBuyingPriceService>();
 builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IDepotStockRepository, DepotStockRepository>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.ILiquidationRepository, LiquidationRepository>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.ILiquidationService, Retrack.API.Services.Liquidation.LiquidationService>();
 builder.Services.AddHostedService<Retrack.API.Services.Liquidation.LiquidationClosingWorker>();
+builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.ISellerLiquidationRepository, SellerLiquidationRepository>();
+builder.Services.AddScoped<Retrack.API.Services.Interfaces.ISellerLiquidationService, Retrack.API.Services.Seller.SellerLiquidationService>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IDepotStockService, Retrack.API.Services.Depot.DepotStockService>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IDepotProofService, Retrack.API.Services.Depot.DepotProofService>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IBatchService, Retrack.API.Services.Depot.BatchService>();
@@ -130,6 +140,11 @@ builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IDepotStaffReposi
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IStaffService, Retrack.API.Services.Depot.StaffService>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IDepotReportService, Retrack.API.Services.Depot.DepotReportService>();
 builder.Services.AddScoped<IAdminService, AdminService>();
+// PayOS thanh toán phí nền tảng (cấu hình qua PayOS__* trong .env / biến môi trường)
+builder.Services.Configure<Retrack.API.Services.Depot.PayOsOptions>(builder.Configuration.GetSection("PayOS"));
+builder.Services.AddHttpClient<Retrack.API.Services.Depot.IPayOsClient, Retrack.API.Services.Depot.PayOsClient>(c => c.Timeout = TimeSpan.FromSeconds(20));
+builder.Services.AddScoped<Retrack.API.Services.Interfaces.IDepotPayOsService, Retrack.API.Services.Depot.DepotPayOsService>();
+builder.Services.AddHostedService<Retrack.API.Services.Depot.PayOsReconciliationWorker>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.INotificationService, Retrack.API.Services.Shared.NotificationService>();
 builder.Services.AddScoped<Retrack.API.Services.Driver.DriverJobService>();
 builder.Services.AddScoped<Retrack.API.Services.Driver.DriverReportingService>();
@@ -185,6 +200,8 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 // ===== BUILD =====
+builder.Services.AddScoped<Retrack.API.Services.Employee.EmployeeDispatchService>();
+builder.Services.AddHostedService<Retrack.API.Services.Employee.EmployeeDispatchWorker>();
 var app = builder.Build();
 
 // ===== MIDDLEWARE PIPELINE =====
