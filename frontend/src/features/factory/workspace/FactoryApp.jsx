@@ -42,14 +42,16 @@ function Workspace() {
         <a
           className="brand"
           href="#"
+          aria-label="Về tổng quan nhà máy"
           onClick={(e) => {
             e.preventDefault();
             navigate("dashboard");
           }}
         >
           <img className="brand-mark" src="/brand/logo_mark.png" alt="" aria-hidden="true" />
-          <span>
-            RETRACK<span className="brand-sub">FACTORY WORKSPACE</span>
+          <span className="factory-brand-wordmark" aria-hidden="true">
+            <strong>retrack</strong>
+            <small>FACTORY WORKSPACE</small>
           </span>
         </a>
         <div className="workspace-name">

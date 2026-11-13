@@ -56,6 +56,8 @@ public class FactoryResponseContractTests
         var json = JsonSerializer.SerializeToElement(response, JsonOptions);
         AssertFields(json, "id", "batchId", "batchCode", "materialType", "estimatedWeightKg", "actualWeightKg",
             "depotId", "depotName", "depotAddress", "depotPhone", "agreedPrice", "totalAmount", "status",
+            "vatTreatment", "vatPercentage", "vatAmount", "invoiceTotalAmount",
+            "priceIncludesVat", "invoiceDate", "sellerTaxCode", "vatLegalBasis",
             "receivedAt", "decidedAt", "rejectionReason", "settledAt", "feeAmount", "netPayableAmount",
             "paymentReference", "platformFeePercentage", "createdAt", "transport", "weightVerification", "weightTicket", "invoice");
         Assert.Equal(JsonValueKind.Null, json.GetProperty("transport").ValueKind);
@@ -113,6 +115,106 @@ public class FactoryResponseContractTests
         Assert.NotNull(dashboard.Data);
         Assert.Equal(1, dashboard.Data.OrderCount);
         Assert.Equal(order, Assert.Single(dashboard.Data.RecentOrders));
+    }
+
+    [Fact]
+    public async Task DashboardAggregatesFactoryMetricsAndKeepsTheExistingScope()
+    {
+        await using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
+        var owner = new User { Role = "FACTORY", FullName = "Factory owner" };
+        var factory = new Factory { Owner = owner };
+        var depot = new Depot { Name = "Depot", Owner = new User { Role = "DEPOT_OWNER" } };
+        var settledAt = DateTime.UtcNow.AddDays(-2);
+        var settled = new InventoryBatch
+        {
+            TargetFactory = factory,
+            Depot = depot,
+            Status = "COMPLETED",
+            MaterialType = "PET",
+            DeclaredWeightKg = 100,
+            ActualWeightKg = 80,
+            GrossAmount = 1_000,
+            PlatformFeeAmount = 50,
+            NetAmount = 950,
+            SettledAt = settledAt
+        };
+        var awaitingSettlement = new InventoryBatch
+        {
+            TargetFactory = factory, Depot = depot, Status = "VERIFIED", MaterialType = "PET", DeclaredWeightKg = 25
+        };
+        var deliveredForQc = new InventoryBatch
+        {
+            TargetFactory = factory, Depot = depot, Status = "ACCEPTED", MaterialType = "PET", DeclaredWeightKg = 50
+        };
+        deliveredForQc.TransportJob = new TransportJob { Batch = deliveredForQc, Status = "DELIVERED" };
+        db.InventoryBatches.AddRange(settled, awaitingSettlement, deliveredForQc,
+            new InventoryBatch { TargetFactory = factory, Depot = depot, Status = "DRAFT", MaterialType = "PET", DeclaredWeightKg = 10 });
+        db.FactoryDemands.Add(new FactoryDemand
+        {
+            Factory = factory, MaterialType = "PET", RequiredWeightKg = 100, Deadline = DateTime.UtcNow.AddDays(7), IsActive = true
+        });
+        db.FactoryDepotPartnerships.Add(new FactoryDepotPartnership { Factory = factory, Depot = depot, Status = "PENDING" });
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var result = await new FactoryDashboardService(db).GetAsync(owner.Id, default);
+
+        Assert.NotNull(result.Data);
+        Assert.Equal(3, result.Data.OrderCount);
+        Assert.Equal(1, result.Data.ActiveDemandCount);
+        Assert.Equal(1, result.Data.PartnerCount);
+        Assert.Equal(1, result.Data.PendingQcCount);
+        Assert.Equal(1, result.Data.PendingSettlementCount);
+        Assert.Equal(80m, result.Data.MonthlyPurchasedKg);
+        Assert.Equal(950m, result.Data.MonthlyNetPayment);
+        Assert.Equal(80m, result.Data.PeriodPurchasedKg);
+        Assert.Equal(1_000m, result.Data.PeriodGrossAmount);
+        Assert.Equal(950m, result.Data.PeriodNetPayment);
+        Assert.Equal(50m, result.Data.PeriodFeeAmount);
+        Assert.Equal(new MaterialVolumeResponse("PET", 80m), Assert.Single(result.Data.MaterialVolumes));
+        Assert.Equal(new MonthlyPaymentResponse(settledAt.Year, settledAt.Month, 950m), Assert.Single(result.Data.SixMonthPayments));
+        Assert.Equal(2, result.Data.PriorityOrders.Count);
+        Assert.Equal(3, result.Data.RecentOrders.Count);
+    }
+
+    [Fact]
+    public async Task PartnerListReturnsAggregatesWithoutChangingCountsOrLatestReview()
+    {
+        await using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
+        var owner = new User { Role = "FACTORY", FullName = "Factory owner" };
+        var factory = new Factory { Owner = owner };
+        var depot = new Depot { Name = "Depot", Address = "Address", Owner = new User { Phone = "0900000000" } };
+        var partner = new FactoryDepotPartnership { Factory = factory, Depot = depot, Status = "APPROVED" };
+        db.FactoryDepotPartnerships.Add(partner);
+        db.FactoryDepotReviews.AddRange(
+            new FactoryDepotReview
+            {
+                Factory = factory, Depot = depot, Batch = new InventoryBatch { TargetFactory = factory, Depot = depot, Status = "COMPLETED" },
+                Rating = 5, Comment = "Đánh giá cũ", CreatedAt = DateTime.UtcNow.AddDays(-1)
+            },
+            new FactoryDepotReview
+            {
+                Factory = factory, Depot = depot, Batch = new InventoryBatch { TargetFactory = factory, Depot = depot, Status = "COMPLETED" },
+                Rating = 3, Comment = "Đánh giá mới", CreatedAt = DateTime.UtcNow
+            });
+        db.InventoryBatches.AddRange(
+            new InventoryBatch { TargetFactory = factory, Depot = depot, Status = "COMPLETED", MaterialType = "PET", DeclaredWeightKg = 10 },
+            new InventoryBatch { TargetFactory = factory, Depot = depot, Status = "ACCEPTED", MaterialType = "PET", DeclaredWeightKg = 20 },
+            new InventoryBatch { TargetFactory = factory, Depot = depot, Status = "MARKETPLACE", MaterialType = "PET", DeclaredWeightKg = 30 });
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var result = await new FactoryPartnerService(db).ListAsync(owner.Id, new PageQuery(), default);
+
+        Assert.NotNull(result.Data);
+        var item = Assert.Single(result.Data.Items);
+        Assert.Equal(2, item.ReviewCount);
+        Assert.Equal(3, item.LatestRating);
+        Assert.Equal("Đánh giá mới", item.LatestComment);
+        Assert.Equal(4, item.OrderCount);
+        Assert.Equal(3, item.CompletedOrderCount);
     }
 
     [Fact]

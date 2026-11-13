@@ -23,7 +23,8 @@ public sealed class DepotBatchRepository(AppDbContext db) : IDepotBatchRepositor
                 b.QualityCheck.QualityNote, b.QualityCheck.Resolution, b.QualityCheck.TicketNumber,
                 b.QualityCheck.TicketImageUrl, b.QualityCheck.InvoiceNumber, b.QualityCheck.InvoiceFileUrl),
             b.SettledAt == null ? null : new DepotBatchSettlementDto(b.AgreedPricePerKg, b.GrossAmount,
-                b.PlatformFeeAmount, b.NetAmount, b.PaymentReference, b.SettledAt.Value,
+                b.PlatformFeeAmount, b.NetAmount, b.VatTreatment, b.VatPercentage, b.VatAmount,
+                b.InvoiceTotalAmount, b.PaymentReference, b.SettledAt.Value,
                 b.QualityCheck == null ? null : b.QualityCheck.PaymentProofUrl)))
         .SingleOrDefaultAsync();
     public async Task<PagedResult<DepotBatchDto>> ListAsync(Guid depotId, DepotQuery query)
