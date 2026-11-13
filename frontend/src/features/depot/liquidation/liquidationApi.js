@@ -14,7 +14,7 @@ export function useLiquidationQuery(path = '', params = {}, enabled = true, poll
   const scope = useLiquidationScope();
   return useQuery({ queryKey: ['liquidation', scope.userId, scope.depotId, path, params],
     enabled: enabled && !!scope.userId && !!scope.depotId, refetchInterval: poll ? 5000 : false,
-    queryFn: async () => (await api.get(`${scope.base}${path}`, { params: { ...params, depotId: scope.depotId } })).data.data });
+    queryFn: async ({ signal }) => (await api.get(`${scope.base}${path}`, { params: { ...params, depotId: scope.depotId }, signal, timeout: 30000 })).data.data });
 }
 export function useLiquidationMutation(method, path, onSuccess) {
   const scope = useLiquidationScope();
