@@ -199,10 +199,42 @@ CREATE TABLE IF NOT EXISTS factory_depot_partnerships (
     updated_at  TIMESTAMPTZ DEFAULT NOW(),
     blocked_by_depot BOOLEAN NOT NULL DEFAULT FALSE,
     blocked_by_factory BOOLEAN NOT NULL DEFAULT FALSE,
+    contract_code VARCHAR(50),
+    contract_version INT NOT NULL DEFAULT 0,
+    contract_terms TEXT,
+    contract_terms_hash VARCHAR(64),
+    contract_status VARCHAR(30),
+    factory_signed_by UUID REFERENCES users(id),
+    factory_signed_at TIMESTAMPTZ,
+    depot_signed_by UUID REFERENCES users(id),
+    depot_signed_at TIMESTAMPTZ,
+    contract_effective_at TIMESTAMPTZ,
+    contract_expires_at TIMESTAMPTZ,
+    termination_status VARCHAR(30),
+    termination_requested_by UUID REFERENCES users(id),
+    termination_requested_at TIMESTAMPTZ,
+    termination_reason VARCHAR(2000),
+    terminated_at TIMESTAMPTZ,
     CONSTRAINT uq_factory_depot UNIQUE (depot_id, factory_id)
 );
 ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS blocked_by_depot BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS blocked_by_factory BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS contract_code VARCHAR(50);
+ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS contract_version INT NOT NULL DEFAULT 0;
+ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS contract_terms TEXT;
+ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS contract_terms_hash VARCHAR(64);
+ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS contract_status VARCHAR(30);
+ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS factory_signed_by UUID REFERENCES users(id);
+ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS factory_signed_at TIMESTAMPTZ;
+ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS depot_signed_by UUID REFERENCES users(id);
+ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS depot_signed_at TIMESTAMPTZ;
+ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS contract_effective_at TIMESTAMPTZ;
+ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS contract_expires_at TIMESTAMPTZ;
+ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS termination_status VARCHAR(30);
+ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS termination_requested_by UUID REFERENCES users(id);
+ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS termination_requested_at TIMESTAMPTZ;
+ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS termination_reason VARCHAR(2000);
+ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS terminated_at TIMESTAMPTZ;
 
 -- Lô hàng tồn kho
 CREATE TABLE IF NOT EXISTS inventory_batches (
@@ -220,6 +252,11 @@ CREATE TABLE IF NOT EXISTS inventory_batches (
     rejection_reason    TEXT,
     agreed_price_per_kg DECIMAL(18, 2),
     gross_amount        DECIMAL(18, 2),
+    vat_treatment       VARCHAR(30),
+    vat_percentage      DECIMAL(5, 2),
+    vat_amount          DECIMAL(18, 2),
+    invoice_total_amount DECIMAL(18, 2),
+    price_includes_vat  BOOLEAN NOT NULL DEFAULT FALSE,
     platform_fee_amount DECIMAL(18, 2),
     net_amount          DECIMAL(18, 2),
     payment_reference   VARCHAR(200),
@@ -232,6 +269,11 @@ CREATE TABLE IF NOT EXISTS inventory_batches (
 );
 ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS code VARCHAR(40);
 ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS image_urls TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS vat_treatment VARCHAR(30);
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS vat_percentage DECIMAL(5, 2);
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS vat_amount DECIMAL(18, 2);
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS invoice_total_amount DECIMAL(18, 2);
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS price_includes_vat BOOLEAN NOT NULL DEFAULT FALSE;
 CREATE SEQUENCE IF NOT EXISTS depot_batch_number START WITH 1 INCREMENT BY 1 NO MINVALUE NO MAXVALUE NO CYCLE;
 CREATE UNIQUE INDEX IF NOT EXISTS ix_inventory_batches_code ON inventory_batches(code);
 
@@ -271,6 +313,14 @@ CREATE TABLE IF NOT EXISTS batch_quality_checks (
     agreed_price_per_kg     DECIMAL(18, 2) NOT NULL,
     -- Hạch toán tài chính (mức phí mặc định 5%, lưu riêng theo từng giao dịch)
     gross_amount            DECIMAL(18, 2) NOT NULL,
+    vat_treatment           VARCHAR(30) NOT NULL DEFAULT 'NOT_APPLICABLE',
+    vat_percentage          DECIMAL(5, 2) NOT NULL DEFAULT 0,
+    vat_amount              DECIMAL(18, 2) NOT NULL DEFAULT 0,
+    invoice_total_amount    DECIMAL(18, 2) NOT NULL DEFAULT 0,
+    price_includes_vat      BOOLEAN NOT NULL DEFAULT FALSE,
+    invoice_date            DATE,
+    seller_tax_code         VARCHAR(50),
+    vat_legal_basis         VARCHAR(500),
     platform_fee_percentage DECIMAL(5, 2)  DEFAULT 0,
     platform_fee_amount     DECIMAL(18, 2) DEFAULT 0,
     net_amount              DECIMAL(18, 2) NOT NULL,
@@ -291,6 +341,14 @@ CREATE TABLE IF NOT EXISTS batch_quality_checks (
     invoice_status          VARCHAR(30),
     created_at              TIMESTAMPTZ  DEFAULT NOW()
 );
+ALTER TABLE batch_quality_checks ADD COLUMN IF NOT EXISTS vat_treatment VARCHAR(30) NOT NULL DEFAULT 'NOT_APPLICABLE';
+ALTER TABLE batch_quality_checks ADD COLUMN IF NOT EXISTS vat_percentage DECIMAL(5, 2) NOT NULL DEFAULT 0;
+ALTER TABLE batch_quality_checks ADD COLUMN IF NOT EXISTS vat_amount DECIMAL(18, 2) NOT NULL DEFAULT 0;
+ALTER TABLE batch_quality_checks ADD COLUMN IF NOT EXISTS invoice_total_amount DECIMAL(18, 2) NOT NULL DEFAULT 0;
+ALTER TABLE batch_quality_checks ADD COLUMN IF NOT EXISTS price_includes_vat BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE batch_quality_checks ADD COLUMN IF NOT EXISTS invoice_date DATE;
+ALTER TABLE batch_quality_checks ADD COLUMN IF NOT EXISTS seller_tax_code VARCHAR(50);
+ALTER TABLE batch_quality_checks ADD COLUMN IF NOT EXISTS vat_legal_basis VARCHAR(500);
 
 -- Factory đánh giá Depot
 CREATE TABLE IF NOT EXISTS factory_depot_reviews (
@@ -809,6 +867,19 @@ ALTER TABLE driver_delivery_events ADD CONSTRAINT ck_driver_evidence CHECK (
     action NOT IN ('checkin','checkout') OR
     (image_url IS NOT NULL AND length(btrim(image_url)) > 0 AND photo_taken_at IS NOT NULL));
 -- RETRACK_EMPLOYEE_DISPATCH_END
+
+-- RETRACK_DEPOT_BUYING_PRICES_V1_BEGIN
+CREATE TABLE IF NOT EXISTS depot_buying_prices (
+    depot_id UUID NOT NULL REFERENCES depots(id) ON DELETE CASCADE,
+    material_type VARCHAR(100) NOT NULL CHECK (material_type IN
+      ('PET','HDPE','PVC','PAPER','CARDBOARD','ALUMINUM','IRON','STEEL','COPPER','ELECTRONIC_WASTE','OTHER')),
+    price_per_kg NUMERIC(18,0) NOT NULL CHECK (price_per_kg > 0 AND price_per_kg <= 1000000000),
+    condition_note VARCHAR(500) NOT NULL DEFAULT '',
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (depot_id, material_type)
+);
+-- RETRACK_DEPOT_BUYING_PRICES_V1_END
 
 -- RETRACK_SCHEMA_END
 
@@ -1395,9 +1466,9 @@ DECLARE
     owner_id uuid;
     employee_source users%ROWTYPE;
     seller_source users%ROWTYPE;
-    depot_id uuid := 'ed200000-0000-4000-8000-000000000001';
+    depot_id uuid := 'ef200000-0000-4000-8000-000000000001';
     area_id uuid; employee_id uuid; seller_id uuid; pickup_id uuid; shift_id uuid;
-    point record; i integer; j integer;
+    point record; seller_point record; i integer; j integer;
     shift_start timestamptz := CURRENT_TIMESTAMP;
     shift_end timestamptz := CURRENT_TIMESTAMP + interval '20 hours';
 BEGIN
@@ -1410,7 +1481,7 @@ BEGIN
         RAISE EXCEPTION 'Cần employee@retrack.vn, seller@retrack.vn và Owner đang hoạt động. Chưa seed gì.';
     END IF;
     INSERT INTO depots(id, owner_id, name, address, latitude, longitude, rating, verification_status, created_at)
-    VALUES(depot_id, owner_id, '[DEMO-DISPATCH] Kho điều phối Đà Nẵng',
+    VALUES(depot_id, owner_id, '[DEMO-DISPATCH-V2] Kho điều phối Đà Nẵng',
         'X7P4+XF9 Ngũ Hành Sơn, Đà Nẵng — kho mô phỏng', 15.9874125, 108.2562344, 0, 'APPROVED', CURRENT_TIMESTAMP)
     ON CONFLICT(id) DO NOTHING;
     i := 0;
@@ -1424,20 +1495,16 @@ BEGIN
     ) AS v(name,address,lat,lng)
     LOOP
         i := i + 1;
-        area_id := ('ed210000-0000-4000-8000-' || lpad(i::text,12,'0'))::uuid;
-        employee_id := ('ed220000-0000-4000-8000-' || lpad(i::text,12,'0'))::uuid;
-        seller_id := ('ed230000-0000-4000-8000-' || lpad(i::text,12,'0'))::uuid;
+        area_id := ('ef210000-0000-4000-8000-' || lpad(i::text,12,'0'))::uuid;
+        employee_id := ('ef220000-0000-4000-8000-' || lpad(i::text,12,'0'))::uuid;
+        seller_id := ('ef230000-0000-4000-8000-' || lpad(i::text,12,'0'))::uuid;
         -- UUID cố định/unique email: xung đột với dữ liệu ngoài fixture làm transaction dừng.
         INSERT INTO users(id,email,password_hash,role,full_name,phone,is_active,created_at,updated_at)
-        VALUES(employee_id,'employee.dispatch' || lpad(i::text,2,'0') || '@retrack.test',employee_source.password_hash,
+        VALUES(employee_id,'employee.dispatch.v2.' || lpad(i::text,2,'0') || '@retrack.test',employee_source.password_hash,
             'DEPOT_EMPLOYEE','Nhân viên điều phối demo ' || i,'090990000' || i,true,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
         ON CONFLICT(id) DO NOTHING;
-        INSERT INTO users(id,email,password_hash,role,full_name,phone,is_active,created_at,updated_at)
-        VALUES(seller_id,'seller.dispatch' || lpad(i::text,2,'0') || '@retrack.test',seller_source.password_hash,
-            'SELLER','Người bán mô phỏng khu vực ' || i,'090980000' || i,true,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
-        ON CONFLICT(id) DO NOTHING;
         INSERT INTO depot_staffs(id,depot_id,user_id,staff_type,is_active)
-        VALUES(('ed240000-0000-4000-8000-' || lpad(i::text,12,'0'))::uuid,depot_id,employee_id,'DEPOT_EMPLOYEE',true)
+        VALUES(('ef240000-0000-4000-8000-' || lpad(i::text,12,'0'))::uuid,depot_id,employee_id,'DEPOT_EMPLOYEE',true)
         ON CONFLICT(id) DO NOTHING;
         INSERT INTO employee_collection_areas(id,depot_id,name,latitude,longitude,radius_meters,is_active)
         VALUES(area_id,depot_id,point.name,point.lat,point.lng,2500,true) ON CONFLICT(id) DO NOTHING;
@@ -1451,20 +1518,49 @@ BEGIN
                 CASE WHEN i % 2 = 0 THEN 'car' ELSE 'motorcycle' END,
                 CASE WHEN i % 2 = 0 THEN 500 ELSE 100 END,30,CURRENT_TIMESTAMP);
         END IF;
-        FOR j IN 1..6 LOOP
-            pickup_id := ('ed250000-0000-4000-8000-' || lpad(((i-1)*6+j)::text,12,'0'))::uuid;
+    END LOOP;
+    -- 12 địa điểm riêng; mỗi Seller có 3 tình huống lịch hẹn, không dồn mọi Seller về tâm vùng.
+    -- Tọa độ kế thừa bộ địa điểm dự án; hai điểm bổ sung đối chiếu Mapcarta/OSM:
+    -- https://mapcarta.com/W404714309 ; https://mapcarta.com/W675604354
+    -- Điểm công cộng chỉ dùng mô phỏng, không phải yêu cầu thu gom thực tế.
+    i := 0;
+    FOR seller_point IN SELECT * FROM (VALUES
+        ('Chợ Hàn, 119 Trần Phú, Đà Nẵng',16.0683600,108.2244300),
+        ('Nhà thờ Chính tòa, 156 Trần Phú, Đà Nẵng',16.0666800,108.2230600),
+        ('Bảo tàng Điêu khắc Chăm, 2 đường 2 Tháng 9, Đà Nẵng',16.0602000,108.2231700),
+        ('Công viên APEC, đường 2 Tháng 9, Đà Nẵng',16.0586000,108.2232700),
+        ('Chợ Cồn, đường Hùng Vương, Đà Nẵng',16.0681700,108.2145300),
+        ('Bệnh viện Đà Nẵng, 124 Hải Phòng, Đà Nẵng',16.0721056,108.2156940),
+        ('Trung tâm Hành chính, 24 Trần Phú, Đà Nẵng',16.0770864,108.2231701),
+        ('Đại học Bách khoa, 54 Nguyễn Lương Bằng, Đà Nẵng',16.0746638,108.1506880),
+        ('X7P4+XF9 Ngũ Hành Sơn, Đà Nẵng',15.9874125,108.2562344),
+        ('Đại học Đông Á, 33 Xô Viết Nghệ Tĩnh, Đà Nẵng',16.0321559,108.2213119),
+        ('Chợ Túy Loan, Đà Nẵng',15.9903511,108.1409952),
+        ('Khu du lịch Bà Nà Hills, thôn An Sơn, Đà Nẵng',16.0259108,108.0322546)
+    ) AS v(address,lat,lng)
+    LOOP
+        i := i + 1;
+        seller_id := ('ef230000-0000-4000-8000-' || lpad(i::text,12,'0'))::uuid;
+        INSERT INTO users(id,email,password_hash,role,full_name,phone,is_active,created_at,updated_at)
+        VALUES(seller_id,'seller.dispatch.v2.' || lpad(i::text,2,'0') || '@retrack.test',seller_source.password_hash,
+            'SELLER','Seller địa điểm demo ' || i,'090980' || lpad(i::text,4,'0'),true,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+        ON CONFLICT(id) DO NOTHING;
+        FOR j IN 1..3 LOOP
+            pickup_id := ('ef250000-0000-4000-8000-' || lpad(((i-1)*3+j)::text,12,'0'))::uuid;
             INSERT INTO pickup_requests(id,seller_id,target_depot_id,description,address,latitude,longitude,preferred_datetime,
                 status,gross_amount,platform_fee_percentage,platform_fee_amount,net_amount,created_at,updated_at)
             VALUES(pickup_id,seller_id,depot_id,
-                '[DEMO-DISPATCH] Khu ' || i || ' / đơn ' || j || '. Chai nhựa, giấy carton; chưa cân. Không thu gom thực tế.',
-                point.address,point.lat,point.lng,
-                CASE WHEN j <= 4 THEN NULL WHEN j = 5 THEN CURRENT_TIMESTAMP + interval '1 hour'
+                '[DEMO-DISPATCH-V2] Điểm ' || i || ' / lịch ' || j ||
+                CASE WHEN i >= 10 THEN ' [NGOAI-VUNG] Chờ Owner xử lý; không tự giao người gần nhất.' ELSE ' [TRONG-VUNG]' END ||
+                ' Chai nhựa, giấy carton; chưa cân. Không thu gom thực tế.',
+                seller_point.address,seller_point.lat,seller_point.lng,
+                CASE WHEN j = 1 THEN NULL WHEN j = 2 THEN CURRENT_TIMESTAMP + interval '1 hour'
                      ELSE CURRENT_TIMESTAMP + interval '2 days' END,
                 'PENDING',0,5,0,0,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
             ON CONFLICT(id) DO NOTHING;
         END LOOP;
     END LOOP;
-    RAISE NOTICE 'Đã bổ sung fixture 36 đơn / 6 nhân viên. Backend tự phân công trong khoảng 15 giây; đơn ngày kia chưa được giao.';
+    RAISE NOTICE 'Fixture V2: 36 đơn, 12 Seller/địa điểm, 6 Employee. Điểm 10–12 ngoài vùng; đơn ngày kia chưa phân công. Không reset fixture cũ.';
 END $retrack_dispatch_demo_seed$;
 -- RETRACK_DISPATCH_DEMO_SEED_END
 
@@ -1688,6 +1784,24 @@ END IF;
 END $retrack_driver_stock_seed$;
 -- RETRACK_DRIVER_STOCK_SEED_END
 
+-- Giá thu mua riêng từng kho demo; không ghi đè bảng giá người dùng đã sửa.
+DO $buying_prices_demo$
+BEGIN
+    IF current_setting('retrack.seed_demo', true) = 'on' THEN
+        INSERT INTO depot_buying_prices(depot_id, material_type, price_per_kg, condition_note)
+        SELECT d.id, p.material, p.price, 'Giá demo tham khảo, chốt sau cân và phân loại'
+        FROM depots d
+        JOIN (VALUES
+          ('00000000-0000-0000-0000-000000000010'::uuid,'IRON',6000),
+          ('00000000-0000-0000-0000-000000000010'::uuid,'PET',8500),
+          ('00000000-0000-0000-0000-000000000011'::uuid,'IRON',6500),
+          ('00000000-0000-0000-0000-000000000011'::uuid,'PET',9000),
+          ('00000000-0000-0000-0000-000000000012'::uuid,'IRON',5800),
+          ('00000000-0000-0000-0000-000000000012'::uuid,'PAPER',3000)
+        ) p(depot_id,material,price) ON p.depot_id=d.id
+        ON CONFLICT (depot_id, material_type) DO NOTHING;
+    END IF;
+END $buying_prices_demo$;
 -- RETRACK_SEED_END
 
 COMMIT;

@@ -18,12 +18,27 @@ public sealed class LiquidationRepository(AppDbContext db) : ILiquidationReposit
         if (lot != null) await db.Entry(lot).ReloadAsync();
         return lot;
     }
-    public async Task<PagedResult<LiquidationLot>> ListAsync(Guid userId, Guid depotId, LiquidationQuery query, DateTime now)
+    public async Task<PagedResult<LiquidationListRow>> ListAsync(Guid userId, Guid depotId, LiquidationQuery query, DateTime now)
     {
         var source = db.LiquidationLots.AsNoTracking();
-        source = source.Where(x => x.Seller.IsActive && (x.Status != "CANCELLED" || db.LiquidationParticipations.Any(p => p.LotId == x.Id && p.OwnerId == userId && p.DepotId == depotId)));
+        var participation = db.LiquidationParticipations.Where(p => p.OwnerId == userId && p.DepotId == depotId);
+        var purchases = db.LiquidationAgreements.Where(a => a.BuyerId == userId && a.DepotId == depotId);
+        var completed = purchases.Where(a => db.DepotStockReceipts.Any(r =>
+            r.BulkAgreementId == a.Id && r.DepotId == depotId && r.Status == "POSTED"));
+
+        source = query.View switch
+        {
+            "OPEN" => source.Where(x => x.Status == "PUBLISHED" && x.Seller.IsActive),
+            "PURCHASES" => source.Where(x => x.Status == "AWARDED"
+                && purchases.Any(a => a.LotId == x.Id) && !completed.Any(a => a.LotId == x.Id)),
+            "HISTORY" => source.Where(x =>
+                (x.Status == "AWARDED" && completed.Any(a => a.LotId == x.Id))
+                || ((x.Status == "AWARDED" || x.Status == "NO_SALE" || x.Status == "CANCELLED")
+                    && participation.Any(p => p.LotId == x.Id) && !purchases.Any(a => a.LotId == x.Id))),
+            _ => source.Where(x => x.Seller.IsActive && (x.Status != "CANCELLED" || participation.Any(p => p.LotId == x.Id)))
+        };
         if (!string.IsNullOrWhiteSpace(query.Search)) source = source.Where(x => x.Title.Contains(query.Search) || x.PublicArea.Contains(query.Search));
-        if (query.ParticipatingOnly) source = source.Where(x => db.LiquidationParticipations.Any(p => p.LotId == x.Id && p.OwnerId == userId && p.DepotId == depotId));
+        if (query.ParticipatingOnly) source = source.Where(x => participation.Any(p => p.LotId == x.Id));
         source = query.Status switch {
             "SURVEY" => source.Where(x => x.Status == "PUBLISHED" && x.SurveyStart <= now && x.SurveyEnd > now),
             "BIDDING" => source.Where(x => x.Status == "PUBLISHED" && x.BiddingStart <= now && x.BiddingEnd > now),
@@ -36,7 +51,10 @@ public sealed class LiquidationRepository(AppDbContext db) : ILiquidationReposit
         var offset = (long)(query.Page - 1) * query.PageSize;
         return new() { Page = query.Page, PageSize = query.PageSize, TotalCount = total,
             Items = offset > int.MaxValue ? [] : await source.OrderByDescending(x => x.CreatedAt).ThenBy(x => x.Id)
-                .Skip((int)offset).Take(query.PageSize).ToListAsync() };
+                .Skip((int)offset).Take(query.PageSize)
+                .Select(x => new LiquidationListRow(x, purchases.Any(a => a.LotId == x.Id)
+                    ? (completed.Any(a => a.LotId == x.Id) ? "COMPLETED" : "IN_PROGRESS")
+                    : null)).ToListAsync() };
     }
     public Task<LiquidationParticipation?> ParticipationAsync(Guid lotId, Guid ownerId) => db.LiquidationParticipations.SingleOrDefaultAsync(x => x.LotId == lotId && x.OwnerId == ownerId);
     public void AddParticipation(LiquidationParticipation participation) => db.LiquidationParticipations.Add(participation);

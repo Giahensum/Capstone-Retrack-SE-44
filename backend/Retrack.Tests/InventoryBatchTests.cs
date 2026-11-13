@@ -39,7 +39,9 @@ public sealed class InventoryBatchTests : IAsyncLifetime
     {
         await using var db = Open();
         var batchIds = await db.InventoryBatches.Where(b => b.DepotId == depotId).Select(b => b.Id).ToListAsync();
+        var transportIds = await db.TransportJobs.Where(t => batchIds.Contains(t.BatchId)).Select(t => t.Id).ToListAsync();
         await db.PlatformTransactions.Where(t => t.SourceType == "BATCH_ORDER" && batchIds.Contains(t.SourceId)).ExecuteDeleteAsync();
+        await db.Notifications.Where(n => n.TransportJobId != null && transportIds.Contains(n.TransportJobId.Value)).ExecuteDeleteAsync();
         await db.TransportJobs.Where(t => t.Batch.DepotId == depotId).ExecuteDeleteAsync();
         await db.InventoryBatches.Where(b => b.DepotId == depotId).ExecuteDeleteAsync();
         await db.FactoryDepotPartnerships.Where(p => p.DepotId == depotId).ExecuteDeleteAsync();
@@ -118,17 +120,17 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         db.FactoryDepotPartnerships.Add(new FactoryDepotPartnership { DepotId = depotId, Factory = factory, Status = "APPROVED", BlockedByFactory = true });
         await db.SaveChangesAsync();
         try
-        {
-            var service = new DepotService(new Retrack.API.Repositories.DepotOwnerRepository(db), new Retrack.API.Repositories.DepotPaymentReadRepository(db));
-            var blocked = await service.GetDemandsAsync(ownerId, depotId, new() { Search = marker });
-            Assert.True(Assert.Single(blocked.Items).IsBlocked);
-            var open = await service.GetDemandsAsync(otherOwnerId, otherDepotId, new() { Search = marker });
-            Assert.False(Assert.Single(open.Items).IsBlocked);
-        }
+            {
+                var service = new DepotService(new Retrack.API.Repositories.DepotOwnerRepository(db), new Retrack.API.Repositories.DepotPaymentReadRepository(db));
+                var blocked = await service.GetDemandsAsync(ownerId, depotId, new() { Search = marker });
+                Assert.True(Assert.Single(blocked.Items).IsBlocked);
+                var open = await service.GetDemandsAsync(otherOwnerId, otherDepotId, new() { Search = marker });
+                Assert.False(Assert.Single(open.Items).IsBlocked);
+            }
         finally
         {
-            await db.Depots.Where(d => d.Id == otherDepotId).ExecuteDeleteAsync();
-            await db.Users.Where(u => u.Id == otherOwnerId).ExecuteDeleteAsync();
+                await db.Depots.Where(d => d.Id == otherDepotId).ExecuteDeleteAsync();
+                await db.Users.Where(u => u.Id == otherOwnerId).ExecuteDeleteAsync();
         }
     }
 
@@ -356,27 +358,49 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         var input = Input(10); input.TargetFactoryId = factory.Id;
         await Batches(db).CreateAsync(ownerId, depotId, input);
         var partnerService = new Retrack.API.Services.Factory.FactoryPartnerService(db);
-        var approve = new Retrack.API.DTOs.Factory.PartnerStatusRequest { Status = Retrack.API.Models.Enums.PartnershipStatus.APPROVED };
-        Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Conflict, (await partnerService.UpdateStatusAsync(factoryOwnerId, depotId, approve, default)).Outcome);
+        var contract = new Retrack.API.DTOs.Factory.PartnershipContractRequest { Terms = new string('A', 80), ValidMonths = 12, ConfirmElectronicSignature = true };
+        Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Conflict, (await partnerService.ProposeContractAsync(factoryOwnerId, depotId, contract, default)).Outcome);
         Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Success, (await new Retrack.API.Services.Factory.FactoryMarketService(db).AcceptAsync(factoryOwnerId, input.OperationId, new(), default)).Outcome);
         var batch = await db.InventoryBatches.SingleAsync(b => b.Id == input.OperationId);
         batch.Status = "VERIFIED";
         batch.QualityCheck = new BatchQualityCheck { BatchId = batch.Id, FactoryId = factory.Id, ActualWeightKg = 10, Grade = "A", IsAccepted = true };
         db.BatchQualityChecks.Add(batch.QualityCheck);
         await db.SaveChangesAsync();
-        Assert.Equal("APPROVED", (await partnerService.UpdateStatusAsync(factoryOwnerId, depotId, approve, default)).Data!.Status);
+        Assert.Equal("PENDING_DEPOT", (await partnerService.ProposeContractAsync(factoryOwnerId, depotId, contract, default)).Data!.ContractStatus);
+        var pendingContract = await db.FactoryDepotPartnerships.SingleAsync(x => x.FactoryId == factory.Id && x.DepotId == depotId);
+        Assert.NotNull(pendingContract.FactorySignedAt);
+        Assert.Equal(factoryOwnerId, pendingContract.FactorySignedBy);
+        Assert.Equal(64, pendingContract.ContractTermsHash!.Length);
+        var depot = new DepotPartnershipService(new DepotService(new Retrack.API.Repositories.DepotOwnerRepository(db), new Retrack.API.Repositories.DepotPaymentReadRepository(db)), new Retrack.API.Repositories.DepotPartnershipRepository(db), new Retrack.API.Repositories.DepotUnitOfWork(db));
+        Assert.Equal("APPROVED", (await depot.DecideContractAsync(ownerId, depotId, factory.Id, new("ACCEPT", true), default)).Status);
+        await db.Entry(pendingContract).ReloadAsync();
+        Assert.Equal("ACTIVE", pendingContract.ContractStatus);
+        Assert.Equal(ownerId, pendingContract.DepotSignedBy);
+        Assert.NotNull(pendingContract.ContractEffectiveAt);
         var next = Input(10); next.TargetFactoryId = factory.Id;
         Assert.Equal("TRANSPORT_READY", (await Batches(db).CreateAsync(ownerId, depotId, next)).Status);
-        Assert.Equal("DECLINED", (await partnerService.UpdateStatusAsync(factoryOwnerId, depotId, new() { Status = Retrack.API.Models.Enums.PartnershipStatus.DECLINED }, default)).Data!.Status);
+        Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Conflict,
+            (await partnerService.UpdateStatusAsync(factoryOwnerId, depotId, new() { Status = Retrack.API.Models.Enums.PartnershipStatus.DECLINED }, default)).Outcome);
         var again = Input(10); again.TargetFactoryId = factory.Id;
-        Assert.Equal("PENDING_APPROVAL", (await Batches(db).CreateAsync(ownerId, depotId, again)).Status);
+        Assert.Equal("TRANSPORT_READY", (await Batches(db).CreateAsync(ownerId, depotId, again)).Status);
         await partnerService.UpdateStatusAsync(factoryOwnerId, depotId, new() { Status = Retrack.API.Models.Enums.PartnershipStatus.BLOCKED }, default);
-        var depot = new DepotPartnershipService(new DepotService(new Retrack.API.Repositories.DepotOwnerRepository(db), new Retrack.API.Repositories.DepotPaymentReadRepository(db)), new Retrack.API.Repositories.DepotPartnershipRepository(db), new Retrack.API.Repositories.DepotUnitOfWork(db));
         Assert.Equal("BLOCKED", (await depot.UpdateAsync(ownerId, depotId, factory.Id, "UNBLOCKED", default)).Status);
         await Assert.ThrowsAsync<ArgumentException>(() => depot.UpdateAsync(ownerId, depotId, factory.Id, "APPROVED", default));
         await depot.UpdateAsync(ownerId, depotId, factory.Id, "BLOCKED", default);
         Assert.Equal("BLOCKED", (await partnerService.UpdateStatusAsync(factoryOwnerId, depotId, new() { Status = Retrack.API.Models.Enums.PartnershipStatus.UNBLOCKED }, default)).Data!.Status);
-        Assert.Equal("DECLINED", (await depot.UpdateAsync(ownerId, depotId, factory.Id, "UNBLOCKED", default)).Status);
+        Assert.Equal("APPROVED", (await depot.UpdateAsync(ownerId, depotId, factory.Id, "UNBLOCKED", default)).Status);
+        Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Conflict,
+            (await partnerService.RequestTerminationAsync(factoryOwnerId, depotId, new() { Reason = "Hai bên thống nhất dừng hợp tác." }, default)).Outcome);
+        foreach (var open in await db.InventoryBatches.Where(x => x.DepotId == depotId && x.TargetFactoryId == factory.Id).ToListAsync())
+            open.Status = "COMPLETED";
+        await db.SaveChangesAsync();
+        Assert.Equal("PENDING_DEPOT", (await partnerService.RequestTerminationAsync(factoryOwnerId, depotId,
+            new() { Reason = "Hai bên thống nhất dừng hợp tác." }, default)).Data!.TerminationStatus);
+        Assert.Equal("TERMINATED", (await depot.DecideTerminationAsync(ownerId, depotId, factory.Id, new("ACCEPT"), default)).ContractStatus);
+        await db.Entry(pendingContract).ReloadAsync();
+        Assert.Equal("TERMINATED", pendingContract.TerminationStatus);
+        Assert.NotNull(pendingContract.TerminatedAt);
+        Assert.Equal("DECLINED", pendingContract.Status);
     }
 
     [Theory]
@@ -404,6 +428,18 @@ public sealed class InventoryBatchTests : IAsyncLifetime
     public async Task Depot_factory_batch_settlement_roundtrips_weight_qc_invoice_and_payment_details()
     {
         await using var db = Open();
+        var previousFee = await db.SystemConfigs.AsNoTracking()
+            .Where(x => x.ConfigKey == "PLATFORM_FEE_PERCENTAGE")
+            .Select(x => x.ConfigValue)
+            .SingleOrDefaultAsync();
+        var feeConfig = await db.SystemConfigs.SingleOrDefaultAsync(x => x.ConfigKey == "PLATFORM_FEE_PERCENTAGE");
+        if (feeConfig is null)
+            db.SystemConfigs.Add(new SystemConfig { ConfigKey = "PLATFORM_FEE_PERCENTAGE", ConfigValue = "5.00" });
+        else
+            feeConfig.ConfigValue = "5.00";
+        await db.SaveChangesAsync();
+        try
+        {
         db.Users.Add(new User { Id = factoryOwnerId, Email = $"roundtrip-{factoryOwnerId}@test.invalid", Role = "FACTORY", FullName = "Nhà máy thử" });
         var factory = new Factory { OwnerId = factoryOwnerId, Name = "Nhà máy thử", Address = "Đà Nẵng", MinimumPurityPercent = 80, AcceptedMaterialsCsv = "PET" };
         db.Factories.Add(factory);
@@ -422,24 +458,43 @@ public sealed class InventoryBatchTests : IAsyncLifetime
 
         var orders = new Retrack.API.Services.Factory.FactoryOrderService(db);
         Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Success, (await orders.ReceiveAsync(factoryOwnerId, first.Id, default)).Outcome);
+        Assert.Single(await db.Notifications.Where(x => x.UserId == ownerId && x.TransportJobId == transport.Id && x.Title == "Nhà máy đã nhận hàng").ToListAsync());
         var qc = new Retrack.API.Services.Factory.FactoryQCService(db, new ConfigurationBuilder().Build());
         Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Success, (await qc.WeighAsync(factoryOwnerId, first.Id,
-            new() { GrossWeightKg = 70, TareWeightKg = 10, TicketNumber = "VE-TEST-001" }, default)).Outcome);
-        Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Success, (await qc.WeighAsync(factoryOwnerId, first.Id,
-            new() { GrossWeightKg = 70, TareWeightKg = 10, TicketNumber = "VE-TEST-001" }, default)).Outcome);
+            new() { GrossWeightKg = 70, TareWeightKg = 10, TicketNumber = "VE-TEST-001", TicketImageUrl = "https://example.com/ticket-test.png" }, default)).Outcome);
         Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Success, (await qc.QualityAsync(factoryOwnerId, first.Id,
             new() { Accept = true, PurityPercent = 95, MoisturePercent = 3, ContaminationPercent = 2, Grade = "A", Note = "Đạt KCS" }, default)).Outcome);
 
         var partners = new Retrack.API.Services.Factory.FactoryPartnerService(db);
-        Assert.Equal("APPROVED", (await partners.UpdateStatusAsync(factoryOwnerId, depotId,
-            new() { Status = Retrack.API.Models.Enums.PartnershipStatus.APPROVED }, default)).Data!.Status);
+        var proposed = await partners.ProposeContractAsync(factoryOwnerId, depotId,
+            new() { Terms = new string('B', 80), ValidMonths = 12, ConfirmElectronicSignature = true }, default);
+        Assert.Equal("PENDING_DEPOT", proposed.Data!.ContractStatus);
+        var depotPartners = new DepotPartnershipService(new DepotService(new Retrack.API.Repositories.DepotOwnerRepository(db), new Retrack.API.Repositories.DepotPaymentReadRepository(db)), new Retrack.API.Repositories.DepotPartnershipRepository(db), new Retrack.API.Repositories.DepotUnitOfWork(db));
+        Assert.Equal("APPROVED", (await depotPartners.DecideContractAsync(ownerId, depotId, factory.Id, new("ACCEPT", true), default)).Status);
         Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Success, (await orders.InvoiceAsync(factoryOwnerId, first.Id,
             new() { InvoiceNumber = "HD-TEST-001", InvoiceFileUrl = "https://example.com/factory-invoice-test.pdf" }, default)).Outcome);
         Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Success, (await orders.InvoiceAsync(factoryOwnerId, first.Id,
             new() { InvoiceNumber = "HD-TEST-001", InvoiceFileUrl = "https://example.com/factory-invoice-test.pdf" }, default)).Outcome);
         var settled = await orders.SettleAsync(factoryOwnerId, first.Id,
-            new() { AgreedPricePerKg = 12000, PaymentReference = "SIM-FACTORY-001" }, default);
+            new() { AgreedPricePerKg = 12000, VatTreatment = "TAXABLE", VatPercentage = 10,
+                InvoiceNumber = "HD-TEST-001", InvoiceDate = DateOnly.FromDateTime(DateTime.UtcNow),
+                SellerTaxCode = "0314892841", PaymentReference = "SIM-FACTORY-001" }, default);
         Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Success, settled.Outcome);
+        Assert.Equal(720000m, settled.Data!.TotalAmount);
+        Assert.Equal(72000m, settled.Data.VatAmount);
+        Assert.Equal(792000m, settled.Data.InvoiceTotalAmount);
+        Assert.Equal(36000m, settled.Data.FeeAmount);
+        Assert.Equal(756000m, settled.Data.NetPayableAmount);
+        var platformTransaction = await db.PlatformTransactions.SingleAsync(x => x.SourceType == "BATCH_ORDER" && x.SourceId == first.Id);
+        Assert.Equal(factoryOwnerId, platformTransaction.PayerId);
+        Assert.Equal(720000m, platformTransaction.TransactionAmount);
+        Assert.Equal(5m, platformTransaction.FeePercentage);
+        var retried = await orders.SettleAsync(factoryOwnerId, first.Id,
+            new() { AgreedPricePerKg = 12000, VatTreatment = "TAXABLE", VatPercentage = 10,
+                InvoiceNumber = "HD-TEST-001", InvoiceDate = DateOnly.FromDateTime(DateTime.UtcNow),
+                SellerTaxCode = "0314892841", PaymentReference = "SIM-FACTORY-001" }, default);
+        Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Success, retried.Outcome);
+        Assert.Equal(1, await db.PlatformTransactions.CountAsync(x => x.SourceType == "BATCH_ORDER" && x.SourceId == first.Id));
         Assert.Equal("PAID", (await orders.GetAsync(factoryOwnerId, first.Id, default)).Data!.Status);
 
         var detail = await Batches(db).DetailAsync(ownerId, depotId, first.Id);
@@ -451,7 +506,12 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         Assert.True(detail.Quality.IsAccepted);
         Assert.Equal("A", detail.Quality.Grade);
         Assert.Equal("HD-TEST-001", detail.Quality.InvoiceNumber);
+        Assert.Equal("https://example.com/ticket-test.png", detail.Quality.TicketImageUrl);
         Assert.Equal(settled.Data!.TotalAmount, detail.Settlement!.GrossAmount);
+        Assert.Equal("TAXABLE", detail.Settlement.VatTreatment);
+        Assert.Equal(10m, detail.Settlement.VatPercentage);
+        Assert.Equal(settled.Data.VatAmount, detail.Settlement.VatAmount);
+        Assert.Equal(settled.Data.InvoiceTotalAmount, detail.Settlement.InvoiceTotalAmount);
         Assert.Equal(settled.Data.FeeAmount, detail.Settlement.FeeAmount);
         Assert.Equal(settled.Data.NetPayableAmount, detail.Settlement.NetAmount);
         Assert.Equal("SIM-FACTORY-001", detail.Settlement.PaymentReference);
@@ -469,6 +529,30 @@ public sealed class InventoryBatchTests : IAsyncLifetime
 
         var followUp = Input(40); followUp.TargetFactoryId = factory.Id;
         Assert.Equal("TRANSPORT_READY", (await Batches(db).CreateAsync(ownerId, depotId, followUp)).Status);
+        var nextBatch = await db.InventoryBatches.Include(x => x.TransportJob).SingleAsync(x => x.Id == followUp.OperationId);
+        nextBatch.Status = "DELIVERED"; nextBatch.TransportJob!.Status = "DELIVERED"; await db.SaveChangesAsync();
+        Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Success, (await orders.ReceiveAsync(factoryOwnerId, nextBatch.Id, default)).Outcome);
+        Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Success, (await qc.WeighAsync(factoryOwnerId, nextBatch.Id, new() { GrossWeightKg = 45, TareWeightKg = 5, TicketNumber = "VE-TEST-002" }, default)).Outcome);
+        Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Success, (await qc.QualityAsync(factoryOwnerId, nextBatch.Id, new() { Accept = true, PurityPercent = 95, Grade = "A" }, default)).Outcome);
+        await db.SystemConfigs.Where(x => x.ConfigKey == "PLATFORM_FEE_PERCENTAGE").ExecuteUpdateAsync(x => x.SetProperty(p => p.ConfigValue, "7.00"));
+        var secondSettlement = await orders.SettleAsync(factoryOwnerId, nextBatch.Id, new() { AgreedPricePerKg = 12000, VatTreatment = "TAXABLE", VatPercentage = 10, InvoiceNumber = "HD-TEST-002", InvoiceDate = DateOnly.FromDateTime(DateTime.UtcNow), SellerTaxCode = "0314892841", PaymentReference = "SIM-FACTORY-002" }, default);
+        Assert.Equal(7m, secondSettlement.Data!.FeePercentage);
+        Assert.Equal(5m, (await db.PlatformTransactions.SingleAsync(x => x.SourceId == first.Id)).FeePercentage);
+        }
+        finally
+        {
+        db.ChangeTracker.Clear();
+        feeConfig = await db.SystemConfigs.SingleOrDefaultAsync(x => x.ConfigKey == "PLATFORM_FEE_PERCENTAGE");
+        if (previousFee is null)
+        {
+            if (feeConfig is not null) db.SystemConfigs.Remove(feeConfig);
+        }
+        else if (feeConfig is not null)
+        {
+            feeConfig.ConfigValue = previousFee;
+        }
+        await db.SaveChangesAsync();
+        }
     }
 
     [Fact]
@@ -958,5 +1042,87 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         var input = Input(); input.TargetFactoryId = Guid.NewGuid();
         await Assert.ThrowsAsync<ArgumentException>(() => Batches(db).CreateAsync(ownerId, depotId, input));
         Assert.False(await db.InventoryBatches.AnyAsync(b => b.DepotId == depotId));
+    }
+
+    [Fact]
+    public async Task Factory_contract_boundaries_versioning_rejection_scope_and_termination_rules_persist()
+    {
+        await using var db = Open();
+        db.Users.Add(new User { Id = factoryOwnerId, Email = $"contract-{factoryOwnerId}@test.invalid", Role = "FACTORY", FullName = "Factory" });
+        var factory = new Retrack.API.Models.Factory { OwnerId = factoryOwnerId, Name = "Factory contract", Address = "Test" };
+        db.Factories.Add(factory);
+        var partner = new FactoryDepotPartnership { DepotId = depotId, Factory = factory };
+        var inspected = new InventoryBatch { DepotId = depotId, TargetFactory = factory, MaterialType = "PET", DeclaredWeightKg = 10, Status = "VERIFIED" };
+        inspected.QualityCheck = new BatchQualityCheck { Batch = inspected, Factory = factory, ActualWeightKg = 10, Grade = "A", IsAccepted = true };
+        db.FactoryDepotPartnerships.Add(partner); db.InventoryBatches.Add(inspected); await db.SaveChangesAsync();
+        var factoryService = new Retrack.API.Services.Factory.FactoryPartnerService(db);
+        var depotService = new DepotPartnershipService(new DepotService(new Retrack.API.Repositories.DepotOwnerRepository(db), new Retrack.API.Repositories.DepotPaymentReadRepository(db)), new Retrack.API.Repositories.DepotPartnershipRepository(db), new Retrack.API.Repositories.DepotUnitOfWork(db));
+
+        async Task<Retrack.API.Services.Shared.ServiceOutcome> Propose(string terms, int months) =>
+            (await factoryService.ProposeContractAsync(factoryOwnerId, depotId, new() { Terms = terms, ValidMonths = months, ConfirmElectronicSignature = true }, default)).Outcome;
+        Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Invalid, await Propose(new string('a', 49), 12));
+        Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Invalid, await Propose(new string('a', 10001), 12));
+        Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Invalid, await Propose(new string('a', 50), 0));
+        Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Invalid, await Propose(new string('a', 50), 121));
+        Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Success, await Propose(new string('a', 50), 1));
+        await db.Entry(partner).ReloadAsync();
+        var code = partner.ContractCode; var firstHash = partner.ContractTermsHash;
+        Assert.NotNull(code); Assert.Equal(1, partner.ContractVersion); Assert.Equal(64, firstHash!.Length);
+        Assert.Equal("DECLINED", (await depotService.DecideContractAsync(ownerId, depotId, factory.Id, new("REJECT", false), default)).Status);
+        Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Success, await Propose(new string('b', 10000), 120));
+        await db.Entry(partner).ReloadAsync();
+        Assert.Equal(code, partner.ContractCode); Assert.Equal(2, partner.ContractVersion); Assert.NotEqual(firstHash, partner.ContractTermsHash);
+        Assert.Equal("APPROVED", (await depotService.DecideContractAsync(ownerId, depotId, factory.Id, new("ACCEPT", true), default)).Status);
+        Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Conflict, await Propose(new string('c', 50), 12));
+
+        inspected.Status = "COMPLETED"; await db.SaveChangesAsync();
+        await Assert.ThrowsAsync<ArgumentException>(() => depotService.RequestTerminationAsync(ownerId, depotId, factory.Id, new("ngắn"), default));
+        await Assert.ThrowsAsync<ArgumentException>(() => depotService.RequestTerminationAsync(ownerId, depotId, factory.Id, new(new string('x', 2001)), default));
+        Assert.Equal("PENDING_FACTORY", (await depotService.RequestTerminationAsync(ownerId, depotId, factory.Id, new("Chủ vựa đề nghị kết thúc hợp đồng."), default)).TerminationStatus);
+        await Assert.ThrowsAsync<DepotConflictException>(() => depotService.RequestTerminationAsync(ownerId, depotId, factory.Id, new("Không được tạo đề nghị trùng lặp."), default));
+        await Assert.ThrowsAsync<DepotConflictException>(() => depotService.DecideTerminationAsync(ownerId, depotId, factory.Id, new("ACCEPT"), default));
+        Assert.Equal("REJECTED", (await factoryService.DecideTerminationAsync(factoryOwnerId, depotId, new() { Decision = "REJECT" }, default)).Data!.TerminationStatus);
+        await db.Entry(partner).ReloadAsync(); Assert.Equal("ACTIVE", partner.ContractStatus);
+        Assert.Equal("PENDING_FACTORY", (await depotService.RequestTerminationAsync(ownerId, depotId, factory.Id, new("Đề nghị kết thúc lần hai hợp lệ."), default)).TerminationStatus);
+        Assert.Equal("TERMINATED", (await factoryService.DecideTerminationAsync(factoryOwnerId, depotId, new() { Decision = "ACCEPT" }, default)).Data!.TerminationStatus);
+        db.ChangeTracker.Clear();
+        var saved = await db.FactoryDepotPartnerships.AsNoTracking().SingleAsync(x => x.Id == partner.Id);
+        Assert.Equal("TERMINATED", saved.ContractStatus); Assert.NotNull(saved.TerminatedAt); Assert.Equal("Đề nghị kết thúc lần hai hợp lệ.", saved.TerminationReason);
+    }
+
+    [Fact]
+    public async Task Inactive_factory_is_rejected_and_admin_prices_are_visible_to_factory()
+    {
+        await using var db = Open();
+        var owner = new User { Id = factoryOwnerId, Email = $"inactive-{factoryOwnerId}@test.invalid", Role = "FACTORY", FullName = "Factory", IsActive = false };
+        db.Users.Add(owner); db.Factories.Add(new Retrack.API.Models.Factory { OwnerId = factoryOwnerId, Name = "Inactive", Address = "Test" });
+        db.MarketPrices.Add(new MarketPrice { MaterialType = Retrack.API.Models.Enums.MaterialType.PET, PricePerKg = 12345, EffectiveDate = DateTime.UtcNow });
+        await db.SaveChangesAsync();
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => new Retrack.API.Services.Factory.FactoryDashboardService(db).GetAsync(factoryOwnerId, default, "month"));
+        owner.IsActive = true; await db.SaveChangesAsync();
+        var prices = await new Retrack.API.Services.Factory.FactoryMarketService(db).PricesAsync(default);
+        Assert.Contains(prices.Data!, x => x.MaterialType == "PET" && x.PricePerKg == 12345);
+    }
+
+    [Fact]
+    public async Task Settlement_failure_rolls_back_batch_quality_and_orphan_transaction()
+    {
+        Guid batchId;
+        await using (var db = Open())
+        {
+            db.Users.Add(new User { Id = factoryOwnerId, Email = $"rollback-{factoryOwnerId}@test.invalid", Role = "FACTORY", FullName = "Factory" });
+            var factory = new Retrack.API.Models.Factory { OwnerId = factoryOwnerId, Name = "Factory rollback", Address = "Test" };
+            var batch = new InventoryBatch { DepotId = depotId, TargetFactory = factory, MaterialType = "PET", DeclaredWeightKg = 10, Status = "VERIFIED" };
+            batch.QualityCheck = new BatchQualityCheck { Batch = batch, Factory = factory, ActualWeightKg = 10, Grade = "A", IsAccepted = true };
+            db.InventoryBatches.Add(batch); await db.SaveChangesAsync(); batchId = batch.Id;
+            db.PlatformTransactions.Add(new PlatformTransaction { SourceType = "BATCH_ORDER", SourceId = batch.Id, PayerId = factoryOwnerId, TransactionAmount = 1, FeeAmount = 1 });
+            await db.SaveChangesAsync();
+            await Assert.ThrowsAsync<DbUpdateException>(() => new Retrack.API.Services.Factory.FactoryOrderService(db).SettleAsync(factoryOwnerId, batch.Id,
+                new() { AgreedPricePerKg = 1000, VatTreatment = "TAXABLE", VatPercentage = 10, InvoiceNumber = "HD-ROLLBACK", InvoiceDate = DateOnly.FromDateTime(DateTime.UtcNow), SellerTaxCode = "0314892841", PaymentReference = "ROLLBACK" }, default));
+        }
+        await using var verify = Open();
+        var saved = await verify.InventoryBatches.Include(x => x.QualityCheck).SingleAsync(x => x.Id == batchId);
+        Assert.Equal("VERIFIED", saved.Status); Assert.Null(saved.SettledAt); Assert.Equal(0, saved.QualityCheck!.GrossAmount);
+        Assert.Equal(1, await verify.PlatformTransactions.CountAsync(x => x.SourceType == "BATCH_ORDER" && x.SourceId == batchId));
     }
 }

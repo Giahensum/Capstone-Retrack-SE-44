@@ -1,5 +1,5 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { ROUTE_MODES, ROUTE_VEHICLES } from "../../helpers/routePreferences";
+import { ROUTE_VEHICLES } from "../../helpers/routePreferences";
 import { colors, styles as s } from "../../theme";
 
 function Choice({ label, selected, onPress }) {
@@ -21,8 +21,7 @@ function Choice({ label, selected, onPress }) {
   );
 }
 
-export default function RouteOptions({ vehicle, mode, onVehicleChange, onModeChange }) {
-  const preference = ROUTE_MODES.find((option) => option.value === mode);
+export default function RouteOptions({ vehicle, onVehicleChange }) {
   return (
     <View style={s.card}>
       <Text style={s.text}>Bạn đi bằng phương tiện nào?</Text>
@@ -36,18 +35,7 @@ export default function RouteOptions({ vehicle, mode, onVehicleChange, onModeCha
           />
         ))}
       </View>
-      <Text style={s.text}>Ưu tiên tuyến đường</Text>
-      <View style={styles.choices}>
-        {ROUTE_MODES.map((option) => (
-          <Choice
-            key={option.value}
-            label={option.label}
-            selected={mode === option.value}
-            onPress={() => onModeChange(option.value)}
-          />
-        ))}
-      </View>
-      <Text style={s.muted}>{preference?.description}</Text>
+      <Text style={s.muted}>Tự động chọn tuyến cân bằng giữa quãng đường và thời gian.</Text>
       {!vehicle ? (
         <Text style={s.muted}>Chọn phương tiện để tìm tuyến từ vị trí của bạn đến người bán.</Text>
       ) : null}

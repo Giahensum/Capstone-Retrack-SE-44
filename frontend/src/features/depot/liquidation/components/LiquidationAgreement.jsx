@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import {
   Handshake, FileSignature, Wallet, Banknote, Truck, Warehouse, MapPin, Phone, CalendarClock, FileText, Layers,
@@ -11,13 +12,15 @@ import DepositContract from '@/components/liquidation/DepositContract';
 import ContractViewer from '@/components/liquidation/ContractViewer';
 import { toContract } from '@/components/liquidation/ContractDocument';
 import { Modal, Section, Tile, Notice, Steps, Badge } from '@/components/liquidation/LiquidationUI';
-import { useLiquidationQuery, useLiquidationMutation, localTime } from '../liquidationApi';
+import { useLiquidationQuery, useLiquidationMutation, useLiquidationScope, localTime } from '../liquidationApi';
 
 const primaryBtn = 'inline-flex items-center justify-center gap-2 rounded-full bg-d-primary px-6 py-2.5 text-sm font-bold text-white shadow-sm transition active:scale-95 disabled:opacity-50';
 const checkLabel = 'flex cursor-pointer gap-2.5 text-sm text-d-on-surface';
 const checkbox = 'mt-0.5 size-4 accent-[#446900]';
 
 export default function LiquidationAgreement({ id, onClose }) {
+  const { userId, depotId } = useLiquidationScope();
+  const client = useQueryClient();
   const query = useLiquidationQuery(`/agreements/${id}`, {}, true, true);
   const [reference, setReference] = useState('');
   const [depositRef, setDepositRef] = useState('');
@@ -36,10 +39,13 @@ export default function LiquidationAgreement({ id, onClose }) {
   const bothSigned = !!(d?.sellerSignedAt && d?.buyerSignedAt);
   const depositOk = !hasDeposit || !!d?.depositConfirmedAt;
   const collected = !!(d?.paymentConfirmedAt && d?.sellerHandedOverAt && d?.ownerCollectedAt);
+  const posted = d?.receiptStatus === 'POSTED';
+  const receiptLabel = posted ? 'Đã ghi sổ' : d?.receiptStatus === 'SUBMITTED' ? 'Chờ duyệt phiếu nhập'
+    : d?.receiptId ? 'Phiếu nháp · chờ ghi sổ' : 'Chưa lập';
 
   const flags = hasDeposit
-    ? [bothSigned, !!d?.depositConfirmedAt, !!d?.paymentConfirmedAt, !!d?.ownerCollectedAt, !!d?.receiptId]
-    : [!!d?.paymentConfirmedAt, !!d?.ownerCollectedAt, !!d?.receiptId];
+    ? [bothSigned, !!d?.depositConfirmedAt, !!d?.paymentConfirmedAt, !!d?.ownerCollectedAt, posted]
+    : [!!d?.paymentConfirmedAt, !!d?.ownerCollectedAt, posted];
   const defs = hasDeposit
     ? [['sign', 'Ký hợp đồng', FileSignature], ['deposit', 'Chuyển cọc', Wallet], ['pay', 'Thanh toán', Banknote], ['collect', 'Nhận hàng', Truck], ['receipt', 'Nhập kho', Warehouse]]
     : [['pay', 'Thanh toán', Banknote], ['collect', 'Nhận hàng', Truck], ['receipt', 'Nhập kho', Warehouse]];
@@ -99,7 +105,7 @@ export default function LiquidationAgreement({ id, onClose }) {
     } else if (collected && !d.receiptId) {
       action = <div className="flex justify-end"><button type="button" className={primaryBtn} onClick={() => setReceiving(true)}><Warehouse size={16} />Lập phiếu nhập từ lô trúng</button></div>;
     } else if (d.receiptId) {
-      action = <div className="flex justify-end"><Link to={`/depot/inventory?tab=receipts&receiptId=${d.receiptId}`} className={primaryBtn}><ReceiptText size={16} />Đến phiếu nhập để kiểm tra / duyệt<ArrowRight size={15} /></Link></div>;
+      action = <div className="flex justify-end"><Link to={`/depot/inventory?tab=receipts&receiptId=${d.receiptId}`} className={primaryBtn}><ReceiptText size={16} />{posted ? 'Xem phiếu đã ghi sổ' : 'Đến phiếu nhập để kiểm tra / duyệt'}<ArrowRight size={15} /></Link></div>;
     }
   }
   const overdue = d && new Date(d.collectionDeadline).getTime() < Date.now() && !d.receiptId;
@@ -112,7 +118,7 @@ export default function LiquidationAgreement({ id, onClose }) {
     ] : []),
     ['Tham chiếu chuyển tiền', d.paymentReference ?? 'Chưa báo chuyển'], ['Chủ kho báo chuyển tiền', localTime(d.paymentReportedAt)],
     ['Seller xác nhận đủ tiền', localTime(d.paymentConfirmedAt)], ['Seller bàn giao đủ', localTime(d.sellerHandedOverAt)],
-    ['Kho xác nhận đã nhận đủ về kho', localTime(d.ownerCollectedAt)], ['Phiếu nhập', d.receiptStatus ?? 'Chưa lập'],
+    ['Kho xác nhận đã nhận đủ về kho', localTime(d.ownerCollectedAt)], ['Phiếu nhập', receiptLabel],
   ];
 
   return (
@@ -120,7 +126,9 @@ export default function LiquidationAgreement({ id, onClose }) {
       <Modal
         icon={Handshake} tone="teal" title="Thỏa thuận mua lô trúng" size="lg" onClose={onClose} busy={busy}
         subtitle={d?.title}
-        badge={d && <Badge tone={d.receiptId ? 'primary' : 'teal'} icon={d.receiptId ? CheckCircle2 : Hourglass}>{d.receiptId ? 'Đã lập phiếu nhập' : 'Đang thực hiện'}</Badge>}
+        badge={d && <Badge tone={posted ? 'primary' : 'teal'} icon={posted ? CheckCircle2 : Hourglass}>
+          {posted ? 'Hoàn thành · đã nhập kho' : d.receiptId ? receiptLabel : 'Đang thực hiện'}
+        </Badge>}
         footer={d && (action ?? (waiting ? <p role="status" className="flex items-center gap-2 text-sm font-medium text-d-on-surface-variant"><Hourglass size={16} className="text-amber-500" />{waiting}</p> : null))}
       >
         <QueryState query={query}>{d && (
@@ -168,7 +176,10 @@ export default function LiquidationAgreement({ id, onClose }) {
         )}</QueryState>
       </Modal>
       {docOpen && d && <ContractViewer contract={toContract(d, d)} onClose={() => setDocOpen(false)} />}
-      {receiving && <StockReceiptForm agreement={d} onClose={() => { setReceiving(false); query.refetch(); }} />}
+      {receiving && <StockReceiptForm agreement={d} onClose={() => {
+        setReceiving(false);
+        client.invalidateQueries({ queryKey: ['liquidation', userId, depotId] });
+      }} />}
     </>
   );
 }

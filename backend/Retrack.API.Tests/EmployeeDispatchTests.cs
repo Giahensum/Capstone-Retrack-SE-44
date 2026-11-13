@@ -58,6 +58,39 @@ public sealed class EmployeeDispatchTests : IAsyncLifetime
         Assert.Equal(2, await db.Notifications.CountAsync());
     }
     [Fact]
+    public async Task DifferentSellerCoordinatesInSameAreaUseSameEmployee()
+    {
+        var one = await Pickup();
+        var two = await Pickup();
+        var moved = await db.PickupRequests.FindAsync(two);
+        moved!.Longitude = 108.225m;
+        await db.SaveChangesAsync();
+        await Service.DispatchAsync(default);
+        Assert.Equal(first.Id, (await Read(one)).AcceptedCollectorId);
+        Assert.Equal(first.Id, (await Read(two)).AcceptedCollectorId);
+    }
+
+    [Fact]
+    public async Task FullDoesNotTransferToDistantAreaInSameDepot()
+    {
+        nearby.Latitude = 16.15; await db.SaveChangesAsync();
+        var id = await Pickup("SCHEDULED", first.Id);
+        await Service.ChangeAvailabilityAsync(first.Id, a.Id, new("FULL", "Xe đầy cần về kho bàn giao"), default);
+        Assert.Null((await Read(id)).AcceptedCollectorId);
+        Assert.Equal("PENDING", (await Read(id)).Status);
+    }
+
+    [Fact]
+    public async Task OutsideAllAreasWaitsInsteadOfAssigningNearestEmployee()
+    {
+        var id = await Pickup();
+        (await db.PickupRequests.FindAsync(id))!.Latitude = 16.3m;
+        await db.SaveChangesAsync();
+        await Service.DispatchAsync(default);
+        Assert.Null((await Read(id)).AcceptedCollectorId);
+        Assert.Single(await db.Notifications.ToListAsync());
+    }
+    [Fact]
     public async Task FullTransfersUnstartedButKeepsCargoAndHistory()
     {
         var id = await Pickup("SCHEDULED", first.Id);

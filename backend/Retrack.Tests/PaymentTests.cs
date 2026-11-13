@@ -95,6 +95,9 @@ public sealed class PaymentTests : IAsyncLifetime
         var fee = Assert.Single(await verify.PlatformTransactions.Where(t => t.SourceId == seed.Request).ToListAsync());
         Assert.Equal("PICKUP_REQUEST", fee.SourceType);
         Assert.Equal(10m, fee.FeeAmount);
+        Assert.Equal(seed.Owner, fee.PayerId);
+        Assert.Equal(1000m, fee.TransactionAmount);
+        Assert.Equal(1m, fee.FeePercentage);
         var notice = Assert.Single(await verify.Notifications.Where(n => n.PickupRequestId == seed.Request).ToListAsync());
         Assert.Equal(request.SellerId, notice.UserId);
         Assert.Equal("PAYMENT", notice.Category);
