@@ -86,6 +86,24 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
         batch.Status = "RECEIVED";
         await NotifyDepotAsync(batch.DepotId, "Nhà máy xác nhận hàng đã đến", $"{factory.Name} đã xác nhận nhận hàng lô {batch.Code ?? batch.Id.ToString()}; chờ cân và KCS.", batch.Id, ct: ct);
         batch.FactoryReceivedAt = DateTime.UtcNow;
+        var recipients = new List<Guid>();
+        var depotOwnerId = await Db.Depots.Where(x => x.Id == batch.DepotId).Select(x => x.OwnerId).SingleAsync(ct);
+        recipients.Add(depotOwnerId);
+        if (batch.TransportJob?.DriverId is Guid driverId) recipients.Add(driverId);
+        var uniqueRecipients = recipients.Distinct().ToArray();
+        var existingRecipients = await Db.Notifications.AsNoTracking()
+            .Where(x => uniqueRecipients.Contains(x.UserId) && x.TransportJobId == batch.TransportJob!.Id && x.Title == "Nhà máy đã nhận hàng")
+            .Select(x => x.UserId)
+            .ToListAsync(ct);
+        var recipientsAlreadyNotified = existingRecipients.ToHashSet();
+        foreach (var recipient in uniqueRecipients.Where(x => !recipientsAlreadyNotified.Contains(x)))
+            Db.Notifications.Add(new Notification
+            {
+                UserId = recipient,
+                TransportJobId = batch.TransportJob!.Id,
+                Title = "Nhà máy đã nhận hàng",
+                Message = $"Lô {batch.Code ?? batch.Id.ToString()} đã được nhà máy xác nhận nhận hàng."
+            });
         await Db.SaveChangesAsync(ct);
         if (transaction is not null) await transaction.CommitAsync(ct);
         return ServiceResult<OrderReceivedResponse>.Success(data: new OrderReceivedResponse
@@ -102,27 +120,85 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
         await using var transaction = await Db.Database.BeginTransactionAsync(ct);
         var batch = await LockOrderAsync(id, factory.Id, ct);
         if (batch is null) return ServiceResult<OrderSettlementResponse>.NotFound("Không tìm thấy đơn hàng.");
-        if (batch.Status is "PAID" or "COMPLETED") return ServiceResult<OrderSettlementResponse>.Conflict("Đơn hàng đã được quyết toán.");
+        if (batch.Status is "PAID" or "COMPLETED")
+        {
+            var existing = await Db.PlatformTransactions.AsNoTracking()
+                .SingleOrDefaultAsync(x => x.SourceType == "BATCH_ORDER" && x.SourceId == batch.Id, ct);
+            var savedQc = batch.QualityCheck;
+            var sameRequest = savedQc is not null && existing is not null &&
+                batch.AgreedPricePerKg == request.AgreedPricePerKg &&
+                string.Equals(batch.PaymentReference, request.PaymentReference.Trim(), StringComparison.Ordinal) &&
+                string.Equals(batch.VatTreatment, request.VatTreatment.Trim().ToUpperInvariant(), StringComparison.Ordinal) &&
+                batch.VatPercentage == request.VatPercentage && batch.PriceIncludesVat == request.PriceIncludesVat;
+            if (!sameRequest) return ServiceResult<OrderSettlementResponse>.Conflict("Đơn hàng đã được quyết toán với dữ liệu khác.");
+            return ServiceResult<OrderSettlementResponse>.Success(data: new OrderSettlementResponse
+            {
+                Id = batch.Id, Status = "PAID", TotalAmount = batch.GrossAmount ?? 0,
+                PriceIncludesVat = batch.PriceIncludesVat, VatTreatment = batch.VatTreatment ?? "NOT_APPLICABLE",
+                VatPercentage = batch.VatPercentage ?? 0, VatAmount = batch.VatAmount ?? 0,
+                InvoiceTotalAmount = batch.InvoiceTotalAmount ?? 0, FeeAmount = batch.PlatformFeeAmount ?? 0,
+                NetPayableAmount = batch.NetAmount ?? 0, PaymentReference = batch.PaymentReference,
+                SettledAt = batch.SettledAt, FeePercentage = existing!.FeePercentage ?? 0
+            }, message: "Đơn hàng đã được quyết toán; trả lại kết quả đã lưu.");
+        }
         var qc = batch.QualityCheck;
         if (batch.Status != "VERIFIED" || qc?.IsAccepted != true)
             return ServiceResult<OrderSettlementResponse>.Conflict("Chỉ quyết toán lô đã được KCS chấp nhận.");
         if (request.AgreedPricePerKg <= 0) return ServiceResult<OrderSettlementResponse>.Invalid("Đơn giá phải lớn hơn 0.");
+        var vatTreatment = request.VatTreatment.Trim().ToUpperInvariant();
+        if (vatTreatment is not ("NOT_APPLICABLE" or "ZERO_RATE" or "TAXABLE"))
+            return ServiceResult<OrderSettlementResponse>.Invalid("Cách áp dụng VAT không hợp lệ.");
+        if (vatTreatment == "NOT_APPLICABLE" && request.VatPercentage != 0)
+            return ServiceResult<OrderSettlementResponse>.Invalid("Giao dịch không áp dụng VAT phải có thuế suất 0%.");
+        if (vatTreatment == "ZERO_RATE" && request.VatPercentage != 0)
+            return ServiceResult<OrderSettlementResponse>.Invalid("Giao dịch VAT 0% phải có thuế suất 0%.");
+        if (vatTreatment == "TAXABLE" && request.VatPercentage <= 0)
+            return ServiceResult<OrderSettlementResponse>.Invalid("Giao dịch chịu VAT phải có thuế suất lớn hơn 0%.");
+        if (vatTreatment == "TAXABLE" && request.VatPercentage is not (5m or 8m or 10m))
+            return ServiceResult<OrderSettlementResponse>.Invalid("Thuế suất VAT chỉ được chọn 5%, 8% hoặc 10% theo hóa đơn hợp lệ.");
+        if (vatTreatment != "NOT_APPLICABLE" && (string.IsNullOrWhiteSpace(request.InvoiceNumber) ||
+            request.InvoiceDate is null || string.IsNullOrWhiteSpace(request.SellerTaxCode)))
+            return ServiceResult<OrderSettlementResponse>.Invalid("Giao dịch có VAT phải có số hóa đơn, ngày hóa đơn và mã số thuế bên bán.");
+        if (request.InvoiceDate > DateOnly.FromDateTime(DateTime.UtcNow.AddHours(7)))
+            return ServiceResult<OrderSettlementResponse>.Invalid("Ngày hóa đơn không được ở tương lai.");
+        if ((vatTreatment == "NOT_APPLICABLE" || request.VatPercentage == 8m) && string.IsNullOrWhiteSpace(request.VatLegalBasis))
+            return ServiceResult<OrderSettlementResponse>.Invalid("Cần ghi căn cứ áp dụng không chịu VAT hoặc mức giảm 8%.");
         var feeText = await Db.SystemConfigs.AsNoTracking().Where(x => x.ConfigKey == "PLATFORM_FEE_PERCENTAGE")
             .Select(x => x.ConfigValue).FirstOrDefaultAsync(ct);
         var feePercent = decimal.TryParse(feeText, System.Globalization.NumberStyles.Number,
             System.Globalization.CultureInfo.InvariantCulture, out var configuredFee) ? configuredFee : 5m;
         if (feePercent is < 0 or > 100) feePercent = 5m;
-        var total = decimal.Round(qc.ActualWeightKg * request.AgreedPricePerKg, 0, MidpointRounding.AwayFromZero);
+        var quotedTotal = decimal.Round(qc.ActualWeightKg * request.AgreedPricePerKg, 0, MidpointRounding.AwayFromZero);
+        var total = request.PriceIncludesVat && request.VatPercentage > 0
+            ? decimal.Round(quotedTotal / (1m + request.VatPercentage / 100m), 0, MidpointRounding.AwayFromZero)
+            : quotedTotal;
+        var invoiceTotal = request.PriceIncludesVat ? quotedTotal :
+            total + decimal.Round(total * request.VatPercentage / 100m, 0, MidpointRounding.AwayFromZero);
+        var vat = invoiceTotal - total;
         var fee = decimal.Round(total * feePercent / 100m, 0, MidpointRounding.AwayFromZero);
         qc.AgreedPricePerKg = request.AgreedPricePerKg;
         qc.GrossAmount = total;
+        qc.VatTreatment = vatTreatment;
+        qc.VatPercentage = request.VatPercentage;
+        qc.VatAmount = vat;
+        qc.InvoiceTotalAmount = invoiceTotal;
+        qc.PriceIncludesVat = request.PriceIncludesVat;
+        qc.InvoiceNumber = request.InvoiceNumber?.Trim();
+        qc.InvoiceDate = request.InvoiceDate;
+        qc.SellerTaxCode = request.SellerTaxCode?.Trim();
+        qc.VatLegalBasis = request.VatLegalBasis?.Trim();
         qc.PlatformFeePercentage = feePercent;
         qc.PlatformFeeAmount = fee;
-        qc.NetAmount = total - fee;
+        qc.NetAmount = invoiceTotal - fee;
         batch.AgreedPricePerKg = request.AgreedPricePerKg;
         batch.GrossAmount = total;
+        batch.VatTreatment = vatTreatment;
+        batch.VatPercentage = request.VatPercentage;
+        batch.VatAmount = vat;
+        batch.InvoiceTotalAmount = invoiceTotal;
+        batch.PriceIncludesVat = request.PriceIncludesVat;
         batch.PlatformFeeAmount = fee;
-        batch.NetAmount = total - fee;
+        batch.NetAmount = invoiceTotal - fee;
         batch.QualityCheck = qc;
         batch.PaymentReference = request.PaymentReference.Trim();
         batch.SettledAt = DateTime.UtcNow;
@@ -131,6 +207,7 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
         Db.PlatformTransactions.Add(new Retrack.API.Models.PlatformTransaction
         {
             SourceType = "BATCH_ORDER", SourceId = batch.Id, FeeAmount = fee,
+            PayerId = factory.OwnerId, TransactionAmount = total, FeePercentage = feePercent,
             Description = $"Factory settlement at {feePercent}%"
         });
         await Db.SaveChangesAsync(ct);
@@ -140,8 +217,13 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
             Id = batch.Id,
             Status = "PAID",
             TotalAmount = total,
+            PriceIncludesVat = request.PriceIncludesVat,
+            VatTreatment = vatTreatment,
+            VatPercentage = request.VatPercentage,
+            VatAmount = vat,
+            InvoiceTotalAmount = invoiceTotal,
             FeeAmount = fee,
-            NetPayableAmount = total - fee,
+            NetPayableAmount = invoiceTotal - fee,
             PaymentReference = batch.PaymentReference,
             SettledAt = batch.SettledAt,
             FeePercentage = feePercent
@@ -160,12 +242,13 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
             return ServiceResult<InvoiceUpdatedResponse>.Invalid("Chọn tệp hóa đơn trước khi lưu.");
         if (attachments is not null && request.InvoiceFileUrl != batch.QualityCheck.InvoiceFileUrl && !attachments.IsOwnedUrl(request.InvoiceFileUrl, userId))
             return ServiceResult<InvoiceUpdatedResponse>.Invalid("Hóa đơn phải được tải lên qua chức năng đính kèm của nhà máy.");
-        var changed = batch.QualityCheck.InvoiceNumber != request.InvoiceNumber?.Trim() || batch.QualityCheck.InvoiceFileUrl != request.InvoiceFileUrl.Trim();
-        batch.QualityCheck.InvoiceNumber = request.InvoiceNumber?.Trim();
+        // Sau quyết toán, giữ số hóa đơn đã được đối soát; tên tệp tải lên không được ghi đè.
+        var invoiceNumber = batch.QualityCheck.InvoiceNumber ?? request.InvoiceNumber?.Trim();
+        var changed = batch.QualityCheck.InvoiceNumber != invoiceNumber || batch.QualityCheck.InvoiceFileUrl != request.InvoiceFileUrl.Trim();
+        batch.QualityCheck.InvoiceNumber = invoiceNumber;
         batch.QualityCheck.InvoiceFileUrl = request.InvoiceFileUrl.Trim();
         batch.QualityCheck.InvoiceStatus = "UPLOADED";
         if (changed) await NotifyDepotAsync(batch.DepotId, "Nhà máy đã bổ sung hóa đơn", $"{factory.Name} đã cập nhật hóa đơn lô {batch.Code ?? batch.Id.ToString()}. Kho có thể tải chứng từ trong chi tiết lô.", batch.Id, ct: ct);
-        if (request.VatAmount.HasValue) batch.QualityCheck.QualityNote = $"VAT:{request.VatAmount.Value}";
         await Db.SaveChangesAsync(ct);
         if (tx != null) await tx.CommitAsync(ct);
         return ServiceResult<InvoiceUpdatedResponse>.Success(data: new InvoiceUpdatedResponse

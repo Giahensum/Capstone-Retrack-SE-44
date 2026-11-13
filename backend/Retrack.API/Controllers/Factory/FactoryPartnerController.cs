@@ -18,6 +18,18 @@ public class FactoryPartnerController(IFactoryPartnerService service) : FactoryC
     public async Task<IActionResult> UpdateStatus(Guid depotId, [FromBody] PartnerStatusRequest request, CancellationToken ct)
         => this.ToActionResult(await service.UpdateStatusAsync(CurrentUserId, depotId, request, ct));
 
+    [HttpPost("{depotId:guid}/contract")]
+    public async Task<IActionResult> ProposeContract(Guid depotId, PartnershipContractRequest request, CancellationToken ct)
+        => this.ToActionResult(await service.ProposeContractAsync(CurrentUserId, depotId, request, ct));
+
+    [HttpPost("{depotId:guid}/contract/termination")]
+    public async Task<IActionResult> RequestTermination(Guid depotId, ContractTerminationRequest request, CancellationToken ct)
+        => this.ToActionResult(await service.RequestTerminationAsync(CurrentUserId, depotId, request, ct));
+
+    [HttpPost("{depotId:guid}/contract/termination/decision")]
+    public async Task<IActionResult> DecideTermination(Guid depotId, ContractTerminationDecisionRequest request, CancellationToken ct)
+        => this.ToActionResult(await service.DecideTerminationAsync(CurrentUserId, depotId, request, ct));
+
     [HttpPost("orders/{orderId:guid}/rating")]
     public async Task<IActionResult> Rate(Guid orderId, RatingRequest request, CancellationToken ct)
         => this.ToActionResult(await service.RateAsync(CurrentUserId, orderId, request, ct));

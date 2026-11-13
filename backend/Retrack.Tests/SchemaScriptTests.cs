@@ -74,7 +74,7 @@ public sealed class SchemaScriptTests
             UPDATE employee_dispatch_shifts SET availability='STOPPED',reason='Chủ kho ngừng ca trong kiểm thử';
             UPDATE pickup_requests SET status='CANCELLED' WHERE id='e0000000-0929-4000-8000-000000000013';
             UPDATE transport_jobs SET status='CANCELLED' WHERE id='d8600000-0000-4000-8000-000000000001';
-            UPDATE users SET password_hash='fixture-custom-hash' WHERE email='employee.dispatch01@retrack.test';
+            UPDATE users SET password_hash='fixture-custom-hash' WHERE email='employee.dispatch.v2.01@retrack.test';
             """, db, tx)) await changedDemo.ExecuteNonQueryAsync();
         await using (var repeat = new NpgsqlCommand(sql, db, tx) { CommandTimeout = 120 })
             await repeat.ExecuteNonQueryAsync();
@@ -101,7 +101,7 @@ public sealed class SchemaScriptTests
         {
             await using var reader = await verify.ExecuteReaderAsync();
             Assert.True(await reader.ReadAsync());
-            Assert.Equal(26L, reader.GetInt64(0));
+            Assert.Equal(32L, reader.GetInt64(0));
             Assert.Equal(5L, reader.GetInt64(1));
             Assert.Equal(4L, reader.GetInt64(2));
             Assert.Equal(15L, reader.GetInt64(3));
@@ -125,7 +125,7 @@ public sealed class SchemaScriptTests
                 (SELECT count(*) FROM employee_dispatch_shifts WHERE availability='STOPPED'),
                 (SELECT status FROM pickup_requests WHERE id='e0000000-0929-4000-8000-000000000013'),
                 (SELECT status FROM transport_jobs WHERE id='d8600000-0000-4000-8000-000000000001'),
-                (SELECT password_hash FROM users WHERE email='employee.dispatch01@retrack.test'),
+                (SELECT password_hash FROM users WHERE email='employee.dispatch.v2.01@retrack.test'),
                 (SELECT count(*) FROM depot_stock_receipts WHERE id IN ('d8800000-0000-4000-8000-000000000001','d8800000-0000-4000-8000-000000000002') AND status='POSTED' AND NOT costs_confirmed),
                 (SELECT sum(quantity) FROM depot_stock_lines WHERE receipt_id IN ('d8800000-0000-4000-8000-000000000001','d8800000-0000-4000-8000-000000000002')),
                 (SELECT verification_status FROM depots WHERE id='d8100000-0000-4000-8000-000000000001')

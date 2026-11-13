@@ -147,7 +147,7 @@ public class FactoryServiceWorkflowTests
     }
 
     [Fact]
-    public async Task RatingAfterSettlementCanApprovePartnershipAtomically()
+    public async Task RatingCannotBypassMutualElectronicContract()
     {
         await using var db = NewDb();
         var (factory, depot, batch) = await Seed(db, "COMPLETED");
@@ -165,10 +165,9 @@ public class FactoryServiceWorkflowTests
                 PartnershipStatus = PartnershipStatus.APPROVED
             }, default);
 
-        Assert.Equal(ServiceOutcome.Success, result.Outcome);
-        Assert.Equal("APPROVED", result.Data!.PartnershipStatus);
-        Assert.Equal("APPROVED", (await db.FactoryDepotPartnerships.SingleAsync()).Status);
-        Assert.Equal(5, (await db.FactoryDepotReviews.SingleAsync()).Rating);
+        Assert.Equal(ServiceOutcome.Invalid, result.Outcome);
+        Assert.Equal("PENDING", (await db.FactoryDepotPartnerships.SingleAsync()).Status);
+        Assert.Empty(db.FactoryDepotReviews);
     }
 
     [Fact]
@@ -189,7 +188,9 @@ public class FactoryServiceWorkflowTests
         Assert.Equal(ServiceOutcome.Success, (await orders.ReceiveAsync(factory.OwnerId, batch.Id, default)).Outcome);
         Assert.Equal("RECEIVED", batch.Status);
         Assert.NotNull(batch.FactoryReceivedAt);
+        Assert.Single(await db.Notifications.Where(x => x.TransportJobId == job.Id && x.Title == "Nhà máy đã nhận hàng").ToListAsync());
         Assert.Equal(ServiceOutcome.Conflict, (await orders.ReceiveAsync(factory.OwnerId, batch.Id, default)).Outcome);
+        Assert.Single(await db.Notifications.Where(x => x.TransportJobId == job.Id && x.Title == "Nhà máy đã nhận hàng").ToListAsync());
     }
 
     [Theory]

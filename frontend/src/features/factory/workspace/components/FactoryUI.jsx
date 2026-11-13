@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useId, useRef, useState } from "react";
 import { useAuthStore } from "@/app/store/useAuthStore";
 import { useQueryClient } from "@tanstack/react-query";
 import { labels } from "../data/factoryState";
@@ -11,6 +11,7 @@ export const useFactory = () => useContext(Context);
 export function FactoryProvider({ children }) {
   const [state, setState] = useState(null);
   const current = useRef(null);
+  const mutationLock = useRef(false);
   const queryClient = useQueryClient();
   const token = useAuthStore((auth) => auth.token);
   const user = useAuthStore((auth) => auth.user);
@@ -67,6 +68,8 @@ export function FactoryProvider({ children }) {
 
   async function act(type, payload, successMessage = "Đã lưu thay đổi trên máy chủ.") {
     if (!useAuthStore.getState().token) { setNotice({ text: "Phiên đăng nhập đã hết hạn. Hãy đăng nhập lại.", error: true }); return false; }
+    if (mutationLock.current) return false;
+    mutationLock.current = true;
     setBusy(true);
     try {
       await performFactoryAction(type, payload);
@@ -78,7 +81,7 @@ export function FactoryProvider({ children }) {
       if (type === "ACCEPT_BATCH") await refresh();
       setNotice({ text: error.message, error: true });
       return false;
-    } finally { setBusy(false); }
+    } finally { mutationLock.current = false; setBusy(false); }
   }
 
   return (
@@ -94,8 +97,9 @@ export function FactoryProvider({ children }) {
 export function Status({ value }) {
   return <span className={`status status-${value}`}>{labels[value] || value}</span>;
 }
-export function Button({ children, secondary, danger, ...props }) {
-  return <button className={`btn ${secondary ? "secondary" : ""} ${danger ? "danger" : ""}`} type="button" {...props}>{children}</button>;
+export function Button({ children, secondary, danger, disabled = false, ...props }) {
+  const mutationBusy = useContext(Context)?.busy ?? false;
+  return <button className={`btn ${secondary ? "secondary" : ""} ${danger ? "danger" : ""}`} type="button" disabled={disabled || mutationBusy} {...props}>{children}</button>;
 }
 export function PageHead({ eyebrow, title, text, children }) {
   return <div className="page-head"><div><span className="eyebrow">{eyebrow || "VẬN HÀNH NHÀ MÁY"}</span><h1>{title}</h1><p>{text}</p></div><div className="actions">{children}</div></div>;
@@ -119,6 +123,8 @@ export function Field({ label, children, ...props }) {
 }
 export function Modal({ title, children, onClose, busy = false }) {
   const ref = useRef();
+  const mutationBusy = useContext(Context)?.busy ?? false;
+  const isBusy = busy || mutationBusy;
   useEffect(() => {
     const dialog = ref.current;
     const previous = document.activeElement;
@@ -126,8 +132,8 @@ export function Modal({ title, children, onClose, busy = false }) {
     dialog.showModal(); document.body.style.overflow = "hidden";
     return () => { dialog.close(); document.body.style.overflow = overflow; previous?.focus(); };
   }, []);
-  return <dialog ref={ref} className="factory-dialog" aria-labelledby="factory-dialog-title" onCancel={(e) => { if (busy) e.preventDefault(); else onClose(); }}>
-    <div className="dialog-head"><h2 id="factory-dialog-title">{title}</h2><button disabled={busy} onClick={onClose} aria-label="Đóng hộp thoại">×</button></div>
+  return <dialog ref={ref} className="factory-dialog" aria-labelledby="factory-dialog-title" onCancel={(e) => { if (isBusy) e.preventDefault(); else onClose(); }}>
+    <div className="dialog-head"><h2 id="factory-dialog-title">{title}</h2><button disabled={isBusy} onClick={onClose} aria-label="Đóng hộp thoại">×</button></div>
     <div className="dialog-body">{children}</div>
   </dialog>;
 }
@@ -140,12 +146,17 @@ export async function readAttachment(file) {
 export function Attachment({ label, value, onChange }) {
   const { notify } = useFactory();
   const [busy, setBusy] = useState(false);
-  return <div className="field"><span>{label}</span><input aria-label={label} type="file" disabled={busy} accept=".pdf,.jpg,.jpeg,.png" onChange={async (e) => {
+  const inputId = useId();
+  return <div className="field"><span>{label}</span><div className={`factory-file-picker ${busy ? "busy" : ""}`}>
+    <input id={inputId} className="factory-file-input" aria-label={label} type="file" disabled={busy} accept=".pdf,.jpg,.jpeg,.png" onChange={async (e) => {
     const input = e.target; setBusy(true);
     try { const file = await readAttachment(input.files?.[0]); if (file) onChange(file); }
     catch (error) { notify(error.message, true); }
     finally { input.value = ""; setBusy(false); }
-  }} />
+    }} />
+    <label className="factory-file-button" htmlFor={inputId} aria-disabled={busy}>{busy ? "Đang đọc tệp…" : "Chọn tệp"}</label>
+    <span className="factory-file-name">{value?.name || "Chưa chọn tệp"}</span>
+  </div>
     <small>{busy ? "Đang đọc tệp…" : "PDF, JPG, PNG · Tối đa 700 KB/tệp"}</small>
     {value && <div className="factory-attachment-saved">
       <strong>{value.file ? "Đã chọn để lưu:" : "Đã lưu trên máy chủ:"}</strong>

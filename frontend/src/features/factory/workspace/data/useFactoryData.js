@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { mapDemand, mapOrder, request } from "./factoryApi";
+import { loadFactoryPrices, mapDemand, mapOrder, request } from "./factoryApi";
 
 const paths = {
   demands: "/api/factory/demands",
@@ -42,6 +42,20 @@ function mapPartner(partner) {
     reviewCount: partner.reviewCount,
     orderCount: partner.orderCount,
     completedOrderCount: partner.completedOrderCount,
+    contractCode: partner.contractCode,
+    contractVersion: partner.contractVersion,
+    contractTerms: partner.contractTerms,
+    contractTermsHash: partner.contractTermsHash,
+    contractStatus: partner.contractStatus,
+    factorySignedAt: partner.factorySignedAt,
+    depotSignedAt: partner.depotSignedAt,
+    contractEffectiveAt: partner.contractEffectiveAt,
+    contractExpiresAt: partner.contractExpiresAt,
+    terminationStatus: partner.terminationStatus,
+    terminationRequestedBy: partner.terminationRequestedBy,
+    terminationRequestedAt: partner.terminationRequestedAt,
+    terminationReason: partner.terminationReason,
+    terminatedAt: partner.terminatedAt,
   };
 }
 
@@ -67,6 +81,13 @@ export function useFactoryDashboard(period = "month") {
   return useQuery({
     queryKey: ["factory", "dashboard", period],
     queryFn: () => request(`/api/factory/dashboard?period=${encodeURIComponent(period)}`),
+  });
+}
+
+export function useFactoryPrices() {
+  return useQuery({
+    queryKey: ["factory", "prices"],
+    queryFn: loadFactoryPrices,
   });
 }
 
