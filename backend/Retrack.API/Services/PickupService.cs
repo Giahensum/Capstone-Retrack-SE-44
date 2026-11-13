@@ -84,7 +84,21 @@ namespace Retrack.API.Services
                 Status = "PENDING"
             };
 
+            await using var transaction = await _db.Database.BeginTransactionAsync();
             await _repo.CreateAsync(request);
+            _db.Notifications.Add(new Notification
+            {
+                UserId = sellerId,
+                PickupRequestId = request.Id,
+                Category = "PICKUP",
+                TargetType = "PICKUP_REQUEST",
+                TargetId = request.Id,
+                Title = "Tạo đơn thu gom thành công",
+                Message = $"Đơn thu gom #{request.Id.ToString()[..8].ToUpper()} đã được tạo và đang chờ kho tiếp nhận.",
+                CreatedAt = DateTime.UtcNow
+            });
+            await _db.SaveChangesAsync();
+            await transaction.CommitAsync();
             return await MapToDto(request);
         }
 
@@ -114,7 +128,8 @@ namespace Retrack.API.Services
                 s.IsActive && s.User.IsActive && s.StaffType == "DEPOT_EMPLOYEE");
             if (!owner && !employee) throw new DepotForbiddenException();
             var requests = await _db.PickupRequests.Include(p => p.Seller).Include(p => p.TargetDepot).Include(p => p.Items)
-                .Where(p => p.TargetDepotId == depotId && (owner || p.Status == "PENDING" || p.AcceptedCollectorId == actorId))
+                .Where(p => p.TargetDepotId == depotId && (owner || p.AcceptedCollectorId == actorId
+                    || (p.Status == "PENDING" && !_db.EmployeeCollectionAreas.Any(a => a.DepotId == depotId))))
                 .OrderByDescending(p => p.CreatedAt).ThenBy(p => p.Id).Take(100).ToListAsync();
             var result = new List<PickupRequestDto>();
             foreach (var r in requests) result.Add(await MapToDto(r));
@@ -131,12 +146,26 @@ namespace Retrack.API.Services
             var req = await _repo.GetByIdAsync(requestId)
                 ?? throw new KeyNotFoundException("Không tìm thấy yêu cầu.");
             if (req.TargetDepotId != staff.DepotId) throw new DepotForbiddenException();
+            // Chặn API nhận đơn cũ vượt qua điều phối, chỉ áp dụng kho đã cấu hình khu vực.
+            if (await _db.EmployeeCollectionAreas.AnyAsync(a => a.DepotId == staff.DepotId))
+                throw new DepotConflictException("Kho đang phân công tự động. Hãy mở danh sách đơn được giao.");
             if (req.Status != "PENDING" || req.AcceptedCollectorId != null)
                 throw new DepotConflictException("Đơn đã được nhận hoặc không còn chờ nhận.");
             if (!await _db.Depots.AnyAsync(d => d.Id == staff.DepotId && d.VerificationStatus == "APPROVED"))
                 throw new DepotConflictException("Kho chưa được xác minh hồ sơ để nhận giao dịch mới.");
             req.AcceptedCollectorId = collectorId;
             req.Status = "SCHEDULED";
+            _db.Notifications.Add(new Notification
+            {
+                UserId = req.SellerId,
+                PickupRequestId = req.Id,
+                Category = "PICKUP",
+                TargetType = "PICKUP_REQUEST",
+                TargetId = req.Id,
+                Title = "Đơn thu gom đã được tiếp nhận",
+                Message = $"Kho đã tiếp nhận đơn #{req.Id.ToString()[..8].ToUpper()} và lên lịch thu gom.",
+                CreatedAt = DateTime.UtcNow
+            });
             await _repo.UpdateAsync(req);
             await transaction.CommitAsync();
             return await MapToDto(req);
@@ -201,6 +230,18 @@ namespace Retrack.API.Services
                     req.GrossAmount, req.PlatformFeePercentage, req.PlatformFeeAmount, req.NetAmount))
             });
 
+            _db.Notifications.Add(new Notification
+            {
+                UserId = req.SellerId,
+                PickupRequestId = requestId,
+                Category = "PICKUP",
+                TargetType = "PICKUP_REQUEST",
+                TargetId = requestId,
+                Title = "Đã có kết quả cân phế liệu",
+                Message = $"Đơn #{requestId.ToString()[..8].ToUpper()} đã được cân xong. Tổng thực nhận: {req.NetAmount:N0} đ. Vui lòng kiểm tra và xác nhận.",
+                CreatedAt = DateTime.UtcNow
+            });
+
             await _db.SaveChangesAsync();
             await transaction.CommitAsync();
             return await MapToDto(req);
@@ -208,18 +249,29 @@ namespace Retrack.API.Services
 
         public async Task<PickupRequestDto> ConfirmBySellerAsync(Guid requestId, Guid sellerId)
         {
+            await using var transaction = await _db.Database.BeginTransactionAsync();
+            var locked = await _db.PickupRequests.FromSqlInterpolated($"SELECT * FROM pickup_requests WHERE id = {requestId} FOR UPDATE")
+                .SingleOrDefaultAsync() ?? throw new KeyNotFoundException("Không tìm thấy yêu cầu.");
+            await _db.Entry(locked).ReloadAsync();
             var req = await _repo.GetByIdAsync(requestId)
                 ?? throw new KeyNotFoundException("Không tìm thấy yêu cầu.");
             if (req.SellerId != sellerId)
                 throw new DepotForbiddenException();
             if (req.Status != "WEIGHED") throw new DepotConflictException("Đơn chưa chờ xác nhận kết quả cân.");
             req.Status = "SELLER_CONFIRMED";
+            if (req.AcceptedCollectorId.HasValue)
+                _db.Notifications.Add(Notification.ForPickup(req.AcceptedCollectorId.Value, req.Id, "Người bán đã xác nhận kết quả cân",
+                    "Người bán đã đồng ý kết quả cân. Hãy kiểm tra và bàn giao đơn cho chủ kho để thanh toán."));
             await _repo.UpdateAsync(req);
+            await transaction.CommitAsync();
             return await MapToDto(req);
         }
 
         public async Task<PickupRequestDto> MarkPaymentSentAsync(Guid requestId, Guid ownerId, string paymentProofUrl)
-            => await MapToDto(await _payments.MarkSentAsync(requestId, ownerId, paymentProofUrl));
+        {
+            var req = await _payments.MarkSentAsync(requestId, ownerId, paymentProofUrl);
+            return await MapToDto(req);
+        }
 
         public async Task<PickupRequestDto> MarkDoneAsync(Guid requestId, Guid sellerId)
         {
@@ -233,8 +285,20 @@ namespace Retrack.API.Services
             if (req.Status == "DONE") return await MapToDto(req);
             if (req.Status != "PAYMENT_SENT") throw new DepotConflictException("Chủ kho chưa xác nhận chuyển tiền.");
             req.Status = "DONE";
+            _db.Notifications.Add(Notification.ForPickup(sellerId, req.Id, "Đơn thu gom đã hoàn tất",
+                $"Bạn đã xác nhận nhận tiền cho đơn #{req.Id.ToString()[..8].ToUpper()}. Đơn thu gom đã hoàn tất.", "PAYMENT"));
             req.StockReceivedAt ??= DateTime.UtcNow;
             req.UpdatedAt = DateTime.UtcNow;
+            if (req.TargetDepotId.HasValue)
+            {
+                var owner = await _db.Depots.Where(x => x.Id == req.TargetDepotId.Value).Select(x => (Guid?)x.OwnerId).SingleOrDefaultAsync();
+                if (owner.HasValue)
+                {
+                    var notice = Notification.ForDepot(owner.Value, req.TargetDepotId.Value, "PAYMENT", "Người bán đã xác nhận nhận tiền",
+                        $"Đơn {req.Id} đã hoàn tất sau khi người bán xác nhận nhận tiền. Kho có thể kiểm tra giao dịch và hàng đã nhập.");
+                    notice.PickupRequestId = req.Id; _db.Notifications.Add(notice);
+                }
+            }
             await _repo.UpdateAsync(req);
             await transaction.CommitAsync();
             return await MapToDto(req);

@@ -15,7 +15,6 @@ import { coordinatesOf } from "../../helpers/coordinates";
 import { getRoutes } from "../../helpers/goongDirections";
 import { selectRoute } from "../../helpers/routeSelection";
 import {
-  ROUTE_MODES,
   ROUTE_VEHICLES,
   formatRouteDistance,
   formatRouteDuration,
@@ -38,7 +37,6 @@ export default function PickupDetailScreen({ route, navigation }) {
   const focused = useIsFocused();
   const gps = useEmployeeLocation(focused);
   const [vehicle, setVehicle] = useState(null);
-  const [mode, setMode] = useState("balanced");
   const [routeResult, setRouteResult] = useState(null);
   const [retry, setRetry] = useState(0);
   const destination = coordinatesOf(pickup);
@@ -55,11 +53,10 @@ export default function PickupDetailScreen({ route, navigation }) {
   const routeLoading = Boolean(requestKey && !currentResult);
   const routeError = currentResult?.error;
   const directions = useMemo(
-    () => selectRoute(currentResult?.routes, mode),
-    [currentResult, mode],
+    () => selectRoute(currentResult?.routes, "balanced"),
+    [currentResult],
   );
   const vehicleLabel = ROUTE_VEHICLES.find((option) => option.value === vehicle)?.label;
-  const modeLabel = ROUTE_MODES.find((option) => option.value === mode)?.label;
   const { acceptingId, confirm } = useAcceptPickup(
     () => {
       setData((previous) => ({
@@ -150,9 +147,7 @@ export default function PickupDetailScreen({ route, navigation }) {
           <Text style={[s.title, { fontSize: 21 }]}>Bản đồ và tuyến đường</Text>
           <RouteOptions
             vehicle={vehicle}
-            mode={mode}
             onVehicleChange={setVehicle}
-            onModeChange={setMode}
           />
           {destination ? (
             <PickupMap
@@ -189,7 +184,7 @@ export default function PickupDetailScreen({ route, navigation }) {
           {directions ? (
             <View style={s.card}>
               <Text style={[s.label, { color: colors.primary }]}>
-                {vehicleLabel} · {modeLabel}
+                {vehicleLabel} · Tuyến cân bằng
               </Text>
               <Text style={s.text}>Khoảng cách: {formatRouteDistance(directions.distanceMeters)}</Text>
               <Text style={s.text}>
@@ -197,8 +192,8 @@ export default function PickupDetailScreen({ route, navigation }) {
               </Text>
               <Text style={s.muted}>
                 {currentResult.routes.length === 1
-                  ? "Goong trả về 1 tuyến hợp lệ; các ưu tiên đang dùng chung tuyến này."
-                  : `Đã so sánh ${currentResult.routes.length} tuyến Goong trả về theo ưu tiên của bạn.`}
+                  ? "Goong trả về 1 tuyến hợp lệ."
+                  : `Đã so sánh ${currentResult.routes.length} tuyến Goong trả về để chọn tuyến cân bằng.`}
               </Text>
               <Text style={s.muted}>
                 Thời gian mang tính ước tính, chưa xác nhận tình trạng kẹt xe hiện tại.

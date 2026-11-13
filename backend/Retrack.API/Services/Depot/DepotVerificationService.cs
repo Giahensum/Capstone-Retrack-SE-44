@@ -92,6 +92,9 @@ public sealed class DepotVerificationService(IDepotVerificationRepository reposi
             throw new DepotConflictException("Thông tin kho đã thay đổi so với hồ sơ. Hãy yêu cầu bổ sung thay vì duyệt hồ sơ cũ.");
         submission.Status = status; submission.ReviewedAt = DateTime.UtcNow; submission.ReviewedBy = adminId; submission.ReviewReason = dto.Reason.Trim();
         depot.VerificationStatus = status;
+        repository.AddNotice(Notification.ForDepot(depot.OwnerId, depot.Id, "VERIFICATION",
+            dto.Approve ? "Hồ sơ kho đã được duyệt" : "Hồ sơ kho cần bổ sung",
+            $"Kho {depot.Name}: {dto.Reason.Trim()}", targetType: "PROFILE"));
         await work.SaveAsync(); await tx.CommitAsync();
     }
     public async Task<DepotVerificationDocument> FileAsync(Guid actor, Guid id)

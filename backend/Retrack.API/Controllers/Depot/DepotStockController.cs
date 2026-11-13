@@ -11,6 +11,9 @@ namespace Retrack.API.Controllers.Depot;
 public class DepotStockController(IDepotStockService service) : ControllerBase
 {
     private Guid UserId => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    [Authorize(Roles = "DEPOT_OWNER"), HttpPost("cost-preview")]
+    public async Task<IActionResult> PreviewCosts(Guid depotId, StockCostPreviewInput dto) =>
+        Ok(ApiResponse<StockCostPreviewDto>.Ok(await service.PreviewCostsAsync(UserId, depotId, dto)));
     [Authorize(Roles = "DEPOT_OWNER"), HttpGet("receipts/{id:guid}/adjustments")]
     public async Task<IActionResult> Adjustments(Guid depotId, Guid id, [FromQuery] DepotQuery query) =>
         Ok(ApiResponse<PagedResult<StockAdjustmentDto>>.Ok(await service.AdjustmentsAsync(UserId, depotId, id, query)));
@@ -25,12 +28,17 @@ public class DepotStockController(IDepotStockService service) : ControllerBase
     [HttpGet("receipts")]
     public async Task<IActionResult> List(Guid depotId, [FromQuery] DepotQuery query) =>
         Ok(ApiResponse<PagedResult<StockReceiptDto>>.Ok(await service.ListAsync(UserId, depotId, query)));
+    [HttpGet("receipts/{id:guid}")]
+    public async Task<IActionResult> Detail(Guid depotId, Guid id) => Ok(ApiResponse<StockReceiptDto>.Ok(await service.GetAsync(UserId, depotId, id)));
     [HttpPost("receipts")]
     public async Task<IActionResult> Create(Guid depotId, CreateStockReceiptDto dto) =>
         Ok(ApiResponse<StockReceiptDto>.Ok(await service.CreateAsync(UserId, depotId, dto)));
     [HttpPatch("receipts/{id:guid}/submit")]
     public async Task<IActionResult> Submit(Guid depotId, Guid id) =>
         Ok(ApiResponse<StockReceiptDto>.Ok(await service.ReviewAsync(UserId, depotId, id, "SUBMITTED")));
+    [Authorize(Roles = "DEPOT_OWNER"), HttpPut("receipts/{id:guid}/draft")]
+    public async Task<IActionResult> UpdateDraft(Guid depotId, Guid id, UpdateStockReceiptDto dto) =>
+        Ok(ApiResponse<StockReceiptDto>.Ok(await service.UpdateDraftAsync(UserId, depotId, id, dto)));
     [Authorize(Roles = "DEPOT_OWNER"), HttpPut("receipts/{id:guid}/costs")]
     public async Task<IActionResult> UpdateCosts(Guid depotId, Guid id, UpdateStockCostsDto dto) =>
         Ok(ApiResponse<StockReceiptDto>.Ok(await service.UpdateCostsAsync(UserId, depotId, id, dto)));

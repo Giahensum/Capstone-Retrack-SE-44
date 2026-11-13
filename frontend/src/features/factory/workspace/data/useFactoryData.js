@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { mapDemand, mapOrder, request } from "./factoryApi";
+import { loadFactoryPrices, mapDemand, mapOrder, request } from "./factoryApi";
 
 const paths = {
   demands: "/api/factory/demands",
@@ -81,6 +81,13 @@ export function useFactoryDashboard(period = "month") {
   return useQuery({
     queryKey: ["factory", "dashboard", period],
     queryFn: () => request(`/api/factory/dashboard?period=${encodeURIComponent(period)}`),
+  });
+}
+
+export function useFactoryPrices() {
+  return useQuery({
+    queryKey: ["factory", "prices"],
+    queryFn: loadFactoryPrices,
   });
 }
 

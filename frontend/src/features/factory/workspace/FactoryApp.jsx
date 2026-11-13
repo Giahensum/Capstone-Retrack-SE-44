@@ -48,9 +48,7 @@ function Workspace() {
             navigate("dashboard");
           }}
         >
-          <span className="factory-brand-logo" aria-hidden="true">
-            <img src="/brand/factory-logo.png" alt="" />
-          </span>
+          <img className="brand-mark" src="/brand/logo_mark.png" alt="" aria-hidden="true" />
           <span className="factory-brand-wordmark" aria-hidden="true">
             <strong>retrack</strong>
             <small>FACTORY WORKSPACE</small>

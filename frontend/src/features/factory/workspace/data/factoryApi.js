@@ -174,23 +174,25 @@ export function mapOrder(order) {
 }
 
 export async function loadFactoryState() {
-  const [profileResult, dashboard, pricesResult] = await Promise.all([
+  const [profileResult, dashboard] = await Promise.all([
     request("/api/factory/profile"),
     request("/api/factory/dashboard"),
-    request("/api/factory/marketplace/prices"),
   ]);
-  const prices = pricesResult.map((price) => ({
+  return {
+    version: 3,
+    profile: mapProfile(profileResult),
+    dashboard,
+  };
+}
+
+export async function loadFactoryPrices() {
+  const pricesResult = await request("/api/factory/marketplace/prices");
+  return pricesResult.map((price) => ({
     material: price.materialType,
     price: price.pricePerKg,
     date: dateOnly(price.effectiveDate),
     source: price.source || "",
   }));
-  return {
-    version: 3,
-    profile: mapProfile(profileResult),
-    dashboard,
-    prices,
-  };
 }
 
 export async function performFactoryAction(type, payload) {

@@ -10,7 +10,7 @@ using Xunit;
 
 namespace Retrack.Tests;
 
-public sealed class StockReceiptTests : IAsyncLifetime
+public sealed partial class StockReceiptTests : IAsyncLifetime
 {
     private readonly Guid owner = Guid.NewGuid(), depot = Guid.NewGuid(), employee = Guid.NewGuid();
     private static AppDbContext Open()
@@ -54,6 +54,19 @@ public sealed class StockReceiptTests : IAsyncLifetime
         var draft = await Stock(db).CreateAsync(owner, depot, input);
         return await Stock(db).ReviewAsync(owner, depot, draft.Id, "POSTED");
     }
+    [Theory]
+    [InlineData(false, "DEPOT_OWNER")]
+    [InlineData(true, "SELLER")]
+    public async Task Employee_cannot_access_stock_when_warehouse_owner_is_disabled_or_loses_role(bool active,string role)
+    {
+        await using var db=Open();var receipt=await Stock(db).CreateAsync(owner,depot,Input());
+        await db.Users.Where(x=>x.Id==owner).ExecuteUpdateAsync(x=>x.SetProperty(u=>u.IsActive,active).SetProperty(u=>u.Role,role));
+        await Assert.ThrowsAsync<DepotForbiddenException>(()=>Stock(db).ListAsync(employee,depot,new()));
+        await Assert.ThrowsAsync<DepotForbiddenException>(()=>Stock(db).GetAsync(employee,depot,receipt.Id));
+        await Assert.ThrowsAsync<DepotForbiddenException>(()=>Stock(db).ReviewAsync(employee,depot,receipt.Id,"SUBMITTED"));
+        var input=Input();input.PurchaseCost=0;input.CostsConfirmed=false;input.Lines[0].ReferencePrice=0;
+        await Assert.ThrowsAsync<DepotForbiddenException>(()=>Stock(db).CreateAsync(employee,depot,input));
+    }
     [Fact]
     public async Task Stale_tracked_receipt_cannot_adjust_voided_stock_or_trade_after_verification_is_revoked()
     {
@@ -67,6 +80,19 @@ public sealed class StockReceiptTests : IAsyncLifetime
         { var warehouse = await current.Depots.SingleAsync(x => x.Id == depot); warehouse.VerificationStatus = "UNVERIFIED"; await current.SaveChangesAsync(); }
         await Assert.ThrowsAsync<DepotConflictException>(() => Stock(stale).SellAsync(owner, depot, live.Lines.Single().Id, new(Guid.NewGuid(), 1, 200, 0, "Không được bán khi mất xác minh")));
         await using var check = Open(); Assert.False(await check.DepotStockCostAdjustments.AnyAsync(x => x.Line.Receipt.DepotId == depot)); Assert.False(await check.DepotReuseSales.AnyAsync(x => x.Line.Receipt.DepotId == depot));
+    }
+    [Fact]
+    public async Task Employee_receipt_submission_notifies_owner_once_with_safe_scoped_detail()
+    {
+        await using var db = Open(); var input = Input(); input.PurchaseCost = 0; input.CostsConfirmed = false; input.Lines[0].ReferencePrice = 0;
+        var receipt = await Stock(db).CreateAsync(employee, depot, input);
+        await Stock(db).ReviewAsync(employee, depot, receipt.Id, "SUBMITTED"); await Stock(db).ReviewAsync(employee, depot, receipt.Id, "SUBMITTED");
+        var notice = Assert.Single(await db.Notifications.Where(x => x.UserId == owner).ToListAsync());
+        Assert.Equal("STOCK", notice.Category); Assert.Equal(receipt.Id, notice.TargetId); Assert.Equal(depot, notice.DepotId);
+        Assert.Equal(receipt.Id, (await Stock(db).GetAsync(owner, depot, receipt.Id)).Id);
+        Assert.False((await Stock(db).GetAsync(employee, depot, receipt.Id)).CostsConfirmed);
+        await Assert.ThrowsAsync<DepotForbiddenException>(() => Stock(db).GetAsync(Guid.NewGuid(), depot, receipt.Id));
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => Stock(db).GetAsync(owner, depot, Guid.NewGuid()));
     }
     [Fact]
     public async Task Cost_report_matches_settled_fifo_and_partial_reuse_sale_without_double_subtracting_fees()

@@ -32,6 +32,9 @@ public sealed class DepotPaymentService(IDepotOwnerRepository owners, IDepotPaym
         req.PaymentProofUrl = paymentProofUrl;
         req.Status = "PAYMENT_SENT";
         req.UpdatedAt = DateTime.UtcNow;
+        // Thông báo lưu cùng trạng thái thanh toán; retry không tạo thêm bản ghi.
+        payments.AddNotice(Notification.ForPickup(req.SellerId, req.Id, "Kho đã chuyển khoản thanh toán",
+            $"Kho đã báo chuyển tiền cho đơn #{req.Id.ToString()[..8].ToUpper()}. Vui lòng đối chiếu tài khoản và xác nhận nhận tiền.", "PAYMENT"));
 
         // Ghi nhận phí cùng giao dịch với trạng thái và chứng từ.
         payments.AddFee(new PlatformTransaction

@@ -8,18 +8,28 @@ namespace Retrack.API.Repositories;
 public sealed class DepotOperationsRepository(AppDbContext db) : IDepotOperationsRepository
 {
     private IQueryable<Notification> Notices(Guid owner, Guid depot) => db.Notifications.Where(x => x.UserId == owner &&
-        (x.TransportJobId == null && x.PickupRequestId == null || db.TransportJobs.Any(t => t.Id == x.TransportJobId && t.Batch.DepotId == depot) ||
-         db.PickupRequests.Any(p => p.Id == x.PickupRequestId && p.TargetDepotId == depot)));
-    public Task<PagedResult<DepotNoticeDto>> NoticesAsync(Guid owner, Guid depot, DepotQuery query)
+        (x.DepotId == depot || x.DepotId == null &&
+         (x.TransportJobId == null && x.PickupRequestId == null || db.TransportJobs.Any(t => t.Id == x.TransportJobId && t.Batch.DepotId == depot) ||
+          db.PickupRequests.Any(p => p.Id == x.PickupRequestId && p.TargetDepotId == depot))));
+    public Task<PagedResult<DepotNoticeDto>> NoticesAsync(Guid owner, Guid depot, DepotNoticeQuery query)
     {
         var rows = Notices(owner, depot).AsNoTracking();
         if (query.Status == "UNREAD") rows = rows.Where(x => !x.IsRead);
         if (query.Status == "READ") rows = rows.Where(x => x.IsRead);
+        if (!string.IsNullOrWhiteSpace(query.Search))
+        {
+            var search = "%" + query.Search.Trim().Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_") + "%";
+            rows = rows.Where(x => EF.Functions.ILike(x.Title, search) || x.Message != null && EF.Functions.ILike(x.Message, search));
+        }
+        if (!string.IsNullOrEmpty(query.Category)) rows = rows.Where(x =>
+            (x.Category != "SYSTEM" ? x.Category : x.TransportJobId != null ? "TRANSPORT" : x.PickupRequestId != null ? "PAYMENT" : "SYSTEM") == query.Category);
         return DepotRepositoryPage.ReadAsync(rows.OrderByDescending(x => x.CreatedAt).ThenBy(x => x.Id).Select(x => new DepotNoticeDto(
-            x.Id, x.Title, x.Message, x.IsRead, x.CreatedAt, db.TransportJobs.Where(t => t.Id == x.TransportJobId).Select(t => (Guid?)t.BatchId).FirstOrDefault(), x.PickupRequestId)), query);
+            x.Id, x.Title, x.Message, x.IsRead, x.CreatedAt, x.BatchId ?? db.TransportJobs.Where(t => t.Id == x.TransportJobId).Select(t => (Guid?)t.BatchId).FirstOrDefault(), x.PickupRequestId,
+            x.Category != "SYSTEM" ? x.Category : x.TransportJobId != null ? "TRANSPORT" : x.PickupRequestId != null ? "PAYMENT" : "SYSTEM", x.TargetType, x.TargetId)), query);
     }
     public Task<int> UnreadAsync(Guid owner, Guid depot) => Notices(owner, depot).CountAsync(x => !x.IsRead);
-    public async Task<bool> ReadAsync(Guid owner, Guid depot, Guid id) => await Notices(owner, depot).Where(x => x.Id == id).ExecuteUpdateAsync(s => s.SetProperty(x => x.IsRead, true)) > 0;
+    public async Task<bool> ReadAsync(Guid owner, Guid depot, Guid id, bool isRead = true) => await Notices(owner, depot).Where(x => x.Id == id).ExecuteUpdateAsync(s => s.SetProperty(x => x.IsRead, isRead)) > 0;
+    public Task<int> ReadAllAsync(Guid owner, Guid depot) => Notices(owner, depot).Where(x => !x.IsRead).ExecuteUpdateAsync(s => s.SetProperty(x => x.IsRead, true));
     public Task<PagedResult<DepotDriverEventDto>> EventsAsync(Guid depot, Guid batch, DepotQuery query) => DepotRepositoryPage.ReadAsync(db.DriverDeliveryEvents.AsNoTracking()
         .Where(x => x.Job.BatchId == batch && x.Job.Batch.DepotId == depot).OrderByDescending(x => x.CreatedAt).ThenBy(x => x.Id)
         .Select(x => new DepotDriverEventDto(x.Id, x.Action, x.Driver.FullName, x.Driver.Phone, x.Reason, x.ImageUrl, x.CreatedAt,

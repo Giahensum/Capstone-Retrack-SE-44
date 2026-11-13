@@ -14,7 +14,7 @@ import {
 } from "../components/FactoryUI";
 import { materials, money, number, today } from "../data/factoryState";
 import { mapOrder } from "../data/factoryApi";
-import { useFactoryDashboard, useFactoryPage } from "../data/useFactoryData";
+import { useFactoryDashboard, useFactoryPage, useFactoryPrices } from "../data/useFactoryData";
 import ContractDocument from "../../../../components/ui/ContractDocument";
 
 const MaterialSelect = ({ value, onChange, all = false }) => (
@@ -446,7 +446,7 @@ export function Marketplace({ navigate }) {
   );
 }
 export function Demands() {
-  const { act } = useFactory();
+  const { act, busy } = useFactory();
   const [editing, setEditing] = useState(null);
   const [remove, setRemove] = useState(null);
   const [filter, setFilter] = useState("");
@@ -551,6 +551,7 @@ export function Demands() {
         <Modal
           title={editing.id ? "Chỉnh sửa nhu cầu" : "Đăng nhu cầu thu mua"}
           onClose={() => setEditing(null)}
+          busy={busy}
         >
           <form
             onSubmit={async (e) => {
@@ -596,10 +597,10 @@ export function Demands() {
               </Field>
             </div>
             <div className="form-actions">
-              <Button secondary onClick={() => setEditing(null)}>
+              <Button secondary disabled={busy} onClick={() => setEditing(null)}>
                 Hủy
               </Button>
-              <Button type="submit">Lưu nhu cầu</Button>
+              <Button type="submit" disabled={busy}>{busy ? "Đang lưu…" : "Lưu nhu cầu"}</Button>
             </div>
           </form>
         </Modal>
@@ -886,7 +887,7 @@ export function Profile() {
   );
 }
 export function Prices() {
-  const { state } = useFactory();
+  const { data: prices = [], isPending, error } = useFactoryPrices();
   return (
     <>
       <PageHead
@@ -894,6 +895,8 @@ export function Prices() {
         text="Dùng để lập kế hoạch thu mua. Giá giao dịch cuối cùng được thỏa thuận sau KCS."
       />
       <Card title="Bảng giá cập nhật bởi Admin">
+        {isPending && <p role="status">Đang tải bảng giá…</p>}
+        {error && <p role="alert">{error.message}</p>}
         <div className="table-wrap">
           <table>
             <thead>
@@ -905,7 +908,7 @@ export function Prices() {
               </tr>
             </thead>
             <tbody>
-              {state.prices.map((p) => (
+              {prices.map((p) => (
                 <tr key={p.material}>
                   <td>
                     <strong>{materials[p.material]}</strong>
@@ -917,6 +920,7 @@ export function Prices() {
               ))}
             </tbody>
           </table>
+          {!prices.length && !isPending && !error && <Empty text="Chưa có bảng giá tham khảo" />}
         </div>
       </Card>
     </>

@@ -1,6 +1,10 @@
 @import "tailwindcss";
 @import "./features/depot/styles/depot-theme.css";
 
+/* Hiệu ứng mở popup (Modal đấu thầu) */
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes popIn { from { opacity: 0; transform: translateY(14px) scale(0.98); } to { opacity: 1; transform: none; } }
+
 @layer base {
   :root {
     --color-primary: #10b981;    /* emerald-500 */
@@ -59,4 +63,14 @@
   .input-field {
     @apply bg-slate-900 border border-slate-600 text-slate-100 rounded-lg px-3 py-2 w-full focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all;
   }
+}
+
+/* Hợp đồng đặt cọc: khổ A4, in và xuất PDF */
+.contract-sheet { font-family: "Times New Roman", Times, serif; font-size: 15px; line-height: 1.5; color: #000; background: #fff; }
+.contract-avoid { break-inside: avoid; page-break-inside: avoid; padding-bottom: 12px; }
+#contract-print-root { position: fixed; left: -10000px; top: 0; width: 180mm; background: #fff; }
+@media print {
+  @page { size: A4; margin: 15mm; }
+  body > *:not(#contract-print-root) { display: none !important; }
+  #contract-print-root { position: static; left: 0; width: auto; }
 }

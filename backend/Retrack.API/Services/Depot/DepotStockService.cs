@@ -32,34 +32,17 @@ public sealed partial class DepotStockService(IDepotStockRepository repository, 
         return new() { Page = page.Page, PageSize = page.PageSize, TotalCount = page.TotalCount,
             Items = page.Items.Select(x => Map(x, isOwner)).ToList() };
     }
+    public async Task<StockReceiptDto> GetAsync(Guid userId, Guid depotId, Guid receiptId)
+    {
+        var isOwner = await RequireAccessAsync(userId, depotId);
+        var receipt = await repository.FindReceiptAsync(receiptId);
+        if (receipt == null || receipt.DepotId != depotId) throw new KeyNotFoundException("Không tìm thấy phiếu nhập trong kho.");
+        return Map(receipt, isOwner);
+    }
     public async Task<StockReceiptDto> CreateAsync(Guid userId, Guid depotId, CreateStockReceiptDto dto)
     {
         var isOwner = await RequireAccessAsync(userId, depotId);
-        if (dto.OperationId == Guid.Empty || dto.SourceType is not ("EXTERNAL_PURCHASE" or "OPENING_BALANCE" or "BULK_PURCHASE") ||
-            string.IsNullOrWhiteSpace(dto.Reference) || dto.Reference.Length > 255 || dto.Lines is null || dto.Expenses is null ||
-            dto.Lines.Count is < 1 or > 50 || dto.Expenses.Count > 30 || dto.Lines.Any(x => x == null) || dto.Expenses.Any(x => x == null) || dto.ReceivedAt.Kind != DateTimeKind.Utc ||
-            dto.ReceivedAt < new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc) || dto.ReceivedAt > DateTime.UtcNow.AddMinutes(5))
-            throw new ArgumentException("Cần nguồn, ngày nhận thực tế, mã tham chiếu và từ 1 đến 50 dòng hàng.");
-        // Nhân viên chỉ lập số nhận; chủ kho lập/chốt dữ liệu chi phí nội bộ.
-        if (!isOwner && (dto.CostsConfirmed || dto.PurchaseCost != 0 || dto.Expenses.Count != 0 || dto.Lines.Any(x => x.DirectCost != 0 || x.ReferencePrice != 0)))
-            throw new DepotForbiddenException();
-        Money(dto.PurchaseCost);
-        foreach (var x in dto.Lines)
-        {
-            if (x.Kind is not ("MATERIAL" or "REUSABLE") || string.IsNullOrWhiteSpace(x.Name) || x.Name.Length > 255 ||
-                x.Quantity <= 0 || x.Quantity > 1_000_000_000 || decimal.Round(x.Quantity, 3) != x.Quantity || x.ConditionNote?.Length > 1000)
-                throw new ArgumentException("Tên, số lượng hoặc tình trạng dòng hàng không hợp lệ.");
-            if (x.Kind == "MATERIAL") { x.MaterialType = MaterialCatalog.RequireCode(x.MaterialType ?? ""); x.Unit = "kg"; }
-            else if (x.Unit is not ("cái" or "bộ") || decimal.Truncate(x.Quantity) != x.Quantity || x.MaterialType != null)
-                throw new ArgumentException("Đồ tái sử dụng đếm nguyên cái/bộ và không đồng thời là dòng vật liệu.");
-            Money(x.ReferencePrice); Money(x.DirectCost);
-        }
-        foreach (var x in dto.Expenses)
-        {
-            if (x.Category is not ("LABOR" or "FUEL" or "TRANSPORT" or "HANDLING" or "NON_RECOVERABLE_TAX" or "OTHER") ||
-                string.IsNullOrWhiteSpace(x.Description) || x.Description.Length > 255) throw new ArgumentException("Chi phí cần nhóm và mô tả rõ.");
-            Money(x.Amount);
-        }
+        ValidateReceipt(dto, isOwner);
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(dto))));
         await using var tx = await work.BeginAsync();
         await batches.LockDepotAsync(depotId);
@@ -89,6 +72,11 @@ public sealed partial class DepotStockService(IDepotStockRepository repository, 
                 Name = x.Name.Trim(), Unit = x.Unit, Quantity = x.Quantity, ReferencePrice = x.ReferencePrice,
                 DirectCost = x.DirectCost, ConditionNote = x.ConditionNote, AllocatedCost = costs?[i], Position = i }).ToList(),
             Expenses = dto.Expenses.Select(x => new DepotStockExpense { Category = x.Category, Description = x.Description.Trim(), Amount = x.Amount }).ToList() };
+        if (dto.PostImmediately)
+        {
+            receipt.Status = "POSTED"; receipt.PostedAt = DateTime.UtcNow; receipt.PostedBy = userId;
+            receipt.ReviewedAt = receipt.PostedAt; receipt.ReviewedBy = userId;
+        }
         repository.AddReceipt(receipt);
         await work.SaveAsync(); await tx.CommitAsync();
         return Map(receipt, isOwner);
@@ -109,7 +97,7 @@ public sealed partial class DepotStockService(IDepotStockRepository repository, 
                 throw new ArgumentException("Chi phí cần nhóm và mô tả rõ.");
         }
         await using var tx = await work.BeginAsync(); await batches.LockDepotAsync(depotId);
-        var receipt = await repository.FindReceiptAsync(id);
+        var receipt = await repository.ReloadReceiptAsync(id);
         if (receipt == null || receipt.DepotId != depotId) throw new KeyNotFoundException("Không tìm thấy phiếu trong kho.");
         if (receipt.Status is not ("DRAFT" or "SUBMITTED")) throw new DepotConflictException("Chỉ cập nhật chi phí trước khi ghi sổ; không sửa ngầm giá vốn đã xuất.");
         if (receipt.BulkAgreementId.HasValue && dto.PurchaseCost != (await repository.BulkSourceAsync(receipt.BulkAgreementId.Value))?.Amount)
@@ -136,7 +124,7 @@ public sealed partial class DepotStockService(IDepotStockRepository repository, 
         if (action is not ("SUBMITTED" or "POSTED" or "REJECTED" or "VOIDED")) throw new ArgumentException("Thao tác không hợp lệ.");
         if (action is "REJECTED" or "VOIDED" && (string.IsNullOrWhiteSpace(reason) || reason.Length > 1000)) throw new ArgumentException("Cần lý do tối đa 1.000 ký tự.");
         await using var tx = await work.BeginAsync(); await batches.LockDepotAsync(depotId);
-        var receipt = await repository.FindReceiptAsync(id);
+        var receipt = await repository.ReloadReceiptAsync(id);
         if (receipt == null || receipt.DepotId != depotId) throw new KeyNotFoundException("Không tìm thấy phiếu trong kho.");
         if (receipt.Status == action) return Map(receipt, isOwner);
         if (action == "VOIDED")
@@ -155,6 +143,9 @@ public sealed partial class DepotStockService(IDepotStockRepository repository, 
             throw new DepotConflictException("Phiếu đã chốt, không được ghi sổ lại hoặc sửa lịch sử.");
         if (action == "POSTED") { receipt.PostedAt = DateTime.UtcNow; receipt.PostedBy = userId; }
         receipt.Status = action; receipt.ReviewedBy = userId; receipt.ReviewedAt = DateTime.UtcNow; receipt.ReviewNote = reason?.Trim();
+        if (action == "SUBMITTED" && !isOwner)
+            repository.AddNotice(Notification.ForDepot(await repository.OwnerIdAsync(depotId), depotId, "STOCK",
+                "Phiếu nhập kho đang chờ duyệt", $"Nhân viên đã gửi phiếu {receipt.Reference}. Vui lòng kiểm tra hàng thực nhận và chi phí trước khi ghi sổ.", targetType: "RECEIPT", targetId: receipt.Id));
         await work.SaveAsync(); await tx.CommitAsync();
         return Map(receipt, isOwner);
     }
@@ -234,6 +225,34 @@ public sealed partial class DepotStockService(IDepotStockRepository repository, 
         repository.AddExpense(new() { Id = dto.OperationId, BatchId = batchId, Description = dto.Description.Trim(), Amount = dto.Amount, CreatedBy = ownerId });
         await work.SaveAsync(); await tx.CommitAsync();
     }
+    private static void ValidateReceipt(CreateStockReceiptDto dto, bool isOwner)
+    {
+        if (dto.OperationId == Guid.Empty || dto.SourceType is not ("EXTERNAL_PURCHASE" or "OPENING_BALANCE" or "BULK_PURCHASE") ||
+            string.IsNullOrWhiteSpace(dto.Reference) || dto.Reference.Length > 255 || dto.Lines is null || dto.Expenses is null ||
+            dto.Lines.Count is < 1 or > 50 || dto.Expenses.Count > 30 || dto.Lines.Any(x => x == null) || dto.Expenses.Any(x => x == null) || dto.ReceivedAt.Kind != DateTimeKind.Utc ||
+            dto.ReceivedAt < new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc) || dto.ReceivedAt > DateTime.UtcNow.AddMinutes(5))
+            throw new ArgumentException("Cần nguồn, ngày nhận thực tế, mã tham chiếu và từ 1 đến 50 dòng hàng.");
+        // Nhân viên chỉ lập số nhận; chủ kho lập/chốt dữ liệu chi phí nội bộ.
+        if (!isOwner && (dto.PostImmediately || dto.CostsConfirmed || dto.PurchaseCost != 0 || dto.Expenses.Count != 0 || dto.Lines.Any(x => x.DirectCost != 0 || x.ReferencePrice != 0)))
+            throw new DepotForbiddenException();
+        Money(dto.PurchaseCost);
+        foreach (var x in dto.Lines)
+        {
+            if (x.Kind is not ("MATERIAL" or "REUSABLE") || string.IsNullOrWhiteSpace(x.Name) || x.Name.Length > 255 ||
+                x.Quantity <= 0 || x.Quantity > 1_000_000_000 || decimal.Round(x.Quantity, 3) != x.Quantity || x.ConditionNote?.Length > 1000)
+                throw new ArgumentException("Tên, số lượng hoặc tình trạng dòng hàng không hợp lệ.");
+            if (x.Kind == "MATERIAL") { x.MaterialType = MaterialCatalog.RequireCode(x.MaterialType ?? ""); x.Unit = "kg"; }
+            else if (x.Unit is not ("cái" or "bộ") || decimal.Truncate(x.Quantity) != x.Quantity || x.MaterialType != null)
+                throw new ArgumentException("Đồ tái sử dụng đếm nguyên cái/bộ và không đồng thời là dòng vật liệu.");
+            Money(x.ReferencePrice); Money(x.DirectCost);
+        }
+        foreach (var x in dto.Expenses)
+        {
+            if (x.Category is not ("LABOR" or "FUEL" or "TRANSPORT" or "HANDLING" or "NON_RECOVERABLE_TAX" or "OTHER") ||
+                string.IsNullOrWhiteSpace(x.Description) || x.Description.Length > 255) throw new ArgumentException("Chi phí cần nhóm và mô tả rõ.");
+            Money(x.Amount);
+        }
+    }
     private static void Money(decimal value)
     {
         if (value < 0 || value > 1_000_000_000_000 || decimal.Truncate(value) != value)
@@ -244,7 +263,7 @@ public sealed partial class DepotStockService(IDepotStockRepository repository, 
         includeCost ? x.PurchaseCost + x.Expenses.Sum(e => e.Amount) + x.Lines.Sum(l => l.DirectCost) : 0, x.ReviewNote,
         x.Lines.OrderBy(l => l.Position).Select(l => new StockLineDto(l.Id, l.Kind, l.MaterialType, l.Name, l.Unit,
             l.Quantity, includeCost ? l.ReferencePrice : 0, includeCost ? l.DirectCost : 0, includeCost ? l.AllocatedCost : null, l.ConditionNote)).ToList(),
-        includeCost ? x.Expenses.Select(e => new StockExpenseInput(e.Category, e.Description, e.Amount)).ToList() : [], x.BulkAgreementId);
+        includeCost ? x.Expenses.Select(e => new StockExpenseInput(e.Category, e.Description, e.Amount)).ToList() : [], x.BulkAgreementId, Revision(x));
     private static ReuseSaleDto Sale(DepotReuseSale x)
     {
         var cost = x.UnitCost * x.Quantity;

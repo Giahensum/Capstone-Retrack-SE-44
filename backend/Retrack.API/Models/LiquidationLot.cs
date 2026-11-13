@@ -25,6 +25,7 @@ public class LiquidationLot
     [Column("collection_deadline")] public DateTime CollectionDeadline { get; set; }
     [Column("starting_price", TypeName = "numeric(18,0)")] public decimal StartingPrice { get; set; }
     [Column("bid_increment", TypeName = "numeric(18,0)")] public decimal BidIncrement { get; set; }
+    [Column("deposit_percent", TypeName = "numeric(5,2)")] public decimal DepositPercent { get; set; }
     [Column("highest_price", TypeName = "numeric(18,0)")] public decimal? HighestPrice { get; set; }
     [Column("highest_bid_id")] public Guid? HighestBidId { get; set; }
     [Column("bid_count")] public int BidCount { get; set; }
@@ -76,5 +77,11 @@ public class LiquidationAgreement
     [Column("payment_confirmed_at")] public DateTime? PaymentConfirmedAt { get; set; }
     [Column("owner_collected_at")] public DateTime? OwnerCollectedAt { get; set; }
     [Column("seller_handed_over_at")] public DateTime? SellerHandedOverAt { get; set; }
+    [Column("deposit_amount", TypeName = "numeric(18,0)")] public decimal DepositAmount { get; set; }
+    [Column("seller_signed_at")] public DateTime? SellerSignedAt { get; set; }
+    [Column("buyer_signed_at")] public DateTime? BuyerSignedAt { get; set; }
+    [Column("deposit_reference"), MaxLength(255)] public string? DepositReference { get; set; }
+    [Column("deposit_reported_at")] public DateTime? DepositReportedAt { get; set; }
+    [Column("deposit_confirmed_at")] public DateTime? DepositConfirmedAt { get; set; }
     [Column("created_at")] public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

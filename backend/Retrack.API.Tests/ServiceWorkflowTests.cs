@@ -188,7 +188,9 @@ public class FactoryServiceWorkflowTests
         Assert.Equal(ServiceOutcome.Success, (await orders.ReceiveAsync(factory.OwnerId, batch.Id, default)).Outcome);
         Assert.Equal("RECEIVED", batch.Status);
         Assert.NotNull(batch.FactoryReceivedAt);
+        Assert.Single(await db.Notifications.Where(x => x.TransportJobId == job.Id && x.Title == "Nhà máy đã nhận hàng").ToListAsync());
         Assert.Equal(ServiceOutcome.Conflict, (await orders.ReceiveAsync(factory.OwnerId, batch.Id, default)).Outcome);
+        Assert.Single(await db.Notifications.Where(x => x.TransportJobId == job.Id && x.Title == "Nhà máy đã nhận hàng").ToListAsync());
     }
 
     [Theory]

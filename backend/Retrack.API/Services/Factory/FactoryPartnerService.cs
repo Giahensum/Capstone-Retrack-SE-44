@@ -25,29 +25,52 @@ public class FactoryPartnerService(AppDbContext db) : FactoryServiceBase(db), IF
         var partnerships = await source.OrderByDescending(x => x.CreatedAt).ThenBy(x => x.Id)
             .Skip((query.Page - 1) * query.PageSize).Take(query.PageSize).ToListAsync(ct);
         var depotIds = partnerships.Select(x => x.DepotId).ToArray();
-        var reviews = await Db.FactoryDepotReviews.AsNoTracking().Where(x => x.FactoryId == factory.Id && depotIds.Contains(x.DepotId))
-            .OrderByDescending(x => x.CreatedAt).ToListAsync(ct);
-        var latestReviews = reviews.GroupBy(x => x.DepotId).ToDictionary(x => x.Key, x => x.First());
-        var items = partnerships.Select(x => new PartnerResponse
+        var reviewStats = depotIds.Length == 0
+            ? new Dictionary<Guid, PartnerReviewStats>()
+            : await Db.FactoryDepotReviews.AsNoTracking()
+                .Where(x => x.FactoryId == factory.Id && depotIds.Contains(x.DepotId))
+                .GroupBy(x => x.DepotId)
+                .Select(group => new PartnerReviewStats(
+                    group.Key,
+                    group.Count(),
+                    group.OrderByDescending(x => x.CreatedAt).ThenByDescending(x => x.Id).Select(x => x.Rating).FirstOrDefault(),
+                    group.OrderByDescending(x => x.CreatedAt).ThenByDescending(x => x.Id).Select(x => x.Comment).FirstOrDefault()))
+                .ToDictionaryAsync(x => x.DepotId, ct);
+        var orderStats = depotIds.Length == 0
+            ? new Dictionary<Guid, PartnerOrderStats>()
+            : await Db.InventoryBatches.AsNoTracking()
+                .Where(batch => batch.TargetFactoryId == factory.Id && depotIds.Contains(batch.DepotId) && batch.Status != "MARKETPLACE")
+                .GroupBy(batch => batch.DepotId)
+                .Select(group => new PartnerOrderStats(
+                    group.Key,
+                    group.Count(),
+                    group.Count(batch => batch.Status == "COMPLETED")))
+                .ToDictionaryAsync(x => x.DepotId, ct);
+        var items = partnerships.Select(x =>
         {
-            Id = x.Id,
-            DepotId = x.DepotId,
-            Name = x.Depot.Name,
-            Address = x.Depot.Address,
-            ContactPhone = x.Depot.Owner.Phone,
-            Status = x.EffectiveStatus, BlockedByFactory = x.BlockedByFactory, BlockedByDepot = x.BlockedByDepot, LegacyBlocked = x.Status == "BLOCKED",
-            Rating = x.Depot.Rating,
-            LatestRating = latestReviews.TryGetValue(x.DepotId, out var review) ? review.Rating : null,
-            LatestComment = latestReviews.TryGetValue(x.DepotId, out review) ? review.Comment : null,
-            ReviewCount = reviews.Count(r => r.DepotId == x.DepotId),
-            OrderCount = Db.InventoryBatches.Count(b => b.TargetFactoryId == x.FactoryId && b.DepotId == x.DepotId && b.Status != "MARKETPLACE"),
-            CompletedOrderCount = Db.InventoryBatches.Count(b => b.TargetFactoryId == x.FactoryId && b.DepotId == x.DepotId && b.Status == "COMPLETED"),
-            ContractCode = x.ContractCode, ContractVersion = x.ContractVersion, ContractTerms = x.ContractTerms,
-            ContractTermsHash = x.ContractTermsHash, ContractStatus = x.ContractStatus,
-            FactorySignedAt = x.FactorySignedAt, DepotSignedAt = x.DepotSignedAt,
-            ContractEffectiveAt = x.ContractEffectiveAt, ContractExpiresAt = x.ContractExpiresAt,
-            TerminationStatus = x.TerminationStatus, TerminationRequestedBy = x.TerminationRequestedBy,
-            TerminationRequestedAt = x.TerminationRequestedAt, TerminationReason = x.TerminationReason, TerminatedAt = x.TerminatedAt
+            reviewStats.TryGetValue(x.DepotId, out var review);
+            orderStats.TryGetValue(x.DepotId, out var orders);
+            return new PartnerResponse
+            {
+                Id = x.Id,
+                DepotId = x.DepotId,
+                Name = x.Depot.Name,
+                Address = x.Depot.Address,
+                ContactPhone = x.Depot.Owner.Phone,
+                Status = x.EffectiveStatus, BlockedByFactory = x.BlockedByFactory, BlockedByDepot = x.BlockedByDepot, LegacyBlocked = x.Status == "BLOCKED",
+                Rating = x.Depot.Rating,
+                LatestRating = review?.LatestRating,
+                LatestComment = review?.LatestComment,
+                ReviewCount = review?.ReviewCount ?? 0,
+                OrderCount = orders?.OrderCount ?? 0,
+                CompletedOrderCount = orders?.CompletedOrderCount ?? 0,
+                ContractCode = x.ContractCode, ContractVersion = x.ContractVersion, ContractTerms = x.ContractTerms,
+                ContractTermsHash = x.ContractTermsHash, ContractStatus = x.ContractStatus,
+                FactorySignedAt = x.FactorySignedAt, DepotSignedAt = x.DepotSignedAt,
+                ContractEffectiveAt = x.ContractEffectiveAt, ContractExpiresAt = x.ContractExpiresAt,
+                TerminationStatus = x.TerminationStatus, TerminationRequestedBy = x.TerminationRequestedBy,
+                TerminationRequestedAt = x.TerminationRequestedAt, TerminationReason = x.TerminationReason, TerminatedAt = x.TerminatedAt
+            };
         }).ToList();
         return ServiceResult<PageResponse<PartnerResponse>>.Success(data: new PageResponse<PartnerResponse>
         {
@@ -73,6 +96,7 @@ public class FactoryPartnerService(AppDbContext db) : FactoryServiceBase(db), IF
         var partner = await Db.FactoryDepotPartnerships.SingleOrDefaultAsync(x => x.FactoryId == factory.Id && x.DepotId == depotId, ct);
         if (partner is null) return ServiceResult<PartnerStatusResponse>.NotFound("Không tìm thấy đối tác.");
         await Db.Entry(partner).ReloadAsync(ct);
+        var previous = (partner.Status, partner.BlockedByFactory, partner.BlockedByDepot);
         if (status is "APPROVED" or "DECLINED")
         {
             if (partner.IsBlocked) return ServiceResult<PartnerStatusResponse>.Conflict("Quan hệ đang bị chặn; quyết định hợp tác không được mở chặn.");
@@ -85,6 +109,8 @@ public class FactoryPartnerService(AppDbContext db) : FactoryServiceBase(db), IF
         }
         else partner.BlockedByFactory = status == "BLOCKED";
         partner.UpdatedAt = DateTime.UtcNow;
+        if (previous != (partner.Status, partner.BlockedByFactory, partner.BlockedByDepot))
+            await NotifyDepotAsync(depotId, "Nhà máy cập nhật quan hệ hợp tác", $"{factory.Name}: {(status == "APPROVED" ? "đồng ý hợp tác" : status == "DECLINED" ? "chưa đồng ý hợp tác, lô sau cần duyệt lại" : status == "BLOCKED" ? "đã chặn giao dịch mới" : "đã bỏ phần chặn của nhà máy")}. Xem trạng thái quan hệ hiện tại trước khi gửi lô.", targetType: "PARTNERS", ct: ct);
         await Db.SaveChangesAsync(ct);
         if (tx != null) await tx.CommitAsync(ct);
         return ServiceResult<PartnerStatusResponse>.Success(data: new PartnerStatusResponse
@@ -101,6 +127,8 @@ public class FactoryPartnerService(AppDbContext db) : FactoryServiceBase(db), IF
         var terms = request.Terms.Trim();
         if (terms.Length is < 50 or > 10000)
             return ServiceResult<PartnerStatusResponse>.Invalid("Nội dung hợp đồng phải từ 50 đến 10.000 ký tự.");
+        if (request.ValidMonths is < 1 or > 120)
+            return ServiceResult<PartnerStatusResponse>.Invalid("Thời hạn hợp đồng phải từ 1 đến 120 tháng.");
         var factory = await CurrentFactory(userId, ct);
         await using var tx = Db.Database.IsRelational() ? await Db.Database.BeginTransactionAsync(ct) : null;
         if (Db.Database.IsRelational())
@@ -206,6 +234,10 @@ public class FactoryPartnerService(AppDbContext db) : FactoryServiceBase(db), IF
         ContractCode = partner.ContractCode, ContractStatus = partner.ContractStatus,
         TerminationStatus = partner.TerminationStatus
     };
+
+    private sealed record PartnerReviewStats(Guid DepotId, int ReviewCount, int? LatestRating, string? LatestComment);
+    private sealed record PartnerOrderStats(Guid DepotId, int OrderCount, int CompletedOrderCount);
+
     public async Task<ServiceResult<PartnerRatingResponse>> RateAsync(Guid userId, Guid orderId, RatingRequest request, CancellationToken ct)
     {
         if (request.BlockPartner) return ServiceResult<PartnerRatingResponse>.Invalid("Dùng chức năng chặn đối tác riêng để xác nhận thao tác.");
@@ -227,6 +259,7 @@ public class FactoryPartnerService(AppDbContext db) : FactoryServiceBase(db), IF
         review.Rating = request.Rating;
         review.Comment = request.Comment?.Trim();
         var partner = await Db.FactoryDepotPartnerships.SingleOrDefaultAsync(x => x.FactoryId == factory.Id && x.DepotId == batch.DepotId, ct);
+        var previousStatus = partner?.Status;
         if (request.PartnershipStatus is not null)
         {
             if (partner is null)
@@ -235,6 +268,8 @@ public class FactoryPartnerService(AppDbContext db) : FactoryServiceBase(db), IF
                 return ServiceResult<PartnerRatingResponse>.Conflict("Quan hệ đang bị chặn; hãy xử lý trạng thái chặn trước.");
             partner.Status = request.PartnershipStatus.Value.ToString();
             partner.UpdatedAt = DateTime.UtcNow;
+            if (previousStatus != partner.Status)
+                await NotifyDepotAsync(batch.DepotId, "Nhà máy cập nhật quan hệ hợp tác", $"{factory.Name} đã cập nhật quyết định hợp tác sau đánh giá lô. Xem thông tin đối tác trước khi gửi lô tiếp theo.", targetType: "PARTNERS", ct: ct);
         }
         await Db.SaveChangesAsync(ct);
         if (tx != null) await tx.CommitAsync(ct);
