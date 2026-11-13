@@ -108,13 +108,14 @@ public sealed partial class DepotStockRepository(AppDbContext db) : IDepotStockR
         var active = ActiveBatches(depotId, names);
         var used = await db.DepotBatchCostSources.AsNoTracking().Where(x => active.Any(b => b.Id == x.BatchId))
             .GroupBy(x => new { x.SourceId, x.SourceType }).Select(g => new { g.Key.SourceId, g.Key.SourceType, Quantity = g.Sum(x => x.Quantity) }).ToListAsync();
+        var usedBySource = used.ToDictionary(x => (x.SourceType, x.SourceId), x => x.Quantity);
         var legacy = await active.Where(b => !db.DepotBatchCostSources.Any(x => x.BatchId == b.Id))
             .SumAsync(b => (decimal?)b.DeclaredWeightKg) ?? 0;
         var result = new List<DepotCostLayer>();
         // Lô cũ chưa có snapshot vẫn chiếm lượng tồn; không cộng lại DONE thành một phiếu nhận mới.
         foreach (var layer in layers.OrderBy(x => x.ReceivedAt).ThenBy(x => x.Id))
         {
-            var left = Math.Max(0, layer.Quantity - used.Where(x => x.SourceId == layer.Id && x.SourceType == layer.SourceType).Sum(x => x.Quantity));
+            var left = Math.Max(0, layer.Quantity - usedBySource.GetValueOrDefault((layer.SourceType, layer.Id)));
             var legacyUsed = Math.Min(left, legacy);
             legacy -= legacyUsed;
             left -= legacyUsed;
