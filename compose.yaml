@@ -1,0 +1,108 @@
+name: retrack
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-retrack}
+      POSTGRES_USER: ${POSTGRES_USER:-retrack}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Dien POSTGRES_PASSWORD trong .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/bootstrap/retrack-system.sql:/opt/retrack/bootstrap.sql:ro
+      - ./deploy/init-db.sh:/opt/retrack/init-db.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    logging: &logging
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  api:
+    image: ${IMAGE_PREFIX:-retrack}/api:${IMAGE_TAG:-local}
+    build:
+      context: ./backend/Retrack.API
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      Database__Initialize: "false"
+      HttpsRedirection__Enabled: "false"
+      ConnectionStrings__DefaultConnection: 'Host=db;Port=5432;Database=${POSTGRES_DB:-retrack};Username=${POSTGRES_USER:-retrack};Password="${POSTGRES_PASSWORD:?Dien POSTGRES_PASSWORD trong .env}"'
+      Jwt__Key: ${JWT_KEY:?Dien JWT_KEY ngau nhien it nhat 32 byte trong .env}
+      Jwt__Issuer: ${JWT_ISSUER:-ReTrackAPI}
+      Jwt__Audience: ${JWT_AUDIENCE:-ReTrackClient}
+      Frontend__Url: ${PUBLIC_URL:-http://localhost:8080}
+      AiService__Url: ${AI_SERVICE_URL:-http://ai:5005}
+      Cloudinary__CloudName: ${CLOUDINARY_CLOUD_NAME:-}
+      Cloudinary__ApiKey: ${CLOUDINARY_API_KEY:-}
+      Cloudinary__ApiSecret: ${CLOUDINARY_API_SECRET:-}
+      Google__ClientId: ${VITE_GOOGLE_CLIENT_ID:-}
+      Smtp__Host: ${SMTP_HOST:-}
+      Smtp__Port: ${SMTP_PORT:-587}
+      Smtp__Username: ${SMTP_USERNAME:-}
+      Smtp__Password: ${SMTP_PASSWORD:-}
+      Smtp__FromEmail: ${SMTP_FROM_EMAIL:-}
+      Smtp__FromName: ReTrack
+      PayOS__ClientId: ${PAYOS_CLIENT_ID:-}
+      PayOS__ApiKey: ${PAYOS_API_KEY:-}
+      PayOS__ChecksumKey: ${PAYOS_CHECKSUM_KEY:-}
+      PayOS__ReturnUrl: ${PUBLIC_URL:-http://localhost:8080}/depot/payments/fees?payos=return
+      PayOS__CancelUrl: ${PUBLIC_URL:-http://localhost:8080}/depot/payments/fees?payos=cancel
+      Logging__LogLevel__Microsoft.EntityFrameworkCore: Warning
+    volumes:
+      - uploads:/app/uploads
+    logging: *logging
+
+  web:
+    image: ${IMAGE_PREFIX:-retrack}/web:${IMAGE_TAG:-local}
+    build:
+      context: ./frontend
+      args:
+        VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID:-}
+        VITE_GOOGLE_MAPS_API_KEY: ${VITE_GOOGLE_MAPS_API_KEY:-}
+        VITE_GOONG_API_KEY: ${VITE_GOONG_API_KEY:-}
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${WEB_BIND_IP:-127.0.0.1}:${WEB_PORT:-8080}:80"
+    logging: *logging
+
+  ai:
+    profiles: ["ai"]
+    image: ${IMAGE_PREFIX:-retrack}/ai:${IMAGE_TAG:-local}
+    build:
+      context: ./AI_Garbage_Classification/Pytorch-Garbage-Classification
+    restart: unless-stopped
+    environment:
+      AI_REQUIRE_WEIGHTS: "true"
+      OMP_NUM_THREADS: ${AI_CPU_THREADS:-2}
+    volumes:
+      - type: bind
+        source: ${AI_MODEL_DIR:-./AI_Garbage_Classification/Pytorch-Garbage-Classification}/model.pth
+        target: /app/model.pth
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${AI_MODEL_DIR:-./AI_Garbage_Classification/Pytorch-Garbage-Classification}/yolov8n.pt
+        target: /app/yolov8n.pt
+        read_only: true
+        bind:
+          create_host_path: false
+      - ai_cache:/home/ai/.EasyOCR
+    logging: *logging
+
+volumes:
+  postgres_data:
+  uploads:
+  ai_cache:

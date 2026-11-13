@@ -2,6 +2,8 @@
 
 > Nền tảng số hóa chuỗi cung ứng phế liệu, kết nối Người bán → Kho vựa → Nhà máy tái chế.
 
+Đóng gói container và deploy: [Hướng dẫn Docker](docs/docker-deployment.md) — web/API/PostgreSQL, tùy chọn AI CPU và HTTPS theo domain.
+
 ## 🏗️ Tech Stack
 
 | Layer | Technology |

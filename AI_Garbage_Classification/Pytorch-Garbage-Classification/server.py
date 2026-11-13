@@ -169,8 +169,12 @@ if os.path.exists(WEIGHTS_PATH):
         logger.info("Tai model EfficientNet-B4 thanh cong!")
     except Exception as e:
         logger.error(f"Loi tai model weights: {e}")
+        if os.environ.get('AI_REQUIRE_WEIGHTS', '').lower() == 'true':
+            raise RuntimeError('Không nạp được model.pth; dừng dịch vụ AI container.') from e
 else:
     logger.warning(f"Khong tim thay weights o {WEIGHTS_PATH}!")
+    if os.environ.get('AI_REQUIRE_WEIGHTS', '').lower() == 'true':
+        raise RuntimeError('Thiếu model.pth; cần mount model đã huấn luyện trước khi chạy container.')
 classifier_model.eval()
 
 logger.info("Dang khoi tao YOLOv8n...")

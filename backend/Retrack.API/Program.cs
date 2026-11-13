@@ -215,11 +215,26 @@ if (app.Environment.IsDevelopment())
     });
 }
 
-if (!app.Environment.IsDevelopment()) app.UseHttpsRedirection();
+// Container sau reverse proxy có thể tắt redirect nội bộ; TLS được xử lý tại gateway.
+if (!app.Environment.IsDevelopment() && builder.Configuration.GetValue("HttpsRedirection:Enabled", true)) app.UseHttpsRedirection();
 app.UseCors("AllowFrontend");
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+app.MapGet("/health/live", () => Results.Ok(new { status = "ok" }));
+app.MapGet("/health/ready", async (AppDbContext db, CancellationToken ct) =>
+{
+    try
+    {
+        // Kiểm tra kết nối và bảng nghiệp vụ; không tự sửa schema hoặc chạy seed.
+        await db.Users.AsNoTracking().Select(x => x.Id).Take(1).ToListAsync(ct);
+        return Results.Ok(new { status = "ready" });
+    }
+    catch (Exception) when (!ct.IsCancellationRequested)
+    {
+        return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+    }
+});
 
 // ===== DB-FIRST: app KHÔNG tự migrate; schema/seed nằm ở db/bootstrap/retrack-system.sql =====
 // Tạo/cập nhật schema bằng script SQL đã review trước khi khởi động ứng dụng.

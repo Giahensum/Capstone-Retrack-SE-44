@@ -1,0 +1,2 @@
+# Script chạy trong Linux container cần giữ LF khi checkout trên Windows.
+deploy/*.sh text eol=lf

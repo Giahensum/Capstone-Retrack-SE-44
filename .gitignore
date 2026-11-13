@@ -12,6 +12,8 @@
 .worktrees/
 
 # ── Backend (.NET) ──
+**/[Bb]in/
+**/[Oo]bj/
 backend/**/bin/
 backend/**/obj/
 backend/**/*.user
