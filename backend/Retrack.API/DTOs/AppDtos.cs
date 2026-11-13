@@ -209,6 +209,11 @@ namespace Retrack.API.DTOs
         public string Message { get; set; } = string.Empty;
         public T? Data { get; set; }
 
+        [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        public string? Code { get; set; }
+        [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        public string? TraceId { get; set; }
+
         public static ApiResponse<T> Ok(T data, string message = "Success")
             => new() { Success = true, Message = message, Data = data };
 

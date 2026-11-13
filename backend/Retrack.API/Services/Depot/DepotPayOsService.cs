@@ -11,13 +11,13 @@ public sealed class DepotPayOsService(IDepotUnitOfWork work, IDepotReportReposit
     public async Task<PayOsLinkDto> CreateLinkAsync(Guid ownerId, Guid depotId, Guid invoiceId)
     {
         await scope.RequireOwnerAsync(ownerId, depotId);
-        if (!payos.IsConfigured) throw new InvalidOperationException("PayOS chưa được cấu hình trên máy chủ.");
+        if (!payos.IsConfigured) throw new DepotConflictException("PayOS chưa sẵn sàng. Bạn có thể chuyển khoản và gửi chứng từ để Admin đối soát.");
         await using var tx = await work.BeginAsync();
         var invoice = await reports.LockInvoiceAsync(invoiceId) ?? throw new KeyNotFoundException("Không tìm thấy hóa đơn.");
         if (invoice.PayerId != ownerId) throw new DepotForbiddenException();
         if (invoice.Status != "PENDING") throw new DepotConflictException("Hóa đơn không còn ở trạng thái chờ thanh toán.");
         if (invoice.TotalFeeAmount <= 0 || invoice.TotalFeeAmount != decimal.Truncate(invoice.TotalFeeAmount))
-            throw new InvalidOperationException("Số tiền hóa đơn phải là số nguyên VND lớn hơn 0.");
+            throw new DepotConflictException("Hóa đơn chưa có số tiền nguyên VND hợp lệ để thanh toán PayOS. Vui lòng liên hệ Admin đối soát, hoặc gửi chứng từ chuyển khoản.");
 
         // Dùng lại link cũ nếu PayOS vẫn coi là đang chờ; nếu đã hết hạn/hủy thì tạo đơn mới.
         if (OrderCodeOf(invoice) is long old)
