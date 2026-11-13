@@ -4,13 +4,15 @@ using Retrack.API.Models;
 
 namespace Retrack.API.Repositories.Interfaces;
 
+public record LiquidationListRow(LiquidationLot Lot, string? PurchaseStatus);
+
 public interface ILiquidationRepository
 {
     Task<bool> IsActiveSellerAsync(Guid id);
     Task<LiquidationLot?> FindAsync(Guid id);
     Task<LiquidationLot?> LockAsync(Guid id);
     Task LockCreateAsync(Guid id);
-    Task<PagedResult<LiquidationLot>> ListAsync(Guid userId, Guid depotId, LiquidationQuery query, DateTime now);
+    Task<PagedResult<LiquidationListRow>> ListAsync(Guid userId, Guid depotId, LiquidationQuery query, DateTime now);
     Task<LiquidationParticipation?> ParticipationAsync(Guid lotId, Guid ownerId);
     void AddParticipation(LiquidationParticipation participation);
     Task<LiquidationBid?> FindBidAsync(Guid id);

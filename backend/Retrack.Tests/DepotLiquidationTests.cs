@@ -123,6 +123,9 @@ public sealed class DepotLiquidationTests : IAsyncLifetime
         clock.Now = clock.Now.AddHours(1); await Service(db).FinalizeAsync(lotId); await Service(db).FinalizeAsync(lotId);
         Assert.Single(await db.Notifications.Where(x => x.UserId == competitor).ToListAsync());
         Assert.Equal(2, await db.Notifications.CountAsync(x => x.UserId == owner || x.UserId == competitor));
+        var history = await Service(db).ListAsync(owner, depot, new() { View = "HISTORY" });
+        Assert.Null(Assert.Single(history.Items, x => x.Id == lotId).PurchaseStatus);
+        Assert.DoesNotContain((await Service(db).ListAsync(owner, second, new() { View = "HISTORY" })).Items, x => x.Id == lotId);
     }
     [Fact]
     public async Task Agreement_receipt_requires_both_sides_and_keeps_lump_sum_with_no_duplicate_stock()
@@ -142,11 +145,56 @@ public sealed class DepotLiquidationTests : IAsyncLifetime
         agreement.PaymentConfirmedAt = DateTime.UtcNow; agreement.SellerHandedOverAt = DateTime.UtcNow; await db.SaveChangesAsync();
         await Service(db).AgreementActionAsync(owner, depot, agreement.Id, "CONFIRM_COLLECTED");
         var receipt = await Stock(db).CreateAsync(owner, depot, input);
+        var current = await Service(db).ListAsync(owner, depot, new() { View = "PURCHASES" });
+        Assert.Equal("IN_PROGRESS", Assert.Single(current.Items, x => x.Id == lotId).PurchaseStatus);
+        Assert.DoesNotContain((await Service(db).ListAsync(owner, depot, new() { View = "HISTORY" })).Items, x => x.Id == lotId);
         Assert.Equal(10200000, receipt.TotalCost); Assert.Equal(receipt.TotalCost, receipt.Lines.Sum(x => x.AllocatedCost));
         Assert.Equal(receipt.Id, (await Stock(db).CreateAsync(owner, depot, input)).Id);
         input.OperationId = Guid.NewGuid(); await Assert.ThrowsAsync<DepotConflictException>(() => Stock(db).CreateAsync(owner, depot, input));
         await Assert.ThrowsAsync<ArgumentException>(() => Stock(db).UpdateCostsAsync(owner, depot, receipt.Id, new(1, true, receipt.Lines.Select(x => new StockLineCostInput(x.Id, x.ReferencePrice, 0)).ToList(), [])));
         await Stock(db).ReviewAsync(owner, depot, receipt.Id, "POSTED");
         Assert.Equal(receipt.Id, (await Service(db).AgreementAsync(owner, depot, agreement.Id)).ReceiptId);
+        var completed = Assert.Single((await Service(db).ListAsync(owner, depot, new() { View = "HISTORY" })).Items, x => x.Id == lotId);
+        Assert.Equal("AWARDED", completed.Status);
+        Assert.Equal("COMPLETED", completed.PurchaseStatus);
+        Assert.DoesNotContain((await Service(db).ListAsync(owner, depot, new() { View = "PURCHASES" })).Items, x => x.Id == lotId);
+        Assert.DoesNotContain((await Service(db).ListAsync(owner, second, new() { View = "HISTORY" })).Items, x => x.Id == lotId);
+        Assert.DoesNotContain((await Service(db).ListAsync(competitor, rivalDepot, new() { View = "HISTORY" })).Items, x => x.Id == lotId);
+        await Stock(db).ReviewAsync(owner, depot, receipt.Id, "VOIDED", "Đảo phiếu thử nghiệm");
+        Assert.Contains((await Service(db).ListAsync(owner, depot, new() { View = "PURCHASES" })).Items, x => x.Id == lotId);
+        Assert.DoesNotContain((await Service(db).ListAsync(owner, depot, new() { View = "HISTORY" })).Items, x => x.Id == lotId);
+    }
+
+    [Fact]
+    public async Task Open_lot_paging_filters_ended_lots_before_counting_and_slicing()
+    {
+        await using var db = Open();
+        var name = "Phân trang " + Guid.NewGuid();
+        var lots = Enumerable.Range(0, 14).Select(i => new LiquidationLot
+        {
+            SellerId = seller, Title = name + " " + i,
+            Status = i < 13 ? "PUBLISHED" : "NO_SALE",
+            CreatedAt = clock.Now.AddMinutes(i),
+            SurveyStart = clock.Now.AddHours(1), SurveyEnd = clock.Now.AddHours(2),
+            BiddingStart = clock.Now.AddHours(3), BiddingEnd = clock.Now.AddHours(4),
+            OriginalEnd = clock.Now.AddHours(4), CollectionDeadline = clock.Now.AddDays(1),
+            StartingPrice = 1000000, BidIncrement = 10000
+        }).ToList();
+        db.LiquidationLots.AddRange(lots);
+        var ids = lots.Select(x => x.Id).ToArray();
+        try
+        {
+            await db.SaveChangesAsync();
+            var first = await Service(db).ListAsync(owner, depot, new() { View = "OPEN", Search = name, PageSize = 12 });
+            var secondPage = await Service(db).ListAsync(owner, depot, new() { View = "OPEN", Search = name, PageSize = 12, Page = 2 });
+            Assert.Equal(13, first.TotalCount);
+            Assert.Equal(13, secondPage.TotalCount);
+            Assert.Equal(12, first.Items.Count);
+            Assert.Equal(ids[0], Assert.Single(secondPage.Items).Id);
+            Assert.Equal(ids[12], first.Items[0].Id);
+            Assert.DoesNotContain(first.Items, x => x.Id == ids[13]);
+            await Assert.ThrowsAsync<ArgumentException>(() => Service(db).ListAsync(owner, depot, new() { View = "INVALID" }));
+        }
+        finally { await db.LiquidationLots.Where(x => ids.Contains(x.Id)).ExecuteDeleteAsync(); }
     }
 }

@@ -6,11 +6,13 @@ namespace Retrack.API.DTOs.Liquidation;
 public class LiquidationQuery : DepotQuery
 {
     public bool ParticipatingOnly { get; set; }
+    public string? View { get; set; }
 }
 public record LiquidationSummaryDto(Guid Id, string Title, string PublicArea, decimal StartingPrice,
     decimal BidIncrement, decimal? HighestPrice, int BidCount, string Phase, string Status,
     DateTime SurveyStart, DateTime SurveyEnd, DateTime BiddingStart, DateTime BiddingEnd,
-    DateTime HardEnd, DateTime CollectionDeadline, string[] ImageUrls, DateTime ServerTime, decimal DepositPercent);
+    DateTime HardEnd, DateTime CollectionDeadline, string[] ImageUrls, DateTime ServerTime, decimal DepositPercent,
+    string? PurchaseStatus = null);
 // Thông tin hai bên ghi trên hợp đồng; thông tin chưa có trong hệ thống (CCCD, MST cá nhân…) để trống cho hai bên tự điền khi in.
 public record ContractPartiesDto(string SellerName, string SellerPhone, string BuyerRepresentative, string BuyerPhone,
     string DepotName, string DepotAddress, string? DepotTaxCode);

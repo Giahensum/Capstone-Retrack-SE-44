@@ -64,7 +64,8 @@ public record CreateBatchExpenseDto(Guid OperationId, [Required, StringLength(25
 public record BatchExpenseDto(Guid Id, string Description, decimal Amount, DateTime CreatedAt);
 public record BatchCostDto(List<BatchCostSourceDto> Sources, List<BatchExpenseDto> Expenses, bool HasCompleteCost,
     decimal? CostOfGoods, decimal SellingCosts, decimal? Revenue, decimal? PlatformFee,
-    decimal? PretaxDifference, bool IsSettled, string Note, bool NeedsCostReconciliation = false, decimal? AdjustedCostOfGoods = null);
+    decimal? PretaxDifference, bool IsSettled, string Note, bool NeedsCostReconciliation = false, decimal? AdjustedCostOfGoods = null,
+    int SourceCount = 0, int ExpenseCount = 0, bool HasReconciliation = false);
 
 public record CreateStockAdjustmentDto(Guid OperationId, Guid LineId, string Kind, decimal Amount, string Reason);
 public record StockAdjustmentDto(Guid Id, Guid LineId, string LineName, string Kind, decimal Amount, string Reason, Guid CreatedBy, DateTime CreatedAt);
