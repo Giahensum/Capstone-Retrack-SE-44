@@ -125,14 +125,49 @@ public sealed partial class DepotStockRepository(AppDbContext db) : IDepotStockR
     public void AddAllocations(IEnumerable<DepotBatchCostSource> sources) => db.DepotBatchCostSources.AddRange(sources);
     public Task<InventoryBatch?> FindBatchAsync(Guid depotId, Guid batchId) => db.InventoryBatches
         .SingleOrDefaultAsync(x => x.Id == batchId && x.DepotId == depotId);
-    public Task<List<BatchCostSourceDto>> BatchSourcesAsync(Guid batchId) => db.DepotBatchCostSources.AsNoTracking()
+    public Task<List<BatchCostSourceDto>> BatchSourcesAsync(Guid batchId, DepotQuery? query = null) => ReadRowsAsync(db.DepotBatchCostSources.AsNoTracking()
         .Where(x => x.BatchId == batchId).OrderBy(x => x.SourceLabel).ThenBy(x => x.Id)
         .Select(x => new BatchCostSourceDto(x.SourceType, x.SourceLabel, x.Quantity, x.UnitCost,
             db.DepotCostReconciliations.Where(r => r.BatchSourceId == x.Id).OrderByDescending(r => r.SequenceNo).Select(r => r.UnitCost).FirstOrDefault(),
-            db.DepotCostReconciliations.Any(r => r.BatchSourceId == x.Id))).ToListAsync();
-    public Task<List<BatchExpenseDto>> BatchExpensesAsync(Guid batchId) => db.DepotBatchExpenses.AsNoTracking()
+            db.DepotCostReconciliations.Any(r => r.BatchSourceId == x.Id))), query);
+    public Task<List<BatchExpenseDto>> BatchExpensesAsync(Guid batchId, DepotQuery? query = null) => ReadRowsAsync(db.DepotBatchExpenses.AsNoTracking()
         .Where(x => x.BatchId == batchId).OrderBy(x => x.CreatedAt).ThenBy(x => x.Id)
-        .Select(x => new BatchExpenseDto(x.Id, x.Description, x.Amount, x.CreatedAt)).ToListAsync();
+        .Select(x => new BatchExpenseDto(x.Id, x.Description, x.Amount, x.CreatedAt)), query);
+
+    // Tính trên toàn lô, độc lập với trang nguồn và trang chi phí đang xem.
+    public Task<BatchCostTotals> BatchCostTotalsAsync(Guid batchId) => db.Database.SqlQuery<BatchCostTotals>($"""
+        WITH sources AS (
+            SELECT s.quantity, s.unit_cost,
+                   CASE WHEN r.found THEN r.unit_cost ELSE s.unit_cost END AS effective_cost,
+                   r.found
+            FROM depot_batch_cost_sources s
+            LEFT JOIN LATERAL (
+                SELECT unit_cost, TRUE AS found FROM depot_cost_reconciliations
+                WHERE batch_source_id = s.id ORDER BY sequence_no DESC LIMIT 1
+            ) r ON TRUE
+            WHERE s.batch_id = {batchId}
+        ), expenses AS (
+            SELECT COUNT(*)::int AS count, COALESCE(SUM(amount), 0) AS amount
+            FROM depot_batch_expenses WHERE batch_id = {batchId}
+        )
+        SELECT COUNT(*)::int AS "SourceCount", COALESCE(SUM(quantity), 0) AS "Quantity",
+               (COUNT(*) FILTER (WHERE unit_cost IS NULL))::int AS "MissingOriginal",
+               (COUNT(*) FILTER (WHERE effective_cost IS NULL))::int AS "MissingEffective",
+               COALESCE(SUM(quantity * unit_cost), 0) AS "OriginalCost",
+               COALESCE(SUM(quantity * effective_cost), 0) AS "EffectiveCost",
+               (SELECT count FROM expenses) AS "ExpenseCount",
+               (SELECT amount FROM expenses) AS "SellingCosts",
+               COALESCE(BOOL_OR(found), FALSE) AS "HasReconciliation"
+        FROM sources
+        """).SingleAsync();
+
+    private static Task<List<T>> ReadRowsAsync<T>(IQueryable<T> source, DepotQuery? query)
+    {
+        if (query is null) return source.ToListAsync();
+        var offset = (long)(query.Page - 1) * query.PageSize;
+        return offset > int.MaxValue ? Task.FromResult(new List<T>())
+            : source.Skip((int)offset).Take(query.PageSize).ToListAsync();
+    }
     public Task<DepotBatchExpense?> FindExpenseAsync(Guid id) => db.DepotBatchExpenses.SingleOrDefaultAsync(x => x.Id == id);
     public void AddExpense(DepotBatchExpense expense) => db.DepotBatchExpenses.Add(expense);
     private static async Task<PagedResult<T>> PageAsync<T>(IQueryable<T> source, DepotQuery query)

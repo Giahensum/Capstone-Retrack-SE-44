@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import Modal from '@/components/ui/Modal';
 import { ClipboardList } from 'lucide-react';
 import { MaterialIcon } from './DepotIcon';
@@ -30,8 +31,12 @@ export function GridTable({ headers, children, empty }) {
     {headers.map((h) => <th key={h} className={cellClass + ' whitespace-nowrap font-medium'}>{h}</th>)}</tr></thead><tbody>{children}</tbody></table>
     {empty && <p role="status" className="p-8 text-center">Chưa có dữ liệu phù hợp.</p>}</div>;
 }
-export function Pager({ page, setPage, total = 0, size = 20 }) {
-  const pages = Math.max(1, Math.ceil(total / size));
+export function Pager({ page, setPage, total, size = 20 }) {
+  const pages = Math.max(1, Math.ceil((total ?? 0) / size));
+  useEffect(() => {
+    if (total != null && page > pages) setPage(pages);
+  }, [page, pages, setPage, total]);
+  if (total == null) return null;
   const pagerBtn = "min-h-11 px-4 py-2 rounded-full border border-d-border-subtle bg-d-surface hover:bg-d-surface-container-low disabled:opacity-40 disabled:hover:bg-d-surface transition-colors font-medium";
   return <div className="flex flex-wrap justify-between items-center gap-3 text-sm text-d-on-surface-variant w-full"><span>Trang {page}/{pages} · {total} mục</span><div className="flex gap-2">
     <button type="button" className={pagerBtn} disabled={page === 1} onClick={() => setPage(page - 1)}>Trước</button>

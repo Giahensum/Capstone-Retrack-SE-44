@@ -191,22 +191,27 @@ public sealed partial class DepotStockService(IDepotStockRepository repository, 
             BatchId = batchId, SourceId = x.Id, SourceType = source.SourceType, SourceLabel = source.Label,
             Quantity = x.Quantity, UnitCost = x.UnitCost == null ? null : decimal.Round(x.UnitCost.Value, 9) }; }));
     }
-    public async Task<BatchCostDto> BatchCostsAsync(Guid ownerId, Guid depotId, Guid batchId)
+    public async Task<BatchCostDto> BatchCostsAsync(Guid ownerId, Guid depotId, Guid batchId, int? sourcePage = null, int? expensePage = null)
     {
         await scope.RequireOwnerAsync(ownerId, depotId);
         var batch = await repository.FindBatchAsync(depotId, batchId) ?? throw new KeyNotFoundException("Không tìm thấy lô trong kho.");
-        var sources = await repository.BatchSourcesAsync(batchId);
-        var expenses = await repository.BatchExpensesAsync(batchId);
-        var originalComplete = sources.Count > 0 && sources.All(x => x.UnitCost != null) && sources.Sum(x => x.Quantity) == batch.DeclaredWeightKg;
-        var complete = sources.Count > 0 && sources.All(x => (x.HasReconciliation ? x.EffectiveUnitCost : x.UnitCost) != null) && sources.Sum(x => x.Quantity) == batch.DeclaredWeightKg;
-        decimal? cost = originalComplete ? decimal.Round(sources.Sum(x => x.Quantity * x.UnitCost!.Value), 0) : null;
-        decimal? adjustedCost = complete ? decimal.Round(sources.Sum(x => x.Quantity * (x.HasReconciliation ? x.EffectiveUnitCost!.Value : x.UnitCost!.Value)), 0) : null;
-        var selling = expenses.Sum(x => x.Amount);
+        if (sourcePage is < 1 || expensePage is < 1) throw new ArgumentException("Trang phải từ 1 trở lên.");
+        var paged = sourcePage.HasValue || expensePage.HasValue;
+        var totals = await repository.BatchCostTotalsAsync(batchId);
+        var sources = await repository.BatchSourcesAsync(batchId, paged ? new DepotQuery { Page = sourcePage ?? 1 } : null);
+        var expenses = await repository.BatchExpensesAsync(batchId, paged ? new DepotQuery { Page = expensePage ?? 1 } : null);
+        var quantityMatches = totals.SourceCount > 0 && totals.Quantity == batch.DeclaredWeightKg;
+        var originalComplete = quantityMatches && totals.MissingOriginal == 0;
+        var complete = quantityMatches && totals.MissingEffective == 0;
+        decimal? cost = originalComplete ? decimal.Round(totals.OriginalCost, 0) : null;
+        decimal? adjustedCost = complete ? decimal.Round(totals.EffectiveCost, 0) : null;
+        var selling = totals.SellingCosts;
         var settled = batch.SettledAt != null;
         var late = await repository.HasLateCostsAsync(batchId);
         return new(sources, expenses, complete, cost, selling, settled ? batch.GrossAmount : null,
             settled ? batch.PlatformFeeAmount : null, settled && !late ? batch.NetAmount - adjustedCost - selling : null, settled,
-            "FIFO theo nguồn nhận; nguồn pickup cũ thiếu nhật ký dùng mốc ước tính. Snapshot ban đầu giữ nguyên. Vốn sau đối soát cộng các bút toán bổ sung theo tỷ lệ lượng hàng từ nguồn; không thay đổi tiền mua/bán đã thỏa thuận. Chưa gồm thuế thu nhập/hàng trả/chi phí chưa ghi.", late, adjustedCost);
+            "FIFO theo nguồn nhận; nguồn pickup cũ thiếu nhật ký dùng mốc ước tính. Snapshot ban đầu giữ nguyên. Vốn sau đối soát cộng các bút toán bổ sung theo tỷ lệ lượng hàng từ nguồn; không thay đổi tiền mua/bán đã thỏa thuận. Chưa gồm thuế thu nhập/hàng trả/chi phí chưa ghi.", late, adjustedCost,
+            totals.SourceCount, totals.ExpenseCount, totals.HasReconciliation);
     }
     public async Task AddBatchExpenseAsync(Guid ownerId, Guid depotId, Guid batchId, CreateBatchExpenseDto dto)
     {
