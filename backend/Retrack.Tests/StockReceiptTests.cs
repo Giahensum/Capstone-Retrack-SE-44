@@ -221,6 +221,36 @@ public sealed partial class StockReceiptTests : IAsyncLifetime
         Assert.Equal(200, Assert.Single(await Inventory(db).GetAsync(owner, depot)).AvailableKg);
     }
     [Fact]
+    public async Task Batch_cost_pages_keep_totals_from_every_source_and_expense()
+    {
+        await using var db = Open();
+        var input = Input(21, 100);
+        input.Lines = Enumerable.Range(1, 21).Select(i => new StockLineInput
+        {
+            Name = $"Sắt nguồn {i}", Kind = "MATERIAL", MaterialType = "IRON", Unit = "kg",
+            Quantity = 1, ReferencePrice = 100 + i
+        }).ToList();
+        await Posted(db, input);
+        var batch = await Batches(db).CreateAsync(owner, depot, new() { OperationId = Guid.NewGuid(), MaterialType = "IRON", WeightKg = 21 });
+        for (var i = 1; i <= 21; i++)
+            await Stock(db).AddBatchExpenseAsync(owner, depot, batch.Id, new(Guid.NewGuid(), $"Chi phí {i}", 100));
+
+        var first = await Stock(db).BatchCostsAsync(owner, depot, batch.Id, 1, 1);
+        var last = await Stock(db).BatchCostsAsync(owner, depot, batch.Id, 2, 2);
+        Assert.Equal(20, first.Sources.Count);
+        Assert.Equal(20, first.Expenses.Count);
+        Assert.Single(last.Sources);
+        Assert.Single(last.Expenses);
+        Assert.Equal(21, last.SourceCount);
+        Assert.Equal(21, last.ExpenseCount);
+        Assert.Equal(2100, first.CostOfGoods);
+        Assert.Equal(first.CostOfGoods, last.CostOfGoods);
+        Assert.Equal(2100, last.SellingCosts);
+        Assert.False(last.HasReconciliation);
+        await Assert.ThrowsAsync<ArgumentException>(() => Stock(db).BatchCostsAsync(owner, depot, batch.Id, 0, 1));
+    }
+
+    [Fact]
     public async Task Cancel_releases_source_allocations_for_next_batch()
     {
         await using var db = Open(); await Posted(db, Input(100));
@@ -388,9 +418,12 @@ public sealed partial class StockReceiptTests : IAsyncLifetime
         Assert.Single((await Stock(db).AdjustmentsAsync(owner, depot, receipt.Id, new())).Items);
         Assert.Equal(1000, (await Stock(db).CurrentReceiptCostsAsync(owner, depot, receipt.Id)).Single().OriginalCost);
         Assert.Equal(1500, (await Stock(db).CurrentReceiptCostsAsync(owner, depot, receipt.Id)).Single().EffectiveCost);
-        Assert.Equal(400, (await Stock(db).BatchCostsAsync(owner, depot, first.Id)).CostOfGoods);
-        Assert.False((await Stock(db).BatchCostsAsync(owner, depot, first.Id)).NeedsCostReconciliation);
-        Assert.Equal(600, (await Stock(db).BatchCostsAsync(owner, depot, first.Id)).AdjustedCostOfGoods);
+        var costs = await Stock(db).BatchCostsAsync(owner, depot, first.Id, 2, 1);
+        Assert.Empty(costs.Sources);
+        Assert.Equal(400, costs.CostOfGoods);
+        Assert.False(costs.NeedsCostReconciliation);
+        Assert.True(costs.HasReconciliation);
+        Assert.Equal(600, costs.AdjustedCostOfGoods);
         var next = await Batches(db).CreateAsync(owner, depot, new() { OperationId = Guid.NewGuid(), MaterialType = "IRON", WeightKg = 60 });
         Assert.Equal(900, (await Stock(db).BatchCostsAsync(owner, depot, next.Id)).CostOfGoods);
         var batch = await db.InventoryBatches.SingleAsync(x => x.Id == first.Id);

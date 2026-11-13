@@ -94,7 +94,12 @@ test('Lô trúng: nhập sắt/đồ cũ, phân bổ vốn, chặn xuất vượ
         expect((await stock()).receivedKg).toBe(0);
         const restored = await request.put(`/api/depot/stock/receipts/${receipt.id}/draft?depotId=${f.DepotId}`, { headers, data: { ...editBody, expectedRevision: corrected.revision } });
         expect(restored.status()).toBe(200);
+        await page.goto('/depot/liquidations');
+        await page.getByRole('button', { name: 'Đang mua', exact: true }).click();
+        const wonLot = page.getByRole('article').filter({ hasText: 'Lô hợp đồng hoàn thiện fixture' });
+        await expect(wonLot).toContainText('Đang thực hiện mua');
         await openAgreement();
+        await expect(agreement).toContainText('Phiếu nháp · chờ ghi sổ');
         await agreement.getByRole('link', { name: 'Đến phiếu nhập để kiểm tra / duyệt' }).click();
         await expect(page).toHaveURL(new RegExp(`receiptId=${receipt.id}`));
         const review = page.getByRole('dialog', { name: /^Phiếu nhập:/ });
@@ -110,6 +115,14 @@ test('Lô trúng: nhập sắt/đồ cũ, phân bổ vốn, chặn xuất vượ
         const postAgain = await request.patch(`/api/depot/stock/receipts/${receipt.id}/post?depotId=${f.DepotId}`, { headers });
         expect(postAgain.status()).toBe(200);
         expect((await stock()).receivedKg).toBe(1000);
+        await page.goto('/depot/liquidations?view=PURCHASES');
+        await expect(page.getByText('Kho đang chọn chưa có lô trúng chờ thanh toán, nhận hàng hoặc ghi sổ nhập kho.')).toBeVisible();
+        await page.getByRole('button', { name: 'Lịch sử', exact: true }).click();
+        await expect(wonLot).toContainText('Hoàn thành · đã nhập kho');
+        await page.reload();
+        await wonLot.getByRole('button', { name: 'Xem lô và điều kiện' }).click();
+        await page.getByRole('button', { name: 'Mở thỏa thuận & giao nhận', exact: true }).click();
+        await expect(agreement.getByRole('link', { name: 'Xem phiếu đã ghi sổ' })).toHaveAttribute('href', new RegExp(`receiptId=${receipt.id}`));
         await page.goto('/depot/inventory?tab=reusable');
         const chairs = page.getByRole('row').filter({ hasText: 'Ghế lô trúng kiểm thử' });
         await expect(chairs).toContainText('10 cái');

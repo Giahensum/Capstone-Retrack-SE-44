@@ -6,6 +6,8 @@ namespace Retrack.API.Repositories.Interfaces;
 
 public record DepotCostLayer(Guid Id, string SourceType, string Label, decimal Quantity, decimal? UnitCost, DateTime ReceivedAt);
 public record DepotBulkStockSource(Guid DepotId, decimal Amount, bool Ready);
+public record BatchCostTotals(int SourceCount, decimal Quantity, int MissingOriginal, int MissingEffective,
+    decimal OriginalCost, decimal EffectiveCost, int ExpenseCount, decimal SellingCosts, bool HasReconciliation);
 public interface IDepotStockRepository
 {
     Task<bool> IsActiveStaffAsync(Guid userId, Guid depotId);
@@ -28,8 +30,9 @@ public interface IDepotStockRepository
     Task<List<DepotCostLayer>> AvailableLayersAsync(Guid depotId, string material);
     void AddAllocations(IEnumerable<DepotBatchCostSource> sources);
     Task<InventoryBatch?> FindBatchAsync(Guid depotId, Guid batchId);
-    Task<List<BatchCostSourceDto>> BatchSourcesAsync(Guid batchId);
-    Task<List<BatchExpenseDto>> BatchExpensesAsync(Guid batchId);
+    Task<List<BatchCostSourceDto>> BatchSourcesAsync(Guid batchId, DepotQuery? query = null);
+    Task<List<BatchExpenseDto>> BatchExpensesAsync(Guid batchId, DepotQuery? query = null);
+    Task<BatchCostTotals> BatchCostTotalsAsync(Guid batchId);
     Task<DepotBatchExpense?> FindExpenseAsync(Guid id);
     void AddExpense(DepotBatchExpense expense);
     Task<decimal?> CurrentLineCostAsync(Guid lineId);
