@@ -207,11 +207,13 @@ public sealed partial class DepotStockService(IDepotStockRepository repository, 
         decimal? adjustedCost = complete ? decimal.Round(totals.EffectiveCost, 0) : null;
         var selling = totals.SellingCosts;
         var settled = batch.SettledAt != null;
+        var outputVat = batch.VatAmount ?? 0;
         var late = await repository.HasLateCostsAsync(batchId);
         return new(sources, expenses, complete, cost, selling, settled ? batch.GrossAmount : null,
-            settled ? batch.PlatformFeeAmount : null, settled && !late ? batch.NetAmount - adjustedCost - selling : null, settled,
+            settled ? batch.PlatformFeeAmount : null, settled && !late ? batch.NetAmount - outputVat - adjustedCost - selling : null, settled,
             "FIFO theo nguồn nhận; nguồn pickup cũ thiếu nhật ký dùng mốc ước tính. Snapshot ban đầu giữ nguyên. Vốn sau đối soát cộng các bút toán bổ sung theo tỷ lệ lượng hàng từ nguồn; không thay đổi tiền mua/bán đã thỏa thuận. Chưa gồm thuế thu nhập/hàng trả/chi phí chưa ghi.", late, adjustedCost,
-            totals.SourceCount, totals.ExpenseCount, totals.HasReconciliation);
+            totals.SourceCount, totals.ExpenseCount, totals.HasReconciliation,
+            settled ? batch.VatAmount : null, settled ? batch.NetAmount : null);
     }
     public async Task AddBatchExpenseAsync(Guid ownerId, Guid depotId, Guid batchId, CreateBatchExpenseDto dto)
     {
