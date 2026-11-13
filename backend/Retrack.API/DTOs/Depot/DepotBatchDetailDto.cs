@@ -9,4 +9,5 @@ public record DepotBatchQualityDto(decimal ActualWeightKg, decimal? GrossWeightK
     string? TicketNumber, string? TicketImageUrl, string? InvoiceNumber, string? InvoiceFileUrl);
 public record DepotBatchSettlementDto(decimal? PricePerKg, decimal? GrossAmount, decimal? FeeAmount,
     decimal? NetAmount, string? VatTreatment, decimal? VatPercentage, decimal? VatAmount,
-    decimal? InvoiceTotalAmount, string? PaymentReference, DateTime SettledAt, string? PaymentProofUrl);
+    decimal? InvoiceTotalAmount, string? PaymentReference, DateTime SettledAt, string? PaymentProofUrl,
+    bool? PriceIncludesVat = null);

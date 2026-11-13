@@ -23,7 +23,8 @@ public sealed partial class DepotReportRepository
                 SELECT 'FACTORY' AS channel,
                     CASE WHEN b.settled_at IS NOT NULL THEN b.gross_amount ELSE q.gross_amount END AS gross,
                     CASE WHEN b.settled_at IS NOT NULL THEN b.platform_fee_amount ELSE q.platform_fee_amount END AS fee,
-                    CASE WHEN b.settled_at IS NOT NULL THEN b.net_amount ELSE q.net_amount END AS net,
+                    CASE WHEN b.settled_at IS NOT NULL THEN b.net_amount ELSE q.net_amount END AS settlement,
+                    CASE WHEN b.settled_at IS NOT NULL THEN COALESCE(b.vat_amount, 0) ELSE COALESCE(q.vat_amount, 0) END AS vat,
                     CASE WHEN s.missing = 0 AND s.quantity = b.declared_weight_kg THEN ROUND(s.cost, 0) ELSE NULL END AS cost,
                     COALESCE(e.amount, 0) AS selling,
                     EXISTS(SELECT 1 FROM depot_batch_cost_sources cs JOIN depot_stock_cost_adjustments a ON a.line_id = cs.source_id
@@ -37,7 +38,7 @@ public sealed partial class DepotReportRepository
                          (b.settled_at IS NULL AND b.status NOT IN ('CANCELLED', 'REJECTED') AND q.is_accepted AND q.payment_proof_url IS NOT NULL))
                     AND COALESCE(b.settled_at, q.created_at) >= {start} AND COALESCE(b.settled_at, q.created_at) < {end}
                 UNION ALL
-                SELECT 'REUSABLE', x.quantity * x.unit_price, 0, x.quantity * x.unit_price,
+                SELECT 'REUSABLE', x.quantity * x.unit_price, 0, x.quantity * x.unit_price, 0,
                        COALESCE(rc.unit_cost, x.unit_cost) * x.quantity, x.selling_cost,
                        EXISTS(SELECT 1 FROM depot_stock_cost_adjustments a WHERE a.line_id = x.line_id AND a.created_at > x.created_at
                               AND NOT EXISTS(SELECT 1 FROM depot_cost_reconciliations r WHERE r.adjustment_id = a.id AND r.reuse_sale_id = x.id))
@@ -47,13 +48,15 @@ public sealed partial class DepotReportRepository
                 WHERE r.depot_id = {depotId} AND x.created_at >= {start} AND x.created_at < {end}
             )
             SELECT c.channel AS "Channel", COUNT(r.channel)::int AS "TransactionCount",
-                (COUNT(*) FILTER (WHERE r.channel IS NOT NULL AND (r.cost IS NULL OR r.net IS NULL OR r.needs_review)))::int AS "IncompleteCount",
+                (COUNT(*) FILTER (WHERE r.channel IS NOT NULL AND (r.cost IS NULL OR r.settlement IS NULL OR r.needs_review)))::int AS "IncompleteCount",
                 CASE WHEN COUNT(*) FILTER (WHERE r.channel IS NOT NULL AND r.gross IS NULL) > 0 THEN NULL ELSE COALESCE(SUM(r.gross), 0) END AS "GrossRevenue",
                 CASE WHEN COUNT(*) FILTER (WHERE r.channel IS NOT NULL AND r.fee IS NULL) > 0 THEN NULL ELSE COALESCE(SUM(r.fee), 0) END AS "PlatformFees",
-                CASE WHEN COUNT(*) FILTER (WHERE r.channel IS NOT NULL AND r.net IS NULL) > 0 THEN NULL ELSE COALESCE(SUM(r.net), 0) END AS "NetRevenue",
+                CASE WHEN COUNT(*) FILTER (WHERE r.channel IS NOT NULL AND r.settlement IS NULL) > 0 THEN NULL ELSE COALESCE(SUM(r.settlement - r.vat), 0) END AS "NetRevenue",
                 COALESCE(SUM(r.cost), 0) AS "KnownCostOfGoods", COALESCE(SUM(r.selling), 0) AS "SellingCosts",
-                CASE WHEN COUNT(*) FILTER (WHERE r.channel IS NOT NULL AND (r.cost IS NULL OR r.net IS NULL OR r.needs_review)) > 0 THEN NULL
-                     ELSE COALESCE(SUM(r.net - r.cost - r.selling), 0) END AS "PretaxDifference"
+                CASE WHEN COUNT(*) FILTER (WHERE r.channel IS NOT NULL AND (r.cost IS NULL OR r.settlement IS NULL OR r.needs_review)) > 0 THEN NULL
+                     ELSE COALESCE(SUM(r.settlement - r.vat - r.cost - r.selling), 0) END AS "PretaxDifference",
+                COALESCE(SUM(r.vat), 0) AS "OutputVat",
+                CASE WHEN COUNT(*) FILTER (WHERE r.channel IS NOT NULL AND r.settlement IS NULL) > 0 THEN NULL ELSE COALESCE(SUM(r.settlement), 0) END AS "SettlementAmount"
             FROM (VALUES ('FACTORY'), ('REUSABLE')) AS c(channel) LEFT JOIN rows r ON r.channel = c.channel
             GROUP BY c.channel ORDER BY c.channel
             """).ToListAsync();
