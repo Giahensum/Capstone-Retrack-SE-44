@@ -187,7 +187,8 @@ public sealed partial class DepotStockService(IDepotStockRepository repository, 
     {
         var layers = await repository.AvailableLayersAsync(depotId, material);
         var take = DepotCosting.Take(quantity, layers.Select(x => new CostingSource(x.Id, x.Quantity, x.UnitCost)).ToArray());
-        repository.AddAllocations(take.Select(x => { var source = layers.Single(l => l.Id == x.Id); return new DepotBatchCostSource {
+        var layersById = layers.ToDictionary(x => x.Id);
+        repository.AddAllocations(take.Select(x => { var source = layersById[x.Id]; return new DepotBatchCostSource {
             BatchId = batchId, SourceId = x.Id, SourceType = source.SourceType, SourceLabel = source.Label,
             Quantity = x.Quantity, UnitCost = x.UnitCost == null ? null : decimal.Round(x.UnitCost.Value, 9) }; }));
     }
