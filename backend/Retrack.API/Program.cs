@@ -9,6 +9,7 @@ using Retrack.API.Data;
 using Retrack.API.Middleware;
 using Retrack.API.Repositories;
 using Retrack.API.Services;
+using Retrack.API.Helpers;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -63,6 +64,14 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 
 builder.Services.AddAuthorization();
+builder.Services.AddVerificationRateLimits();
+builder.Services.AddOptions<Retrack.API.Services.Depot.VerificationScannerOptions>()
+    .Bind(builder.Configuration.GetSection("VerificationScanner"))
+    .Validate(x => x.Mode is "Disabled" or "ClamAv", "VerificationScanner:Mode cần là Disabled hoặc ClamAv.")
+    .Validate(x => x.Port is >= 1 and <= 65535 && x.TimeoutSeconds is >= 1 and <= 30
+        && !string.IsNullOrWhiteSpace(x.Host) && x.Host.Length <= 253, "Cấu hình scanner không hợp lệ.")
+    .ValidateOnStart();
+builder.Services.AddSingleton<Retrack.API.Services.Interfaces.IVerificationFileScanner, Retrack.API.Services.Depot.VerificationFileScanner>();
 
 // ===== CORS =====
 builder.Services.AddCors(options =>
@@ -221,6 +230,7 @@ if (!app.Environment.IsDevelopment()) app.UseHttpsRedirection();
 app.UseCors("AllowFrontend");
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 app.MapControllers();
 
 // ===== DB-FIRST: app KHÔNG tự migrate; schema/seed nằm ở db/bootstrap/retrack-system.sql =====

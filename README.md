@@ -2,6 +2,57 @@
 
 > Nền tảng số hóa chuỗi cung ứng phế liệu, kết nối Người bán → Kho vựa → Nhà máy tái chế.
 
+## Bảo vệ hồ sơ Depot
+
+Schema/seed chung vẫn chỉ có `db/bootstrap/retrack-system.sql`; xem
+[hướng dẫn DB](db/README.md) khi pull backend mới, đặc biệt các khối
+`RETRACK_DEPOT_VERIFICATION_DOCUMENTS_V2` và
+`RETRACK_DEPOT_VERIFICATION_SCANNING_V1`.
+
+Hồ sơ kho lưu riêng tư trong PostgreSQL, không dùng URL Cloudinary công khai.
+Chỉ Owner đúng kho và Admin đang hoạt động được tải/xem. Upload tối đa 3 tệp,
+2 MB/tệp; giới hạn bổ sung 8 lần nộp/phút và 30 lần tải/phút theo tài khoản,
+ngoài giới hạn 5 bộ hồ sơ/24 giờ hiện có. Khi quá hạn mức, API trả 429,
+`Retry-After` và mã tra cứu. Giới hạn phút là trong một tiến trình API:
+khi chạy nhiều replica, TV5 cần bổ sung giới hạn dùng chung hoặc tại gateway.
+
+Biến môi trường ở `backend/Retrack.API/.env.example`:
+
+- `VerificationScanner__Mode=Disabled`: chỉ cho bỏ quét ở Development;
+  giao diện ghi rõ chưa quét và chỉ dùng giấy tờ kiểm thử.
+- `VerificationScanner__Mode=ClamAv`: quét bằng daemon ClamAV qua INSTREAM.
+  Điền Host/Port và TimeoutSeconds (1–30 giây); tối đa hai lượt quét đồng thời
+  trên một tiến trình, không giữ khóa DB trong lúc quét.
+- Production chưa cấu hình scanner sẽ từ chối **hồ sơ mới** bằng 503; xem
+  hồ sơ/lịch sử và các nghĩa vụ giao dịch đang có vẫn giữ quyền hiện tại.
+  Daemon lỗi/timeout/phản hồi không rõ không được coi là tệp sạch.
+
+ClamAV tự host không cần API key hay tài khoản dịch vụ. Nếu dùng Docker,
+mở Docker Desktop/daemon, chọn image chính thức thuộc phiên bản đang hỗ trợ,
+cấp RAM phù hợp và giữ bộ chữ ký FreshClam được cập nhật. Tài liệu chính thức
+khuyến nghị khoảng 4 GiB cho container. Sau staging, ghim phiên bản/digest đã
+nghiệm thu để triển khai. Không tự tải giấy tờ khách hàng lên dịch vụ quét công khai.
+[Cài ClamAV bằng Docker](https://docs.clamav.net/manual/Installing/Docker.html).
+
+Ví dụ chạy thử local sau khi chọn image và kiểm tra còn được hỗ trợ:
+
+```powershell
+$clamImage = 'clamav/clamav:stable'
+docker run -d --name retrack-clamav --restart unless-stopped --memory 4g -p 127.0.0.1:3310:3310 -v retrack-clamav-signatures:/var/lib/clamav $clamImage
+```
+
+Chờ daemon sẵn sàng rồi đặt Mode=ClamAv, Host=127.0.0.1, Port=3310 và khởi động
+lại API. Nếu API cũng ở Docker, dùng hostname dịch vụ trên network nội bộ,
+không dùng 127.0.0.1 trỏ về chính container API. Không công khai cổng 3310:
+giao thức TCP ClamAV không có xác thực/TLS.
+[Giao thức và mạng ClamAV](https://docs.clamav.net/manual/Usage/Scanning.html).
+
+`CLEAN` chỉ ghi khi daemon trả kết quả sạch, có thời điểm quét; hồ sơ cũ hoặc
+tệp bỏ quét ở Development giữ `NOT_SCANNED`. Antivirus không thay xét duyệt
+giấy tờ, làm sạch nội dung PDF (CDR) hoặc kiểm tra pháp lý. Chưa có tự xóa
+giấy tờ theo thời hạn; nhóm phải chốt chính sách lưu/xóa và xử lý bản sao lưu
+trước khi dùng hồ sơ thật.
+
 ## 🏗️ Tech Stack
 
 | Layer | Technology |

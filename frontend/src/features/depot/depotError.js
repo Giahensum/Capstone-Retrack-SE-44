@@ -9,6 +9,8 @@ export function depotError(error) {
     message = 'Thao tác đã được hủy.';
   } else if (!error?.response) {
     message = 'Không kết nối được máy chủ. Hãy kiểm tra mạng và thử lại.';
+  } else if (status === 503 && body?.code === 'VERIFICATION_SCANNER_UNAVAILABLE') {
+    message = 'Dịch vụ kiểm tra an toàn tệp chưa sẵn sàng. Hồ sơ chưa được nộp; vui lòng thử lại sau.';
   } else if (status >= 500) {
     message = status === 502 || status === 503 ? 'Dịch vụ kết nối đang gián đoạn. Vui lòng thử lại sau.'
       : status === 504 ? 'Dịch vụ chưa phản hồi kịp. Hãy kiểm tra kết quả trước khi gửi lại thao tác.'

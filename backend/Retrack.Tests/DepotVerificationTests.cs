@@ -6,6 +6,7 @@ using Retrack.API.DTOs.Depot;
 using Retrack.API.Models;
 using Retrack.API.Repositories;
 using Retrack.API.Services.Depot;
+using Retrack.API.Services.Interfaces;
 using Xunit;
 namespace Retrack.Tests;
 
@@ -19,7 +20,79 @@ public sealed class DepotVerificationTests : IAsyncLifetime
         return new(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(connection).Options);
     }
     private static DepotService Scope(AppDbContext db) => new(new DepotOwnerRepository(db), new DepotPaymentReadRepository(db));
-    private static DepotVerificationService Service(AppDbContext db) => new(new DepotVerificationRepository(db), new DepotUnitOfWork(db), Scope(db));
+    private static DepotVerificationService Service(AppDbContext db, IVerificationFileScanner? scanner = null) =>
+        new(new DepotVerificationRepository(db), new DepotUnitOfWork(db), Scope(db), scanner ?? new FixtureScanner());
+    private sealed class FixtureScanner : IVerificationFileScanner
+    {
+        public VerificationScanPolicy Policy => new(true, "Fixture", "Chỉ dùng trong test.");
+        public Task<bool> ScanAsync(ReadOnlyMemory<byte> content, CancellationToken cancellationToken = default) => Task.FromResult(false);
+    }
+    private sealed class ScriptedScanner(Func<Task<bool>> run) : IVerificationFileScanner
+    {
+        public int Calls { get; private set; }
+        public VerificationScanPolicy Policy => new(true, "Fixture", "Chỉ dùng trong test.");
+        public async Task<bool> ScanAsync(ReadOnlyMemory<byte> content, CancellationToken cancellationToken = default)
+        { Calls++; cancellationToken.ThrowIfCancellationRequested(); return await run(); }
+    }
+    [Fact]
+    public async Task Scan_happens_before_depot_lock_and_successful_retry_does_not_require_scanner()
+    {
+        await using var db = Open(); await Service(db).CreateDepotAsync(owner, Input());
+        var unavailable = false;
+        var scanner = new ScriptedScanner(async () =>
+        {
+            if (unavailable) throw new VerificationScannerUnavailableException();
+            await using var probe = Open(); await using var tx = await probe.Database.BeginTransactionAsync();
+            await probe.Database.ExecuteSqlInterpolatedAsync($"SELECT id FROM depots WHERE id = {depot} FOR UPDATE NOWAIT");
+            await tx.RollbackAsync();
+            return true;
+        });
+        var service = Service(db, scanner); var id = Guid.NewGuid();
+        await service.SubmitAsync(owner, depot, id, null, [File()], ["REGISTRATION"]);
+        unavailable = true;
+        Assert.Equal(id, await service.SubmitAsync(owner, depot, id, null, [File()], ["REGISTRATION"]));
+        Assert.Equal(1, scanner.Calls);
+        db.ChangeTracker.Clear();
+        var submission = Assert.Single((await service.ListAsync(owner, depot, new())).Items);
+        var file = Assert.Single(submission.Files);
+        Assert.Equal("CLEAN", file.ScanStatus); Assert.NotNull(file.ScannedAt);
+    }
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Scanner_rejection_or_outage_leaves_no_partial_files_or_pending_submission(bool malware)
+    {
+        await using var db = Open(); await Service(db).CreateDepotAsync(owner, Input());
+        var scanCalls = 0;
+        var scanner = new ScriptedScanner(() =>
+        {
+            if (++scanCalls == 1) return Task.FromResult(true);
+            return malware ? Task.FromException<bool>(new ArgumentException("Tệp không an toàn"))
+                : Task.FromException<bool>(new VerificationScannerUnavailableException());
+        });
+        var service = Service(db, scanner);
+        if (malware) await Assert.ThrowsAsync<ArgumentException>(() => service.SubmitAsync(owner, depot, Guid.NewGuid(), null, [File(), File()]));
+        else await Assert.ThrowsAsync<VerificationScannerUnavailableException>(() => service.SubmitAsync(owner, depot, Guid.NewGuid(), null, [File(), File()]));
+        db.ChangeTracker.Clear();
+        Assert.False(await db.DepotVerificationSubmissions.AnyAsync(x => x.DepotId == depot));
+        Assert.False(await db.DepotVerificationDocuments.AnyAsync(x => x.Submission.DepotId == depot));
+        Assert.Equal("UNVERIFIED", (await db.Depots.SingleAsync(x => x.Id == depot)).VerificationStatus);
+    }
+    [Fact]
+    public async Task Owner_disabled_while_scan_is_running_cannot_persist_new_submission()
+    {
+        await using var db = Open(); await Service(db).CreateDepotAsync(owner, Input());
+        var scanner = new ScriptedScanner(async () =>
+        {
+            await using var change = Open();
+            await change.Users.Where(x => x.Id == owner).ExecuteUpdateAsync(set => set.SetProperty(x => x.IsActive, false));
+            return true;
+        });
+        await Assert.ThrowsAsync<DepotForbiddenException>(() =>
+            Service(db, scanner).SubmitAsync(owner, depot, Guid.NewGuid(), null, [File()], ["REGISTRATION"]));
+        Assert.False(await db.DepotVerificationSubmissions.AnyAsync(x => x.DepotId == depot));
+        Assert.False(await db.DepotVerificationDocuments.AnyAsync(x => x.Submission.DepotId == depot));
+    }
     private CreateDepotDto Input() => new() { OperationId = depot, Profile = new() { Name = "Kho xác minh thử", Address = "Ngũ Hành Sơn, Đà Nẵng", TaxCode = "TEST-ONLY" } };
     private static IFormFile File(string content = "%PDF-1.7\nTest fixture") => new FormFile(new MemoryStream(System.Text.Encoding.UTF8.GetBytes(content)), 0, System.Text.Encoding.UTF8.GetByteCount(content), "files", "ho-so.pdf");
     public async Task InitializeAsync()

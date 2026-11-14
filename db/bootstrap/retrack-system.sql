@@ -708,6 +708,12 @@ CREATE TABLE IF NOT EXISTS depot_verification_documents (
 ALTER TABLE depot_verification_documents ADD COLUMN IF NOT EXISTS kind VARCHAR(20) NOT NULL DEFAULT 'LEGACY'
     CHECK (kind IN ('LEGACY','REGISTRATION','DEPOT_PHOTO','SUPPORTING'));
 -- RETRACK_DEPOT_VERIFICATION_DOCUMENTS_V2_END
+-- RETRACK_DEPOT_VERIFICATION_SCANNING_V1_BEGIN
+-- Hồ sơ cũ chưa được quét: không gán trạng thái sạch theo đuôi/chữ ký tệp.
+ALTER TABLE depot_verification_documents ADD COLUMN IF NOT EXISTS scan_status VARCHAR(20) NOT NULL DEFAULT 'NOT_SCANNED'
+    CHECK (scan_status IN ('NOT_SCANNED','CLEAN'));
+ALTER TABLE depot_verification_documents ADD COLUMN IF NOT EXISTS scanned_at TIMESTAMPTZ;
+-- RETRACK_DEPOT_VERIFICATION_SCANNING_V1_END
 -- RETRACK_DEPOT_QUERY_INDEXES_V1_BEGIN
 -- Đo EXPLAIN ANALYZE trước/sau trên fixture riêng; không đưa BYTEA vào index.
 -- DB đang có tải lớn: xem db/README.md để tạo CONCURRENTLY ngoài transaction.

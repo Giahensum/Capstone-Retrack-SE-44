@@ -17,7 +17,7 @@ export default function VerificationDocument({ file }) {
         const link = document.createElement('a'); link.href = url; link.download = file.name; link.click();
         setTimeout(() => URL.revokeObjectURL(url), 1000);
       }
-    } catch { setError('Không tải được hồ sơ. Hãy kiểm tra quyền truy cập hoặc thử lại.'); }
+    } catch (failure) { setError(failure.response?.status === 429 ? 'Bạn tải hồ sơ quá nhanh. Hãy chờ một phút rồi thử lại.' : 'Không tải được hồ sơ. Hãy kiểm tra quyền truy cập hoặc thử lại.'); }
     finally { setBusy(false); }
   };
   const image = ['image/png', 'image/jpeg'].includes(file.contentType);
@@ -25,6 +25,9 @@ export default function VerificationDocument({ file }) {
     <div className="flex gap-2 items-start"><FileText size={18} className="shrink-0 text-d-primary mt-1" aria-hidden="true" />
       <div className="min-w-0"><p className="font-medium break-all">{file.name}</p><p className="text-xs text-d-on-surface-variant">{documentKinds[file.kind] ?? documentKinds.LEGACY} · {documentSize(file.size)}</p></div>
     </div>
+    <p className="text-xs text-d-on-surface-variant">{file.scanStatus === 'CLEAN'
+      ? 'Đã quét mã độc' + (file.scannedAt ? ' · ' + new Date(file.scannedAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) : '')
+      : 'Chưa quét mã độc · không coi chữ ký định dạng là kết quả an toàn'}</p>
     <div className="flex flex-wrap gap-2">
       {image && <button type="button" className={buttonClass} disabled={busy} onClick={() => load(true)} aria-label={'Xem ' + file.name}><Eye size={16} aria-hidden="true" />Xem ảnh</button>}
       <button type="button" className="min-h-11 rounded-full border border-d-border-subtle px-4 py-2 text-sm font-semibold text-d-primary inline-flex gap-2 items-center disabled:opacity-40"

@@ -43,6 +43,7 @@ namespace Retrack.API.Middleware
                 InvalidOperationException when !depotRequest => (HttpStatusCode.BadRequest, ex.Message),
                 ArgumentException => (HttpStatusCode.BadRequest, ex.Message),
                 System.ComponentModel.DataAnnotations.ValidationException => (HttpStatusCode.BadRequest, ex.Message),
+                VerificationScannerUnavailableException => (HttpStatusCode.ServiceUnavailable, ex.Message),
                 PayOsException => (HttpStatusCode.BadGateway, "Không kết nối được dịch vụ thanh toán. Hãy kiểm tra trạng thái hóa đơn trước khi thử lại."),
                 HttpRequestException => (HttpStatusCode.BadGateway, "Dịch vụ kết nối đang gián đoạn. Vui lòng thử lại sau."),
                 OperationCanceledException => (HttpStatusCode.GatewayTimeout, "Dịch vụ chưa phản hồi kịp. Hãy kiểm tra kết quả trước khi gửi lại thao tác."),
@@ -57,6 +58,7 @@ namespace Retrack.API.Middleware
                 HttpStatusCode.Conflict => "CONFLICT",
                 HttpStatusCode.BadGateway => "PROVIDER_UNAVAILABLE",
                 HttpStatusCode.GatewayTimeout => "PROVIDER_TIMEOUT",
+                HttpStatusCode.ServiceUnavailable => "VERIFICATION_SCANNER_UNAVAILABLE",
                 _ => "INTERNAL_ERROR"
             };
             if ((int)statusCode >= 500)
