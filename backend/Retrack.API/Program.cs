@@ -9,6 +9,7 @@ using Retrack.API.Data;
 using Retrack.API.Middleware;
 using Retrack.API.Repositories;
 using Retrack.API.Services;
+using Retrack.API.Helpers;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -63,6 +64,22 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 
 builder.Services.AddAuthorization();
+builder.Services.AddVerificationRateLimits();
+builder.Services.AddOptions<Retrack.API.Services.Depot.VerificationScannerOptions>()
+    .Bind(builder.Configuration.GetSection("VerificationScanner"))
+    .Validate(x => x.Mode is "Disabled" or "ClamAv", "VerificationScanner:Mode cần là Disabled hoặc ClamAv.")
+    .Validate(x => x.Port is >= 1 and <= 65535 && x.TimeoutSeconds is >= 1 and <= 30
+        && !string.IsNullOrWhiteSpace(x.Host) && x.Host.Length <= 253, "Cấu hình scanner không hợp lệ.")
+    .ValidateOnStart();
+builder.Services.AddSingleton<Retrack.API.Services.Interfaces.IVerificationFileScanner, Retrack.API.Services.Depot.VerificationFileScanner>();
+builder.Services.AddOptions<Retrack.API.Services.Shared.VerificationStorageOptions>()
+    .Bind(builder.Configuration.GetSection("VerificationStorage"))
+    .Validate(x => x.Provider is "Database" or "Cloudinary", "VerificationStorage:Provider cần là Database hoặc Cloudinary.")
+    .ValidateOnStart();
+builder.Services.AddHttpClient(Retrack.API.Services.Shared.CloudinaryVerificationStorage.HttpClientName)
+    .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false })
+    .RemoveAllLoggers();
+builder.Services.AddSingleton<Retrack.API.Services.Interfaces.IVerificationDocumentStorage, Retrack.API.Services.Shared.CloudinaryVerificationStorage>();
 
 // ===== CORS =====
 builder.Services.AddCors(options =>
@@ -222,6 +239,7 @@ if (!app.Environment.IsDevelopment() && builder.Configuration.GetValue("HttpsRed
 app.UseCors("AllowFrontend");
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 app.MapControllers();
 app.MapGet("/health/live", () => Results.Ok(new { status = "ok" }));
 app.MapGet("/health/ready", async (AppDbContext db, CancellationToken ct) =>

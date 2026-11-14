@@ -27,6 +27,13 @@ public sealed class DepotVerificationDocument
     [Column("submission_id")] public Guid SubmissionId { get; set; }
     [Column("name")] public string Name { get; set; } = "";
     [Column("content_type")] public string ContentType { get; set; } = "";
+    [Column("kind")] public string Kind { get; set; } = "LEGACY";
+    [Column("scan_status")] public string ScanStatus { get; set; } = "NOT_SCANNED";
+    [Column("scanned_at")] public DateTime? ScannedAt { get; set; }
     [Column("content")] public byte[] Content { get; set; } = [];
+    [Column("storage_provider")] public string StorageProvider { get; set; } = "DATABASE";
+    [Column("storage_key")] public string? StorageKey { get; set; }
+    [Column("byte_size")] public int? ByteSize { get; set; }
+    [Column("content_sha256")] public string? ContentSha256 { get; set; }
     public DepotVerificationSubmission Submission { get; set; } = null!;
 }
