@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { FileCheck2, ImagePlus, Paperclip, Trash2, Upload } from 'lucide-react';
 import api from '@/lib/axios';
 import { buttonClass, inputClass, MutationError } from './DepotUI';
+import { depotError } from '../depotError';
 
 export const documentKinds = {
   REGISTRATION: 'Giấy tờ kinh doanh', DEPOT_PHOTO: 'Ảnh kho', SUPPORTING: 'Tài liệu bổ sung', LEGACY: 'Hồ sơ chưa phân loại',
@@ -21,6 +22,8 @@ export default function VerificationUploadForm({ depotId, onSuccess }) {
   const [files, setFiles] = useState([]), [note, setNote] = useState('');
   const [operationId, setOperationId] = useState(() => crypto.randomUUID());
   const [error, setError] = useState('');
+  const policy = useQuery({ queryKey: ['verification-upload-policy'], retry: 1, staleTime: 30000,
+    queryFn: async () => (await api.get('/depot/verifications/policy')).data.data });
   const upload = useMutation({
     mutationFn: async () => {
       const form = new FormData();
@@ -43,7 +46,12 @@ export default function VerificationUploadForm({ depotId, onSuccess }) {
     changed(); setFiles(current => [...current, ...incoming.map(file => ({ file, kind, id: crypto.randomUUID() }))]);
   };
   const ready = files.some(item => item.kind === 'REGISTRATION');
-  return <form className="space-y-5" onSubmit={event => { event.preventDefault(); if (ready && !upload.isPending) upload.mutate(); }}>
+  return <form className="space-y-5" onSubmit={event => { event.preventDefault(); if (ready && !upload.isPending && policy.data?.acceptsUploads) upload.mutate(); }}>
+    <div className="rounded-xl border border-d-border-subtle p-3 text-sm" role={policy.isError || policy.data?.acceptsUploads === false ? 'alert' : 'status'}>
+      {policy.isPending ? 'Đang kiểm tra điều kiện nộp hồ sơ…' : policy.isError
+        ? <>{depotError(policy.error)} <button type="button" className="underline font-semibold" onClick={() => policy.refetch()}>Thử lại</button></>
+        : policy.data?.message}
+    </div>
     <div className="rounded-2xl bg-d-surface-container-low p-4 text-sm space-y-2">
       <p className="font-semibold">Chuẩn bị trước khi nộp</p>
       <ol className="list-decimal pl-5 space-y-1">
@@ -84,7 +92,7 @@ export default function VerificationUploadForm({ depotId, onSuccess }) {
     </fieldset>
     <MutationError mutation={upload} />
     <div className="flex flex-wrap items-center gap-3">
-      <button className={buttonClass} disabled={upload.isPending || !ready}><Upload size={18} aria-hidden="true" />{upload.isPending ? 'Đang nộp…' : 'Nộp hồ sơ xác minh'}</button>
+      <button className={buttonClass} disabled={upload.isPending || !ready || !policy.data?.acceptsUploads}><Upload size={18} aria-hidden="true" />{upload.isPending ? 'Đang nộp…' : 'Nộp hồ sơ xác minh'}</button>
       <p className="text-xs text-d-on-surface-variant">{files.length}/3 tệp · {ready ? 'Đã có giấy tờ kinh doanh' : 'Cần ít nhất một giấy tờ kinh doanh'}</p>
     </div>
     <p className="text-xs text-d-on-surface-variant">Hồ sơ đã nộp được lưu lịch sử. Nếu cần thay đổi, chờ Admin yêu cầu bổ sung rồi nộp bộ hồ sơ mới.</p>

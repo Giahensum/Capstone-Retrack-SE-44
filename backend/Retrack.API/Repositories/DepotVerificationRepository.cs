@@ -35,7 +35,7 @@ public sealed class DepotVerificationRepository(AppDbContext db) : IDepotVerific
         if (!string.IsNullOrEmpty(query.Status)) source = source.Where(x => x.Status == query.Status);
         return DepotRepositoryPage.ReadAsync(source.OrderByDescending(x => x.SubmittedAt).ThenBy(x => x.Id)
             .Select(x => new VerificationSubmissionDto(x.Id, x.DepotId, x.DepotName, x.Status, x.Note, x.SubmittedAt,
-                x.ReviewedAt, x.ReviewReason, x.Documents.OrderBy(d => d.Id).Select(d => new VerificationFileDto(d.Id, d.Name, d.ContentType, d.Content.Length, d.Kind)).ToList(), x.DepotAddress, x.TaxCode)), query);
+                x.ReviewedAt, x.ReviewReason, x.Documents.OrderBy(d => d.Id).Select(d => new VerificationFileDto(d.Id, d.Name, d.ContentType, d.Content.Length, d.Kind, d.ScanStatus, d.ScannedAt)).ToList(), x.DepotAddress, x.TaxCode)), query);
     }
     public Task<Guid?> FileOwnerAsync(Guid id) => db.DepotVerificationDocuments.AsNoTracking()
         .Where(x => x.Id == id).Select(x => (Guid?)x.Submission.Depot.OwnerId).SingleOrDefaultAsync();

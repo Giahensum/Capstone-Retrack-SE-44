@@ -63,6 +63,13 @@ trước khi chạy backend mới. Khối này chỉ thêm cột `kind`, hồ s�
 `LEGACY`; không sửa nội dung tệp, trạng thái duyệt hoặc chạy seed.
 Ảnh kho là tài liệu hỗ trợ tùy chọn, không thay cho giấy tờ kinh doanh.
 
+Bổ sung kiểm tra an toàn tệp 14/11/2026:
+`RETRACK_DEPOT_VERIFICATION_SCANNING_V1_BEGIN/END` thêm `scan_status` và
+`scanned_at` vào tài liệu xác minh. DB cũ cần chạy khối này trước backend mới.
+Hồ sơ cũ giữ `NOT_SCANNED`, không đổi thành sạch và không mất nội dung.
+Mọi bổ sung vẫn nằm trong chính một file `bootstrap/retrack-system.sql`.
+Chi tiết cấu hình scanner ở mục “Bảo vệ hồ sơ Depot” trong README gốc.
+
 Khối `RETRACK_DEPOT_QUERY_INDEXES_V1_BEGIN/END` bổ sung ba index cho danh sách
 lô theo kho/thời gian, lịch sử hồ sơ theo kho/thời gian và tệp theo hồ sơ.
 Không đổi trạng thái, số tiền, tồn kho hoặc quyền của role khác.
