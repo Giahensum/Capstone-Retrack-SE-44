@@ -2,6 +2,11 @@
 
 > Nền tảng số hóa chuỗi cung ứng phế liệu, kết nối Người bán → Kho vựa → Nhà máy tái chế.
 
+Trước khi triển khai production, TV5 cần phối hợp nhóm nâng nền tảng:
+dự án hiện target .NET 8, đã hết hỗ trợ ngày 10/11/2026; hướng nâng là
+.NET 10 LTS kèm kiểm thử EF/Npgsql và các role. Vá dependency riêng không
+thay cho nâng runtime. [Chính sách hỗ trợ .NET](https://dotnet.microsoft.com/en-us/platform/support/policy/dotnet-core).
+
 ## Bảo vệ hồ sơ Depot
 
 Schema/seed chung vẫn chỉ có `db/bootstrap/retrack-system.sql`; xem
