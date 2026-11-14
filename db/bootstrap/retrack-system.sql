@@ -703,6 +703,11 @@ CREATE TABLE IF NOT EXISTS depot_verification_documents (
     name VARCHAR(150) NOT NULL, content_type VARCHAR(50) NOT NULL,
     content BYTEA NOT NULL CHECK (octet_length(content) BETWEEN 1 AND 2097152)
 );
+-- RETRACK_DEPOT_VERIFICATION_DOCUMENTS_V2_BEGIN
+-- Tương thích hồ sơ cũ; không suy diễn loại giấy tờ từ tên tệp.
+ALTER TABLE depot_verification_documents ADD COLUMN IF NOT EXISTS kind VARCHAR(20) NOT NULL DEFAULT 'LEGACY'
+    CHECK (kind IN ('LEGACY','REGISTRATION','DEPOT_PHOTO','SUPPORTING'));
+-- RETRACK_DEPOT_VERIFICATION_DOCUMENTS_V2_END
 -- RETRACK_DEPOT_OPERATIONS_V1
 CREATE TABLE IF NOT EXISTS depot_incident_followups (
     id UUID PRIMARY KEY, event_id UUID NOT NULL REFERENCES driver_delivery_events(id) ON DELETE CASCADE,

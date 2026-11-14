@@ -10,11 +10,12 @@ public interface IDepotVerificationRepository
     void AddDepot(Depot depot);
     Task LockDepotAsync(Guid id);
     Task<bool> ActiveAdminAsync(Guid id);
-    Task<DepotVerificationSubmission?> FindAsync(Guid id);
+    Task<DepotVerificationSubmission?> FindAsync(Guid id, bool includeDocuments = false);
     Task<bool> HasPendingAsync(Guid depotId);
     Task<int> RecentCountAsync(Guid depotId);
     void Add(DepotVerificationSubmission submission);
     void AddNotice(Notification notice);
     Task<PagedResult<VerificationSubmissionDto>> ListAsync(Guid? depotId, DepotQuery query);
-    Task<(Guid OwnerId, DepotVerificationDocument Document)?> FileAsync(Guid id);
+    Task<Guid?> FileOwnerAsync(Guid id);
+    Task<DepotVerificationDocument?> FileAsync(Guid id, Guid actor);
 }

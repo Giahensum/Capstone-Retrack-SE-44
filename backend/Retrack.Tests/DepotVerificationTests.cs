@@ -36,6 +36,88 @@ public sealed class DepotVerificationTests : IAsyncLifetime
         await db.Users.Where(x => x.Id == owner || x.Id == admin || x.Id == stranger).ExecuteDeleteAsync();
     }
     [Fact]
+    public async Task Classified_documents_preserve_purpose_across_retry_review_and_private_download()
+    {
+        await using var db = Open(); var service = Service(db); await service.CreateDepotAsync(owner, Input());
+        var photoBytes = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l9sAAAAASUVORK5CYII=");
+        IFormFile Photo() => new FormFile(new MemoryStream(photoBytes), 0, photoBytes.Length, "files", "mat-tien.png");
+        var id = Guid.NewGuid();
+        await service.SubmitAsync(owner, depot, id, "Đối chiếu kho", [File(), Photo()], ["REGISTRATION", "DEPOT_PHOTO"]);
+        Assert.Equal(id, await service.SubmitAsync(owner, depot, id, "Đối chiếu kho", [File(), Photo()], ["REGISTRATION", "DEPOT_PHOTO"]));
+        await Assert.ThrowsAsync<DepotConflictException>(() => service.SubmitAsync(owner, depot, id, "Đối chiếu kho", [File(), Photo()], ["REGISTRATION", "SUPPORTING"]));
+        db.ChangeTracker.Clear();
+        var submission = Assert.Single((await service.ListAsync(owner, depot, new())).Items);
+        Assert.Equal(2, submission.Files.Count);
+        var photo = Assert.Single(submission.Files, x => x.Kind == "DEPOT_PHOTO");
+        Assert.Equal(photoBytes, (await service.FileAsync(admin, photo.Id)).Content);
+        await Assert.ThrowsAsync<DepotForbiddenException>(() => service.FileAsync(stranger, photo.Id));
+        await service.ReviewAsync(admin, id, new(true, "Đã đối chiếu giấy tờ và ảnh"));
+        db.ChangeTracker.Clear();
+        Assert.Empty(db.ChangeTracker.Entries<DepotVerificationDocument>());
+        Assert.Equal("APPROVED", (await db.Depots.SingleAsync(x => x.Id == depot)).VerificationStatus);
+        Assert.Equal(2, await db.DepotVerificationDocuments.CountAsync(x => x.SubmissionId == id));
+        (await db.Users.SingleAsync(x => x.Id == admin)).IsActive = false;
+        await db.SaveChangesAsync();
+        await Assert.ThrowsAsync<DepotForbiddenException>(() => service.FileAsync(admin, photo.Id));
+        (await db.Users.SingleAsync(x => x.Id == owner)).IsActive = false;
+        await db.SaveChangesAsync();
+        await Assert.ThrowsAsync<DepotForbiddenException>(() => service.FileAsync(owner, photo.Id));
+    }
+    [Theory]
+    [InlineData("DEPOT_PHOTO", null)]
+    [InlineData("REGISTRATION", "UNKNOWN")]
+    [InlineData("REGISTRATION", "DEPOT_PHOTO")]
+    [InlineData("LEGACY", null)]
+    public async Task Invalid_classification_or_pdf_as_warehouse_photo_never_creates_submission(string first, string? second)
+    {
+        await using var db = Open(); var service = Service(db); await service.CreateDepotAsync(owner, Input());
+        var kinds = second == null ? new[] { first } : new[] { first, second };
+        await Assert.ThrowsAsync<ArgumentException>(() => service.SubmitAsync(owner, depot, Guid.NewGuid(), null,
+            second == null ? [File()] : [File(), File()], kinds));
+        Assert.False(await db.DepotVerificationSubmissions.AnyAsync(x => x.DepotId == depot));
+    }
+    [Fact]
+    public async Task Disguised_extension_or_mismatched_classification_count_is_rejected()
+    {
+        await using var db = Open(); var service = Service(db); await service.CreateDepotAsync(owner, Input());
+        var bytes = System.Text.Encoding.UTF8.GetBytes("%PDF-1.7\nTest");
+        var file = new FormFile(new MemoryStream(bytes), 0, bytes.Length, "files", "ho-so.html");
+        await Assert.ThrowsAsync<ArgumentException>(() => service.SubmitAsync(owner, depot, Guid.NewGuid(), null, [file]));
+        await Assert.ThrowsAsync<ArgumentException>(() => service.SubmitAsync(owner, depot, Guid.NewGuid(), null, [File()], ["REGISTRATION", "SUPPORTING"]));
+        Assert.False(await db.DepotVerificationSubmissions.AnyAsync(x => x.DepotId == depot));
+    }
+    [Fact]
+    public async Task Incorrect_stream_length_is_bounded_and_rejected_before_persistence()
+    {
+        await using var db = Open(); var service = Service(db); await service.CreateDepotAsync(owner, Input());
+        var file = new MisdeclaredFile();
+        await Assert.ThrowsAsync<ArgumentException>(() => service.SubmitAsync(owner, depot, Guid.NewGuid(), null, [file]));
+        Assert.InRange(file.BytesRead, 0, 6);
+        Assert.False(await db.DepotVerificationSubmissions.AnyAsync(x => x.DepotId == depot));
+    }
+    private sealed class MisdeclaredFile : IFormFile
+    {
+        private readonly CountingStream stream = new(new byte[3 * 1024 * 1024]);
+        public long BytesRead => stream.BytesRead;
+        public string ContentType => "application/pdf";
+        public string ContentDisposition => "";
+        public IHeaderDictionary Headers { get; set; } = new HeaderDictionary();
+        public long Length => 5;
+        public string Name => "files";
+        public string FileName => "khai-bao-sai.pdf";
+        public Stream OpenReadStream() => stream;
+        public void CopyTo(Stream target) => throw new NotSupportedException();
+        public Task CopyToAsync(Stream target, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+    }
+    private sealed class CountingStream(byte[] content) : MemoryStream(content)
+    {
+        public long BytesRead { get; private set; }
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            var read = await base.ReadAsync(buffer, cancellationToken); BytesRead += read; return read;
+        }
+    }
+    [Fact]
     public async Task New_owner_creates_warehouse_with_retry_but_cannot_trade_or_claim_another_owners_operation()
     {
         await using var db = Open(); var service = Service(db);
