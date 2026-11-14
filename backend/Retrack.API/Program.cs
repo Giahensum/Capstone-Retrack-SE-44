@@ -72,6 +72,14 @@ builder.Services.AddOptions<Retrack.API.Services.Depot.VerificationScannerOption
         && !string.IsNullOrWhiteSpace(x.Host) && x.Host.Length <= 253, "Cấu hình scanner không hợp lệ.")
     .ValidateOnStart();
 builder.Services.AddSingleton<Retrack.API.Services.Interfaces.IVerificationFileScanner, Retrack.API.Services.Depot.VerificationFileScanner>();
+builder.Services.AddOptions<Retrack.API.Services.Shared.VerificationStorageOptions>()
+    .Bind(builder.Configuration.GetSection("VerificationStorage"))
+    .Validate(x => x.Provider is "Database" or "Cloudinary", "VerificationStorage:Provider cần là Database hoặc Cloudinary.")
+    .ValidateOnStart();
+builder.Services.AddHttpClient(Retrack.API.Services.Shared.CloudinaryVerificationStorage.HttpClientName)
+    .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false })
+    .RemoveAllLoggers();
+builder.Services.AddSingleton<Retrack.API.Services.Interfaces.IVerificationDocumentStorage, Retrack.API.Services.Shared.CloudinaryVerificationStorage>();
 
 // ===== CORS =====
 builder.Services.AddCors(options =>

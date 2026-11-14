@@ -7,6 +7,9 @@ using Retrack.API.Models;
 using Retrack.API.Repositories;
 using Retrack.API.Services.Depot;
 using Retrack.API.Services.Interfaces;
+using Microsoft.Extensions.Logging.Abstractions;
+using Retrack.API.Services.Shared;
+using System.Collections.Concurrent;
 using Xunit;
 namespace Retrack.Tests;
 
@@ -20,8 +23,125 @@ public sealed class DepotVerificationTests : IAsyncLifetime
         return new(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(connection).Options);
     }
     private static DepotService Scope(AppDbContext db) => new(new DepotOwnerRepository(db), new DepotPaymentReadRepository(db));
-    private static DepotVerificationService Service(AppDbContext db, IVerificationFileScanner? scanner = null) =>
-        new(new DepotVerificationRepository(db), new DepotUnitOfWork(db), Scope(db), scanner ?? new FixtureScanner());
+    private static DepotVerificationService Service(AppDbContext db, IVerificationFileScanner? scanner = null, IVerificationDocumentStorage? storage = null) =>
+        new(new DepotVerificationRepository(db), new DepotUnitOfWork(db), Scope(db), scanner ?? new FixtureScanner(), storage ?? new DatabaseFixtureStorage(), NullLogger<DepotVerificationService>.Instance);
+    private sealed class DatabaseFixtureStorage : IVerificationDocumentStorage
+    {
+        public string Provider => "DATABASE";
+        public Task<string> UploadAsync(Guid operationId, Guid documentId, byte[] content, string type, CancellationToken ct) => throw new NotSupportedException();
+        public Task<byte[]> ReadAsync(string key, int size, CancellationToken ct) => throw new NotSupportedException();
+        public Task DeleteAsync(string key, CancellationToken ct) => throw new NotSupportedException();
+    }
+    private sealed class CloudFixtureStorage : IVerificationDocumentStorage
+    {
+        public string Provider => "CLOUDINARY";
+        public ConcurrentDictionary<string, byte[]> Objects { get; } = new();
+        public ConcurrentBag<string> Deleted { get; } = [];
+        public int Uploads, Reads;
+        public int FailAt { get; set; }
+        public Func<Task>? OnUpload { get; set; }
+        public Func<Task>? OnRead { get; set; }
+        public async Task<string> UploadAsync(Guid operationId, Guid documentId, byte[] content, string type, CancellationToken ct)
+        {
+            var count = Interlocked.Increment(ref Uploads);
+            if (count == FailAt) throw new VerificationStorageUnavailableException();
+            var key = $"retrack/private-depot-verifications/{operationId:N}/{documentId:N}.pdf";
+            Objects[key] = content.ToArray();
+            if (OnUpload != null) await OnUpload();
+            return key;
+        }
+        public async Task<byte[]> ReadAsync(string key, int size, CancellationToken ct)
+        { Interlocked.Increment(ref Reads); if (OnRead != null) await OnRead(); return Objects[key].ToArray(); }
+        public Task DeleteAsync(string key, CancellationToken ct) { Objects.TryRemove(key, out _); Deleted.Add(key); return Task.CompletedTask; }
+    }
+    [Fact]
+    public async Task Cloud_submission_persists_metadata_only_and_preserves_private_download_and_retry()
+    {
+        await using var db = Open(); var cloud = new CloudFixtureStorage();
+        var service = Service(db, storage: cloud); await service.CreateDepotAsync(owner, Input());
+        var id = await service.SubmitAsync(owner, depot, Guid.NewGuid(), "Hồ sơ cloud fixture", [File()], ["REGISTRATION"]);
+        db.ChangeTracker.Clear();
+        var record = await db.DepotVerificationDocuments.SingleAsync(x => x.SubmissionId == id);
+        Assert.Empty(record.Content); Assert.Equal("CLOUDINARY", record.StorageProvider);
+        Assert.NotNull(record.ContentSha256); Assert.True(record.ByteSize > 0);
+        var item = Assert.Single((await service.ListAsync(owner, depot, new())).Items);
+        Assert.Equal(record.ByteSize, Assert.Single(item.Files).Size);
+        await Assert.ThrowsAsync<DepotForbiddenException>(() => service.FileAsync(stranger, record.Id));
+        Assert.Equal(0, cloud.Reads);
+        var expected = System.Text.Encoding.UTF8.GetBytes("%PDF-1.7\nTest fixture");
+        Assert.Equal(expected, (await service.FileAsync(owner, record.Id)).Content);
+        Assert.Equal(expected, (await service.FileAsync(admin, record.Id)).Content);
+        cloud.FailAt = 2;
+        Assert.Equal(id, await service.SubmitAsync(owner, depot, id, "Hồ sơ cloud fixture", [File()], ["REGISTRATION"]));
+        Assert.Equal(1, cloud.Uploads); Assert.Empty(cloud.Deleted);
+        await Assert.ThrowsAsync<DepotConflictException>(() => service.SubmitAsync(owner, depot, id, "Đổi nội dung", [File()], ["REGISTRATION"]));
+    }
+    [Fact]
+    public async Task Partial_upload_failure_compensates_owned_assets_without_falling_back_to_database()
+    {
+        await using var db = Open(); var cloud = new CloudFixtureStorage { FailAt = 2 };
+        var service = Service(db, storage: cloud); await service.CreateDepotAsync(owner, Input());
+        await Assert.ThrowsAsync<VerificationStorageUnavailableException>(() => service.SubmitAsync(owner, depot, Guid.NewGuid(), null, [File(), File()]));
+        Assert.Empty(cloud.Objects); Assert.Single(cloud.Deleted);
+        Assert.False(await db.DepotVerificationSubmissions.AnyAsync(x => x.DepotId == depot));
+        Assert.Equal("UNVERIFIED", (await db.Depots.SingleAsync(x => x.Id == depot)).VerificationStatus);
+    }
+    [Fact]
+    public async Task Legacy_database_documents_remain_readable_and_replayable_after_cloud_is_enabled()
+    {
+        await using var db = Open(); var original = Service(db); await original.CreateDepotAsync(owner, Input());
+        var id = await original.SubmitAsync(owner, depot, Guid.NewGuid(), null, [File()]);
+        await db.DepotVerificationDocuments.Where(x => x.SubmissionId == id).ExecuteUpdateAsync(set =>
+            set.SetProperty(x => x.ByteSize, (int?)null).SetProperty(x => x.ContentSha256, (string?)null));
+        db.ChangeTracker.Clear();
+        var cloud = new CloudFixtureStorage(); var service = Service(db, storage: cloud);
+        var item = Assert.Single((await service.ListAsync(owner, depot, new())).Items);
+        var file = Assert.Single(item.Files); Assert.True(file.Size > 0);
+        Assert.NotEmpty((await service.FileAsync(owner, file.Id)).Content);
+        Assert.Equal(id, await service.SubmitAsync(owner, depot, id, null, [File()]));
+        Assert.Equal(0, cloud.Reads); Assert.Equal(0, cloud.Uploads);
+        Assert.Equal("DATABASE", (await db.DepotVerificationDocuments.SingleAsync(x => x.Id == file.Id)).StorageProvider);
+    }
+    [Fact]
+    public async Task Pending_submission_conflict_cleans_only_new_assets_and_keeps_winner_readable()
+    {
+        await using var db = Open(); var cloud = new CloudFixtureStorage();
+        var service = Service(db, storage: cloud); await service.CreateDepotAsync(owner, Input());
+        var first = await service.SubmitAsync(owner, depot, Guid.NewGuid(), null, [File()]);
+        await Assert.ThrowsAsync<DepotConflictException>(() => service.SubmitAsync(owner, depot, Guid.NewGuid(), null, [File()]));
+        Assert.Single(cloud.Objects); Assert.Single(cloud.Deleted);
+        var document = await db.DepotVerificationDocuments.SingleAsync(x => x.SubmissionId == first);
+        Assert.NotEmpty((await service.FileAsync(owner, document.Id)).Content);
+    }
+    [Fact]
+    public async Task Concurrent_cloud_retries_have_one_submission_and_compensate_losing_upload()
+    {
+        await using (var setup = Open()) await Service(setup).CreateDepotAsync(owner, Input());
+        var cloud = new CloudFixtureStorage(); var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var arrived = 0;
+        cloud.OnUpload = async () => { if (Interlocked.Increment(ref arrived) == 2) ready.SetResult(); await ready.Task.WaitAsync(TimeSpan.FromSeconds(10)); };
+        var id = Guid.NewGuid();
+        async Task<Guid> Submit() { await using var db = Open(); return await Service(db, storage: cloud).SubmitAsync(owner, depot, id, null, [File()]); }
+        var results = await Task.WhenAll(Submit(), Submit());
+        Assert.All(results, result => Assert.Equal(id, result)); Assert.Single(cloud.Objects); Assert.Single(cloud.Deleted);
+        await using var verify = Open();
+        Assert.Equal(1, await verify.DepotVerificationSubmissions.CountAsync(x => x.DepotId == depot));
+        Assert.Equal(1, await verify.DepotVerificationDocuments.CountAsync(x => x.SubmissionId == id));
+    }
+    [Fact]
+    public async Task Corrupted_cloud_body_and_rights_revoked_during_download_never_return_document()
+    {
+        await using var db = Open(); var cloud = new CloudFixtureStorage(); var service = Service(db, storage: cloud);
+        await service.CreateDepotAsync(owner, Input());
+        var id = await service.SubmitAsync(owner, depot, Guid.NewGuid(), null, [File()]);
+        var document = await db.DepotVerificationDocuments.SingleAsync(x => x.SubmissionId == id);
+        var original = cloud.Objects[document.StorageKey!].ToArray();
+        cloud.Objects[document.StorageKey!][0] ^= 1;
+        await Assert.ThrowsAsync<VerificationStorageUnavailableException>(() => service.FileAsync(owner, document.Id));
+        cloud.Objects[document.StorageKey!] = original;
+        cloud.OnRead = async () => { await using var change = Open(); await change.Users.Where(x => x.Id == owner).ExecuteUpdateAsync(set => set.SetProperty(x => x.IsActive, false)); };
+        await Assert.ThrowsAsync<DepotForbiddenException>(() => service.FileAsync(owner, document.Id));
+    }
     private sealed class FixtureScanner : IVerificationFileScanner
     {
         public VerificationScanPolicy Policy => new(true, "Fixture", "Chỉ dùng trong test.");

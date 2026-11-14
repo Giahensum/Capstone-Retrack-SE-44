@@ -70,6 +70,13 @@ Hồ sơ cũ giữ `NOT_SCANNED`, không đổi thành sạch và không mất n
 Mọi bổ sung vẫn nằm trong chính một file `bootstrap/retrack-system.sql`.
 Chi tiết cấu hình scanner ở mục “Bảo vệ hồ sơ Depot” trong README gốc.
 
+Bổ sung cloud riêng tư: `RETRACK_DEPOT_PRIVATE_CLOUD_V1_BEGIN/END` thêm provider,
+key, kích thước và SHA-256 vào metadata hồ sơ; điều chỉnh CHECK để cloud có
+byte DB rỗng và đủ metadata, còn hồ sơ DATABASE vẫn phải có nội dung hợp lệ.
+Không chuyển/xóa nội dung hồ sơ cũ. Máy đã nâng đến af6446a chỉ cần sao lưu
+rồi chạy khối này trước backend mới, không chọn seed. Máy mới chạy một file
+chung như trên. Cấu hình cloud dùng account Cloudinary hiện có; xem README gốc.
+
 Khối `RETRACK_DEPOT_QUERY_INDEXES_V1_BEGIN/END` bổ sung ba index cho danh sách
 lô theo kho/thời gian, lịch sử hồ sơ theo kho/thời gian và tệp theo hồ sơ.
 Không đổi trạng thái, số tiền, tồn kho hoặc quyền của role khác.
