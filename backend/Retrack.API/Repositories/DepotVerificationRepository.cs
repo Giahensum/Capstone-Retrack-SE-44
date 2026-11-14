@@ -17,9 +17,11 @@ public sealed class DepotVerificationRepository(AppDbContext db) : IDepotVerific
         if (depot != null) await db.Entry(depot).ReloadAsync();
     }
     public Task<bool> ActiveAdminAsync(Guid id) => db.Users.AnyAsync(x => x.Id == id && x.Role == "ADMIN" && x.IsActive);
-    public async Task<DepotVerificationSubmission?> FindAsync(Guid id)
+    public async Task<DepotVerificationSubmission?> FindAsync(Guid id, bool includeDocuments = false)
     {
-        var row = await db.DepotVerificationSubmissions.Include(x => x.Documents).SingleOrDefaultAsync(x => x.Id == id);
+        var query = db.DepotVerificationSubmissions.AsQueryable();
+        if (includeDocuments) query = query.Include(x => x.Documents);
+        var row = await query.SingleOrDefaultAsync(x => x.Id == id);
         if (row != null) await db.Entry(row).ReloadAsync();
         return row;
     }
@@ -33,12 +35,13 @@ public sealed class DepotVerificationRepository(AppDbContext db) : IDepotVerific
         if (!string.IsNullOrEmpty(query.Status)) source = source.Where(x => x.Status == query.Status);
         return DepotRepositoryPage.ReadAsync(source.OrderByDescending(x => x.SubmittedAt).ThenBy(x => x.Id)
             .Select(x => new VerificationSubmissionDto(x.Id, x.DepotId, x.DepotName, x.Status, x.Note, x.SubmittedAt,
-                x.ReviewedAt, x.ReviewReason, x.Documents.OrderBy(d => d.Id).Select(d => new VerificationFileDto(d.Id, d.Name, d.ContentType, d.Content.Length)).ToList(), x.DepotAddress, x.TaxCode)), query);
+                x.ReviewedAt, x.ReviewReason, x.Documents.OrderBy(d => d.Id).Select(d => new VerificationFileDto(d.Id, d.Name, d.ContentType, d.Content.Length, d.Kind)).ToList(), x.DepotAddress, x.TaxCode)), query);
     }
-    public async Task<(Guid OwnerId, DepotVerificationDocument Document)?> FileAsync(Guid id)
-    {
-        var row = await db.DepotVerificationDocuments.AsNoTracking().Where(x => x.Id == id)
-            .Select(x => new { OwnerId = x.Submission.Depot.OwnerId, Document = x }).SingleOrDefaultAsync();
-        return row == null ? null : (row.OwnerId, row.Document);
-    }
+    public Task<Guid?> FileOwnerAsync(Guid id) => db.DepotVerificationDocuments.AsNoTracking()
+        .Where(x => x.Id == id).Select(x => (Guid?)x.Submission.Depot.OwnerId).SingleOrDefaultAsync();
+    // Kiểm tra lại quyền trong chính truy vấn đọc byte để không tải hồ sơ của chủ kho khác.
+    public Task<DepotVerificationDocument?> FileAsync(Guid id, Guid actor) => db.DepotVerificationDocuments.AsNoTracking()
+        .Where(x => x.Id == id && db.Users.Any(u => u.Id == actor && u.IsActive &&
+            (u.Role == "ADMIN" || (u.Role == "DEPOT_OWNER" && x.Submission.Depot.OwnerId == actor))))
+        .SingleOrDefaultAsync();
 }
