@@ -35,16 +35,16 @@ export default function LoginPage() {
     const [form, setForm] = useState({ email: '', password: '' });
     // ── Helpers ──────────────────────────────────────────
     const handleSuccess = (data) => {
-        if (data.role === 'DEPOT_EMPLOYEE' || data.role === 'DRIVER') {
-            navigate('/staff-app');
-            return;
-        }
         login(data.token, {
             userId: data.userId,
             email: data.email,
             fullName: data.fullName,
             role: data.role,
         });
+        if (data.role === 'DEPOT_EMPLOYEE' || data.role === 'DRIVER') {
+            navigate('/staff-app');
+            return;
+        }
         toast.success(`Xin chào, ${data.fullName}!`);
         navigate(ROLE_HOME[data.role] ?? '/');
     };
@@ -55,7 +55,10 @@ export default function LoginPage() {
             return res.data.data;
         },
         onSuccess: handleSuccess,
-        onError: () => toast.error('Email hoặc mật khẩu không đúng'),
+        onError: (err) => {
+            const msg = err?.response?.data?.message || 'Email hoặc mật khẩu không đúng';
+            toast.error(msg);
+        },
     });
     const fillAccount = (email, pass) => {
         setForm({ email, password: pass });
@@ -120,8 +123,9 @@ export default function LoginPage() {
                   try {
                     const res = await api.post('/auth/google', { idToken: credentialResponse.credential });
                     handleSuccess(res.data.data);
-                  } catch {
-                    toast.error('Đăng nhập Google thất bại. Vui lòng kiểm tra lại tài khoản.');
+                  } catch (err) {
+                    const msg = err?.response?.data?.message || 'Đăng nhập Google thất bại. Vui lòng kiểm tra lại tài khoản.';
+                    toast.error(msg);
                   }
                 }}
                 onError={() => toast.error('Đăng nhập Google bị hủy')}
