@@ -27,6 +27,7 @@ public sealed class DepotVerificationDocument
     [Column("submission_id")] public Guid SubmissionId { get; set; }
     [Column("name")] public string Name { get; set; } = "";
     [Column("content_type")] public string ContentType { get; set; } = "";
+    [Column("kind")] public string Kind { get; set; } = "LEGACY";
     [Column("content")] public byte[] Content { get; set; } = [];
     public DepotVerificationSubmission Submission { get; set; } = null!;
 }

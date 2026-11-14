@@ -38,28 +38,43 @@ public sealed class DepotVerificationService(IDepotVerificationRepository reposi
         if (query.Status is not (null or "" or "SUBMITTED" or "APPROVED" or "REJECTED")) throw new ArgumentException("Trạng thái hồ sơ không hợp lệ.");
         return await repository.ListAsync(depotId, query);
     }
-    public async Task<Guid> SubmitAsync(Guid ownerId, Guid depotId, Guid operationId, string? note, IReadOnlyList<IFormFile> files)
+    public async Task<Guid> SubmitAsync(Guid ownerId, Guid depotId, Guid operationId, string? note, IReadOnlyList<IFormFile> files, IReadOnlyList<string>? fileKinds = null)
     {
         await scope.RequireOwnerAsync(ownerId, depotId);
         if (operationId == Guid.Empty || files.Count is < 1 or > 3 || note?.Length > 2000) throw new ArgumentException("Cần 1–3 tệp hồ sơ và ghi chú tối đa 2000 ký tự.");
+        // Client cũ chưa phân loại vẫn được giữ nguyên contract; giao diện mới phải có giấy tờ kinh doanh.
+        if (fileKinds != null && (fileKinds.Count != files.Count || !fileKinds.Contains("REGISTRATION") ||
+            fileKinds.Any(kind => kind is not ("REGISTRATION" or "DEPOT_PHOTO" or "SUPPORTING"))))
+            throw new ArgumentException("Cần ít nhất một giấy tờ kinh doanh và phân loại đúng từng tệp.");
         var documents = new List<DepotVerificationDocument>();
-        foreach (var file in files)
+        for (var index = 0; index < files.Count; index++)
         {
+            var file = files[index];
+            var kind = fileKinds?[index] ?? "LEGACY";
             if (file.Length is <= 0 or > 2 * 1024 * 1024) throw new ArgumentException("Mỗi tệp tối đa 2 MB, không nhận tệp rỗng.");
-            await using var input = file.OpenReadStream(); using var buffer = new MemoryStream();
-            await input.CopyToAsync(buffer);
-            var content = buffer.ToArray();
+            await using var input = file.OpenReadStream();
+            // Đọc tối đa kích thước khai báo + 1, kể cả khi stream khai báo sai Length.
+            var buffer = new byte[(int)file.Length + 1];
+            var count = await input.ReadAtLeastAsync(buffer, buffer.Length, throwOnEndOfStream: false);
+            var content = buffer.AsSpan(0, count).ToArray();
             var type = ContentType(content);
             if (content.Length != file.Length || content.Length > 2 * 1024 * 1024 || type == null) throw new ArgumentException("Chỉ nhận nội dung PDF, PNG hoặc JPEG hợp lệ, tối đa 2 MB.");
+            if (kind == "DEPOT_PHOTO" && type == "application/pdf") throw new ArgumentException("Ảnh kho cần là PNG hoặc JPEG; không dùng PDF.");
             var name = Path.GetFileName(file.FileName.Replace('\\', '/'));
             if (string.IsNullOrWhiteSpace(name) || name.Length > 150 || name.Any(char.IsControl)) throw new ArgumentException("Tên tệp không hợp lệ, tối đa 150 ký tự.");
-            documents.Add(new() { Name = name, ContentType = type, Content = content });
+            var extension = Path.GetExtension(name).ToLowerInvariant();
+            if ((type == "application/pdf" && extension != ".pdf") ||
+                (type == "image/png" && extension != ".png") ||
+                (type == "image/jpeg" && extension is not (".jpg" or ".jpeg")))
+                throw new ArgumentException("Đuôi tệp phải khớp nội dung PDF, PNG hoặc JPEG.");
+            documents.Add(new() { Name = name, ContentType = type, Content = content, Kind = kind });
         }
         await using var tx = await work.BeginAsync(); await repository.LockDepotAsync(depotId);
         var old = await repository.FindAsync(operationId);
         if (old != null)
         {
             if (old.DepotId != depotId) throw new DepotForbiddenException();
+            old = await repository.FindAsync(operationId, includeDocuments: true) ?? throw new KeyNotFoundException("Không tìm thấy hồ sơ.");
             if (old.Note != (note?.Trim() ?? "") || !Fingerprints(old.Documents).SequenceEqual(Fingerprints(documents)))
                 throw new DepotConflictException("Mã thao tác đã dùng cho hồ sơ khác.");
             await tx.CommitAsync(); return old.Id;
@@ -99,10 +114,10 @@ public sealed class DepotVerificationService(IDepotVerificationRepository reposi
     }
     public async Task<DepotVerificationDocument> FileAsync(Guid actor, Guid id)
     {
-        var row = await repository.FileAsync(id) ?? throw new KeyNotFoundException("Không tìm thấy tệp.");
-        if (row.OwnerId != actor) await RequireAdmin(actor);
+        var owner = await repository.FileOwnerAsync(id) ?? throw new KeyNotFoundException("Không tìm thấy tệp.");
+        if (owner != actor) await RequireAdmin(actor);
         else await scope.GetDepotsAsync(actor);
-        return row.Document;
+        return await repository.FileAsync(id, actor) ?? throw new DepotForbiddenException();
     }
     private static string? ContentType(byte[] bytes)
     {
@@ -112,5 +127,5 @@ public sealed class DepotVerificationService(IDepotVerificationRepository reposi
         return null;
     }
     private static IEnumerable<string> Fingerprints(IEnumerable<DepotVerificationDocument> files) => files
-        .Select(x => x.Name + ":" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(x.Content))).OrderBy(x => x, StringComparer.Ordinal);
+        .Select(x => x.Kind + ":" + x.Name + ":" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(x.Content))).OrderBy(x => x, StringComparer.Ordinal);
 }

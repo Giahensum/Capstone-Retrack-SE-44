@@ -11,6 +11,7 @@ public sealed class SubmitDepotVerificationForm
     public Guid OperationId { get; set; }
     public string? Note { get; set; }
     public List<IFormFile> Files { get; set; } = [];
+    public List<string>? FileKinds { get; set; }
 }
 
 [ApiController, Route("api/depot/verifications"), Authorize(Roles = "DEPOT_OWNER,ADMIN")]
@@ -24,7 +25,7 @@ public sealed class DepotVerificationController(DepotVerificationService service
         Ok(ApiResponse<PagedResult<VerificationSubmissionDto>>.Ok(await service.ListAsync(Actor, depotId, query)));
     [HttpPost, Authorize(Roles = "DEPOT_OWNER"), RequestSizeLimit(7 * 1024 * 1024)]
     public async Task<IActionResult> Submit(Guid depotId, [FromForm] SubmitDepotVerificationForm form) =>
-        Ok(ApiResponse<Guid>.Ok(await service.SubmitAsync(Actor, depotId, form.OperationId, form.Note, form.Files)));
+        Ok(ApiResponse<Guid>.Ok(await service.SubmitAsync(Actor, depotId, form.OperationId, form.Note, form.Files, form.FileKinds)));
     [HttpGet("/api/admin/depot-verifications"), Authorize(Roles = "ADMIN")]
     public async Task<IActionResult> Queue([FromQuery] DepotQuery query) =>
         Ok(ApiResponse<PagedResult<VerificationSubmissionDto>>.Ok(await service.ListAsync(Actor, null, query)));
