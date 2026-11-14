@@ -41,7 +41,9 @@ test('Owner tạo kho, nộp hồ sơ, Admin yêu cầu bổ sung rồi duyệt 
       expect(await owner.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
       await owner.screenshot({ path: test.info().outputPath('nop-ho-so-' + width + '.png'), fullPage: true });
     }
+    const submitted = owner.waitForResponse(response => response.request().method() === 'POST' && response.url().includes('/api/depot/verifications?'));
     await owner.getByRole('button', { name: 'Nộp hồ sơ xác minh' }).click();
+    expect((await submitted).status()).toBe(200);
     await expect(owner.getByRole('button', { name: 'Nộp hồ sơ xác minh' })).toHaveCount(0);
   };
   await submit(); await owner.reload();
@@ -74,5 +76,23 @@ test('Owner tạo kho, nộp hồ sơ, Admin yêu cầu bổ sung rồi duyệt 
     expect(await owner.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
     expect(await owner.locator('main h1, main dd').evaluateAll(elements => elements.every(el => el.scrollWidth <= el.clientWidth + 1))).toBe(true);
   }
+  // Thử burst sau các thao tác UI để không cản luồng duyệt chính.
+  const headers = { Authorization: 'Bearer ' + token };
+  const missing = '/api/depot/verifications/documents/' + crypto.randomUUID();
+  expect((await request.get(missing)).status()).toBe(401);
+  const downloads = [];
+  for (let attempt = 0; attempt < 31; attempt++) downloads.push(await request.get(missing, { headers }));
+  const limited = downloads.find(response => response.status() === 429);
+  expect(limited).toBeTruthy();
+  expect(Number(limited.headers()['retry-after'])).toBeGreaterThan(0);
+  expect((await limited.json()).code).toBe('RATE_LIMITED');
+  const adminLogin = await request.post('/api/auth/login', { data: { email: process.env.E2E_VERIFY_ADMIN, password: process.env.E2E_VERIFY_PASSWORD } });
+  const adminToken = (await adminLogin.json()).data.token;
+  expect((await request.get(missing, { headers: { Authorization: 'Bearer ' + adminToken } })).status()).toBe(404);
+  const uploads = [];
+  for (let attempt = 0; attempt < 9; attempt++) uploads.push(await request.post('/api/depot/verifications?depotId=' + depotId, { headers, multipart: { operationId: crypto.randomUUID() } }));
+  expect(uploads.some(response => response.status() === 429)).toBe(true);
+  await owner.getByRole('button', { name: 'Tải dang-ky-kinh-doanh.pdf' }).first().click();
+  await expect(owner.getByRole('alert').filter({ hasText: 'Bạn tải hồ sơ quá nhanh' })).toBeVisible();
   expect(errors).toEqual([]); await ownerContext.close(); await adminContext.close();
 });
