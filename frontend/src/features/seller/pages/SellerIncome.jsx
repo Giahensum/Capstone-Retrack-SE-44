@@ -17,7 +17,7 @@ export default function SellerIncome() {
 
   const doneRequests = requests.filter((r) => r.status === 'DONE');
   const totalIncome = doneRequests.reduce(
-    (sum, r) => sum + Number(r.netAmount ?? r.grossAmount ?? 0),
+    (sum, r) => sum + Number(r.grossAmount > 0 ? r.grossAmount : (r.netAmount ?? 0)),
     0
   );
 
@@ -32,7 +32,7 @@ export default function SellerIncome() {
     }).format(d);
     if (!monthlyMap[key]) monthlyMap[key] = { month: key, count: 0, income: 0 };
     monthlyMap[key].count++;
-    monthlyMap[key].income += Number(r.netAmount ?? r.grossAmount ?? 0);
+    monthlyMap[key].income += Number(r.grossAmount > 0 ? r.grossAmount : (r.netAmount ?? 0));
   });
   const monthlyData = Object.values(monthlyMap).reverse();
 
@@ -179,7 +179,7 @@ export default function SellerIncome() {
 
                 <div className="flex items-center gap-3 shrink-0">
                   <span className="font-bold text-sm text-d-primary">
-                    +{formatCurrency(req.netAmount ?? req.grossAmount)}
+                    +{formatCurrency(req.grossAmount > 0 ? req.grossAmount : req.netAmount)}
                   </span>
                   <MaterialIcon
                     name="chevron_right"
