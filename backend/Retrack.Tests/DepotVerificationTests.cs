@@ -52,7 +52,6 @@ public sealed class DepotVerificationTests : IAsyncLifetime
         Assert.Equal(photoBytes, (await service.FileAsync(admin, photo.Id)).Content);
         await Assert.ThrowsAsync<DepotForbiddenException>(() => service.FileAsync(stranger, photo.Id));
         await service.ReviewAsync(admin, id, new(true, "Đã đối chiếu giấy tờ và ảnh"));
-        db.ChangeTracker.Clear();
         Assert.Empty(db.ChangeTracker.Entries<DepotVerificationDocument>());
         Assert.Equal("APPROVED", (await db.Depots.SingleAsync(x => x.Id == depot)).VerificationStatus);
         Assert.Equal(2, await db.DepotVerificationDocuments.CountAsync(x => x.SubmissionId == id));
