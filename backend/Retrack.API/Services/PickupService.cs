@@ -184,7 +184,7 @@ namespace Retrack.API.Services
             if (req.AcceptedCollectorId != collectorId || !await _db.DepotStaffs.AnyAsync(s =>
                 s.UserId == collectorId && s.DepotId == req.TargetDepotId && s.IsActive && s.User.IsActive &&
                 s.StaffType == "DEPOT_EMPLOYEE" && s.User.Role == "DEPOT_EMPLOYEE" && s.Depot.Owner.IsActive)) throw new DepotForbiddenException();
-            if (req.Status != "IN_PROGRESS") throw new DepotConflictException("Đơn phải được check-in trước khi cân.");
+            if (req.Status is not ("IN_PROGRESS" or "SCHEDULED")) throw new DepotConflictException("Đơn phải được check-in trước khi cân.");
             var checkin = await _db.PickupCheckIns.SingleOrDefaultAsync(c => c.PickupRequestId == requestId);
             if (string.IsNullOrWhiteSpace(req.CheckinImageUrl) || checkin is null || checkin.EmployeeId != collectorId)
                 throw new DepotConflictException("Đơn chưa có bằng chứng check-in camera và GPS hợp lệ.");
@@ -238,7 +238,7 @@ namespace Retrack.API.Services
                 TargetType = "PICKUP_REQUEST",
                 TargetId = requestId,
                 Title = "Đã có kết quả cân phế liệu",
-                Message = $"Đơn #{requestId.ToString()[..8].ToUpper()} đã được cân xong. Tổng thực nhận: {req.NetAmount:N0} đ. Vui lòng kiểm tra và xác nhận.",
+                Message = $"Đơn #{requestId.ToString()[..8].ToUpper()} đã được cân xong. Tổng tiền thanh toán: {req.GrossAmount:N0} đ. Vui lòng kiểm tra và xác nhận.",
                 CreatedAt = DateTime.UtcNow
             });
 

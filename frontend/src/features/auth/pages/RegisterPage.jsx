@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
-import { useGoogleLogin } from '@react-oauth/google';
+import { GoogleLogin } from '@react-oauth/google';
 import toast from 'react-hot-toast';
 import { Input } from '@/components/ui/CommonUI';
 import { useAuth } from '@/hooks/useAuth';
@@ -18,7 +18,6 @@ const ROLE_HOME = {
 const ROLES = [
     { value: 'SELLER', label: 'Người bán phế liệu', desc: 'Cá nhân, hộ gia đình có phế liệu cần bán' },
     { value: 'DEPOT_OWNER', label: 'Chủ kho vựa', desc: 'Quản lý trạm thu mua, kho phế liệu' },
-    { value: 'DRIVER', label: 'Tài xế', desc: 'Vận chuyển phế liệu từ kho đến nhà máy' },
     { value: 'FACTORY', label: 'Nhà máy tái chế', desc: 'Cơ sở tái chế quy mô lớn' },
 ];
 export default function RegisterPage() {
@@ -29,6 +28,7 @@ export default function RegisterPage() {
     const [form, setForm] = useState({
         email: '',
         password: '',
+        confirmPassword: '',
         fullName: '',
         phone: '',
         role: 'SELLER',
@@ -44,8 +44,8 @@ export default function RegisterPage() {
         navigate(ROLE_HOME[data.role] ?? '/');
     };
     const registerMutation = useMutation({
-        mutationFn: async () => {
-            const res = await api.post('/auth/register', form);
+        mutationFn: async (payload) => {
+            const res = await api.post('/auth/register', payload);
             return res.data.data;
         },
         onSuccess: handleSuccess,
@@ -55,19 +55,50 @@ export default function RegisterPage() {
             toast.error(msg);
         },
     });
-    const googleLogin = useGoogleLogin({
-        flow: 'implicit',
-        onSuccess: async (tokenResponse) => {
-            try {
-                const res = await api.post('/auth/google', { idToken: tokenResponse.access_token });
-                handleSuccess(res.data.data);
-            }
-            catch {
-                toast.error('Đăng nhập Google thất bại');
-            }
-        },
-        onError: () => toast.error('Đăng nhập Google bị hủy'),
-    });
+
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        const fullName = form.fullName.trim();
+        const email = form.email.trim().toLowerCase();
+        const phone = form.phone.trim().replace(/[\s.-]/g, '');
+        const password = form.password;
+        const confirmPassword = form.confirmPassword;
+
+        if (!fullName) {
+            toast.error('Vui lòng nhập họ và tên.');
+            return;
+        }
+
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+            toast.error('Email không đúng định dạng.');
+            return;
+        }
+
+        const phoneRegex = /^(0|\+84)[35789]\d{8}$/;
+        if (!phoneRegex.test(phone)) {
+            toast.error('Số điện thoại không hợp lệ (cần 10 chữ số, ví dụ 0912345678).');
+            return;
+        }
+
+        if (password.length < 6) {
+            toast.error('Mật khẩu phải có ít nhất 6 ký tự.');
+            return;
+        }
+
+        if (password !== confirmPassword) {
+            toast.error('Mật khẩu xác nhận không khớp.');
+            return;
+        }
+
+        registerMutation.mutate({
+            fullName,
+            email,
+            phone,
+            password,
+            role: form.role,
+        });
+    };
     return (<div className="min-h-screen bg-[#f8f9ff] flex">
       {/* Left panel */}
       <div className="hidden lg:flex lg:w-[45%] bg-gradient-to-br from-[#1f6c3a] to-[#0d3d20] relative overflow-hidden flex-col items-center justify-center p-12">
@@ -154,18 +185,29 @@ export default function RegisterPage() {
                 <span className="px-3 text-xs text-[#9ca3af] font-medium">hoặc</span>
                 <div className="flex-1 border-t border-[#e5e7eb]"/>
               </div>
-              <button onClick={() => googleLogin()} className="w-full flex items-center justify-center gap-3 border-2 border-[#e5e7eb] rounded-2xl py-3 px-6 font-semibold text-[#1f2937] hover:bg-[#f3f4f6] transition-all bg-white text-sm">
-                <svg width="18" height="18" viewBox="0 0 24 24">
-                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-                </svg>
-                Đăng ký với Google (SELLER)
-              </button>
+              <div className="flex justify-center w-full">
+                <div className="w-full [&>div]:w-full [&>div>div]:w-full flex justify-center">
+                  <GoogleLogin
+                    onSuccess={async (credentialResponse) => {
+                      try {
+                        const res = await api.post('/auth/google', { idToken: credentialResponse.credential });
+                        handleSuccess(res.data.data);
+                      } catch (err) {
+                        const msg = err?.response?.data?.message || 'Đăng ký Google thất bại. Vui lòng thử lại.';
+                        toast.error(msg);
+                      }
+                    }}
+                    onError={() => toast.error('Đăng ký Google bị hủy')}
+                    size="large"
+                    theme="outline"
+                    text="signup_with"
+                    shape="rectangular"
+                  />
+                </div>
+              </div>
             </div>) : (
         /* Step 2: Fill info */
-        <form onSubmit={(e) => { e.preventDefault(); registerMutation.mutate(); }} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4">
               <div className="flex items-center gap-2 mb-2">
                 <button type="button" onClick={() => setStep(1)} className="text-sm text-[#446900] font-semibold hover:underline">
                   ← Quay lại
@@ -184,6 +226,9 @@ export default function RegisterPage() {
                 <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-3 bottom-2.5 text-[#9ca3af] hover:text-[#446900]">
                   {showPass ? <EyeOff size={18}/> : <Eye size={18}/>}
                 </button>
+              </div>
+              <div className="relative">
+                <Input label="Xác nhận mật khẩu" type={showPass ? 'text' : 'password'} placeholder="Nhập lại mật khẩu để kiểm tra" value={form.confirmPassword} onChange={(e) => setForm({ ...form, confirmPassword: e.target.value })} required minLength={6} className="!bg-white !border-[#e5e7eb] !text-[#1f2937] focus:!border-[#446900] rounded-xl"/>
               </div>
 
               <p className="text-xs text-[#6b7280] leading-relaxed">

@@ -12,7 +12,10 @@ namespace Retrack.API.Repositories
         public UserRepository(AppDbContext db) => _db = db;
 
         public async Task<User?> GetByEmailAsync(string email)
-            => await _db.Users.FirstOrDefaultAsync(u => u.Email == email);
+        {
+            var normalized = email.Trim().ToLowerInvariant();
+            return await _db.Users.FirstOrDefaultAsync(u => u.Email.ToLower() == normalized);
+        }
 
         public async Task<User?> GetByIdAsync(Guid id)
             => await _db.Users.FindAsync(id);

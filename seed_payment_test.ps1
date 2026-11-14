@@ -46,7 +46,7 @@ $pickupBody = @{
     requestImageUrl = $null
 } | ConvertTo-Json
 
-$pickup = Invoke-RestMethod -Uri "$api/sellerpickup" -Method Post -ContentType "application/json" `
+$pickup = Invoke-RestMethod -Uri "$api/seller/pickups" -Method Post -ContentType "application/json" `
     -Headers @{Authorization = "Bearer $sellerToken"} -Body $pickupBody
 $pickupId = $pickup.data.id
 Write-Host "  Don moi tao: $pickupId (trang thai: $($pickup.data.status))" -ForegroundColor Green
@@ -83,7 +83,7 @@ Write-Host "  => Tong: 132,500 VND -> WEIGHED" -ForegroundColor Green
 Write-Host ""
 Write-Host "=== BUOC 5: Seller xac nhan ket qua can (WEIGHED -> SELLER_CONFIRMED) ===" -ForegroundColor Cyan
 
-Invoke-RestMethod -Uri "$api/sellerpickup/$pickupId/confirm" -Method Patch `
+Invoke-RestMethod -Uri "$api/seller/pickups/$pickupId/confirm" -Method Post `
     -Headers @{Authorization = "Bearer $sellerToken"} | Out-Null
 Write-Host "  Seller da chot gia -> SELLER_CONFIRMED" -ForegroundColor Green
 
@@ -102,7 +102,7 @@ Write-Host "  Chu kho da chuyen 132,500 VND -> PAYMENT_SENT" -ForegroundColor Gr
 # =============================================================
 Write-Host ""
 Write-Host "=== KET QUA ===" -ForegroundColor Yellow
-$finalPickup = Invoke-RestMethod -Uri "$api/sellerpickup/$pickupId" -Method Get `
+$finalPickup = Invoke-RestMethod -Uri "$api/seller/pickups/$pickupId" -Method Get `
     -Headers @{Authorization = "Bearer $sellerToken"}
 $d = $finalPickup.data
 Write-Host "  Don ID    : $($d.id)" -ForegroundColor White
