@@ -63,6 +63,11 @@ trước khi chạy backend mới. Khối này chỉ thêm cột `kind`, hồ s�
 `LEGACY`; không sửa nội dung tệp, trạng thái duyệt hoặc chạy seed.
 Ảnh kho là tài liệu hỗ trợ tùy chọn, không thay cho giấy tờ kinh doanh.
 
+Khối `RETRACK_DEPOT_QUERY_INDEXES_V1_BEGIN/END` bổ sung ba index cho danh sách
+lô theo kho/thời gian, lịch sử hồ sơ theo kho/thời gian và tệp theo hồ sơ.
+Không đổi trạng thái, số tiền, tồn kho hoặc quyền của role khác.
+EF chỉ mô tả index tương ứng; ứng dụng vẫn không tự migrate.
+
 Bổ sung 08/11/2026: bảng giá thu mua riêng của từng kho nằm trong khối
 `-- RETRACK_DEPOT_BUYING_PRICES_V1_BEGIN` đến `-- RETRACK_DEPOT_BUYING_PRICES_V1_END`
 trong chính file SQL chung. DB cũ đã có schema khác đầy đủ chỉ cần chạy khối này
@@ -72,3 +77,64 @@ Giá thị trường Admin và giá kho công bố là hai nguồn khác nhau; k
 thì Seller thấy thông báo chưa có giá, không lấy giá thị trường gán cho tất cả kho.
 
 Chỉnh cùng `bootstrap/retrack-system.sql`: schema trước RETRACK_SCHEMA_END, seed giữa RETRACK_SEED_BEGIN/END. Mọi seed phải kiểm retrack.seed_demo, giữ UUID và trạng thái đã dùng. Không thêm bootstrap/seed theo role song song. Giữ các marker mà tests đang dùng; trước push kiểm bootstrap mới, schema-only, chạy lại và rollback khi lỗi.
+
+## Triển khai có người dùng và theo dõi hiệu năng
+
+Máy mới tiếp tục chạy một file bootstrap. Với DB cũ nhỏ, sao lưu và chọn đúng
+hai khối nâng cấp ở trên trong giờ bảo trì, đặt `lock_timeout` ngắn để dừng nếu
+đang có giao dịch giữ khóa. Không chạy lại seed để tối ưu DB.
+
+Với DB đang có nhiều ghi, người phụ trách hạ tầng có thể tạo lần lượt ba index
+dưới đây trong Query Tool bật Auto-commit, **ngoài BEGIN/COMMIT**. Không chạy
+khối tạo index thông thường trong bootstrap đồng thời với thao tác này:
+
+```sql
+CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_inventory_batches_depot_newest
+    ON inventory_batches(depot_id, created_at DESC, id);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_depot_verification_history
+    ON depot_verification_submissions(depot_id, submitted_at DESC, id);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_depot_verification_documents_submission
+    ON depot_verification_documents(submission_id);
+```
+
+Nếu thao tác bị ngắt, kiểm tra `pg_index.indisvalid` trước khi thử lại:
+`IF NOT EXISTS` chỉ kiểm tra tên, không sửa index sai định nghĩa hoặc INVALID.
+Không tự xóa index cũ vì có thể được role khác sử dụng.
+[Tạo index PostgreSQL](https://www.postgresql.org/docs/17/sql-createindex.html).
+
+Trước và sau mỗi đợt tối ưu, đo truy vấn thực bằng
+`EXPLAIN (ANALYZE, BUFFERS)` trên dữ liệu đại diện; ghi cả thời gian, số dòng,
+buffer và điều kiện lọc. ANALYZE thực thi truy vấn: dùng SELECT đã review.
+Index mới ưu tiên trang đầu theo thời gian; tìm kiếm chứa chuỗi, đếm tổng,
+trang OFFSET rất sâu và các báo cáo tổng hợp vẫn cần đo riêng.
+[Đọc kế hoạch truy vấn](https://www.postgresql.org/docs/17/using-explain.html).
+
+Người vận hành nên thiết lập các việc sau ở môi trường staging trước:
+
+- Thu thập p50/p95/p99 HTTP, tỷ lệ 5xx, truy vấn chậm, lock wait, kết nối đang dùng,
+  dung lượng DB/index và dung lượng sao lưu. Không ghi JWT, mật khẩu, nội dung
+  giấy tờ hoặc tham số nhạy cảm vào log.
+- Cân nhắc `pg_stat_statements` để xác định truy vấn tiêu tốn tổng thời gian;
+  module có thể cần thay cấu hình server và restart, nên không tự bật từ
+  bootstrap hay lúc ứng dụng khởi động.
+  [Thống kê truy vấn](https://www.postgresql.org/docs/17/pgstatstatements.html).
+- Theo dõi `n_dead_tup`, `last_autovacuum`, `last_autoanalyze` và thống kê
+  từng bảng. Giữ autovacuum hoạt động; không chạy `VACUUM FULL` định kỳ trên
+  DB đang phục vụ người dùng.
+  [Bảo trì PostgreSQL](https://www.postgresql.org/docs/17/routine-vacuuming.html).
+- Npgsql đã có connection pool. Tính tổng pool của mọi replica, worker và
+  dịch vụ, chừa kết nối vận hành trong ngân sách PostgreSQL. Không tăng
+  `Maximum Pool Size`, `max_connections` hoặc `work_mem` chỉ vì có thêm user;
+  cần đo CPU/RAM, thời gian chờ và cấu hình máy chủ thực.
+  [Cấu hình Npgsql](https://www.npgsql.org/doc/connection-string-parameters.html).
+- Tách tài khoản chạy app khỏi tài khoản DDL/backup, dùng TLS xác minh
+  chứng chỉ khi kết nối qua mạng; cấu hình secret trên nơi deploy.
+- Kiểm thử khôi phục backup, thống nhất RPO/RTO, theo dõi WAL/dung lượng đĩa;
+  quét malware cho hồ sơ trước khi mở dịch vụ công khai. Khi số tệp lớn,
+  cân nhắc object storage riêng tư có kiểm quyền và thời hạn truy cập;
+  không chuyển giấy tờ sang URL Cloudinary công khai.
+
+Các mục hạ tầng này là hướng dẫn triển khai, chưa có số liệu tải thực hoặc
+xác nhận vận hành trên máy chủ của nhóm. Không bật cache tồn kho/thanh toán,
+replica đọc trễ, partition hay sharding khi chưa có nhu cầu đã đo và phương án
+giữ tính nhất quán.

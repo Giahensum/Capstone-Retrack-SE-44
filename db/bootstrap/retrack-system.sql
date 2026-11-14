@@ -708,6 +708,13 @@ CREATE TABLE IF NOT EXISTS depot_verification_documents (
 ALTER TABLE depot_verification_documents ADD COLUMN IF NOT EXISTS kind VARCHAR(20) NOT NULL DEFAULT 'LEGACY'
     CHECK (kind IN ('LEGACY','REGISTRATION','DEPOT_PHOTO','SUPPORTING'));
 -- RETRACK_DEPOT_VERIFICATION_DOCUMENTS_V2_END
+-- RETRACK_DEPOT_QUERY_INDEXES_V1_BEGIN
+-- Đo EXPLAIN ANALYZE trước/sau trên fixture riêng; không đưa BYTEA vào index.
+-- DB đang có tải lớn: xem db/README.md để tạo CONCURRENTLY ngoài transaction.
+CREATE INDEX IF NOT EXISTS ix_inventory_batches_depot_newest ON inventory_batches(depot_id, created_at DESC, id);
+CREATE INDEX IF NOT EXISTS ix_depot_verification_history ON depot_verification_submissions(depot_id, submitted_at DESC, id);
+CREATE INDEX IF NOT EXISTS ix_depot_verification_documents_submission ON depot_verification_documents(submission_id);
+-- RETRACK_DEPOT_QUERY_INDEXES_V1_END
 -- RETRACK_DEPOT_OPERATIONS_V1
 CREATE TABLE IF NOT EXISTS depot_incident_followups (
     id UUID PRIMARY KEY, event_id UUID NOT NULL REFERENCES driver_delivery_events(id) ON DELETE CASCADE,
