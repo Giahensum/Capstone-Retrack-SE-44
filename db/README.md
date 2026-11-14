@@ -56,6 +56,13 @@ Các SQL cũ đã gộp/xóa khỏi Git. Script kiểm kê/dọn PascalCase lưu
 
 ## Khi nhóm thêm bảng/cột hoặc seed
 
+Bổ sung 14/11/2026: hồ sơ kho có phân loại giấy tờ kinh doanh, ảnh kho và tài liệu
+bổ sung. DB cũ cần chạy khối
+`RETRACK_DEPOT_VERIFICATION_DOCUMENTS_V2_BEGIN/END` trong chính file SQL chung
+trước khi chạy backend mới. Khối này chỉ thêm cột `kind`, hồ sơ cũ giữ
+`LEGACY`; không sửa nội dung tệp, trạng thái duyệt hoặc chạy seed.
+Ảnh kho là tài liệu hỗ trợ tùy chọn, không thay cho giấy tờ kinh doanh.
+
 Bổ sung 08/11/2026: bảng giá thu mua riêng của từng kho nằm trong khối
 `-- RETRACK_DEPOT_BUYING_PRICES_V1_BEGIN` đến `-- RETRACK_DEPOT_BUYING_PRICES_V1_END`
 trong chính file SQL chung. DB cũ đã có schema khác đầy đủ chỉ cần chạy khối này
