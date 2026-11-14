@@ -14,7 +14,26 @@ Schema/seed chung vẫn chỉ có `db/bootstrap/retrack-system.sql`; xem
 `RETRACK_DEPOT_VERIFICATION_DOCUMENTS_V2` và
 `RETRACK_DEPOT_VERIFICATION_SCANNING_V1`.
 
-Hồ sơ kho lưu riêng tư trong PostgreSQL, không dùng URL Cloudinary công khai.
+Hồ sơ kho hỗ trợ hai cách lưu, vẫn tải qua API kiểm quyền, không dùng URL
+Cloudinary công khai:
+
+- Mặc định `VerificationStorage__Provider=Database`: nội dung ở PostgreSQL,
+  chạy được khi máy chưa cấu hình cloud.
+- `VerificationStorage__Provider=Cloudinary`: dùng chính các biến
+  `Cloudinary__CloudName/ApiKey/ApiSecret` hiện có; tệp mới là raw asset
+  `authenticated`, DB chỉ giữ key, kích thước, SHA-256 và thông tin hồ sơ.
+  Backend tải qua API riêng tư có chữ ký hết hạn rồi trả byte; không đưa URL
+  ký hoặc credential cho frontend. Không resize/nén giấy tờ.
+- Hồ sơ cũ trong DB tiếp tục đọc được, không tự chuyển ra cloud hoặc xóa byte.
+  Chọn cloud mà provider lỗi thì báo lỗi, không âm thầm lưu sang DB.
+
+DB cũ cần nâng khối `RETRACK_DEPOT_PRIVATE_CLOUD_V1_BEGIN/END` trong SQL chung
+trước khi chạy backend mới; xem db/README.md. Ảnh lô/ảnh thông thường vẫn theo
+CloudinaryService hiện có, không đổi thành private và không đổi API role khác.
+pg_dump chỉ sao lưu metadata đối với tệp cloud; kế hoạch backup phải bao gồm
+nội dung trên cloud. Tài nguyên private không có tham chiếu do crash hoặc COMMIT
+chưa rõ kết quả cần đối soát; không xóa hàng loạt asset để dọn lỗi.
+
 Chỉ Owner đúng kho và Admin đang hoạt động được tải/xem. Upload tối đa 3 tệp,
 2 MB/tệp; giới hạn bổ sung 8 lần nộp/phút và 30 lần tải/phút theo tài khoản,
 ngoài giới hạn 5 bộ hồ sơ/24 giờ hiện có. Khi quá hạn mức, API trả 429,
