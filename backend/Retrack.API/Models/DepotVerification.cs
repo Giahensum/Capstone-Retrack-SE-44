@@ -28,6 +28,8 @@ public sealed class DepotVerificationDocument
     [Column("name")] public string Name { get; set; } = "";
     [Column("content_type")] public string ContentType { get; set; } = "";
     [Column("kind")] public string Kind { get; set; } = "LEGACY";
+    [Column("scan_status")] public string ScanStatus { get; set; } = "NOT_SCANNED";
+    [Column("scanned_at")] public DateTime? ScannedAt { get; set; }
     [Column("content")] public byte[] Content { get; set; } = [];
     public DepotVerificationSubmission Submission { get; set; } = null!;
 }

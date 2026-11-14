@@ -6,7 +6,7 @@ using Retrack.API.Repositories.Interfaces;
 using Retrack.API.Services.Interfaces;
 namespace Retrack.API.Services.Depot;
 
-public sealed class DepotVerificationService(IDepotVerificationRepository repository, IDepotUnitOfWork work, IDepotService scope)
+public sealed class DepotVerificationService(IDepotVerificationRepository repository, IDepotUnitOfWork work, IDepotService scope, IVerificationFileScanner scanner)
 {
     public async Task<DepotProfileDto> CreateDepotAsync(Guid ownerId, CreateDepotDto dto)
     {
@@ -38,7 +38,7 @@ public sealed class DepotVerificationService(IDepotVerificationRepository reposi
         if (query.Status is not (null or "" or "SUBMITTED" or "APPROVED" or "REJECTED")) throw new ArgumentException("Trạng thái hồ sơ không hợp lệ.");
         return await repository.ListAsync(depotId, query);
     }
-    public async Task<Guid> SubmitAsync(Guid ownerId, Guid depotId, Guid operationId, string? note, IReadOnlyList<IFormFile> files, IReadOnlyList<string>? fileKinds = null)
+    public async Task<Guid> SubmitAsync(Guid ownerId, Guid depotId, Guid operationId, string? note, IReadOnlyList<IFormFile> files, IReadOnlyList<string>? fileKinds = null, CancellationToken cancellationToken = default)
     {
         await scope.RequireOwnerAsync(ownerId, depotId);
         if (operationId == Guid.Empty || files.Count is < 1 or > 3 || note?.Length > 2000) throw new ArgumentException("Cần 1–3 tệp hồ sơ và ghi chú tối đa 2000 ký tự.");
@@ -55,7 +55,7 @@ public sealed class DepotVerificationService(IDepotVerificationRepository reposi
             await using var input = file.OpenReadStream();
             // Đọc tối đa kích thước khai báo + 1, kể cả khi stream khai báo sai Length.
             var buffer = new byte[(int)file.Length + 1];
-            var count = await input.ReadAtLeastAsync(buffer, buffer.Length, throwOnEndOfStream: false);
+            var count = await input.ReadAtLeastAsync(buffer, buffer.Length, throwOnEndOfStream: false, cancellationToken);
             var content = buffer.AsSpan(0, count).ToArray();
             var type = ContentType(content);
             if (content.Length != file.Length || content.Length > 2 * 1024 * 1024 || type == null) throw new ArgumentException("Chỉ nhận nội dung PDF, PNG hoặc JPEG hợp lệ, tối đa 2 MB.");
@@ -69,16 +69,29 @@ public sealed class DepotVerificationService(IDepotVerificationRepository reposi
                 throw new ArgumentException("Đuôi tệp phải khớp nội dung PDF, PNG hoặc JPEG.");
             documents.Add(new() { Name = name, ContentType = type, Content = content, Kind = kind });
         }
-        await using var tx = await work.BeginAsync(); await repository.LockDepotAsync(depotId);
-        var old = await repository.FindAsync(operationId);
-        if (old != null)
+        async Task<Guid?> Replay()
         {
+            var old = await repository.FindAsync(operationId);
+            if (old == null) return null;
             if (old.DepotId != depotId) throw new DepotForbiddenException();
             old = await repository.FindAsync(operationId, includeDocuments: true) ?? throw new KeyNotFoundException("Không tìm thấy hồ sơ.");
             if (old.Note != (note?.Trim() ?? "") || !Fingerprints(old.Documents).SequenceEqual(Fingerprints(documents)))
                 throw new DepotConflictException("Mã thao tác đã dùng cho hồ sơ khác.");
-            await tx.CommitAsync(); return old.Id;
+            return old.Id;
         }
+        // Retry đã ghi thành công không phụ thuộc dịch vụ quét đang hoạt động.
+        if (await Replay() is Guid replay) return replay;
+        // Không giữ transaction/khóa kho trong lúc chờ dịch vụ bên ngoài.
+        foreach (var document in documents)
+            if (await scanner.ScanAsync(document.Content, cancellationToken))
+            {
+                document.ScanStatus = "CLEAN"; document.ScannedAt = DateTime.UtcNow;
+            }
+        cancellationToken.ThrowIfCancellationRequested();
+        await using var tx = await work.BeginAsync(); await repository.LockDepotAsync(depotId);
+        // Tài khoản/quyền sở hữu có thể đổi trong thời gian chờ quét.
+        await scope.RequireOwnerAsync(ownerId, depotId);
+        if (await Replay() is Guid concurrentReplay) { await tx.CommitAsync(); return concurrentReplay; }
         if (await repository.HasPendingAsync(depotId)) throw new DepotConflictException("Kho đã có hồ sơ chờ duyệt.");
         if (await repository.RecentCountAsync(depotId) >= 5) throw new DepotConflictException("Tối đa 5 lần nộp hồ sơ mỗi ngày.");
         var depot = await repository.FindDepotAsync(depotId) ?? throw new KeyNotFoundException("Không tìm thấy kho.");
