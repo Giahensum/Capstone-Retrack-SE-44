@@ -51,7 +51,8 @@ namespace Retrack.API.Services
         // ── Email / Password Login ──────────────────────────────────────
         public async Task<AuthResponseDto?> LoginAsync(LoginDto dto)
         {
-            var user = await _userRepo.GetByEmailAsync(dto.Email.Trim());
+            var normalizedEmail = dto.Email?.Trim().ToLowerInvariant() ?? string.Empty;
+            var user = await _userRepo.GetByEmailAsync(normalizedEmail);
             if (user == null || !BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash))
                 return null;
 
@@ -68,20 +69,27 @@ namespace Retrack.API.Services
             var role = dto.Role?.Trim().ToUpperInvariant();
             if (role is not ("SELLER" or "DEPOT_OWNER" or "FACTORY"))
                 throw new ArgumentException("Vai trò không được phép tự đăng ký.");
-            if (string.IsNullOrWhiteSpace(dto.FullName) || dto.FullName.Length > 255 ||
-                !new System.ComponentModel.DataAnnotations.EmailAddressAttribute().IsValid(dto.Email) ||
-                dto.Password.Length < 6 || Encoding.UTF8.GetByteCount(dto.Password) > 72)
+
+            var normalizedEmail = dto.Email?.Trim().ToLowerInvariant() ?? string.Empty;
+            var fullName = dto.FullName?.Trim() ?? string.Empty;
+            var phone = dto.Phone?.Trim() ?? string.Empty;
+
+            if (string.IsNullOrWhiteSpace(fullName) || fullName.Length > 255 ||
+                string.IsNullOrWhiteSpace(normalizedEmail) ||
+                !new System.ComponentModel.DataAnnotations.EmailAddressAttribute().IsValid(normalizedEmail) ||
+                dto.Password == null || dto.Password.Length < 6 || Encoding.UTF8.GetByteCount(dto.Password) > 72)
                 throw new ArgumentException("Tên, email hoặc mật khẩu không hợp lệ (mật khẩu ít nhất 6 ký tự, tối đa 72 byte).");
-            var existing = await _userRepo.GetByEmailAsync(dto.Email);
+
+            var existing = await _userRepo.GetByEmailAsync(normalizedEmail);
             if (existing != null)
                 throw new InvalidOperationException("Email đã được sử dụng.");
 
             var user = new User
             {
-                Email = dto.Email,
+                Email = normalizedEmail,
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password),
-                FullName = dto.FullName,
-                Phone = dto.Phone,
+                FullName = fullName,
+                Phone = phone,
                 Role = role,
                 IsActive = true
             };
