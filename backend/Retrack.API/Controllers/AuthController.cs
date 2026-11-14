@@ -26,11 +26,18 @@ namespace Retrack.API.Controllers
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginDto dto)
         {
-            var result = await _authService.LoginAsync(dto);
-            if (result == null)
-                return Unauthorized(ApiResponse<string>.Fail("Email hoặc mật khẩu không đúng."));
+            try
+            {
+                var result = await _authService.LoginAsync(dto);
+                if (result == null)
+                    return Unauthorized(ApiResponse<string>.Fail("Email hoặc mật khẩu không đúng."));
 
-            return Ok(ApiResponse<AuthResponseDto>.Ok(result, "Đăng nhập thành công."));
+                return Ok(ApiResponse<AuthResponseDto>.Ok(result, "Đăng nhập thành công."));
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(ApiResponse<string>.Fail(ex.Message));
+            }
         }
 
         /// <summary>Đăng ký tài khoản mới</summary>
@@ -43,22 +50,33 @@ namespace Retrack.API.Controllers
             if (dto.Password.Length < 6)
                 return BadRequest(ApiResponse<string>.Fail("Mật khẩu phải có ít nhất 6 ký tự."));
 
-            var result = await _authService.RegisterAsync(dto);
-            if (string.Equals(result.Role, "FACTORY", StringComparison.OrdinalIgnoreCase))
+            try
             {
-                var exists = await _db.Factories.AnyAsync(x => x.OwnerId == result.UserId);
-                if (!exists)
+                var result = await _authService.RegisterAsync(dto);
+                if (string.Equals(result.Role, "FACTORY", StringComparison.OrdinalIgnoreCase))
                 {
-                    _db.Factories.Add(new Retrack.API.Models.Factory
+                    var exists = await _db.Factories.AnyAsync(x => x.OwnerId == result.UserId);
+                    if (!exists)
                     {
-                        OwnerId = result.UserId,
-                        Name = result.FullName,
-                        Address = "Chưa cập nhật"
-                    });
-                    await _db.SaveChangesAsync();
+                        _db.Factories.Add(new Retrack.API.Models.Factory
+                        {
+                            OwnerId = result.UserId,
+                            Name = result.FullName,
+                            Address = "Chưa cập nhật"
+                        });
+                        await _db.SaveChangesAsync();
+                    }
                 }
+                return Ok(ApiResponse<AuthResponseDto>.Ok(result, "Đăng ký thành công."));
             }
-            return Ok(ApiResponse<AuthResponseDto>.Ok(result, "Đăng ký thành công."));
+            catch (ArgumentException ex)
+            {
+                return BadRequest(ApiResponse<string>.Fail(ex.Message));
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(ApiResponse<string>.Fail(ex.Message));
+            }
         }
 
         /// <summary>
@@ -71,8 +89,20 @@ namespace Retrack.API.Controllers
             if (string.IsNullOrWhiteSpace(dto.IdToken))
                 return BadRequest(ApiResponse<string>.Fail("Google token không hợp lệ."));
 
-            var result = await _authService.GoogleLoginAsync(dto.IdToken);
-            return Ok(ApiResponse<AuthResponseDto>.Ok(result, "Đăng nhập Google thành công."));
+            try
+            {
+                var result = await _authService.GoogleLoginAsync(dto.IdToken);
+                return Ok(ApiResponse<AuthResponseDto>.Ok(result, "Đăng nhập Google thành công."));
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(ApiResponse<string>.Fail(ex.Message));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi đăng nhập Google");
+                return BadRequest(ApiResponse<string>.Fail("Đăng nhập Google không thành công. Token không hợp lệ."));
+            }
         }
 
         /// <summary>Yêu cầu gửi mã OTP đặt lại mật khẩu về email</summary>

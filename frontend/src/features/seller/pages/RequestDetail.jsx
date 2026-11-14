@@ -267,7 +267,14 @@ export default function RequestDetail() {
             ))}
           </div>
           <div className="px-6 py-4 bg-d-surface-container-low border-t border-d-border-subtle flex justify-between items-center">
-            <span className="text-sm font-bold text-d-on-surface">Tổng tiền thanh toán</span>
+            <div>
+              <span className="text-sm font-bold text-d-on-surface">Tổng tiền thanh toán</span>
+              {req.platformFeePercentage > 0 && (
+                <p className="text-xs text-d-on-surface-variant mt-0.5">
+                  Phí dịch vụ ({req.platformFeePercentage}%) do kho vựa chi trả riêng cho sàn RETRACK, người bán nhận 100% tiền hàng.
+                </p>
+              )}
+            </div>
             <span className="text-xl font-bold text-d-primary">
               {formatCurrency(req.grossAmount)}
             </span>
@@ -345,7 +352,7 @@ export default function RequestDetail() {
             </h3>
             <p className="text-xs text-d-on-surface-variant mt-1">
               Vui lòng kiểm tra tài khoản ngân hàng của bạn. Nếu đã nhận đủ số tiền{' '}
-              <strong className="text-d-primary">{formatCurrency(req.netAmount ?? req.grossAmount)}</strong>, hãy bấm xác nhận.
+              <strong className="text-d-primary">{formatCurrency(req.grossAmount ?? req.netAmount)}</strong>, hãy bấm xác nhận.
             </p>
           </div>
 

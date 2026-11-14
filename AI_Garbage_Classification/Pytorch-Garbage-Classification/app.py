@@ -60,6 +60,80 @@ CENTER_CROP_RATIO  = 0.65
 CROP_PADDING       = 0.08
 DEBOUNCE_SEC       = 1.5
 
+# ── Bảng ánh xạ tri thức ngữ nghĩa từ 80 lớp COCO của YOLOv8 sang 12 nhóm rác ReTrack ──
+YOLO_TO_RETRACK_PRIOR = {
+    # 1. Chai lọ & đồ chứa
+    'bottle': {'plastic': 3.2, 'white-glass': 2.2, 'brown-glass': 1.8, 'green-glass': 1.8, 'cardboard': -3.5, 'paper': -3.0, 'clothes': -3.0, 'biological': -3.0, 'shoes': -3.0},
+    'wine glass': {'white-glass': 3.5, 'green-glass': 2.5, 'brown-glass': 2.2, 'plastic': 1.0, 'cardboard': -3.5, 'paper': -3.0, 'clothes': -3.0},
+    'cup': {'plastic': 2.8, 'paper': 2.2, 'white-glass': 1.8, 'metal': 1.2, 'cardboard': -2.0, 'clothes': -3.0},
+    'bowl': {'white-glass': 2.2, 'plastic': 2.2, 'metal': 1.8, 'cardboard': -2.5, 'clothes': -3.0},
+    'vase': {'white-glass': 3.0, 'brown-glass': 2.2, 'green-glass': 2.2, 'plastic': 1.5, 'cardboard': -3.0, 'paper': -3.0, 'clothes': -3.0},
+
+    # 2. Dụng cụ kim loại
+    'fork': {'metal': 4.5, 'plastic': 1.0, 'cardboard': -3.0, 'paper': -3.0, 'clothes': -3.0},
+    'knife': {'metal': 4.5, 'plastic': 1.0, 'cardboard': -3.0, 'paper': -3.0, 'clothes': -3.0},
+    'spoon': {'metal': 4.5, 'plastic': 1.0, 'cardboard': -3.0, 'paper': -3.0, 'clothes': -3.0},
+    'scissors': {'metal': 5.0, 'plastic': 1.0, 'cardboard': -3.0, 'paper': -3.0, 'clothes': -3.0},
+
+    # 3. Giấy & sách báo
+    'book': {'paper': 5.0, 'cardboard': -2.0, 'plastic': -3.0, 'metal': -3.0, 'clothes': -3.0, 'biological': -3.0},
+
+    # 4. Rác điện tử & pin
+    'laptop': {'battery': 4.5, 'plastic': 1.2, 'metal': 1.5, 'paper': -3.5, 'cardboard': -3.5, 'clothes': -3.5},
+    'mouse': {'battery': 4.0, 'plastic': 2.0, 'cardboard': -3.0, 'paper': -3.0},
+    'remote': {'battery': 4.2, 'plastic': 2.0, 'cardboard': -3.0, 'paper': -3.0},
+    'keyboard': {'battery': 4.0, 'plastic': 2.0, 'cardboard': -3.0, 'paper': -3.0},
+    'cell phone': {'battery': 4.8, 'plastic': 1.2, 'metal': 1.5, 'cardboard': -3.5, 'paper': -3.5},
+    'clock': {'battery': 3.8, 'metal': 2.0, 'plastic': 1.5, 'cardboard': -2.5},
+    'microwave': {'metal': 3.5, 'battery': 2.5, 'plastic': 1.2},
+    'oven': {'metal': 3.5, 'battery': 2.5},
+    'toaster': {'metal': 3.8, 'battery': 2.2, 'plastic': 1.2},
+    'refrigerator': {'metal': 3.5, 'battery': 2.5, 'plastic': 1.5},
+    'hair drier': {'metal': 2.5, 'battery': 2.5, 'plastic': 1.8},
+
+    # 5. Vải vóc, trang phục
+    'backpack': {'clothes': 4.5, 'cardboard': -2.5, 'metal': -3.0, 'paper': -3.0},
+    'handbag': {'clothes': 4.5, 'cardboard': -2.5, 'metal': -3.0, 'paper': -3.0},
+    'suitcase': {'clothes': 4.0, 'plastic': 1.8, 'cardboard': -2.5},
+    'tie': {'clothes': 4.8, 'cardboard': -3.0},
+    'umbrella': {'clothes': 3.0, 'metal': 2.0, 'cardboard': -2.5},
+    'teddy bear': {'clothes': 4.5, 'cardboard': -3.0},
+
+    # 6. Rác hữu cơ / Thức ăn thừa
+    'banana': {'biological': 5.5, 'plastic': -3.0, 'paper': -3.0, 'metal': -3.0, 'cardboard': -3.0},
+    'apple': {'biological': 5.5, 'plastic': -3.0, 'paper': -3.0, 'metal': -3.0, 'cardboard': -3.0},
+    'sandwich': {'biological': 5.5, 'plastic': -3.0, 'paper': -3.0, 'metal': -3.0, 'cardboard': -3.0},
+    'orange': {'biological': 5.5, 'plastic': -3.0, 'paper': -3.0, 'metal': -3.0, 'cardboard': -3.0},
+    'broccoli': {'biological': 5.5, 'plastic': -3.0, 'paper': -3.0, 'metal': -3.0, 'cardboard': -3.0},
+    'carrot': {'biological': 5.5, 'plastic': -3.0, 'paper': -3.0, 'metal': -3.0, 'cardboard': -3.0},
+    'hot dog': {'biological': 5.5, 'plastic': -3.0, 'paper': -3.0, 'metal': -3.0, 'cardboard': -3.0},
+    'pizza': {'biological': 5.5, 'plastic': -3.0, 'paper': -3.0, 'metal': -3.0, 'cardboard': -3.0},
+    'donut': {'biological': 5.5, 'plastic': -3.0, 'paper': -3.0, 'metal': -3.0, 'cardboard': -3.0},
+    'cake': {'biological': 5.5, 'plastic': -3.0, 'paper': -3.0, 'metal': -3.0, 'cardboard': -3.0},
+    'potted plant': {'biological': 4.2, 'plastic': 1.5, 'paper': -3.0},
+
+    # 7. Đồ dùng nhựa & khác
+    'toothbrush': {'plastic': 4.2, 'cardboard': -3.0, 'paper': -3.0},
+    'sports ball': {'plastic': 3.5, 'shoes': 1.2, 'trash': 1.5},
+    'frisbee': {'plastic': 4.0, 'cardboard': -3.0},
+}
+
+
+def _get_yolo_semantic_prior(cls_name, conf):
+    prior = np.zeros(12, dtype=np.float32)
+    if not cls_name or conf <= 0.0:
+        return prior
+    mapping = YOLO_TO_RETRACK_PRIOR.get(cls_name.lower())
+    if not mapping:
+        return prior
+    for target_class, weight in mapping.items():
+        if target_class in CLASS_IDX:
+            prior[CLASS_IDX[target_class]] += weight * conf
+        elif target_class == 'glass':
+            for g in ['white-glass', 'brown-glass', 'green-glass']:
+                prior[CLASS_IDX[g]] += (weight / 3.0) * conf
+    return prior
+
 
 def _apply_visual_heuristics(logits_np, crop_img, ocr_text=''):
     '''
@@ -156,13 +230,18 @@ def _apply_visual_heuristics(logits_np, crop_img, ocr_text=''):
 
 
 def _pick_best_box(boxes, img_h, img_w):
-    best_box, best_score = None, -1.0
+    best_box = None
+    best_score = -1.0
+    best_cls_name = None
+    best_conf = 0.0
     img_area = img_h * img_w
     for box in boxes:
         conf = float(box.conf[0])
         if conf < YOLO_CONF_THRESH:
             continue
         bx1, by1, bx2, by2 = map(int, box.xyxy[0])
+        cls_id = int(box.cls[0])
+        cls_name = yolo_model.names.get(cls_id, "")
         area_ratio = max((bx2 - bx1) * (by2 - by1), 1) / img_area
         if area_ratio < MIN_BOX_AREA_RATIO:
             continue
@@ -170,7 +249,9 @@ def _pick_best_box(boxes, img_h, img_w):
         if score > best_score:
             best_score = score
             best_box = (bx1, by1, bx2, by2)
-    return best_box
+            best_cls_name = cls_name
+            best_conf = conf
+    return best_box, best_cls_name, best_conf
 
 
 def _padded_crop(image, x1, y1, x2, y2, pad=CROP_PADDING):
@@ -195,24 +276,28 @@ def predict(image, state):
     ih, iw = image.shape[:2]
     annotated = image.copy()
 
-    # 1. YOLO
+    # 1. YOLO Detection & Semantic Prior Extraction
     results = yolo_model(image, verbose=False)
     best_box = None
+    detected_yolo_class = None
+    yolo_conf = 0.0
     if results and len(results[0].boxes) > 0:
-        best_box = _pick_best_box(results[0].boxes, ih, iw)
+        best_box, detected_yolo_class, yolo_conf = _pick_best_box(results[0].boxes, ih, iw)
 
     if best_box is not None:
         x1, y1, x2, y2 = best_box
         crop_img = _padded_crop(image, x1, y1, x2, y2)
-        cv2.rectangle(annotated, (x1, y1), (x2, y2), (0, 220, 80), 3)
-        cv2.putText(annotated, 'YOLO OK', (iw - 140, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 220, 80), 2)
-        box_status = 'YOLO'
+        box_status = f"YOLO: {detected_yolo_class}" if detected_yolo_class else "YOLO"
+        color = (0, 220, 80)
+        cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 3)
+        cv2.putText(annotated, f'YOLO: {detected_yolo_class}', (iw - 200, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
     else:
         x1, y1, x2, y2 = _center_crop_coords(ih, iw)
         crop_img = image[y1:y2, x1:x2]
-        cv2.rectangle(annotated, (x1, y1), (x2, y2), (0, 200, 255), 2)
-        cv2.putText(annotated, 'AUTO', (iw - 100, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 200, 255), 2)
         box_status = 'AUTO'
+        color = (0, 200, 255)
+        cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 2)
+        cv2.putText(annotated, 'AUTO', (iw - 100, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
 
     # 2. OCR tren crop
     ocr_crop = _padded_crop(image, x1, y1, x2, y2, pad=0.15)
@@ -224,7 +309,7 @@ def predict(image, state):
     except Exception:
         ocr_text = '(OCR loi)'
 
-    # 3. EfficientNet + Heuristic Boost (ket hop mau sac, texture va OCR)
+    # 3. EfficientNet-B4 + Multi-Model Knowledge Stacking
     pil_img = Image.fromarray(crop_img).convert('RGB')
     tensor  = transform(pil_img).unsqueeze(0)
 
@@ -232,11 +317,12 @@ def predict(image, state):
         raw_logits = model(tensor)
         logits_np  = raw_logits[0].cpu().numpy()
 
-    # Ap dung heuristic voi OCR text
-    boost          = _apply_visual_heuristics(logits_np, crop_img, ocr_text)
-    adj_logits     = torch.tensor(logits_np + boost)
-    probs          = torch.softmax(adj_logits, dim=0)
-    pred_idx       = probs.argmax().item()
+    # Chồng kiến thức: EfficientNet logits + YOLO Prior + Visual Heuristics & OCR
+    yolo_prior = _get_yolo_semantic_prior(detected_yolo_class, yolo_conf)
+    boost = _apply_visual_heuristics(logits_np, crop_img, ocr_text)
+    adj_logits = torch.tensor(logits_np + yolo_prior + boost)
+    probs = torch.softmax(adj_logits, dim=0)
+    pred_idx = probs.argmax().item()
 
     confidences = {classes[i]: float(probs[i]) for i in range(12)}
     best_class  = classes[pred_idx]
@@ -244,7 +330,7 @@ def predict(image, state):
 
     raw_probs   = torch.softmax(torch.tensor(logits_np), dim=0)
     raw_top     = classes[raw_probs.argmax().item()]
-    debug_str   = f'RAW:{raw_top} -> ADJ:{best_class}'
+    debug_str   = f'RAW(Eff):{raw_top} + YOLO:{detected_yolo_class} -> ENSEMBLE:{best_class}'
 
     result_text = f'[{box_status}] {best_class.upper()} ({best_prob:.1f}%)'
 
@@ -252,7 +338,6 @@ def predict(image, state):
     label = f'{best_class.upper()} {best_prob:.1f}%'
     ty = max(y1 - 12, 24)
     (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.85, 2)
-    color = (0, 220, 80) if box_status == 'YOLO' else (0, 200, 255)
     cv2.rectangle(annotated, (x1, ty - th - 6), (x1 + tw + 6, ty + 4), (20, 20, 20), -1)
     cv2.putText(annotated, label, (x1 + 3, ty), cv2.FONT_HERSHEY_SIMPLEX, 0.85, color, 2, cv2.LINE_AA)
     cv2.putText(annotated, debug_str, (8, ih - 12), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (200, 200, 0), 1, cv2.LINE_AA)
