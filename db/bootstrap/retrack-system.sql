@@ -714,6 +714,27 @@ ALTER TABLE depot_verification_documents ADD COLUMN IF NOT EXISTS scan_status VA
     CHECK (scan_status IN ('NOT_SCANNED','CLEAN'));
 ALTER TABLE depot_verification_documents ADD COLUMN IF NOT EXISTS scanned_at TIMESTAMPTZ;
 -- RETRACK_DEPOT_VERIFICATION_SCANNING_V1_END
+-- RETRACK_DEPOT_PRIVATE_CLOUD_V1_BEGIN
+ALTER TABLE depot_verification_documents ADD COLUMN IF NOT EXISTS storage_provider VARCHAR(20) NOT NULL DEFAULT 'DATABASE';
+ALTER TABLE depot_verification_documents ADD COLUMN IF NOT EXISTS storage_key VARCHAR(200);
+ALTER TABLE depot_verification_documents ADD COLUMN IF NOT EXISTS byte_size INTEGER;
+ALTER TABLE depot_verification_documents ADD COLUMN IF NOT EXISTS content_sha256 VARCHAR(64);
+ALTER TABLE depot_verification_documents DROP CONSTRAINT IF EXISTS depot_verification_documents_content_check;
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'depot_verification_documents'::regclass
+        AND conname = 'ck_depot_verification_storage') THEN
+        ALTER TABLE depot_verification_documents ADD CONSTRAINT ck_depot_verification_storage CHECK (
+            (storage_provider = 'DATABASE' AND storage_key IS NULL AND octet_length(content) BETWEEN 1 AND 2097152
+                AND (byte_size IS NULL OR byte_size = octet_length(content)))
+            OR
+            (storage_provider = 'CLOUDINARY' AND storage_key IS NOT NULL AND octet_length(content) = 0
+                AND byte_size IS NOT NULL AND byte_size BETWEEN 1 AND 2097152
+                AND content_sha256 IS NOT NULL AND content_sha256 ~ '^[A-F0-9]{64}$')
+        );
+    END IF;
+END $$;
+-- RETRACK_DEPOT_PRIVATE_CLOUD_V1_END
 -- RETRACK_DEPOT_QUERY_INDEXES_V1_BEGIN
 -- Đo EXPLAIN ANALYZE trước/sau trên fixture riêng; không đưa BYTEA vào index.
 -- DB đang có tải lớn: xem db/README.md để tạo CONCURRENTLY ngoài transaction.

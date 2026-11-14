@@ -42,7 +42,7 @@ public sealed class DepotVerificationController(DepotVerificationService service
     [HttpGet("documents/{id:guid}"), EnableRateLimiting(VerificationRateLimits.Download)]
     public async Task<IActionResult> Document(Guid id)
     {
-        var document = await service.FileAsync(Actor, id);
+        var document = await service.FileAsync(Actor, id, HttpContext.RequestAborted);
         Response.Headers.CacheControl = "no-store"; Response.Headers["X-Content-Type-Options"] = "nosniff";
         Response.Headers["Content-Security-Policy"] = "sandbox; default-src 'none'; base-uri 'none'; form-action 'none'";
         return File(document.Content, document.ContentType, document.Name);
