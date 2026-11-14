@@ -31,5 +31,9 @@ public sealed class DepotVerificationDocument
     [Column("scan_status")] public string ScanStatus { get; set; } = "NOT_SCANNED";
     [Column("scanned_at")] public DateTime? ScannedAt { get; set; }
     [Column("content")] public byte[] Content { get; set; } = [];
+    [Column("storage_provider")] public string StorageProvider { get; set; } = "DATABASE";
+    [Column("storage_key")] public string? StorageKey { get; set; }
+    [Column("byte_size")] public int? ByteSize { get; set; }
+    [Column("content_sha256")] public string? ContentSha256 { get; set; }
     public DepotVerificationSubmission Submission { get; set; } = null!;
 }

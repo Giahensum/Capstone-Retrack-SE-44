@@ -1,12 +1,15 @@
 using System.ComponentModel.DataAnnotations;
+using System.Security.Cryptography;
 using Retrack.API.DTOs;
 using Retrack.API.DTOs.Depot;
 using Retrack.API.Models;
 using Retrack.API.Repositories.Interfaces;
 using Retrack.API.Services.Interfaces;
+using Retrack.API.Services.Shared;
 namespace Retrack.API.Services.Depot;
 
-public sealed class DepotVerificationService(IDepotVerificationRepository repository, IDepotUnitOfWork work, IDepotService scope, IVerificationFileScanner scanner)
+public sealed class DepotVerificationService(IDepotVerificationRepository repository, IDepotUnitOfWork work, IDepotService scope,
+    IVerificationFileScanner scanner, IVerificationDocumentStorage storage, ILogger<DepotVerificationService> logger)
 {
     public async Task<DepotProfileDto> CreateDepotAsync(Guid ownerId, CreateDepotDto dto)
     {
@@ -67,7 +70,8 @@ public sealed class DepotVerificationService(IDepotVerificationRepository reposi
                 (type == "image/png" && extension != ".png") ||
                 (type == "image/jpeg" && extension is not (".jpg" or ".jpeg")))
                 throw new ArgumentException("Đuôi tệp phải khớp nội dung PDF, PNG hoặc JPEG.");
-            documents.Add(new() { Name = name, ContentType = type, Content = content, Kind = kind });
+            documents.Add(new() { Name = name, ContentType = type, Content = content, Kind = kind,
+                ByteSize = content.Length, ContentSha256 = Convert.ToHexString(SHA256.HashData(content)) });
         }
         async Task<Guid?> Replay()
         {
@@ -87,19 +91,45 @@ public sealed class DepotVerificationService(IDepotVerificationRepository reposi
             {
                 document.ScanStatus = "CLEAN"; document.ScannedAt = DateTime.UtcNow;
             }
-        cancellationToken.ThrowIfCancellationRequested();
-        await using var tx = await work.BeginAsync(); await repository.LockDepotAsync(depotId);
-        // Tài khoản/quyền sở hữu có thể đổi trong thời gian chờ quét.
-        await scope.RequireOwnerAsync(ownerId, depotId);
-        if (await Replay() is Guid concurrentReplay) { await tx.CommitAsync(); return concurrentReplay; }
-        if (await repository.HasPendingAsync(depotId)) throw new DepotConflictException("Kho đã có hồ sơ chờ duyệt.");
-        if (await repository.RecentCountAsync(depotId) >= 5) throw new DepotConflictException("Tối đa 5 lần nộp hồ sơ mỗi ngày.");
-        var depot = await repository.FindDepotAsync(depotId) ?? throw new KeyNotFoundException("Không tìm thấy kho.");
-        if (depot.VerificationStatus == "APPROVED") throw new DepotConflictException("Kho đã xác minh; không nộp hồ sơ trùng.");
-        repository.Add(new() { Id = operationId, DepotId = depotId, Note = note?.Trim() ?? "", Documents = documents,
-            DepotName = depot.Name, DepotAddress = depot.Address, TaxCode = depot.TaxCode });
-        depot.VerificationStatus = "SUBMITTED";
-        await work.SaveAsync(); await tx.CommitAsync(); return operationId;
+        var uploaded = new List<DepotVerificationDocument>();
+        var commitAttempted = false;
+        try
+        {
+            if (storage.Provider == "CLOUDINARY")
+                foreach (var document in documents)
+                {
+                    document.StorageKey = await storage.UploadAsync(operationId, document.Id, document.Content, document.ContentType, cancellationToken);
+                    document.StorageProvider = "CLOUDINARY"; document.Content = [];
+                    uploaded.Add(document);
+                }
+            cancellationToken.ThrowIfCancellationRequested();
+            await using var tx = await work.BeginAsync(); await repository.LockDepotAsync(depotId);
+            // Tài khoản/quyền sở hữu có thể đổi trong thời gian chờ quét/upload.
+            await scope.RequireOwnerAsync(ownerId, depotId);
+            if (await Replay() is Guid concurrentReplay) { await tx.CommitAsync(); return concurrentReplay; }
+            if (await repository.HasPendingAsync(depotId)) throw new DepotConflictException("Kho đã có hồ sơ chờ duyệt.");
+            if (await repository.RecentCountAsync(depotId) >= 5) throw new DepotConflictException("Tối đa 5 lần nộp hồ sơ mỗi ngày.");
+            var depot = await repository.FindDepotAsync(depotId) ?? throw new KeyNotFoundException("Không tìm thấy kho.");
+            if (depot.VerificationStatus == "APPROVED") throw new DepotConflictException("Kho đã xác minh; không nộp hồ sơ trùng.");
+            repository.Add(new() { Id = operationId, DepotId = depotId, Note = note?.Trim() ?? "", Documents = documents,
+                DepotName = depot.Name, DepotAddress = depot.Address, TaxCode = depot.TaxCode });
+            depot.VerificationStatus = "SUBMITTED";
+            await work.SaveAsync();
+            // Nếu COMMIT mất kết nối, giữ asset riêng tư để đối soát; không xóa nhầm hồ sơ đã ghi.
+            commitAttempted = true;
+            await tx.CommitAsync();
+            return operationId;
+        }
+        finally
+        {
+            if (!commitAttempted)
+                foreach (var document in uploaded)
+                {
+                    using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                    try { await storage.DeleteAsync(document.StorageKey!, cleanup.Token); }
+                    catch { logger.LogWarning("Cần đối soát tài liệu cloud chưa có tham chiếu {DocumentId}", document.Id); }
+                }
+        }
     }
     public async Task ReviewAsync(Guid adminId, Guid id, VerificationReviewDto dto)
     {
@@ -125,12 +155,22 @@ public sealed class DepotVerificationService(IDepotVerificationRepository reposi
             $"Kho {depot.Name}: {dto.Reason.Trim()}", targetType: "PROFILE"));
         await work.SaveAsync(); await tx.CommitAsync();
     }
-    public async Task<DepotVerificationDocument> FileAsync(Guid actor, Guid id)
+    public async Task<DepotVerificationDocument> FileAsync(Guid actor, Guid id, CancellationToken cancellationToken = default)
     {
         var owner = await repository.FileOwnerAsync(id) ?? throw new KeyNotFoundException("Không tìm thấy tệp.");
         if (owner != actor) await RequireAdmin(actor);
         else await scope.GetDepotsAsync(actor);
-        return await repository.FileAsync(id, actor) ?? throw new DepotForbiddenException();
+        var document = await repository.FileAsync(id, actor) ?? throw new DepotForbiddenException();
+        if (document.StorageProvider == "DATABASE") return document;
+        if (document.StorageProvider != "CLOUDINARY" || document.StorageKey == null || document.ByteSize == null || document.ContentSha256 == null)
+            throw new VerificationStorageUnavailableException();
+        var content = await storage.ReadAsync(document.StorageKey, document.ByteSize.Value, cancellationToken);
+        if (content.Length != document.ByteSize || !CryptographicOperations.FixedTimeEquals(SHA256.HashData(content), Convert.FromHexString(document.ContentSha256)))
+            throw new VerificationStorageUnavailableException();
+        // Không trả tệp nếu quyền đã bị thu hồi trong lúc chờ cloud.
+        if (await repository.FileAsync(id, actor) == null) throw new DepotForbiddenException();
+        document.Content = content;
+        return document;
     }
     private static string? ContentType(byte[] bytes)
     {
@@ -140,5 +180,5 @@ public sealed class DepotVerificationService(IDepotVerificationRepository reposi
         return null;
     }
     private static IEnumerable<string> Fingerprints(IEnumerable<DepotVerificationDocument> files) => files
-        .Select(x => x.Kind + ":" + x.Name + ":" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(x.Content))).OrderBy(x => x, StringComparer.Ordinal);
+        .Select(x => x.Kind + ":" + x.Name + ":" + (x.ContentSha256 ?? Convert.ToHexString(SHA256.HashData(x.Content)))).OrderBy(x => x, StringComparer.Ordinal);
 }
