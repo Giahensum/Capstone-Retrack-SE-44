@@ -56,12 +56,12 @@ export default function Payments() {
     <div className="bg-white rounded-[20px] border border-d-border-subtle overflow-hidden shadow-sm">
       {query.isPending ? <p role="status" className="p-8">Đang tải thanh toán…</p> : query.isError ? <div role="alert" className="p-8 text-d-error">{depotError(query.error)} <button onClick={() => query.refetch()} className="ml-2 rounded-full border border-d-error px-4 py-2 font-semibold hover:bg-d-surface-container-low">Thử lại</button></div> : <>
         <div className="overflow-x-auto"><table className="w-full text-left border-collapse">
-          <thead><tr className="bg-d-surface-container/50 border-b border-d-border-subtle">{['Mã đơn', 'Người bán & SĐT', 'Tiền gốc', 'Phí nền tảng', 'Thực trả', 'Trạng thái', 'Hành động'].map((h) => <th key={h} className="py-4 px-6 font-d-label-sm text-d-on-surface-variant whitespace-nowrap">{h}</th>)}</tr></thead>
+          <thead><tr className="bg-d-surface-container/50 border-b border-d-border-subtle">{['Mã đơn', 'Người bán & SĐT', 'Tiền hàng', 'Phí nền tảng', 'Chuyển Seller', 'Trạng thái', 'Hành động'].map((h) => <th key={h} className="py-4 px-6 font-d-label-sm text-d-on-surface-variant whitespace-nowrap">{h}</th>)}</tr></thead>
           <tbody className="divide-y divide-d-border-subtle">{query.data.items.map((p) => <tr key={p.id} className="hover:bg-d-surface-container-low">
             <td className="py-4 px-6 font-medium" title={p.id}>#{p.id.slice(0, 8)}</td>
             <td className="py-4 px-6"><div>{p.sellerName}</div><div className="text-sm text-d-on-surface-variant">{p.sellerPhone}</div></td>
             <td className="py-4 px-6 whitespace-nowrap">{money(p.grossAmount)}</td>
-            <td className="py-4 px-6 whitespace-nowrap">{money(p.platformFeeAmount)} ({p.platformFeePercentage}%)</td>
+            <td className="py-4 px-6 whitespace-nowrap">{money(p.platformFeeAmount)} ({p.platformFeePercentage}%)<p className="text-xs text-d-on-surface-variant">{p.feePolicy === "BUYER_SEPARATE_V1" ? "Kho trả riêng" : "Khấu trừ — đơn cũ"}</p></td>
             <td className="py-4 px-6 font-bold text-d-primary bg-d-surface-accent/10 whitespace-nowrap">{money(p.netAmount)}</td>
             <td className="py-4 px-6">{PICKUP_STATUS_LABEL[p.status] ?? p.status}</td>
             <td className="py-4 px-6"><button type="button" onClick={() => setSelected(p)} className="min-h-11 rounded-full px-4 py-2 bg-d-primary-container text-d-on-primary-container font-semibold whitespace-nowrap hover:opacity-90 focus-visible:outline-2 focus-visible:outline-d-primary">{p.status === 'AWAITING_PAYMENT' ? 'Đối soát' : 'Chi tiết'}</button></td>

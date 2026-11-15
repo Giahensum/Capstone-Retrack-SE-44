@@ -77,6 +77,41 @@ Không chuyển/xóa nội dung hồ sơ cũ. Máy đã nâng đến af6446a ch�
 rồi chạy khối này trước backend mới, không chọn seed. Máy mới chạy một file
 chung như trên. Cấu hình cloud dùng account Cloudinary hiện có; xem README gốc.
 
+## Chính sách bên mua trả phí riêng — 15/11/2026
+
+DB đã có dữ liệu: sao lưu, mở đúng database trong pgAdmin, chọn và chạy trọn
+khối `RETRACK_BUYER_FEES_V1_BEGIN` đến `RETRACK_BUYER_FEES_V1_END` trong
+`bootstrap/retrack-system.sql`, sau đó khởi động lại backend. Không chọn seed,
+không chạy EF migration. Nếu DB còn thiếu các cập nhật trước, nâng schema
+theo các mục trên trước; khối này không thay thế toàn bộ lịch sử nâng DB.
+Máy mới vẫn chỉ chạy toàn bộ một file SQL chung.
+
+Khối mới thêm `fee_policy` vào `pickup_requests`, `inventory_batches`,
+`platform_transactions` và `fee_percentage_snapshot` vào `inventory_batches`.
+Không cập nhật lại tiền hay trạng thái cũ; chạy lại khối không đổi chính sách
+đã chốt. Các đơn/lô demo lịch sử giữ chính sách cũ để kiểm thử tương thích.
+
+- Đơn/lô tạo mới qua API: `BUYER_SEPARATE_V1`. Depot mua Seller thì Depot
+  chịu phí riêng; Factory mua Depot thì Factory chịu phí riêng.
+- Dữ liệu trước khi nâng: `LEGACY_SELLER_DEDUCTION_V1`, giữ số thực nhận đã
+  chốt. Không tự sửa các đơn đang xử lý hoặc đã thanh toán sang công thức mới.
+- Phí mới tính trên tiền hàng chưa VAT, làm tròn VND nguyên; không tính trên
+  VAT hàng. Mức phí cấu hình chốt khi tạo đơn/lô mới, không đổi khi Admin
+  chỉnh cấu hình sau đó. Cấu hình nhận tối đa hai chữ số thập phân.
+- Ví dụ tiền hàng 1.000.000 đ, phí 5%: Seller nhận 1.000.000 đ; Depot trả
+  nền tảng 50.000 đ riêng, tổng chi 1.050.000 đ. Phí mua này nằm trong giá vốn
+  nguồn pickup mới, không được cộng lần thứ hai khi xuất hàng.
+- Factory mua hàng 10.000.000 đ và VAT hàng theo hóa đơn 1.000.000 đ: Depot
+  nhận 11.000.000 đ; Factory chịu phí 500.000 đ riêng, tổng chi 11.500.000 đ.
+  Phí của Factory không bị trừ thêm khỏi doanh thu Depot.
+- `NetAmount`/`NetPayableAmount` vẫn là tiền phải chuyển cho bên bán;
+  `BuyerTotalAmount` là số đó cộng nghĩa vụ phí riêng với nền tảng.
+  Các client phải đọc `FeePolicy` của đơn/lô, không tự suy từ cấu hình hiện tại.
+
+Hóa đơn phí nền tảng vẫn thu riêng theo kỳ; một nguồn chỉ có một giao dịch
+phí. Chưa tự đặt VAT dịch vụ nền tảng hoặc thêm phí vào tiền cọc/lô đấu giá,
+bán đồ cũ ngoài hay gói dịch vụ. PayOS thật cần nghiệm thu riêng.
+
 Khối `RETRACK_DEPOT_QUERY_INDEXES_V1_BEGIN/END` bổ sung ba index cho danh sách
 lô theo kho/thời gian, lịch sử hồ sơ theo kho/thời gian và tệp theo hồ sơ.
 Không đổi trạng thái, số tiền, tồn kho hoặc quyền của role khác.

@@ -23,7 +23,7 @@ export default function CostReportPanel({ period }) {
         {d.channels.map(x => <tr key={x.channel}>
           <td className={cellClass}>{x.channel === 'FACTORY' ? 'Lô xuất nhà máy' : 'Đồ tái sử dụng bán ngoài'}</td>
           <td className={cellClass}><p>{number(x.transactionCount)}</p>{x.incompleteCount > 0 && <p className="text-xs text-d-on-surface-variant mt-1">{number(x.incompleteCount)} chưa đủ dữ liệu</p>}</td>
-          <td className={cellClass}><p className="font-semibold">Sau phí, chưa VAT {amount(x.netRevenue)}</p><p className="text-xs text-d-on-surface-variant mt-1">Tiền hàng {amount(x.grossRevenue)}</p><p className="text-xs text-d-on-surface-variant mt-1">Phí {amount(x.platformFees)} · VAT {amount(x.outputVat)}</p><p className="text-xs text-d-on-surface-variant mt-1">Thanh toán theo quyết toán {amount(x.settlementAmount)}</p></td>
+          <td className={cellClass}><p className="font-semibold">Doanh thu thuần, chưa VAT {amount(x.netRevenue)}</p><p className="text-xs text-d-on-surface-variant mt-1">Tiền hàng {amount(x.grossRevenue)}</p><p className="text-xs text-d-on-surface-variant mt-1">Phí kho chịu khi bán {amount(x.platformFees)} · VAT {amount(x.outputVat)}</p><p className="text-xs text-d-on-surface-variant mt-1">Thanh toán theo quyết toán {amount(x.settlementAmount)}</p></td>
           {[x.knownCostOfGoods, x.sellingCosts, x.pretaxDifference].map((value, i) => <td key={i} className={cellClass}>{amount(value)}</td>)}
         </tr>)}
       </GridTable>

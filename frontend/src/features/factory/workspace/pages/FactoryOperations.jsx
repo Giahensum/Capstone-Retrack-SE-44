@@ -37,7 +37,7 @@ const modes = {
   },
   settlements: {
     title: "Quyết toán thu mua",
-    text: "Chốt đơn giá sau KCS, khấu trừ phí nền tảng và ghi nhận thanh toán cho vựa.",
+    text: "Chốt đơn giá sau KCS, đối chiếu phí theo chính sách của lô và ghi nhận thanh toán cho vựa.",
     states: ["VERIFIED", "PAID"],
   },
 };
@@ -393,13 +393,14 @@ function Financial({ values, net }) {
         <dd>{money(values.invoiceTotal)}</dd>
       </div>
       <div>
-        <dt>Phí nền tảng giữ lại ({values.feePercentage}%)</dt>
-        <dd>− {money(values.fee)}</dd>
+        <dt>{values.feePolicy === 'BUYER_SEPARATE_V1' ? 'Phí Factory trả riêng' : 'Phí khấu trừ — lô cũ'} ({values.feePercentage}%)</dt>
+        <dd>{values.feePolicy === 'BUYER_SEPARATE_V1' ? '+ ' : '− '}{money(values.fee)}</dd>
       </div>
       <div className="financial-total">
         <dt>Thực trả cho vựa</dt>
         <dd>{money(values.payable)}</dd>
       </div>
+      <div><dt>Tổng chi gồm nghĩa vụ phí nền tảng</dt><dd>{money(values.buyerTotal ?? (values.payable + values.fee))}</dd></div>
     </dl>
   );
 }
@@ -623,7 +624,7 @@ function SettlementForm({ order, close }) {
   const [vatTreatment, vatPercentage] = vatOption.split(":");
   let preview;
   try {
-    preview = settlement(order.weight.net, Number(price), state?.profile?.platformFeePercentage ?? order.payment?.feePercentage ?? 1, vatTreatment, Number(vatPercentage), priceIncludesVat);
+    preview = settlement(order.weight.net, Number(price), order.feePercentage ?? state?.profile?.platformFeePercentage ?? order.payment?.feePercentage ?? 5, vatTreatment, Number(vatPercentage), priceIncludesVat, order.feePolicy);
   } catch {
     /* Price has not been entered. */
   }
