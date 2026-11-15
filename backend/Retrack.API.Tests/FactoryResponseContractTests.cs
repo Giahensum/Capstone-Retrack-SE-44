@@ -59,7 +59,7 @@ public class FactoryResponseContractTests
             "vatTreatment", "vatPercentage", "vatAmount", "invoiceTotalAmount",
             "priceIncludesVat", "invoiceDate", "sellerTaxCode", "vatLegalBasis",
             "receivedAt", "decidedAt", "rejectionReason", "settledAt", "feeAmount", "netPayableAmount",
-            "paymentReference", "platformFeePercentage", "createdAt", "transport", "weightVerification", "weightTicket", "invoice");
+            "paymentReference", "platformFeePercentage", "feePolicy", "buyerTotalAmount", "createdAt", "transport", "weightVerification", "weightTicket", "invoice");
         Assert.Equal(JsonValueKind.Null, json.GetProperty("transport").ValueKind);
         Assert.Equal(JsonValueKind.Null, json.GetProperty("invoice").ValueKind);
         var verification = json.GetProperty("weightVerification");

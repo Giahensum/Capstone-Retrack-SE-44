@@ -117,6 +117,7 @@ namespace Retrack.API.DTOs
 
     public class TransactionHistoryItemDto
     {
+        public string FeePolicy { get; set; } = Retrack.API.Services.Shared.PlatformFees.Legacy;
         public Guid Id { get; set; }
         public string SourceType { get; set; } = string.Empty;
         public Guid SourceId { get; set; }

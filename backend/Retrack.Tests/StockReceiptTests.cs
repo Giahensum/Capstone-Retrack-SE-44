@@ -104,6 +104,7 @@ public sealed partial class StockReceiptTests : IAsyncLifetime
         await Stock(db).AddBatchExpenseAsync(owner, depot, batch.Id, new(Guid.NewGuid(), "Xe", 50000));
         await Stock(db).AddBatchExpenseAsync(owner, depot, batch.Id, new(Guid.NewGuid(), "Bốc xếp", 50000));
         var entity = await db.InventoryBatches.SingleAsync(x => x.Id == batch.Id);
+        entity.FeePolicy = Retrack.API.Services.Shared.PlatformFees.Legacy;
         entity.Status = "PAID"; entity.GrossAmount = 1000000; entity.PlatformFeeAmount = 100000; entity.NetAmount = 900000; entity.SettledAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
         var report = await Reports(db).CostReportAsync(owner, depot, new());

@@ -101,6 +101,10 @@ namespace Retrack.API.DTOs
         public string Status { get; set; } = string.Empty;
         public decimal GrossAmount { get; set; }
         public decimal NetAmount { get; set; }
+        public string FeePolicy { get; set; } = Retrack.API.Services.Shared.PlatformFees.Legacy;
+        public decimal PlatformFeePercentage { get; set; }
+        public decimal PlatformFeeAmount { get; set; }
+        public decimal BuyerTotalAmount { get; set; }
         public string? PaymentProofUrl { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
