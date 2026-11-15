@@ -22,10 +22,10 @@ Backend hiện được cung cấp bằng HTTP. Trình duyệt gọi HTTPS tới
 
 1. Fetch `origin`, tạo nhánh task từ `origin/develop`, bảo toàn công việc local bằng worktree khi cần.
 2. Commit riêng cấu hình và tài liệu; push nhánh task, tạo PR có base `develop` để nhóm review.
-3. Có thể deploy thử nhánh feature trước khi merge. Để bản demo chung chạy từ `develop`, đưa cấu hình vào `develop` theo quy trình review của nhóm.
-4. Trên Vercel, đặt Production Branch là `develop` và kiểm tra deployment thực tế dùng đúng branch/commit.
+3. Có thể deploy thử nhánh feature trước khi merge. Bản phát hành chính đi qua PR `feature -> develop`, kiểm tra tích hợp, rồi PR `develop -> main`.
+4. Trên Vercel, đặt Production Branch là `main` và kiểm tra deployment thực tế dùng đúng branch/commit. Đây là lựa chọn của nhóm cho phiên bản `v1.0.0`.
 
-Không bắt buộc merge vào `main`. Chỉ dùng `main` làm nhánh triển khai nếu nhóm chủ động chốt quy trình phát hành đó. Việc tạo project Vercel không tự merge các nhánh. Bật Git integration có thể tự deploy các commit tiếp theo trên nhánh được cấu hình.
+Việc tạo project Vercel không tự merge các nhánh. Sau khi kết nối GitHub và bật tự triển khai, mỗi commit mới trên `main` có thể kích hoạt một lần build/deploy tự động. Chỉ cần tạo project và cấu hình biến một lần; không nhập lại biến mỗi khi có code mới. Thay đổi chỉ ở `develop` chưa cập nhật bản chính cho tới khi được merge vào `main`. Git integration còn phụ thuộc quyền tài khoản, tác giả commit và giới hạn gói Vercel.
 
 ## 2. Tạo project Vercel
 
@@ -62,6 +62,8 @@ Chọn Production và Preview nếu muốn dùng ở cả bản chính và bản
 Vite nhúng các biến `VITE_*` vào JavaScript trình duyệt lúc build, nên đây không phải kho secret. Không nhập connection string, mật khẩu database, JWT signing key, Google Client Secret, PayOS key hoặc Cloudinary API secret. Không commit `.env.local`.
 
 Sau khi thêm/sửa biến, lưu rồi tạo deployment mới hoặc **Deployments > chọn deployment > ... > Redeploy**. Bản đang chạy không tự nhận biến vừa đổi.
+
+`Redeploy` là tạo bản triển khai mới, có thể được kích hoạt tự động bởi Git hoặc chủ động trên dashboard. Đây là hoạt động bình thường vì Vite nhúng cấu hình lúc build. Không phải lỗi của project. Nếu đổi backend với kiến trúc hiện tại, sửa `destination` của rule API trong `vercel.json`, đưa qua PR vào `main`; không thêm `VITE_API_URL` rồi chờ Axios tự đổi.
 
 Google OAuth: thêm origin frontend thực tế vào Authorized JavaScript origins của OAuth client. Goong: cập nhật domain được phép nếu khóa có giới hạn domain. Preview có thể có origin khác; không mặc định mọi Preview đã được cho phép.
 
