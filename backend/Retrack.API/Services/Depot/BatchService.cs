@@ -104,7 +104,9 @@ public sealed class BatchService(IDepotBatchRepository batches, IDepotUnitOfWork
             DeclaredWeightKg = dto.WeightKg, Description = dto.Description,
             TargetFactoryId = isApproved ? dto.TargetFactoryId : null,
             DirectOfferFactoryId = !isApproved && dto.TargetFactoryId.HasValue ? dto.TargetFactoryId : null,
-            Status = status, ImageUrls = imageUrls.ToArray()
+            Status = status, ImageUrls = imageUrls.ToArray(),
+            FeePolicy = Retrack.API.Services.Shared.PlatformFees.BuyerSeparate,
+            FeePercentageSnapshot = Retrack.API.Services.Shared.PlatformFees.Rate(await batches.FeeConfigurationAsync())
         };
         batches.AddBatch(batch);
         await stockLedger.ReserveCostsAsync(depotId, batch.Id, dto.MaterialType, dto.WeightKg);

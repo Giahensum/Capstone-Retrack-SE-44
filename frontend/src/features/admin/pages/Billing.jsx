@@ -73,13 +73,13 @@ function TransactionsTab() {
 
   return (
     <Panel icon={Receipt} title="Lịch sử giao dịch phí">
-      <DataTable minWidth={700} head={<><Th>Loại</Th><Th>Người trả phí</Th><Th className="text-right">Phí</Th><Th>Mô tả</Th><Th>Thời gian</Th></>}>
+      <DataTable minWidth={700} head={<><Th>Loại</Th><Th>Người nộp phí</Th><Th className="text-right">Phí</Th><Th>Mô tả</Th><Th>Thời gian</Th></>}>
         <TableMessage cols={5} loading={isLoading && !data} empty={!isLoading && items.length === 0} icon={Receipt}>Chưa có giao dịch nào.</TableMessage>
         {items.map((t) => (
           <tr key={t.id} className="transition-colors hover:bg-d-surface-accent/40">
             <Td><Badge tone={t.sourceType === 'PICKUP_REQUEST' ? 'teal' : 'blue'}>{t.sourceType === 'PICKUP_REQUEST' ? 'Thu gom' : 'Xuất lô'}</Badge></Td>
             <Td className="font-semibold">{t.payerName ?? <span className="italic text-d-on-surface-variant">Chưa xác định</span>}</Td>
-            <Td className="text-right font-black text-d-error">{formatCurrency(t.feeAmount)}</Td>
+            <Td className="text-right font-black text-d-error">{formatCurrency(t.feeAmount)}<p className="text-xs font-normal text-d-on-surface-variant">{t.feePolicy === "BUYER_SEPARATE_V1" ? "Bên mua chịu riêng" : "Khấu trừ bên bán — đơn cũ"}</p></Td>
             <Td className="text-d-on-surface-variant">{t.description ?? '—'}</Td>
             <Td className="whitespace-nowrap text-d-on-surface-variant">{formatDate(t.createdAt)}</Td>
           </tr>
@@ -204,7 +204,7 @@ function FeeConfigTab() {
       <div className="p-5">
         {isLoading ? <div className="h-24 animate-pulse rounded-2xl bg-d-surface-container" /> : (
           <form className="flex flex-col gap-4" onSubmit={(e) => { e.preventDefault(); mutation.mutate({ platformFeePercentage: Number(current) }); }}>
-            <Field label="Phí nền tảng (%)" hint="Áp dụng cho cả giao dịch thu gom (Seller↔Depot) và xuất lô (Depot↔Factory).">
+            <Field label="Phí nền tảng (%)" hint="Đơn/lô mới chốt mức phí khi tạo. Bên mua chịu phí riêng: Depot mua Seller, Factory mua Depot. Không đổi mức phí trên giao dịch đã tạo.">
               <input type="number" min="0" max="100" step="0.1" value={current} onChange={(e) => setValue(e.target.value)} className={inputClass} />
             </Field>
             <PrimaryButton icon={Save} type="submit" disabled={mutation.isPending} className="self-start">{mutation.isPending ? 'Đang lưu…' : 'Lưu cấu hình'}</PrimaryButton>

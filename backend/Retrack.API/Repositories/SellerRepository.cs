@@ -149,8 +149,8 @@ namespace Retrack.API.Repositories
                     r.Status == "AWAITING_PAYMENT" ||
                     r.Status == "PAYMENT_SENT"),
                 Done = await requests.CountAsync(r => r.Status == "DONE"),
-                TotalIncome = await requests.Where(r => r.Status == "DONE").SumAsync(r => r.GrossAmount > 0 ? r.GrossAmount : r.NetAmount),
-                MonthlyIncome = await requests.Where(r => r.Status == "DONE" && r.UpdatedAt >= monthStart && r.UpdatedAt < nextMonthStart).SumAsync(r => r.GrossAmount > 0 ? r.GrossAmount : r.NetAmount)
+                TotalIncome = await requests.Where(r => r.Status == "DONE").SumAsync(r => r.NetAmount),
+                MonthlyIncome = await requests.Where(r => r.Status == "DONE" && r.UpdatedAt >= monthStart && r.UpdatedAt < nextMonthStart).SumAsync(r => r.NetAmount)
             };
         }
 

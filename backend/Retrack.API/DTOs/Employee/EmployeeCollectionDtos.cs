@@ -22,6 +22,7 @@ public sealed record CollectionPolicyDto(int RadiusMeters, int MaxAccuracyMeters
 public sealed record EmployeeCollectionDto(Guid PickupId, string Status, string Address, decimal? Latitude,
     decimal? Longitude, CheckInEvidenceDto? CheckIn, int Revision, bool CanEdit,
     IReadOnlyList<ClassificationItemDto> Items, decimal TotalWeightKg, decimal GrossAmount, CollectionPolicyDto Policy,
-    decimal PlatformFeePercentage = 0, decimal PlatformFeeAmount = 0, decimal NetAmount = 0);
+    decimal PlatformFeePercentage = 0, decimal PlatformFeeAmount = 0, decimal NetAmount = 0,
+    string FeePolicy = Retrack.API.Services.Shared.PlatformFees.Legacy, decimal BuyerTotalAmount = 0);
 public sealed record MaterialReferenceDto(string Code, string Label, decimal? ReferencePrice,
     DateTime? EffectiveDate, string? Source);

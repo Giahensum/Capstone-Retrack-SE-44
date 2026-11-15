@@ -1,5 +1,13 @@
 import { test, expect } from '@playwright/test';
 
+test.beforeEach(async ({ page }) => {
+  // Test giao diện dùng token giả: polling thông báo cũng phải được mock để không gọi backend thật rồi bị logout.
+  await page.route(/\/api\/(?:depot|seller)\/notifications\/unread-count(?:\?|$)/,
+    route => route.fulfill({ json: { success: true, data: 0 } }));
+  await page.route('**/api/depot/profile?**',
+    route => route.fulfill({ json: { success: true, data: { verificationStatus: 'APPROVED' } } }));
+});
+
 const depotId = '11111111-1111-1111-1111-111111111111';
 const paymentId = '22222222-2222-2222-2222-222222222222';
 const payment = {
@@ -29,7 +37,7 @@ test('Depot thấy đơn Seller đã xác nhận cân nhưng chỉ thanh toán s
   await openPayment(page, confirmed, confirmed);
   await expect(page.getByLabel('Trạng thái')).toHaveValue('');
   await expect(page.getByRole('heading', { name: 'Chờ nhân viên bàn giao' })).toBeVisible();
-  await expect(page.getByText('Đã xác nhận cân · chờ nhân viên bàn giao', { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole('dialog').getByText('Đã xác nhận cân · chờ nhân viên bàn giao', { exact: true }).first()).toBeVisible();
   await expect(page.getByRole('button', { name: 'Xác nhận đã chuyển tiền' })).toHaveCount(0);
   await expect(page.getByText('Chưa có đường dẫn chứng từ hợp lệ. Vui lòng liên hệ quản trị viên.')).toHaveCount(0);
 });
@@ -48,7 +56,7 @@ test('Depot đối soát tiền và chứng từ trước khi ghi nhận', async
 
 test('Đơn đã được xử lý trong lúc mở danh sách không thể duyệt lại', async ({ page }) => {
   await openPayment(page, { ...payment, status: 'PAYMENT_SENT', paymentProofUrl: 'https://example.com/proof.png' });
-  await expect(page.getByText('Đã chuyển tiền · chờ người bán xác nhận', { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole('dialog').getByText('Đã chuyển tiền · chờ người bán xác nhận', { exact: true }).first()).toBeVisible();
   await expect(page.getByRole('link', { name: 'Xem chứng từ' })).toHaveAttribute('href', 'https://example.com/proof.png');
   await expect(page.getByRole('button', { name: 'Xác nhận đã chuyển tiền' })).toHaveCount(0);
 });
@@ -77,7 +85,7 @@ test('Seller thấy chứng từ trước khi xác nhận nhận tiền', async 
     description: 'PET', createdAt: '2026-10-09T00:00:00Z',
   } } }));
   await page.goto(`/seller/requests/${paymentId}`);
-  await expect(page.getByRole('link', { name: 'Xem chứng từ chuyển khoản' })).toHaveAttribute('href', 'https://example.com/proof.png');
+  await expect(page.getByRole('link', { name: 'Xem chứng từ ủy nhiệm chi' })).toHaveAttribute('href', 'https://example.com/proof.png');
   await expect(page.getByRole('button', { name: 'Xác nhận đã nhận tiền' })).toBeVisible();
   await expect(page.getByText('Đã chuyển tiền · chờ người bán xác nhận', { exact: true }).first()).toBeVisible();
 });

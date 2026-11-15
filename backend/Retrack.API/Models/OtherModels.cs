@@ -196,6 +196,8 @@ namespace Retrack.API.Models
         [Column("vat_amount")] public decimal? VatAmount { get; set; }
         [Column("invoice_total_amount")] public decimal? InvoiceTotalAmount { get; set; }
         [Column("price_includes_vat")] public bool PriceIncludesVat { get; set; }
+        [Column("fee_policy"), MaxLength(40)] public string FeePolicy { get; set; } = Retrack.API.Services.Shared.PlatformFees.Legacy;
+        [Column("fee_percentage_snapshot")] public decimal? FeePercentageSnapshot { get; set; }
         [Column("platform_fee_amount")] public decimal? PlatformFeeAmount { get; set; }
         [Column("net_amount")] public decimal? NetAmount { get; set; }
         [Column("payment_reference")] public string? PaymentReference { get; set; }
@@ -418,6 +420,9 @@ namespace Retrack.API.Models
         [Required]
         [Column("fee_amount")]
         public decimal FeeAmount { get; set; }
+
+        [Column("fee_policy"), MaxLength(40)]
+        public string FeePolicy { get; set; } = Retrack.API.Services.Shared.PlatformFees.Legacy;
 
         // Thông tin chi tiết để giữ nguyên giao dịch phí đã phát sinh từ schema legacy.
         [Column("payer_id")]
