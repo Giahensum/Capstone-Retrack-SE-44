@@ -130,13 +130,13 @@ public sealed partial class EmployeeCollectionService(AppDbContext db, ICloudina
         var items = await db.PickupRequestItems.AsNoTracking().Where(i => i.PickupRequestId == pickup.Id)
             .OrderBy(i => i.MaterialType).ThenBy(i => i.Id)
             .Select(i => new ClassificationItemDto(i.Id, i.MaterialType, i.WeightKg, i.PricePerKg, i.SubTotal)).ToListAsync(ct);
+        var money = Retrack.API.Services.Shared.PlatformFees.Pickup(items.Sum(i => i.SubTotal), pickup.PlatformFeePercentage, pickup.FeePolicy);
         return new(pickup.Id, pickup.Status, pickup.Address, pickup.Latitude, pickup.Longitude,
             checkIn == null ? null : new(checkIn.ImageUrl, checkIn.Latitude, checkIn.Longitude,
                 checkIn.AccuracyMeters, checkIn.DistanceMeters, checkIn.CheckedInAt), checkIn?.Revision ?? 0,
             pickup.Status == "IN_PROGRESS" && checkIn != null, items, items.Sum(i => i.WeightKg), items.Sum(i => i.SubTotal),
             new(CollectionValidation.RadiusMeters, CollectionValidation.MaxAccuracyMeters, CollectionValidation.MaxLocationAgeSeconds),
-            pickup.PlatformFeePercentage, decimal.Round(items.Sum(i => i.SubTotal) * pickup.PlatformFeePercentage / 100, 2),
-            items.Sum(i => i.SubTotal) - decimal.Round(items.Sum(i => i.SubTotal) * pickup.PlatformFeePercentage / 100, 2));
+            pickup.PlatformFeePercentage, money.Fee, money.SellerReceives, pickup.FeePolicy, money.BuyerTotal);
     }
 
     public async Task<IReadOnlyList<MaterialReferenceDto>> MaterialsAsync(Guid userId, CancellationToken ct)

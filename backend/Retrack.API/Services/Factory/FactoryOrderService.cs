@@ -138,7 +138,8 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
                 VatPercentage = batch.VatPercentage ?? 0, VatAmount = batch.VatAmount ?? 0,
                 InvoiceTotalAmount = batch.InvoiceTotalAmount ?? 0, FeeAmount = batch.PlatformFeeAmount ?? 0,
                 NetPayableAmount = batch.NetAmount ?? 0, PaymentReference = batch.PaymentReference,
-                SettledAt = batch.SettledAt, FeePercentage = existing!.FeePercentage ?? 0
+                SettledAt = batch.SettledAt, FeePercentage = existing!.FeePercentage ?? 0,
+                FeePolicy = batch.FeePolicy, BuyerTotalAmount = (batch.NetAmount ?? 0) + (batch.PlatformFeeAmount ?? 0)
             }, message: "Đơn hàng đã được quyết toán; trả lại kết quả đã lưu.");
         }
         var qc = batch.QualityCheck;
@@ -165,9 +166,9 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
             return ServiceResult<OrderSettlementResponse>.Invalid("Cần ghi căn cứ áp dụng không chịu VAT hoặc mức giảm 8%.");
         var feeText = await Db.SystemConfigs.AsNoTracking().Where(x => x.ConfigKey == "PLATFORM_FEE_PERCENTAGE")
             .Select(x => x.ConfigValue).FirstOrDefaultAsync(ct);
-        var feePercent = decimal.TryParse(feeText, System.Globalization.NumberStyles.Number,
-            System.Globalization.CultureInfo.InvariantCulture, out var configuredFee) ? configuredFee : 5m;
-        if (feePercent is < 0 or > 100) feePercent = 5m;
+        var feePercent = batch.FeePolicy == PlatformFees.BuyerSeparate
+            ? batch.FeePercentageSnapshot ?? throw new InvalidOperationException("Lô mới thiếu snapshot tỷ lệ phí.")
+            : PlatformFees.Rate(feeText);
         var quotedTotal = decimal.Round(qc.ActualWeightKg * request.AgreedPricePerKg, 0, MidpointRounding.AwayFromZero);
         var total = request.PriceIncludesVat && request.VatPercentage > 0
             ? decimal.Round(quotedTotal / (1m + request.VatPercentage / 100m), 0, MidpointRounding.AwayFromZero)
@@ -175,7 +176,8 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
         var invoiceTotal = request.PriceIncludesVat ? quotedTotal :
             total + decimal.Round(total * request.VatPercentage / 100m, 0, MidpointRounding.AwayFromZero);
         var vat = invoiceTotal - total;
-        var fee = decimal.Round(total * feePercent / 100m, 0, MidpointRounding.AwayFromZero);
+        var money = PlatformFees.Settlement(total, invoiceTotal, feePercent, batch.FeePolicy);
+        var fee = money.Fee;
         qc.AgreedPricePerKg = request.AgreedPricePerKg;
         qc.GrossAmount = total;
         qc.VatTreatment = vatTreatment;
@@ -189,7 +191,7 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
         qc.VatLegalBasis = request.VatLegalBasis?.Trim();
         qc.PlatformFeePercentage = feePercent;
         qc.PlatformFeeAmount = fee;
-        qc.NetAmount = invoiceTotal - fee;
+        qc.NetAmount = money.SellerReceives;
         batch.AgreedPricePerKg = request.AgreedPricePerKg;
         batch.GrossAmount = total;
         batch.VatTreatment = vatTreatment;
@@ -198,7 +200,7 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
         batch.InvoiceTotalAmount = invoiceTotal;
         batch.PriceIncludesVat = request.PriceIncludesVat;
         batch.PlatformFeeAmount = fee;
-        batch.NetAmount = invoiceTotal - fee;
+        batch.NetAmount = money.SellerReceives;
         batch.QualityCheck = qc;
         batch.PaymentReference = request.PaymentReference.Trim();
         batch.SettledAt = DateTime.UtcNow;
@@ -207,7 +209,7 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
         Db.PlatformTransactions.Add(new Retrack.API.Models.PlatformTransaction
         {
             SourceType = "BATCH_ORDER", SourceId = batch.Id, FeeAmount = fee,
-            PayerId = factory.OwnerId, TransactionAmount = total, FeePercentage = feePercent,
+            PayerId = factory.OwnerId, TransactionAmount = total, FeePercentage = feePercent, FeePolicy = batch.FeePolicy,
             Description = $"Factory settlement at {feePercent}%"
         });
         await Db.SaveChangesAsync(ct);
@@ -223,7 +225,8 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
             VatAmount = vat,
             InvoiceTotalAmount = invoiceTotal,
             FeeAmount = fee,
-            NetPayableAmount = invoiceTotal - fee,
+            NetPayableAmount = money.SellerReceives,
+            BuyerTotalAmount = money.BuyerTotal, FeePolicy = batch.FeePolicy,
             PaymentReference = batch.PaymentReference,
             SettledAt = batch.SettledAt,
             FeePercentage = feePercent

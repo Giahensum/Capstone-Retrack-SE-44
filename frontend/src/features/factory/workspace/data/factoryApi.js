@@ -118,6 +118,8 @@ export function mapOrder(order) {
   return {
     id: order.id,
     batchId: order.batchCode || order.batchId,
+    feePolicy: order.feePolicy || "LEGACY_SELLER_DEDUCTION_V1",
+    feePercentage: order.platformFeePercentage,
     depotId: order.depotId,
     material: order.materialType,
     kg: order.estimatedWeightKg,
@@ -157,6 +159,8 @@ export function mapOrder(order) {
       fee: order.feeAmount || 0,
       feePercentage: order.platformFeePercentage ?? 1,
       payable: order.netPayableAmount || 0,
+      feePolicy: order.feePolicy || "LEGACY_SELLER_DEDUCTION_V1",
+      buyerTotal: order.buyerTotalAmount ?? ((order.netPayableAmount || 0) + (order.feeAmount || 0)),
       reference: order.paymentReference || "",
       at: order.settledAt,
     } : null,

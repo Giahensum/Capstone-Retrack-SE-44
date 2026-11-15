@@ -920,6 +920,28 @@ CREATE TABLE IF NOT EXISTS depot_buying_prices (
 );
 -- RETRACK_DEPOT_BUYING_PRICES_V1_END
 
+-- RETRACK_BUYER_FEES_V1_BEGIN
+-- Đơn/lô đã có giữ chính sách cũ và tiền đã chốt. Code tạo mới ghi BUYER_SEPARATE_V1.
+ALTER TABLE pickup_requests ADD COLUMN IF NOT EXISTS fee_policy VARCHAR(40) NOT NULL DEFAULT 'LEGACY_SELLER_DEDUCTION_V1';
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS fee_policy VARCHAR(40) NOT NULL DEFAULT 'LEGACY_SELLER_DEDUCTION_V1';
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS fee_percentage_snapshot NUMERIC(5,2);
+ALTER TABLE platform_transactions ADD COLUMN IF NOT EXISTS fee_policy VARCHAR(40) NOT NULL DEFAULT 'LEGACY_SELLER_DEDUCTION_V1';
+DO $$
+DECLARE table_name TEXT;
+BEGIN
+    FOREACH table_name IN ARRAY ARRAY['pickup_requests', 'inventory_batches', 'platform_transactions'] LOOP
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = table_name::regclass AND conname = 'ck_' || table_name || '_fee_policy') THEN
+            EXECUTE format('ALTER TABLE %I ADD CONSTRAINT %I CHECK (fee_policy IN (''LEGACY_SELLER_DEDUCTION_V1'', ''BUYER_SEPARATE_V1''))', table_name, 'ck_' || table_name || '_fee_policy');
+        END IF;
+    END LOOP;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'inventory_batches'::regclass AND conname = 'ck_batch_fee_snapshot') THEN
+        ALTER TABLE inventory_batches ADD CONSTRAINT ck_batch_fee_snapshot CHECK (
+            (fee_percentage_snapshot IS NULL OR fee_percentage_snapshot BETWEEN 0 AND 100)
+            AND (fee_policy <> 'BUYER_SEPARATE_V1' OR fee_percentage_snapshot IS NOT NULL));
+    END IF;
+END $$;
+-- RETRACK_BUYER_FEES_V1_END
+
 -- RETRACK_SCHEMA_END
 
 -- RETRACK_SEED_BEGIN

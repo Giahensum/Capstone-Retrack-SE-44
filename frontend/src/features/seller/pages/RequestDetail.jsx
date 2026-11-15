@@ -271,12 +271,12 @@ export default function RequestDetail() {
               <span className="text-sm font-bold text-d-on-surface">Tổng tiền thanh toán</span>
               {req.platformFeePercentage > 0 && (
                 <p className="text-xs text-d-on-surface-variant mt-0.5">
-                  Phí dịch vụ ({req.platformFeePercentage}%) do kho vựa chi trả riêng cho sàn RETRACK, người bán nhận 100% tiền hàng.
+                  {req.feePolicy === 'BUYER_SEPARATE_V1' ? `Phí dịch vụ (${req.platformFeePercentage}%) do kho vựa trả riêng; bạn nhận đủ tiền hàng.` : `Đơn cũ: phí dịch vụ ${req.platformFeePercentage}% được khấu trừ theo chính sách đã chốt.`}
                 </p>
               )}
             </div>
             <span className="text-xl font-bold text-d-primary">
-              {formatCurrency(req.grossAmount)}
+              {formatCurrency(req.netAmount)}
             </span>
           </div>
         </div>
@@ -352,7 +352,7 @@ export default function RequestDetail() {
             </h3>
             <p className="text-xs text-d-on-surface-variant mt-1">
               Vui lòng kiểm tra tài khoản ngân hàng của bạn. Nếu đã nhận đủ số tiền{' '}
-              <strong className="text-d-primary">{formatCurrency(req.grossAmount ?? req.netAmount)}</strong>, hãy bấm xác nhận.
+              <strong className="text-d-primary">{formatCurrency(req.netAmount)}</strong>, hãy bấm xác nhận.
             </p>
           </div>
 

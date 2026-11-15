@@ -484,7 +484,9 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         Assert.Equal(72000m, settled.Data.VatAmount);
         Assert.Equal(792000m, settled.Data.InvoiceTotalAmount);
         Assert.Equal(36000m, settled.Data.FeeAmount);
-        Assert.Equal(756000m, settled.Data.NetPayableAmount);
+        Assert.Equal(792000m, settled.Data.NetPayableAmount);
+        Assert.Equal(828000m, settled.Data.BuyerTotalAmount);
+        Assert.Equal(Retrack.API.Services.Shared.PlatformFees.BuyerSeparate, settled.Data.FeePolicy);
         var platformTransaction = await db.PlatformTransactions.SingleAsync(x => x.SourceType == "BATCH_ORDER" && x.SourceId == first.Id);
         Assert.Equal(factoryOwnerId, platformTransaction.PayerId);
         Assert.Equal(720000m, platformTransaction.TransactionAmount);
@@ -536,7 +538,7 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Success, (await qc.QualityAsync(factoryOwnerId, nextBatch.Id, new() { Accept = true, PurityPercent = 95, Grade = "A" }, default)).Outcome);
         await db.SystemConfigs.Where(x => x.ConfigKey == "PLATFORM_FEE_PERCENTAGE").ExecuteUpdateAsync(x => x.SetProperty(p => p.ConfigValue, "7.00"));
         var secondSettlement = await orders.SettleAsync(factoryOwnerId, nextBatch.Id, new() { AgreedPricePerKg = 12000, VatTreatment = "TAXABLE", VatPercentage = 10, InvoiceNumber = "HD-TEST-002", InvoiceDate = DateOnly.FromDateTime(DateTime.UtcNow), SellerTaxCode = "0314892841", PaymentReference = "SIM-FACTORY-002" }, default);
-        Assert.Equal(7m, secondSettlement.Data!.FeePercentage);
+        Assert.Equal(5m, secondSettlement.Data!.FeePercentage); // Lô đã tạo trước khi config đổi sang 7%.
         Assert.Equal(5m, (await db.PlatformTransactions.SingleAsync(x => x.SourceId == first.Id)).FeePercentage);
         }
         finally

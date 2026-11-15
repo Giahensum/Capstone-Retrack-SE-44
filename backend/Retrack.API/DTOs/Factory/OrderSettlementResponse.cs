@@ -15,4 +15,6 @@ public sealed record OrderSettlementResponse
     public required string? PaymentReference { get; init; }
     public required DateTime? SettledAt { get; init; }
     public required decimal FeePercentage { get; init; }
+    public string FeePolicy { get; init; } = Retrack.API.Services.Shared.PlatformFees.Legacy;
+    public decimal BuyerTotalAmount { get; init; }
 }

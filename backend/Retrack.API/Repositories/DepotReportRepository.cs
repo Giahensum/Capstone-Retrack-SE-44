@@ -37,7 +37,8 @@ public sealed partial class DepotReportRepository(AppDbContext db) : IDepotRepor
         var costs = await (from t in db.PlatformTransactions.AsNoTracking()
             join p in db.PickupRequests on t.SourceId equals p.Id
             where t.SourceType == "PICKUP_REQUEST" && p.TargetDepotId == depotId && t.CreatedAt >= start && t.CreatedAt < end
-            group p by t.CreatedAt.AddHours(7).Date into g select new DepotDailyAmount(g.Key, g.Sum(p => p.NetAmount))).ToListAsync();
+            group new { p, t } by t.CreatedAt.AddHours(7).Date into g select new DepotDailyAmount(g.Key,
+                g.Sum(x => x.p.NetAmount + (x.p.FeePolicy == Retrack.API.Services.Shared.PlatformFees.BuyerSeparate ? x.t.FeeAmount : 0)))).ToListAsync();
         return (revenue, costs);
     }
     public async Task<DepotDashboardCounts> DashboardCountsAsync(Guid depotId, DateTime day) => new(

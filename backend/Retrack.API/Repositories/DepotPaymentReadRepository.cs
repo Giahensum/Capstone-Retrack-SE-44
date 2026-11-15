@@ -60,5 +60,5 @@ public sealed class DepotPaymentReadRepository(AppDbContext db) : IDepotPaymentR
             p.AcceptedCollector == null ? null : p.AcceptedCollector.FullName,
             p.Address, p.Status, p.GrossAmount, p.PlatformFeePercentage, p.PlatformFeeAmount, p.NetAmount,
             p.PaymentProofUrl, p.CheckinImageUrl, p.CreatedAt,
-            p.Items.OrderBy(i => i.Id).Select(i => new PaymentItemDto(i.MaterialType, i.WeightKg, i.PricePerKg, i.SubTotal)).ToList()));
+            p.Items.OrderBy(i => i.Id).Select(i => new PaymentItemDto(i.MaterialType, i.WeightKg, i.PricePerKg, i.SubTotal)).ToList(), p.FeePolicy, p.NetAmount + p.PlatformFeeAmount));
 }

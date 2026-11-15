@@ -22,7 +22,8 @@ public sealed partial class DepotReportRepository
             ), rows AS (
                 SELECT 'FACTORY' AS channel,
                     CASE WHEN b.settled_at IS NOT NULL THEN b.gross_amount ELSE q.gross_amount END AS gross,
-                    CASE WHEN b.settled_at IS NOT NULL THEN b.platform_fee_amount ELSE q.platform_fee_amount END AS fee,
+                    CASE WHEN b.fee_policy = 'BUYER_SEPARATE_V1' THEN 0
+                         WHEN b.settled_at IS NOT NULL THEN b.platform_fee_amount ELSE q.platform_fee_amount END AS fee,
                     CASE WHEN b.settled_at IS NOT NULL THEN b.net_amount ELSE q.net_amount END AS settlement,
                     CASE WHEN b.settled_at IS NOT NULL THEN COALESCE(b.vat_amount, 0) ELSE COALESCE(q.vat_amount, 0) END AS vat,
                     CASE WHEN s.missing = 0 AND s.quantity = b.declared_weight_kg THEN ROUND(s.cost, 0) ELSE NULL END AS cost,
