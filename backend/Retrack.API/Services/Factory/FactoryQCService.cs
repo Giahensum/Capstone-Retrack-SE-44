@@ -1,0 +1,110 @@
+using Microsoft.EntityFrameworkCore;
+using Retrack.API.Data;
+using Retrack.API.DTOs.Factory;
+using Retrack.API.Models;
+using Retrack.API.Models.Enums;
+using Retrack.API.Services.Interfaces;
+using Retrack.API.Services.Shared;
+
+namespace Retrack.API.Services.Factory;
+
+public class FactoryQCService(AppDbContext db, IConfiguration configuration, FactoryAttachmentService? attachments = null) : FactoryServiceBase(db), IQCService
+{
+    public async Task<ServiceResult<WeighResponse>> WeighAsync(Guid userId, Guid id, WeighRequest request, CancellationToken ct)
+    {
+        if (request.GrossWeightKg is <= 0 or > 1_000_000_000 || request.TareWeightKg < 0 ||
+            decimal.Round(request.GrossWeightKg, 3) != request.GrossWeightKg || decimal.Round(request.TareWeightKg, 3) != request.TareWeightKg)
+            return ServiceResult<WeighResponse>.Invalid("Khối lượng phải hợp lệ và tối đa 3 chữ số thập phân (0,001 kg).");
+        if (request.GrossWeightKg <= request.TareWeightKg)
+            return ServiceResult<WeighResponse>.Invalid("Khối lượng tổng phải lớn hơn khối lượng bì.");
+        var factory = await CurrentFactory(userId, ct);
+        await using var tx = Db.Database.IsRelational() ? await Db.Database.BeginTransactionAsync(ct) : null;
+        var batch = await LockOrderAsync(id, factory.Id, ct);
+        if (batch is null) return ServiceResult<WeighResponse>.NotFound("Không tìm thấy đơn hàng.");
+        if (batch.SettledAt != null || batch.Status is not ("RECEIVED" or "WEIGHED"))
+            return ServiceResult<WeighResponse>.Conflict("Chỉ cân sau khi nhận hàng và trước khi chốt KCS.");
+        if (attachments is not null && request.TicketImageUrl != batch.QualityCheck?.TicketImageUrl && !attachments.IsOwnedUrl(request.TicketImageUrl, userId))
+            return ServiceResult<WeighResponse>.Invalid("Phiếu cân phải được tải lên qua chức năng đính kèm của nhà máy.");
+        var net = request.GrossWeightKg - request.TareWeightKg;
+        var difference = batch.DeclaredWeightKg == 0 ? 0 : (net - batch.DeclaredWeightKg) / batch.DeclaredWeightKg * 100m;
+        var threshold = configuration.GetValue<decimal?>("Factory:WeightDiscrepancyPercentage") ?? 5m;
+        if (Math.Abs(difference) > threshold && string.IsNullOrWhiteSpace(request.Note))
+            return ServiceResult<WeighResponse>.Invalid($"Lệch cân trên {threshold}%: cần ghi chú biên bản.");
+        var qc = batch.QualityCheck;
+        var notifyWeigh = batch.Status != "WEIGHED" || qc == null || qc.GrossWeightKg != request.GrossWeightKg ||
+            qc.TareWeightKg != request.TareWeightKg || qc.TicketNumber != request.TicketNumber?.Trim() ||
+            qc.TicketImageUrl != request.TicketImageUrl || qc.QualityNote != request.Note?.Trim();
+        if (qc is null)
+        {
+            qc = new BatchQualityCheck
+            {
+                BatchId = batch.Id, FactoryId = factory.Id, ActualWeightKg = net, Grade = "PENDING",
+                AgreedPricePerKg = 0, GrossAmount = 0, NetAmount = 0, IsAccepted = false
+            };
+            Db.BatchQualityChecks.Add(qc);
+        }
+        qc.ActualWeightKg = net;
+        qc.GrossWeightKg = request.GrossWeightKg;
+        qc.TareWeightKg = request.TareWeightKg;
+        qc.DifferencePercentage = decimal.Round(difference, 2);
+        qc.TicketNumber = request.TicketNumber?.Trim();
+        qc.TicketImageUrl = request.TicketImageUrl;
+        qc.QualityNote = request.Note?.Trim();
+        qc.IsAccepted = false;
+        batch.ActualWeightKg = net;
+        batch.Status = "WEIGHED";
+        if (notifyWeigh) await NotifyDepotAsync(batch.DepotId, "Nhà máy đã cân lô hàng", $"{factory.Name} đã cập nhật cân lô {batch.Code ?? batch.Id.ToString()}. Xem khối lượng thực tế và độ lệch trong chi tiết lô.", batch.Id, ct: ct);
+        await Db.SaveChangesAsync(ct);
+        if (tx != null) await tx.CommitAsync(ct);
+        return ServiceResult<WeighResponse>.Success(data: new WeighResponse
+        {
+            Id = batch.Id,
+            Status = batch.Status,
+            GrossWeightKg = request.GrossWeightKg,
+            TareWeightKg = request.TareWeightKg,
+            NetWeightKg = net,
+            DepotWeightKg = batch.DeclaredWeightKg,
+            DifferencePercentage = decimal.Round(difference, 2),
+            Flagged = Math.Abs(difference) > threshold
+        });
+    }
+
+    public async Task<ServiceResult<QualityResponse>> QualityAsync(Guid userId, Guid id, QualityRequest request, CancellationToken ct)
+    {
+        var factory = await CurrentFactory(userId, ct);
+        await using var tx = Db.Database.IsRelational() ? await Db.Database.BeginTransactionAsync(ct) : null;
+        var batch = await LockOrderAsync(id, factory.Id, ct);
+        if (batch is null) return ServiceResult<QualityResponse>.NotFound("Không tìm thấy đơn hàng.");
+        if (batch.SettledAt != null || batch.Status != "WEIGHED" || batch.QualityCheck is null)
+            return ServiceResult<QualityResponse>.Conflict("Cần hoàn tất cân trước khi chốt KCS.");
+        if (request.Accept && request.PurityPercent < factory.MinimumPurityPercent)
+            return ServiceResult<QualityResponse>.Invalid($"Độ tinh khiết thấp hơn ngưỡng nhà máy ({factory.MinimumPurityPercent}%).");
+        if (!request.Accept && (string.IsNullOrWhiteSpace(request.Note) || string.IsNullOrWhiteSpace(request.Resolution)))
+            return ServiceResult<QualityResponse>.Invalid("Từ chối cần lý do và hướng xử lý.");
+        var qc = batch.QualityCheck;
+        qc.PurityPercent = request.PurityPercent;
+        qc.MoisturePercent = request.MoisturePercent;
+        qc.ContaminationPercent = request.ContaminationPercent;
+        qc.Grade = request.Grade;
+        qc.Resolution = request.Accept ? null : request.Resolution;
+        qc.QualityNote = request.Accept ? request.Note?.Trim() : $"{request.Resolution}: {request.Note?.Trim()}";
+        qc.IsAccepted = request.Accept;
+        batch.Status = request.Accept ? "VERIFIED" : "REJECTED";
+        batch.FactoryDecidedAt = DateTime.UtcNow;
+        batch.RejectionReason = request.Accept ? null : request.Note?.Trim();
+        await NotifyDepotAsync(batch.DepotId, request.Accept ? "Lô hàng đã đạt KCS" : "Nhà máy từ chối sau KCS",
+            request.Accept ? $"{factory.Name} đã chấp nhận KCS lô {batch.Code ?? batch.Id.ToString()}." : $"Lô {batch.Code ?? batch.Id.ToString()}: {request.Note?.Trim()}. Hướng xử lý: {request.Resolution}. Hàng chưa được tính là đã trả về kho.", batch.Id, ct: ct);
+        await Db.SaveChangesAsync(ct);
+        if (tx != null) await tx.CommitAsync(ct);
+        return ServiceResult<QualityResponse>.Success(data: new QualityResponse
+        {
+            Id = batch.Id,
+            Status = batch.Status,
+            PurityPercent = qc.PurityPercent,
+            MoisturePercent = qc.MoisturePercent,
+            ContaminationPercent = qc.ContaminationPercent,
+            Grade = qc.Grade,
+            IsAccepted = qc.IsAccepted
+        }, message: request.Accept ? "Đã chấp nhận kết quả KCS." : "Đã ghi nhận từ chối nghiệm thu.");
+    }
+}

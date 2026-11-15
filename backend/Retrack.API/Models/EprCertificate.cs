@@ -1,6 +1,9 @@
-﻿using Retrack.API.Models.Enums;
+using Retrack.API.Models.Enums;
+using System.ComponentModel.DataAnnotations.Schema;
+
 namespace Retrack.API.Models;
 
+[NotMapped]
 public class EprCertificate
 {
     public Guid Id { get; set; }
@@ -12,3 +15,5 @@ public class EprCertificate
     public DateTime IssuedAt { get; set; } = DateTime.UtcNow;
     public BatchOrder BatchOrder { get; set; } = null!;
 }
+
+

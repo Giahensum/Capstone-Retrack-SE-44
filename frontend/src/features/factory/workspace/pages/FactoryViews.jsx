@@ -1,0 +1,928 @@
+import { useEffect, useState } from "react";
+import {
+  Attachment,
+  Button,
+  Card,
+  Confirm,
+  Empty,
+  Field,
+  Modal,
+  Pagination,
+  PageHead,
+  Status,
+  useFactory,
+} from "../components/FactoryUI";
+import { materials, money, number, today } from "../data/factoryState";
+import { mapOrder } from "../data/factoryApi";
+import { useFactoryDashboard, useFactoryPage, useFactoryPrices } from "../data/useFactoryData";
+import ContractDocument from "../../../../components/ui/ContractDocument";
+
+const MaterialSelect = ({ value, onChange, all = false }) => (
+  <select value={value} onChange={onChange}>
+    {all && <option value="">Tất cả vật liệu</option>}
+    {Object.entries(materials).map(([key, name]) => (
+      <option key={key} value={key}>
+        {name}
+      </option>
+    ))}
+  </select>
+);
+export function Dashboard({ navigate }) {
+  const { state } = useFactory();
+  const [period, setPeriod] = useState("month");
+  const { data, isPending, error } = useFactoryDashboard(period);
+  const dashboard = data || (period === "month" ? state.dashboard : null);
+  const weight = dashboard?.periodPurchasedKg ?? 0;
+  const spend = dashboard?.periodNetPayment ?? 0;
+  const fees = dashboard?.periodFeeAmount ?? 0;
+  const feePercentage = state.profile?.platformFeePercentage ?? 1;
+  const pending = (dashboard?.priorityOrders || []).map(mapOrder).filter((o) => ["DELIVERED", "RECEIVED", "WEIGHED"].includes(o.status));
+  const ready = (dashboard?.priorityOrders || []).map(mapOrder).filter((o) => o.status === "VERIFIED");
+  const volume = (dashboard?.materialVolumes || []).map((item) => ({ material: item.materialType, kg: item.weightKg }));
+  const max = Math.max(1, ...volume.map((x) => x.kg));
+  const trend = Array.from({ length: 6 }, (_, i) => {
+    const date = new Date();
+    date.setDate(1);
+    date.setMonth(date.getMonth() - 5 + i);
+    return {
+      label: `T${date.getMonth() + 1}`,
+      value: dashboard?.sixMonthPayments?.find((item) => item.year === date.getFullYear() && item.month === date.getMonth() + 1)?.netPayment || 0,
+    };
+  });
+  return (
+    <>
+      <PageHead
+        eyebrow="TỔNG QUAN VẬN HÀNH"
+        title={`Chào ngày mới, ${state.profile.companyName || "nhà máy"}.`}
+        text="Theo dõi nguồn hàng, chất lượng và chi phí thu mua tại một nơi."
+      >
+        <Button onClick={() => navigate("marketplace")}>
+          + Tìm nguồn nguyên liệu
+        </Button>
+      </PageHead>
+      <div className="overview-banner">
+        <div>
+          <span className="eyebrow">VIỆC CẦN XỬ LÝ</span>
+          <h2>{dashboard?.pendingQcCount ?? 0} lô hàng đang chờ nhận hoặc KCS</h2>
+          <p>Hoàn tất kiểm tra chất lượng để chuyển sang quyết toán.</p>
+        </div>
+        <Button secondary onClick={() => navigate("qc")}>
+          Đến trạm cân →
+        </Button>
+      </div>
+      <div className="section-toolbar">
+        <h2>Hiệu quả thu mua</h2>
+        <select
+          aria-label="Kỳ thống kê"
+          value={period}
+          onChange={(e) => setPeriod(e.target.value)}
+        >
+          <option value="day">Hôm nay</option>
+          <option value="month">Tháng này</option>
+          <option value="year">Năm nay</option>
+        </select>
+      </div>
+      {isPending && <p role="status">Đang tải số liệu…</p>}
+      {error && <p role="alert">{error.message}</p>}
+      <div className="kpi-grid">
+        {[
+          [
+            "Khối lượng đã mua",
+            `${number(weight / 1000)} tấn`,
+            "Theo đơn đã quyết toán",
+          ],
+          ["Thực trả cho vựa", money(spend), "Theo số tiền phải chuyển đã chốt từng lô"],
+          [
+            "Phí nền tảng tích lũy",
+            money(fees),
+            `Tỷ lệ tham khảo ${feePercentage}% • Chưa đối soát`,
+          ],
+          ["Chờ quyết toán", `${dashboard?.pendingSettlementCount ?? 0} đơn`, "Đã nghiệm thu chất lượng"],
+        ].map(([label, value, hint], i) => (
+          <div className="kpi" key={label}>
+            <div className="kpi-label">
+              <span>{label}</span>
+              <span className="kpi-icon">{["↙", "₫", "▤", "◷"][i]}</span>
+            </div>
+            <strong>{value}</strong>
+            <small>{hint}</small>
+          </div>
+        ))}
+      </div>
+      <div className="two-columns">
+        <Card
+          title="Cơ cấu nguyên liệu đã mua"
+          action={<span className="muted">Theo kỳ đã chọn</span>}
+        >
+          {volume.length ? (
+            volume.map((v) => (
+              <div className="bar-row" key={v.material}>
+                <div>
+                  <strong>{materials[v.material]}</strong>
+                  <span>{number(v.kg)} kg</span>
+                </div>
+                <div className="bar-track">
+                  <span style={{ width: `${(v.kg / max) * 100}%` }} />
+                </div>
+              </div>
+            ))
+          ) : (
+            <Empty text="Chưa có giao dịch trong kỳ" />
+          )}
+          <div className="summary-line">
+            Giá mua trung bình trước phí{" "}
+            <strong>
+              {money(
+                weight ? (dashboard?.periodGrossAmount ?? 0) / weight : 0,
+              )}
+              /kg
+            </strong>
+          </div>
+        </Card>
+        <Card title="Thực trả trong 6 tháng gần nhất">
+          <div className="trend-chart">
+            {trend.map((t, i) => (
+              <div className="trend-col" key={i}>
+                <small>{money(t.value)}</small>
+                <div className="trend-track">
+                  <div
+                    style={{
+                      height: `${(t.value / Math.max(1, ...trend.map((x) => x.value))) * 100}%`,
+                    }}
+                  />
+                </div>
+                <span>{t.label}</span>
+              </div>
+            ))}
+          </div>
+          <p className="muted">
+            Tiền chuyển cho vựa theo từng quyết toán. Lô mới: phí Factory trả riêng, không trừ tiền của vựa.
+          </p>
+        </Card>
+      </div>
+      <Card
+        title="Ưu tiên xử lý"
+        action={
+          <Button secondary onClick={() => navigate("orders")}>
+            Tất cả đơn hàng →
+          </Button>
+        }
+      >
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Đơn / Vật liệu</th>
+                <th>Vựa cung cấp</th>
+                <th>Khối lượng khai báo</th>
+                <th>Trạng thái</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {[...pending, ...ready].map((o) => (
+                <tr key={o.id}>
+                  <td>
+                    <strong>{o.id}</strong>
+                    <small>{materials[o.material]}</small>
+                  </td>
+                  <td>{o.depotName}</td>
+                  <td>{number(o.kg)} kg</td>
+                  <td>
+                    <Status value={o.status} />
+                  </td>
+                  <td>
+                    <Button
+                      secondary
+                      onClick={() =>
+                        navigate(
+                          o.status === "VERIFIED" ? "settlements" : "qc",
+                          o.id,
+                        )
+                      }
+                    >
+                      Xử lý →
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {pending.length + ready.length === 0 && (
+            <Empty text="Không có đơn cần xử lý" />
+          )}
+        </div>
+      </Card>
+    </>
+  );
+}
+export function Marketplace({ navigate }) {
+  const { act } = useFactory();
+  const [filters, setFilters] = useState({
+    search: "",
+    material: "",
+    min: "",
+    max: "",
+    direct: false,
+  });
+  const [selected, setSelected] = useState(null);
+  const [reason, setReason] = useState("");
+  const [rejecting, setRejecting] = useState(false);
+  const [page, setPage] = useState(1);
+  const set = (key, value) => { setPage(1); setFilters((f) => ({ ...f, [key]: value })); };
+  const { data, isPending, error } = useFactoryPage("marketplace", {
+    page, search: filters.search, material: filters.material,
+    minWeightKg: filters.min, maxWeightKg: filters.max, directOnly: filters.direct,
+  });
+  const batches = data?.items || [];
+  const depot = selected && { name: selected.depotName, address: selected.depotAddress, phone: selected.depotPhone };
+  return (
+    <>
+      <PageHead
+        title="Sàn nguyên liệu"
+        text="Nhận nguồn hàng phù hợp. Đơn giá được thỏa thuận sau khi cân và kiểm tra chất lượng."
+      />
+      <div className="tabs">
+        <button
+          className={!filters.direct ? "active" : ""}
+          onClick={() => set("direct", false)}
+        >
+          Lô công khai
+        </button>
+        <button
+          className={filters.direct ? "active" : ""}
+          onClick={() => set("direct", true)}
+        >
+          Yêu cầu chỉ định
+        </button>
+      </div>
+      {filters.direct && (
+        <div className="info-box">
+          Yêu cầu của vựa mới cần được duyệt. Vựa đã được duyệt được chuyển
+          thẳng sang đơn hàng; vựa bị chặn không được chỉ định.
+        </div>
+      )}
+      <div className="filter-bar">
+        <Field
+          label="Tìm kiếm"
+          placeholder="Mã lô, tên vựa…"
+          value={filters.search}
+          onChange={(e) => set("search", e.target.value)}
+        />
+        <Field label="Vật liệu">
+          <MaterialSelect
+            all
+            value={filters.material}
+            onChange={(e) => set("material", e.target.value)}
+          />
+        </Field>
+        <Field
+          label="Từ (kg)"
+          type="number"
+          min="0"
+          value={filters.min}
+          onChange={(e) => set("min", e.target.value)}
+        />
+        <Field
+          label="Đến (kg)"
+          type="number"
+          min="0"
+          value={filters.max}
+          onChange={(e) => set("max", e.target.value)}
+        />
+      </div>
+      <div className="section-toolbar">
+        <span className="muted">
+          {data?.totalCount ?? 0} lô khả dụng · Chưa có dữ liệu khoảng cách vận chuyển
+        </span>
+        <Button
+          secondary
+          onClick={() => {
+            setPage(1);
+            setFilters({
+              search: "",
+              material: "",
+              min: "",
+              max: "",
+              direct: filters.direct,
+            });
+          }}
+        >
+          Xóa bộ lọc
+        </Button>
+      </div>
+      <div className="batch-grid">
+        {batches.map((b) => {
+          const d = { name: b.depotName, distance: null };
+          return (
+            <article className="batch-card" key={b.id}>
+              <div className={`material-cover material-${b.material}`} style={b.imageUrl ? { backgroundImage: `linear-gradient(#0005, #0008), url("${b.imageUrl}")`, backgroundSize: "cover", backgroundPosition: "center", color: "white" } : undefined}>
+                <span>{b.material}</span>
+                <span className="material-symbol">
+                  {b.material === "PET"
+                    ? "♻"
+                    : b.material === "IRON"
+                      ? "▰"
+                      : "▱"}
+                </span>
+                <small>NGUYÊN LIỆU TÁI CHẾ</small>
+              </div>
+              <div className="batch-body">
+                <div className="batch-meta">
+                  <span>{b.batchCode || b.id}</span>
+                  <span>{d.distance == null ? "— km" : `${d.distance} km`}</span>
+                </div>
+                <h2>{materials[b.material]}</h2>
+                <p>{d.name}</p>
+                <div className="batch-facts">
+                  <div>
+                    <small>Khối lượng dự kiến</small>
+                    <strong>{b.kg < 1000 ? `${number(b.kg)} kg` : `${number(b.kg / 1000)} tấn`}</strong>
+                  </div>
+                  <div>
+                    <small>Đơn giá</small>
+                    <strong>Sau KCS</strong>
+                  </div>
+                </div>
+                <p className="muted">Vựa chịu phí vận chuyển đến nhà máy.</p>
+                <Button
+                  secondary
+                  onClick={() => {
+                    setSelected(b);
+                    setRejecting(false);
+                    setReason("");
+                  }}
+                >
+                  Xem lô & {b.direct ? "duyệt yêu cầu" : "nhận hàng"} →
+                </Button>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+      {isPending && <p role="status">Đang tải lô hàng…</p>}
+      {error && <p role="alert">{error.message}</p>}
+      {!batches.length && !isPending && !error && (
+        <Card>
+          <Empty text="Không có lô phù hợp" />
+        </Card>
+      )}
+      <Pagination page={page} totalPages={data?.totalPages} totalCount={data?.totalCount} onChange={setPage} />
+      {selected && (
+        <Modal
+          title={`Chi tiết ${selected.batchCode || selected.id}`}
+          onClose={() => setSelected(null)}
+        >
+          <h3>
+            {materials[selected.material]} · {number(selected.kg)} kg
+          </h3>
+          <p>
+            <strong>{depot?.name || selected.depotName}</strong>
+            <br />
+            {depot?.address || selected.depotAddress}
+            <br />
+            {depot?.phone || selected.depotPhone}
+          </p>
+          {depot?.status && <Status value={depot.status} />}
+          <p>{selected.note}</p>
+          {selected.imageUrls?.length > 0 && <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 8, margin: "12px 0" }}>
+            {selected.imageUrls.map((url, index) => <a key={url} href={url} target="_blank" rel="noopener noreferrer"><img src={url} alt={`Ảnh vật liệu ${index + 1}`} style={{ width: "100%", height: 120, objectFit: "cover", borderRadius: 8 }} /></a>)}
+          </div>}
+          <div className="info-box">
+            Nhận lô sẽ tạo đơn chờ vận chuyển. Chưa chốt giá và chưa phát sinh
+            thanh toán.
+          </div>
+          {rejecting && (
+            <Field label="Lý do từ chối">
+              <textarea
+                required
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+              />
+            </Field>
+          )}
+          <div className="form-actions">
+            <Button secondary onClick={() => setSelected(null)}>
+              Đóng
+            </Button>
+            {selected.direct && (
+              <Button
+                danger
+                onClick={async () => {
+                  if (!rejecting) setRejecting(true);
+                  else if (
+                    await act(
+                      "REJECT_OFFER",
+                      { id: selected.id, reason },
+                      "Đã từ chối yêu cầu chỉ định.",
+                    )
+                  )
+                    setSelected(null);
+                }}
+              >
+                {rejecting ? "Xác nhận từ chối" : "Từ chối"}
+              </Button>
+            )}
+            <Button
+              onClick={async () => {
+                if (
+                  await act(
+                    "ACCEPT_BATCH",
+                    { id: selected.id },
+                    "Đã nhận lô. Đơn hàng đang chờ tài xế.",
+                  )
+                ) {
+                  setSelected(null);
+                  navigate("orders");
+                }
+              }}
+            >
+              Nhận lô hàng
+            </Button>
+          </div>
+        </Modal>
+      )}
+    </>
+  );
+}
+export function Demands() {
+  const { act, busy } = useFactory();
+  const [editing, setEditing] = useState(null);
+  const [remove, setRemove] = useState(null);
+  const [filter, setFilter] = useState("");
+  const [page, setPage] = useState(1);
+  const { data, isPending, error } = useFactoryPage("demands", { page, material: filter });
+  const demands = data?.items || [];
+  return (
+    <>
+      <PageHead
+        title="Nhu cầu thu mua"
+        text="Chia sẻ kế hoạch nguyên liệu để vựa chuẩn bị nguồn cung phù hợp."
+      >
+        <Button
+          onClick={() =>
+            setEditing({
+              material: "PET",
+              kg: "",
+              minPrice: "",
+              maxPrice: "",
+              deadline: "",
+              note: "",
+              active: true,
+            })
+          }
+        >
+          + Đăng nhu cầu
+        </Button>
+      </PageHead>
+      <div className="filter-bar">
+        <Field label="Vật liệu">
+          <MaterialSelect
+            all
+            value={filter}
+            onChange={(e) => { setFilter(e.target.value); setPage(1); }}
+          />
+        </Field>
+      </div>
+      <Card title="Kế hoạch đang đăng">
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Nhu cầu</th>
+                <th>Khối lượng</th>
+                <th>Khoảng giá / kg</th>
+                <th>Hạn nhận</th>
+                <th>Trạng thái</th>
+                <th>Thao tác</th>
+              </tr>
+            </thead>
+            <tbody>
+              {demands.map((d) => (
+                  <tr key={d.id}>
+                    <td>
+                      <strong>{materials[d.material]}</strong>
+                      <small>{d.id}</small>
+                      <small>{d.note}</small>
+                    </td>
+                    <td>{number(d.kg)} kg</td>
+                    <td>
+                      {money(d.minPrice)} – {money(d.maxPrice)}
+                    </td>
+                    <td>{d.deadline}</td>
+                    <td>
+                      <span className="status">
+                        {d.deadline < today()
+                          ? "Hết hạn"
+                          : d.active
+                            ? "Đang mở"
+                            : "Tạm dừng"}
+                      </span>
+                    </td>
+                    <td>
+                      <div className="actions">
+                        <Button secondary onClick={() => setEditing(d)}>
+                          Sửa
+                        </Button>
+                        <Button
+                          secondary
+                          onClick={() => void act("TOGGLE_DEMAND", { id: d.id, isActive: !d.active })}
+                        >
+                          {d.active ? "Tạm dừng" : "Mở lại"}
+                        </Button>
+                        <Button danger onClick={() => setRemove(d)}>
+                          Xóa
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+          {!demands.length && !isPending && !error && (
+            <Empty />
+          )}
+        </div>
+      </Card>
+      {isPending && <p role="status">Đang tải nhu cầu…</p>}
+      {error && <p role="alert">{error.message}</p>}
+      <Pagination page={page} totalPages={data?.totalPages} totalCount={data?.totalCount} onChange={setPage} />
+      {editing && (
+        <Modal
+          title={editing.id ? "Chỉnh sửa nhu cầu" : "Đăng nhu cầu thu mua"}
+          onClose={() => setEditing(null)}
+          busy={busy}
+        >
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault();
+              if (await act("SAVE_DEMAND", editing)) setEditing(null);
+            }}
+          >
+            <div className="form-grid">
+              <Field label="Vật liệu">
+                <MaterialSelect
+                  value={editing.material}
+                  onChange={(e) =>
+                    setEditing({ ...editing, material: e.target.value })
+                  }
+                />
+              </Field>
+              {[
+                ["kg", "Khối lượng (kg)", "number"],
+                ["minPrice", "Giá từ (đ/kg)", "number"],
+                ["maxPrice", "Giá đến (đ/kg)", "number"],
+                ["deadline", "Hạn nhận hàng", "date"],
+              ].map(([key, label, type]) => (
+                <Field
+                  key={key}
+                  label={label}
+                  required
+                  type={type}
+                  min={type === "date" ? today() : key === "kg" ? 0.01 : 0}
+                  step={type === "number" ? "any" : undefined}
+                  value={editing[key]}
+                  onChange={(e) =>
+                    setEditing({ ...editing, [key]: e.target.value })
+                  }
+                />
+              ))}
+              <Field label="Yêu cầu chất lượng">
+                <textarea
+                  value={editing.note}
+                  onChange={(e) =>
+                    setEditing({ ...editing, note: e.target.value })
+                  }
+                />
+              </Field>
+            </div>
+            <div className="form-actions">
+              <Button secondary disabled={busy} onClick={() => setEditing(null)}>
+                Hủy
+              </Button>
+              <Button type="submit" disabled={busy}>{busy ? "Đang lưu…" : "Lưu nhu cầu"}</Button>
+            </div>
+          </form>
+        </Modal>
+      )}
+      {remove && (
+        <Confirm
+          title="Xóa nhu cầu?"
+          text={`Tin ${remove.id} sẽ được gỡ khỏi bảng nhu cầu.`}
+          danger
+          onClose={() => setRemove(null)}
+          onConfirm={async () => {
+            if (await act("DELETE_DEMAND", { id: remove.id })) setRemove(null);
+          }}
+        />
+      )}
+    </>
+  );
+}
+export function Partners({ navigate }) {
+  const { act } = useFactory();
+  const [filter, setFilter] = useState("");
+  const [change, setChange] = useState(null);
+  const [contract, setContract] = useState(null);
+  const [contractView, setContractView] = useState(null);
+  const [termination, setTermination] = useState(null);
+  const [page, setPage] = useState(1);
+  const { data, isPending, error } = useFactoryPage("partners", { page, partnerStatus: filter });
+  const depots = data?.items || [];
+  return (
+    <>
+      <PageHead
+        title="Vựa đối tác"
+        text="Nhận lô đầu và kiểm tra chất lượng trước khi quyết định hợp tác. Kho đã hợp tác được gửi thẳng; không hợp tác thì lô sau phải duyệt lại."
+      />
+      <div className="filter-bar">
+        <Field label="Trạng thái">
+          <select value={filter} onChange={(e) => { setFilter(e.target.value); setPage(1); }}>
+            <option value="">Tất cả</option>
+            {["PENDING", "APPROVED", "DECLINED", "BLOCKED"].map((s) => (
+              <option key={s} value={s}>
+                {
+                  {
+                    PENDING: "Chưa quyết định", DECLINED: "Không hợp tác",
+                    APPROVED: "Đã duyệt",
+                    BLOCKED: "Đã chặn",
+                  }[s]
+                }
+              </option>
+            ))}
+          </select>
+        </Field>
+      </div>
+      <div className="partner-grid">
+        {depots.map((d) => {
+            return (
+              <Card
+                key={d.id}
+                title={d.name}
+                action={<Status value={d.status} />}
+              >
+                <p>
+                  {d.address}
+                  <br />
+                  {d.phone}
+                </p>
+                <div className="batch-facts">
+                  <div>
+                    <small>Đã quyết toán</small>
+                    <strong>{d.completedOrderCount} lô</strong>
+                  </div>
+                  <div>
+                    <small>Đánh giá gần nhất</small>
+                    <strong>
+                      {d.reviewCount
+                        ? `★ ${number(d.rating)}/5`
+                        : "Chưa có"}
+                    </strong>
+                  </div>
+                </div>
+                <div className="actions">
+                  <Button
+                    secondary
+                    onClick={() => navigate("settlements")}
+                  >
+                    Xem đơn & đánh giá
+                  </Button>
+                  {d.contractTerms && <Button secondary onClick={() => setContractView(d)}>Xem hợp đồng</Button>}
+                  {d.contractStatus === "ACTIVE" && !["PENDING_DEPOT", "PENDING_FACTORY"].includes(d.terminationStatus) && <Button danger onClick={() => setTermination({ ...d, mode: "request", reason: "" })}>Đề nghị chấm dứt</Button>}
+                  {d.terminationStatus === "PENDING_FACTORY" && <Button danger onClick={() => setTermination({ ...d, mode: "decision" })}>Xử lý đề nghị chấm dứt</Button>}
+                  {d.status !== "BLOCKED" && d.contractStatus !== "ACTIVE" && <><Button onClick={() => setContract({ ...d, terms: d.contractTerms || `HỢP ĐỒNG HỢP TÁC THU MUA NGUYÊN LIỆU TÁI CHẾ\n\nBên mua: Nhà máy trên hệ thống RETRACK.\nBên bán: ${d.name}.\n\nHai bên thống nhất giao nhận nguyên liệu theo từng lô trên RETRACK; khối lượng và chất lượng được chốt theo kết quả cân và KCS; đơn giá, VAT, phí nền tảng và thanh toán được ghi nhận riêng cho từng lô. Hai bên cam kết cung cấp thông tin hợp pháp, bảo mật dữ liệu và xử lý tranh chấp theo pháp luật Việt Nam.`, validMonths: 12, confirmed: false })}>{d.contractStatus === "PENDING_DEPOT" ? "Cập nhật và gửi lại" : "Lập hợp đồng điện tử"}</Button>
+                  <Button secondary onClick={() => setChange({...d, action:'DECLINED', title:'Không hợp tác lâu dài?', message:'Các lô sau phải qua quy trình duyệt lô đầu. Quyết định này không hủy lô đã nhận và không chặn mọi giao dịch.'})}>Không hợp tác</Button></>}
+                  <Button danger={!d.blockedByFactory} onClick={() => setChange({...d, action:d.blockedByFactory?'UNBLOCKED':'BLOCKED', title:d.blockedByFactory?'Bỏ chặn của nhà máy?':'Chặn vựa?', message:d.blockedByFactory?'Chỉ bỏ chặn của nhà máy. Kho còn chặn hoặc trạng thái chặn cũ chưa đối chiếu thì vẫn không giao dịch mới.':'Ngừng nhận lô mới; không tự hủy các lô đang xử lý.'})}>{d.blockedByFactory?'Bỏ chặn của nhà máy':'Chặn vựa'}</Button>
+                  {d.blockedByDepot && <p>Kho đang chặn giao dịch.</p>}{d.legacyBlocked && <p>Trạng thái chặn cũ cần đối chiếu với quản trị viên.</p>}
+                </div>
+                {d.comment && <p className="review">Đánh giá gần nhất: {d.comment}</p>}
+                {d.contractStatus && <p className="muted">Hợp đồng {d.contractCode || ""}: {{ PENDING_DEPOT: "Chờ chủ vựa ký", ACTIVE: "Đang hiệu lực", REJECTED: "Đã bị từ chối", TERMINATED: "Đã chấm dứt" }[d.contractStatus] || d.contractStatus}</p>}
+                {d.terminationStatus === "PENDING_DEPOT" && <p className="info-box warning">Đang chờ chủ vựa xác nhận đề nghị chấm dứt.</p>}
+                {d.terminationStatus === "PENDING_FACTORY" && <p className="info-box warning">Chủ vựa đề nghị chấm dứt: {d.terminationReason}</p>}
+              </Card>
+            );
+          })}
+      </div>
+      {isPending && <p role="status">Đang tải đối tác…</p>}
+      {error && <p role="alert">{error.message}</p>}
+      {!depots.length && !isPending && !error && <Empty />}
+      <Pagination page={page} totalPages={data?.totalPages} totalCount={data?.totalCount} onChange={setPage} />
+      {change && (
+        <Confirm
+          title={change.title}
+          text={`${change.name}: ${change.message}`}
+          danger
+          onClose={() => setChange(null)}
+          onConfirm={async () => {
+            if (
+              await act("PARTNER_STATUS", {
+                id: change.id,
+                status: change.action,
+              })
+            )
+              setChange(null);
+          }}
+        />
+      )}
+      {contract && (
+        <Modal title={`Hợp đồng điện tử • ${contract.name}`} onClose={() => setContract(null)}>
+          <form onSubmit={async (e) => {
+            e.preventDefault();
+            if (await act("PROPOSE_CONTRACT", { id: contract.id, terms: contract.terms, validMonths: contract.validMonths, confirmElectronicSignature: contract.confirmed }, "Đã ký và gửi hợp đồng cho chủ vựa.")) setContract(null);
+          }}>
+            <div className="info-box">Đây là xác nhận điện tử trong hệ thống, lưu phiên bản, thời gian và mã băm nội dung. Chủ vựa phải ký thì hợp đồng mới có hiệu lực.</div>
+            <Field label="Nội dung hợp đồng">
+              <textarea required minLength={50} maxLength={10000} rows={14} value={contract.terms} onChange={(e) => setContract({ ...contract, terms: e.target.value })} />
+            </Field>
+            <Field label="Thời hạn (tháng)" type="number" min="1" max="120" required value={contract.validMonths} onChange={(e) => setContract({ ...contract, validMonths: e.target.value })} />
+            <label className="checkbox-line"><input type="checkbox" required checked={contract.confirmed} onChange={(e) => setContract({ ...contract, confirmed: e.target.checked })} />Tôi đã đọc, đồng ý nội dung và xác nhận ký điện tử với tư cách đại diện nhà máy.</label>
+            <div className="form-actions"><Button secondary onClick={() => setContract(null)}>Hủy</Button><Button type="submit" disabled={!contract.confirmed}>Ký và gửi chủ vựa</Button></div>
+          </form>
+        </Modal>
+      )}
+      {contractView && (
+        <Modal title={`Xem hợp đồng • ${contractView.contractCode || contractView.name}`} onClose={() => setContractView(null)}>
+          <ContractDocument contract={contractView} depotName={contractView.name} />
+          <div className="form-actions"><Button secondary onClick={() => window.print()}>In / Lưu PDF</Button><Button onClick={() => setContractView(null)}>Đóng</Button></div>
+        </Modal>
+      )}
+      {termination && (
+        <Modal title={termination.mode === "request" ? "Đề nghị chấm dứt hợp đồng" : "Xử lý đề nghị chấm dứt"} onClose={() => setTermination(null)}>
+          {termination.mode === "request" ? <form onSubmit={async (e) => { e.preventDefault(); if (await act("REQUEST_CONTRACT_TERMINATION", { id: termination.id, reason: termination.reason }, "Đã gửi đề nghị chấm dứt cho chủ vựa.")) setTermination(null); }}>
+            <div className="info-box warning">Chỉ gửi được khi không còn lô đang vận chuyển, KCS hoặc chờ quyết toán.</div>
+            <Field label="Lý do chấm dứt"><textarea required minLength={10} maxLength={2000} value={termination.reason} onChange={(e) => setTermination({ ...termination, reason: e.target.value })} /></Field>
+            <div className="form-actions"><Button secondary onClick={() => setTermination(null)}>Đóng</Button><Button type="submit" danger>Gửi đề nghị</Button></div>
+          </form> : <div>
+            <div className="info-box warning">Chủ vựa đề nghị chấm dứt: <strong>{termination.terminationReason}</strong></div>
+            <div className="form-actions"><Button secondary onClick={async () => { if (await act("DECIDE_CONTRACT_TERMINATION", { id: termination.id, decision: "REJECT" }, "Đã từ chối đề nghị chấm dứt.")) setTermination(null); }}>Từ chối</Button><Button danger onClick={async () => { if (await act("DECIDE_CONTRACT_TERMINATION", { id: termination.id, decision: "ACCEPT" }, "Hợp đồng đã chấm dứt.")) setTermination(null); }}>Chấp thuận chấm dứt</Button></div>
+          </div>}
+        </Modal>
+      )}
+    </>
+  );
+}
+export function Profile() {
+  const { state, act, busy } = useFactory();
+  const [form, setForm] = useState(state.profile);
+  useEffect(() => {
+    setForm(state.profile);
+  }, [state.profile]);
+  const set = (key, value) => setForm((f) => ({ ...f, [key]: value }));
+  return (
+    <>
+      <PageHead
+        title="Hồ sơ nhà máy"
+        text="Thông tin tiếp nhận nguyên liệu và giấy tờ phục vụ hợp tác với kho vựa."
+      />
+      <Card title="Tài khoản & trạng thái hồ sơ">
+        <div className="detail-grid">
+          <div><span>Chủ tài khoản</span><strong>{form.ownerName || "Chưa cập nhật"}</strong></div>
+          <div><span>Email đăng nhập</span><strong>{form.ownerEmail || "Chưa cập nhật"}</strong></div>
+          <div><span>Số điện thoại tài khoản</span><strong>{form.ownerPhone || form.phone || "Chưa cập nhật"}</strong></div>
+          <div><span>Mã hồ sơ nhà máy</span><strong>{form.id}</strong></div>
+          <div><span>Ngày tạo hồ sơ</span><strong>{form.createdAt || "Chưa xác định"}</strong></div>
+          <div><span>Điểm đánh giá</span><strong>{Number(form.rating || 0).toFixed(1)} / 5</strong></div>
+          <div><span>Phí nền tảng hiện tại</span><strong>{number(form.platformFeePercentage)}%</strong></div>
+        </div>
+        <p className="muted">Tên, email và số điện thoại tài khoản được quản lý bởi phiên đăng nhập chung.</p>
+      </Card>
+      <form
+        onSubmit={async (e) => {
+          e.preventDefault();
+          await act("PROFILE", form, "Đã lưu hồ sơ nhà máy.");
+        }}
+      >
+        <Card title="Thông tin doanh nghiệp">
+          <div className="form-grid">
+            {[
+              ["companyName", "Tên nhà máy"],
+              ["taxCode", "Mã số thuế"],
+              ["address", "Địa chỉ tiếp nhận"],
+              ["industrialZone", "Khu công nghiệp"],
+              ["phone", "Điện thoại"],
+              ["capacity", "Công suất (kg/tháng)", "number"],
+              ["latitude", "Vĩ độ", "number"],
+              ["longitude", "Kinh độ", "number"],
+              ["purity", "Độ tinh khiết tối thiểu (%)", "number"],
+            ].map(([key, label, type]) => (
+              <Field
+                key={key}
+                label={label}
+                required={key !== "industrialZone"}
+                type={type || "text"}
+                step={type === "number" ? "any" : undefined}
+                value={form[key]}
+                onChange={(e) => set(key, e.target.value)}
+              />
+            ))}
+          </div>
+        </Card>
+        <Card title="Vật liệu chấp nhận">
+          <div className="checkbox-grid">
+            {Object.entries(materials).map(([key, label]) => (
+              <label key={key}>
+                <input
+                  type="checkbox"
+                  checked={form.materials.includes(key)}
+                  onChange={(e) =>
+                    setForm((current) => {
+                      const selected = e.target.checked
+                        ? [...current.materials, key]
+                        : current.materials.filter((material) => material !== key);
+                      return {
+                        ...current,
+                        materials: selected,
+                        primaryMaterial: selected.includes(current.primaryMaterial)
+                          ? current.primaryMaterial
+                          : (selected[0] || ""),
+                      };
+                    })
+                  }
+                />
+                {label}
+              </label>
+            ))}
+          </div>
+          <Field label="Vật liệu chính">
+            <select
+              value={form.primaryMaterial}
+              disabled={!form.materials.length}
+              onChange={(e) => set("primaryMaterial", e.target.value)}
+            >
+              {form.materials.map((key) => (
+                <option key={key} value={key}>
+                  {materials[key]}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </Card>
+        <Card title="Giấy phép & Hồ sơ pháp lý">
+          <div className="form-grid">
+            <Attachment
+              label="Giấy phép kinh doanh"
+              value={form.businessLicense}
+              onChange={(f) => set("businessLicense", f)}
+            />
+            <Attachment
+              label="Giấy phép môi trường"
+              value={form.environmentLicense}
+              onChange={(f) => set("environmentLicense", f)}
+            />
+          </div>
+          <p className="muted">
+            Tệp nhỏ được gửi cùng hồ sơ tới máy chủ.
+          </p>
+        </Card>
+        <div className="form-actions">
+          <Button secondary disabled={busy} onClick={() => setForm(state.profile)}>
+            Bỏ thay đổi
+          </Button>
+          <Button type="submit" disabled={busy || !form.materials.length}>
+            {busy ? "Đang lưu hồ sơ…" : "Lưu hồ sơ nhà máy"}
+          </Button>
+        </div>
+      </form>
+    </>
+  );
+}
+export function Prices() {
+  const { data: prices = [], isPending, error } = useFactoryPrices();
+  return (
+    <>
+      <PageHead
+        title="Giá nguyên liệu tham khảo"
+        text="Dùng để lập kế hoạch thu mua. Giá giao dịch cuối cùng được thỏa thuận sau KCS."
+      />
+      <Card title="Bảng giá cập nhật bởi Admin">
+        {isPending && <p role="status">Đang tải bảng giá…</p>}
+        {error && <p role="alert">{error.message}</p>}
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Vật liệu</th>
+                <th>Giá tham khảo / kg</th>
+                <th>Ngày dữ liệu</th>
+                <th>Nguồn</th>
+              </tr>
+            </thead>
+            <tbody>
+              {prices.map((p) => (
+                <tr key={p.material}>
+                  <td>
+                    <strong>{materials[p.material]}</strong>
+                  </td>
+                  <td>{money(p.price)}</td>
+                  <td>{p.date}</td>
+                  <td>{p.source}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {!prices.length && !isPending && !error && <Empty text="Chưa có bảng giá tham khảo" />}
+        </div>
+      </Card>
+    </>
+  );
+}

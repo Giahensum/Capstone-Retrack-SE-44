@@ -1,15 +1,39 @@
-﻿using Retrack.API.Models.Enums;
-namespace Retrack.API.Models;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
-public class PickupRequestItem
+namespace Retrack.API.Models
 {
-    public Guid Id { get; set; }
-    public Guid PickupRequestId { get; set; }
-    public MaterialType MaterialType { get; set; }
-    public string? MaterialLabel { get; set; }
-    public decimal WeightKg { get; set; }
-    public decimal PricePerKg { get; set; }
-    public decimal TotalAmount { get; set; }
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-    public PickupRequest PickupRequest { get; set; } = null!;
+    [Table("pickup_request_items")]
+    public class PickupRequestItem
+    {
+        [Key]
+        [Column("id")]
+        public Guid Id { get; set; } = Guid.NewGuid();
+
+        [Required]
+        [Column("pickup_request_id")]
+        public Guid PickupRequestId { get; set; }
+
+        [Required]
+        [Column("material_type")]
+        [MaxLength(100)]
+        public string MaterialType { get; set; } = string.Empty;
+
+        [Required]
+        [Column("weight_kg")]
+        public decimal WeightKg { get; set; }
+
+        [Required]
+        [Column("price_per_kg")]
+        public decimal PricePerKg { get; set; }
+
+        [Required]
+        [Column("sub_total")]
+        public decimal SubTotal { get; set; }
+
+        // Navigation
+        [ForeignKey("PickupRequestId")]
+        public PickupRequest PickupRequest { get; set; } = null!;
+    }
 }
+

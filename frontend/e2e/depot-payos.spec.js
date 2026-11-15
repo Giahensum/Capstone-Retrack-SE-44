@@ -1,0 +1,31 @@
+import { test, expect } from '@playwright/test';
+
+test('PayOS giả lập chỉ gửi chứng từ chờ đối soát, giữ trạng thái sau tải lại', async ({ page }) => {
+  test.skip(!process.env.E2E_PAYOS_INVOICE_ID, 'Cần ID hóa đơn thử nghiệm UNPAID riêng, backend và frontend Development.');
+  await page.goto('/login');
+  await page.getByLabel('Email', { exact: true }).fill(process.env.E2E_DEPOT_EMAIL);
+  await page.getByLabel('Mật khẩu', { exact: true }).fill(process.env.E2E_DEPOT_PASSWORD);
+  await page.getByRole('button', { name: 'Đăng nhập', exact: true }).click();
+  await expect(page).toHaveURL(/\/depot/);
+  await page.goto('/depot/payments/fees');
+  await page.getByLabel('Kho đang quản lý').selectOption(process.env.E2E_DEPOT_ID);
+  const list = page.waitForResponse(r => /\/reports\/invoices\?/.test(r.url()) && r.request().method() === 'GET');
+  await page.getByRole('button', { name: 'Hóa đơn hàng tháng', exact: true }).click();
+  const invoice = (await (await list).json()).data.items.find(i => i.id === process.env.E2E_PAYOS_INVOICE_ID);
+  expect(invoice, 'Hóa đơn fixture cần nằm trên trang đầu danh sách').toBeTruthy();
+  expect(invoice.status).toBe('UNPAID');
+  const period = new Date(invoice.periodStart).toLocaleDateString('vi-VN');
+  const row = page.getByRole('row').filter({ hasText: period });
+  await row.getByRole('button', { name: 'PayOS giả lập', exact: true }).click();
+  await expect(page.getByText(/không gọi PayOS và không chuyển tiền thật/)).toBeVisible();
+  const submitted = page.waitForResponse(r => r.url().includes(`/${invoice.id}/simulate-payment`) && r.request().method() === 'POST');
+  await page.getByRole('button', { name: 'Mô phỏng thanh toán thành công', exact: true }).click();
+  expect((await submitted).status()).toBe(200);
+  await expect(row).toContainText('Chờ đối soát');
+  await page.reload();
+  await page.getByLabel('Kho đang quản lý').selectOption(process.env.E2E_DEPOT_ID);
+  await page.getByRole('button', { name: 'Hóa đơn hàng tháng', exact: true }).click();
+  const persisted = page.getByRole('row').filter({ hasText: period });
+  await expect(persisted).toContainText('Chờ đối soát');
+  await expect(persisted.getByRole('button', { name: 'PayOS giả lập', exact: true })).toHaveCount(0);
+});

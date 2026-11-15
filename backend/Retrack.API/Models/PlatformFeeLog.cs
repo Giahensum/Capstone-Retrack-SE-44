@@ -1,4 +1,4 @@
-﻿namespace Retrack.API.Models;
+namespace Retrack.API.Models;
 
 public class PlatformFeeLog
 {
@@ -11,3 +11,5 @@ public class PlatformFeeLog
     public decimal FeeAmount { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
+
+

@@ -1,4 +1,4 @@
-﻿namespace Retrack.API.Models.Enums;
+namespace Retrack.API.Models.Enums;
 
 public enum TransportStatus
 {
@@ -9,3 +9,5 @@ public enum TransportStatus
     DELIVERED,
     CANCELLED
 }
+
+

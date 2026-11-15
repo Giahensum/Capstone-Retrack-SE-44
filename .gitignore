@@ -7,6 +7,9 @@
 
 # ── AI Context (local docs cho AI agent, không push) ──
 .ai-context/
+.claude/
+# Worktree cục bộ nằm trong repo, không đưa nội dung checkout lồng vào Git.
+.worktrees/
 
 # ── Backend (.NET) ──
 backend/**/bin/
@@ -15,15 +18,44 @@ backend/**/*.user
 backend/**/*.suo
 backend/**/.vs/
 backend/**/appsettings.Development.json
+backend/**/.env
+backend/**/.env.local
+backend/**/TestResults/
+backend/**/appsettings.json
+backend/**/appsettings.*.json
+!backend/**/appsettings.example.json
+# Fixture dữ liệu riêng trên máy, không dùng làm seed chia sẻ.
+backend/seed_test_data.sql
+# Bản seed kho TP.HCM cũ chỉ giữ local trong .ai-context.
+db/seed_more_depots.sql
+be/**/bin/
+be/**/obj/
+be/**/*.user
+be/**/*.suo
+be/**/.vs/
+be/**/appsettings.Development.json
 
 # ── Frontend (React/Vite) ──
 frontend/node_modules/
 frontend/dist/
+frontend/test-results/
 frontend/.env
 frontend/.env.local
 frontend/.env.*.local
+fe/node_modules/
+fe/dist/
+fe/.env
+fe/.env.local
+fe/.env.*.local
 
 # ── IDE ──
+mobile/node_modules/
+mobile/.expo/
+mobile/dist/
+mobile/.env
+mobile/android/
+mobile/ios/
+
 .vs/
 .vscode/
 .idea/
@@ -41,5 +73,30 @@ desktop.ini
 npm-debug.log*
 
 # ── Misc ──
+**/.env
+**/.env.*
+!**/.env.example
+**/TestResults/
+**/coverage/
+**/playwright-report/
+*.trx
+*.pfx
+*.p12
+*.pem
+*.key
 *.tmp
 *.bak
+
+# Bản sao giao diện Depot giữ local để đối chiếu, không đưa vào build/lint/Git.
+frontend/src/features/depot/*_old*.jsx
+backend/Retrack.API/uploads/
+
+# ── AI Service & Python Cache ──
+__pycache__/
+*.py[cod]
+*$py.class
+.ipynb_checkpoints/
+.gradio/
+AI_Garbage_Classification/**/__pycache__/
+AI_Garbage_Classification/**/.gradio/
+AI_Garbage_Classification/**/.ipynb_checkpoints/
