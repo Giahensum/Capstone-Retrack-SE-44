@@ -346,8 +346,8 @@ namespace Retrack.API.Services
 
         public async Task<FeeConfigDto> UpdateFeeConfigAsync(UpdateFeeConfigDto dto, Guid actorId)
         {
-            if (dto.PlatformFeePercentage < 0 || dto.PlatformFeePercentage > 100)
-                throw new ArgumentException("Phí nền tảng phải trong khoảng 0-100%.");
+            if (dto.PlatformFeePercentage < 0 || dto.PlatformFeePercentage > 100 || decimal.Round(dto.PlatformFeePercentage, 2) != dto.PlatformFeePercentage)
+                throw new ArgumentException("Phí nền tảng phải từ 0 đến 100% và tối đa hai chữ số thập phân.");
 
             var config = await _db.SystemConfigs.FindAsync(FeeConfigKey);
             var oldValue = config?.ConfigValue;
@@ -415,6 +415,7 @@ namespace Retrack.API.Services
                 SourceId = t.SourceId,
                 PayerName = payerNames.GetValueOrDefault((t.SourceType, t.SourceId)),
                 FeeAmount = t.FeeAmount,
+                FeePolicy = t.FeePolicy,
                 Description = t.Description,
                 CreatedAt = t.CreatedAt
             }).ToList();
@@ -423,8 +424,7 @@ namespace Retrack.API.Services
         }
 
         /// <summary>
-        /// PlatformTransaction has no PayerId column (shared table other teammates are still building on) —
-        /// resolve the paying account by joining SourceType/SourceId to the relevant owner instead.
+        /// Ưu tiên người nộp phí đã chốt; chỉ tra owner hiện tại cho giao dịch cũ chưa có PayerId.
         /// </summary>
         private async Task<Dictionary<(string SourceType, Guid SourceId), Guid>> ResolvePayerIdsAsync(IEnumerable<PlatformTransaction> transactions)
         {
@@ -444,6 +444,8 @@ namespace Retrack.API.Services
             var map = new Dictionary<(string, Guid), Guid>();
             foreach (var p in pickupOwners) map[("PICKUP_REQUEST", p.Id)] = p.OwnerId;
             foreach (var b in batchOwners) map[("BATCH_ORDER", b.BatchId)] = b.OwnerId;
+            foreach (var t in transactions.Where(t => t.PayerId.HasValue))
+                map[(t.SourceType, t.SourceId)] = t.PayerId!.Value;
             return map;
         }
 

@@ -42,6 +42,9 @@ namespace Retrack.API.Models
         [Column("checkin_image_url")]
         public string? CheckinImageUrl { get; set; }
 
+        [Column("fee_policy"), MaxLength(40)]
+        public string FeePolicy { get; set; } = Retrack.API.Services.Shared.PlatformFees.Legacy;
+
         // Financial
         [Column("gross_amount")]
         public decimal GrossAmount { get; set; } = 0;

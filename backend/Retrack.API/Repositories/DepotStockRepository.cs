@@ -100,7 +100,8 @@ public sealed partial class DepotStockRepository(AppDbContext db) : IDepotStockR
         var layers = await db.PickupRequestItems.AsNoTracking().Where(x => x.PickupRequest.TargetDepotId == depotId &&
             x.PickupRequest.Status == "DONE" && names.Contains(x.MaterialType))
             .Select(x => new DepotCostLayer(x.Id, "PICKUP", "Thu gom " + x.PickupRequestId, x.WeightKg,
-                (decimal?)x.PricePerKg, x.PickupRequest.StockReceivedAt ?? x.PickupRequest.UpdatedAt)).ToListAsync();
+                (decimal?)(x.PickupRequest.FeePolicy == Retrack.API.Services.Shared.PlatformFees.BuyerSeparate && x.PickupRequest.GrossAmount > 0
+                    ? decimal.Round(x.SubTotal / x.WeightKg * (1m + x.PickupRequest.PlatformFeeAmount / x.PickupRequest.GrossAmount), 9) : x.PricePerKg), x.PickupRequest.StockReceivedAt ?? x.PickupRequest.UpdatedAt)).ToListAsync();
         layers.AddRange(await CostLines().Where(x => x.Line.Receipt.DepotId == depotId &&
             x.Line.Receipt.Status == "POSTED" && x.Line.Kind == "MATERIAL" && names.Contains(x.Line.MaterialType!))
             .Select(x => new DepotCostLayer(x.Line.Id, "RECEIPT", x.Line.Receipt.Reference, x.Line.Quantity,

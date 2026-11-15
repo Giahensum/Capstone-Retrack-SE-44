@@ -211,7 +211,7 @@ public sealed partial class DepotStockService(IDepotStockRepository repository, 
         var outputVat = batch.VatAmount ?? 0;
         var late = await repository.HasLateCostsAsync(batchId);
         return new(sources, expenses, complete, cost, selling, settled ? batch.GrossAmount : null,
-            settled ? batch.PlatformFeeAmount : null, settled && !late ? batch.NetAmount - outputVat - adjustedCost - selling : null, settled,
+            settled ? batch.FeePolicy == Retrack.API.Services.Shared.PlatformFees.BuyerSeparate ? 0 : batch.PlatformFeeAmount : null, settled && !late ? batch.NetAmount - outputVat - adjustedCost - selling : null, settled,
             "FIFO theo nguồn nhận; nguồn pickup cũ thiếu nhật ký dùng mốc ước tính. Snapshot ban đầu giữ nguyên. Vốn sau đối soát cộng các bút toán bổ sung theo tỷ lệ lượng hàng từ nguồn; không thay đổi tiền mua/bán đã thỏa thuận. Chưa gồm thuế thu nhập/hàng trả/chi phí chưa ghi.", late, adjustedCost,
             totals.SourceCount, totals.ExpenseCount, totals.HasReconciliation,
             settled ? batch.VatAmount : null, settled ? batch.NetAmount : null);
