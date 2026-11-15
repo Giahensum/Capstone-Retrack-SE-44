@@ -1,4 +1,107 @@
-﻿// TODO: Implement AppRoutes
-export default function AppRoutes() {
-  return <div>AppRoutes</div>;
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { PrivateRoute } from './PrivateRoute';
+import { ROLES } from '@/lib/utils';
+// Lazy imports for code-splitting
+import { lazy, Suspense } from 'react';
+// Auth
+const LoginPage = lazy(() => import('@/features/auth/pages/LoginPage'));
+const RegisterPage = lazy(() => import('@/features/auth/pages/RegisterPage'));
+const ForgotPasswordPage = lazy(() => import('@/features/auth/pages/ForgotPasswordPage'));
+// Landing
+const LandingPage = lazy(() => import('@/features/landing/pages/LandingPage'));
+// Seller
+const SellerDashboard = lazy(() => import('@/features/seller/pages/SellerDashboard'));
+// Depot
+
+// Giao diện Chủ kho vựa — Ngô Sỹ Giá (TV2)
+import DepotLayout from '@/components/layout/DepotLayout';
+import MyDepotDashboard from '@/features/depot/Dashboard';
+const DepotInventory = lazy(() => import('@/features/depot/Inventory'));
+const DepotBatches = lazy(() => import('@/features/depot/Batches'));
+import DepotPartners from '@/features/depot/Partners';
+import DepotPayments from '@/features/depot/Payments';
+import DepotPlatformFees from '@/features/depot/PlatformFees';
+const DepotRevenueReport = lazy(() => import('@/features/depot/RevenueReport'));
+import DepotStaff from '@/features/depot/Staff';
+import DepotStaffPerformance from '@/features/depot/StaffPerformance';
+import DepotProfile from '@/features/depot/Profile';
+const DepotLiquidations = lazy(() => import('@/features/depot/liquidation/LiquidationMarket'));
+const DepotNotifications = lazy(() => import('@/features/depot/Notifications'));
+const DepotDispatch = lazy(() => import('@/features/depot/dispatch/DispatchPage'));
+const DepotBuyingPrices = lazy(() => import('@/features/depot/BuyingPrices'));
+import { DepotProvider } from '@/features/depot/DepotContext';
+// Employee
+const StaffMobilePage = lazy(() => import('@/features/auth/pages/StaffMobilePage'));
+// Driver
+// Factory
+const FactoryDashboard = lazy(() => import('@/features/factory/workspace/FactoryApp'));
+// Admin
+const AdminDashboard = lazy(() => import('@/features/admin/pages/AdminDashboard'));
+// Loading fallback
+const PageLoader = () => (<div className="flex items-center justify-center min-h-screen bg-slate-900">
+    <div className="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"/>
+  </div>);
+export function AppRoutes() {
+    return (<BrowserRouter>
+      <Suspense fallback={<PageLoader />}>
+        <Routes>
+          {/* Public */}
+          <Route path="/" element={<LandingPage />}/>
+          <Route path="/login" element={<LoginPage />}/>
+          <Route path="/register" element={<RegisterPage />}/>
+          <Route path="/forgot-password" element={<ForgotPasswordPage />}/>
+          <Route path="/staff-app" element={<StaffMobilePage />}/>
+
+          {/* Seller */}
+          <Route path="/seller/*" element={<PrivateRoute allowedRoles={[ROLES.SELLER]}>
+                <SellerDashboard />
+              </PrivateRoute>}/>
+
+          {/* Depot Owner */}
+          <Route path="/depot" element={<PrivateRoute allowedRoles={[ROLES.DEPOT_OWNER]}><DepotProvider><DepotLayout /></DepotProvider></PrivateRoute>}>
+              <Route index element={<Navigate to="dashboard" replace />} />
+              <Route path="dashboard" element={<MyDepotDashboard />} />
+              <Route path="inventory" element={<DepotInventory />} />
+              <Route path="batches" element={<DepotBatches />} />
+              <Route path="partners" element={<DepotPartners />} />
+              <Route path="payments" element={<DepotPayments />} />
+              <Route path="payments/fees" element={<DepotPlatformFees />} />
+              <Route path="reports" element={<DepotRevenueReport />} />
+              <Route path="staff" element={<DepotStaff />} />
+              <Route path="staff/performance" element={<DepotStaffPerformance />} />
+              <Route path="profile" element={<DepotProfile />} />
+              <Route path="liquidations" element={<DepotLiquidations />} />
+              <Route path="notifications" element={<DepotNotifications />} />
+              <Route path="dispatch" element={<DepotDispatch />} />
+              <Route path="buying-prices" element={<DepotBuyingPrices />} />
+              <Route path="*" element={<Navigate to="dashboard" replace />} />
+          </Route>
+
+          {/* Depot Employee */}
+          <Route path="/employee/*" element={<PrivateRoute allowedRoles={[ROLES.DEPOT_EMPLOYEE]}>
+                <StaffMobilePage />
+              </PrivateRoute>}/>
+
+          {/* Driver */}
+          <Route path="/driver/*" element={<PrivateRoute allowedRoles={[ROLES.DRIVER]}>
+                <StaffMobilePage />
+              </PrivateRoute>}/>
+
+          {/* Factory */}
+          <Route path="/factory/*" element={<PrivateRoute allowedRoles={[ROLES.FACTORY]}><FactoryDashboard /></PrivateRoute>}/>
+
+          {/* Admin */}
+          <Route path="/admin/*" element={<PrivateRoute allowedRoles={[ROLES.ADMIN]}>
+                <AdminDashboard />
+              </PrivateRoute>}/>
+
+          {/* Fallback */}
+          <Route path="/unauthorized" element={<div className="flex items-center justify-center min-h-screen text-red-400 text-xl">
+              403 — Không có quyền truy cập
+            </div>}/>
+          <Route path="*" element={<Navigate to="/" replace/>}/>
+        </Routes>
+      </Suspense>
+    </BrowserRouter>);
 }
+

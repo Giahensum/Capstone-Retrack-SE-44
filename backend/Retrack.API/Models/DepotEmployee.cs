@@ -1,4 +1,4 @@
-﻿namespace Retrack.API.Models;
+namespace Retrack.API.Models;
 
 public class DepotEmployee
 {
@@ -13,3 +13,5 @@ public class DepotEmployee
     public User User { get; set; } = null!;
     public Depot Depot { get; set; } = null!;
 }
+
+

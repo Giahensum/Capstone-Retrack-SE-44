@@ -1,82 +1,240 @@
-using Retrack.API.Models;
-using Retrack.API.Models.Enums;
 using Microsoft.EntityFrameworkCore;
+using Retrack.API.Models;
 
-namespace Retrack.API.Data;
-
-public class AppDbContext : DbContext
+namespace Retrack.API.Data
 {
-    public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
-
-    // ── Users & Roles ──
-    public DbSet<User> Users => Set<User>();
-    public DbSet<Seller> Sellers => Set<Seller>();
-    public DbSet<Depot> Depots => Set<Depot>();
-    public DbSet<DepotEmployee> DepotEmployees => Set<DepotEmployee>();
-    public DbSet<Driver> Drivers => Set<Driver>();
-    public DbSet<Factory> Factories => Set<Factory>();
-
-    // ── Pickup (Seller → Depot) ──
-    public DbSet<PickupRequest> PickupRequests => Set<PickupRequest>();
-    public DbSet<PickupRequestItem> PickupRequestItems => Set<PickupRequestItem>();
-    public DbSet<PickupRequestImage> PickupRequestImages => Set<PickupRequestImage>();
-
-    // ── Inventory & Export (Depot → Factory) ──
-    public DbSet<InventoryBatch> InventoryBatches => Set<InventoryBatch>();
-    public DbSet<BatchImage> BatchImages => Set<BatchImage>();
-    public DbSet<BatchOrder> BatchOrders => Set<BatchOrder>();
-
-    // ── Transport (Driver) ──
-    public DbSet<TransportJob> TransportJobs => Set<TransportJob>();
-    public DbSet<TransportTrackingLog> TransportTrackingLogs => Set<TransportTrackingLog>();
-
-    // ── QC & Settlement (Factory) ──
-    public DbSet<WeightVerification> WeightVerifications => Set<WeightVerification>();
-    public DbSet<WeightTicket> WeightTickets => Set<WeightTicket>();
-
-    // ── Business ──
-    public DbSet<Partnership> Partnerships => Set<Partnership>();
-    public DbSet<FactoryDemand> FactoryDemands => Set<FactoryDemand>();
-    public DbSet<Invoice> Invoices => Set<Invoice>();
-    public DbSet<PlatformFeeLog> PlatformFeeLogs => Set<PlatformFeeLog>();
-    public DbSet<MarketPrice> MarketPrices => Set<MarketPrice>();
-    public DbSet<EprCertificate> EprCertificates => Set<EprCertificate>();
-
-    // ── System ──
-    public DbSet<Notification> Notifications => Set<Notification>();
-    public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
-
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    public class AppDbContext : DbContext
     {
-        // ── Enum → string conversion ──
-        modelBuilder.Entity<User>()
-            .Property(u => u.Role).HasConversion<string>();
+        public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
-        modelBuilder.Entity<PickupRequest>()
-            .Property(p => p.Status).HasConversion<string>();
+        // DbSets
+        public DbSet<EmployeeCollectionArea> EmployeeCollectionAreas { get; set; }
+        public DbSet<EmployeeDispatchShift> EmployeeDispatchShifts { get; set; }
+        public DbSet<EmployeeDispatchQueue> EmployeeDispatchQueues { get; set; }
+        public DbSet<EmployeeDispatchEvent> EmployeeDispatchEvents { get; set; }
+        public DbSet<SystemConfig> SystemConfigs { get; set; }
+        public DbSet<User> Users { get; set; }
+        public DbSet<Depot> Depots { get; set; }
+        public DbSet<Factory> Factories { get; set; }
+        public DbSet<DepotStaff> DepotStaffs { get; set; }
+        public DbSet<PickupRequest> PickupRequests { get; set; }
+        public DbSet<PickupRequestItem> PickupRequestItems { get; set; }
+        public DbSet<PickupCheckIn> PickupCheckIns { get; set; }
+        public DbSet<EmployeeCollectionEvent> EmployeeCollectionEvents { get; set; }
+        public DbSet<SellerDepotReview> SellerDepotReviews { get; set; }
+        public DbSet<FactoryDemand> FactoryDemands { get; set; }
+        public DbSet<FactoryDepotPartnership> FactoryDepotPartnerships { get; set; }
+        public DbSet<InventoryBatch> InventoryBatches { get; set; }
+        public DbSet<TransportJob> TransportJobs { get; set; }
+        public DbSet<DriverDeliveryEvent> DriverDeliveryEvents { get; set; }
+        public DbSet<BatchQualityCheck> BatchQualityChecks { get; set; }
+        public DbSet<FactoryDepotReview> FactoryDepotReviews { get; set; }
+        public DbSet<PlatformTransaction> PlatformTransactions { get; set; }
+        // Admin quản lý bảng giá dùng chung; Factory chỉ đọc để tham khảo khi giao dịch.
+        public DbSet<MarketPrice> MarketPrices { get; set; }
+        // Admin DbSets
+        public DbSet<AuditLog> AuditLogs { get; set; }
+        public DbSet<PlatformInvoice> PlatformInvoices { get; set; }
+        public DbSet<Notification> Notifications { get; set; }
+        public DbSet<PasswordResetOtp> PasswordResetOtps { get; set; }
+        public DbSet<DepotBuyingPrice> DepotBuyingPrices { get; set; }
+        public DbSet<DepotStockReceipt> DepotStockReceipts { get; set; }
+        public DbSet<DepotStockLine> DepotStockLines { get; set; }
+        public DbSet<DepotStockExpense> DepotStockExpenses { get; set; }
+        public DbSet<DepotReuseSale> DepotReuseSales { get; set; }
+        public DbSet<DepotBatchCostSource> DepotBatchCostSources { get; set; }
+        public DbSet<DepotBatchExpense> DepotBatchExpenses { get; set; }
+        public DbSet<DepotVerificationSubmission> DepotVerificationSubmissions { get; set; }
+        public DbSet<DepotVerificationDocument> DepotVerificationDocuments { get; set; }
+        public DbSet<DepotStockCostAdjustment> DepotStockCostAdjustments { get; set; }
+        public DbSet<DepotCostReconciliation> DepotCostReconciliations { get; set; }
+        public DbSet<DepotIncidentFollowup> DepotIncidentFollowups { get; set; }
 
-        modelBuilder.Entity<PickupRequestItem>()
-            .Property(p => p.MaterialType).HasConversion<string>();
+        public DbSet<LiquidationLot> LiquidationLots { get; set; }
+        public DbSet<LiquidationParticipation> LiquidationParticipations { get; set; }
+        public DbSet<LiquidationBid> LiquidationBids { get; set; }
+        public DbSet<LiquidationAgreement> LiquidationAgreements { get; set; }
 
-        modelBuilder.Entity<InventoryBatch>()
-            .Property(b => b.MaterialType).HasConversion<string>();
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            base.OnModelCreating(modelBuilder);
+            modelBuilder.Entity<DepotBuyingPrice>().HasKey(x => new { x.DepotId, x.MaterialType });
+            modelBuilder.Entity<DepotBuyingPrice>().HasOne(x => x.Depot).WithMany().HasForeignKey(x => x.DepotId).OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<EmployeeCollectionArea>().HasOne<Depot>().WithMany().HasForeignKey(a => a.DepotId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<EmployeeDispatchShift>().HasOne<EmployeeCollectionArea>().WithMany().HasForeignKey(s => s.AreaId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<EmployeeDispatchShift>().HasOne<User>().WithMany().HasForeignKey(s => s.EmployeeId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<EmployeeDispatchShift>().HasIndex(s => new { s.EmployeeId, s.StartsAt, s.EndsAt });
+            modelBuilder.Entity<EmployeeDispatchQueue>().HasOne<PickupRequest>().WithMany().HasForeignKey(q => q.PickupId).OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<EmployeeDispatchEvent>().HasOne<PickupRequest>().WithMany().HasForeignKey(e => e.PickupId).OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<EmployeeDispatchEvent>().HasOne<User>().WithMany().HasForeignKey(e => e.FromEmployeeId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<EmployeeDispatchEvent>().HasOne<User>().WithMany().HasForeignKey(e => e.ToEmployeeId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<EmployeeDispatchEvent>().HasOne<EmployeeDispatchShift>().WithMany().HasForeignKey(e => e.ShiftId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<EmployeeDispatchEvent>().HasIndex(e => new { e.PickupId, e.CreatedAt });
+            modelBuilder.Entity<LiquidationParticipation>().HasIndex(x => new { x.LotId, x.OwnerId }).IsUnique();
+            modelBuilder.Entity<LiquidationAgreement>().HasIndex(x => x.LotId).IsUnique();
+            modelBuilder.Entity<LiquidationAgreement>().HasIndex(x => x.WinningBidId).IsUnique();
+            modelBuilder.Entity<LiquidationBid>().HasIndex(x => new { x.LotId, x.CreatedAt });
+            modelBuilder.Entity<LiquidationLot>().HasOne(x => x.Seller).WithMany().OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<LiquidationAgreement>().HasOne(x => x.Lot).WithMany().OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<LiquidationAgreement>().HasOne(x => x.WinningBid).WithMany().OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<LiquidationAgreement>().HasOne(x => x.Depot).WithMany().OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<LiquidationParticipation>().HasOne(x => x.Depot).WithMany().OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<DepotStockReceipt>().HasIndex(x => x.BulkAgreementId).IsUnique()
+                .HasFilter("bulk_agreement_id IS NOT NULL AND status NOT IN ('VOIDED','REJECTED')");
 
-        modelBuilder.Entity<InventoryBatch>()
-            .Property(b => b.Status).HasConversion<string>();
+            modelBuilder.Entity<DepotIncidentFollowup>().HasOne(x => x.Event).WithMany().HasForeignKey(x => x.EventId).OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<DepotCostReconciliation>().HasOne(x => x.BatchSource).WithMany().HasForeignKey(x => x.BatchSourceId).OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<DepotCostReconciliation>().HasOne(x => x.ReuseSale).WithMany().HasForeignKey(x => x.ReuseSaleId).OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<DepotVerificationSubmission>().HasOne(x => x.Depot).WithMany().OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<DepotVerificationDocument>().HasOne(x => x.Submission).WithMany(x => x.Documents).HasForeignKey(x => x.SubmissionId).OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<DepotVerificationDocument>().HasIndex(x => x.SubmissionId)
+                .HasDatabaseName("ix_depot_verification_documents_submission");
+            modelBuilder.Entity<DepotVerificationSubmission>().HasIndex(x => new { x.DepotId, x.SubmittedAt, x.Id })
+                .IsDescending(false, true, false).HasDatabaseName("ix_depot_verification_history");
+            modelBuilder.Entity<InventoryBatch>().HasIndex(x => new { x.DepotId, x.CreatedAt, x.Id })
+                .IsDescending(false, true, false).HasDatabaseName("ix_inventory_batches_depot_newest");
+            modelBuilder.Entity<DepotStockReceipt>().HasIndex(x => new { x.DepotId, x.CreatedAt });
+            modelBuilder.Entity<DepotStockLine>().HasIndex(x => new { x.ReceiptId, x.Position }).IsUnique();
+            modelBuilder.Entity<DepotBatchCostSource>().HasIndex(x => new { x.BatchId, x.SourceType, x.SourceId }).IsUnique();
+            modelBuilder.Entity<DepotReuseSale>().HasIndex(x => x.LineId);
+            modelBuilder.Entity<DepotStockReceipt>().HasOne(x => x.Depot).WithMany().OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<DepotReuseSale>().HasOne(x => x.Line).WithMany().OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<DriverDeliveryEvent>().HasOne(e => e.Job).WithMany()
+                .HasForeignKey(e => e.JobId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<DriverDeliveryEvent>().HasOne(e => e.Driver).WithMany()
+                .HasForeignKey(e => e.DriverId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<DriverDeliveryEvent>().HasIndex(e => new { e.JobId, e.DriverId, e.OperationId }).IsUnique();
+            // Các model scaffold của kiến trúc cũ không thuộc schema dùng chung.
+            // Khai báo tập trung để EF không tự sinh lại các bảng PascalCase.
+            modelBuilder.Ignore<Seller>();
+            modelBuilder.Ignore<DepotEmployee>();
+            modelBuilder.Ignore<Driver>();
+            modelBuilder.Ignore<PickupRequestImage>();
+            modelBuilder.Ignore<BatchImage>();
+            modelBuilder.Ignore<BatchOrder>();
+            modelBuilder.Ignore<TransportTrackingLog>();
+            modelBuilder.Ignore<WeightVerification>();
+            modelBuilder.Ignore<WeightTicket>();
+            modelBuilder.Ignore<Partnership>();
+            modelBuilder.Ignore<PlatformFeeLog>();
+            modelBuilder.Ignore<EprCertificate>();
 
-        modelBuilder.Entity<TransportJob>()
-            .Property(t => t.Status).HasConversion<string>();
+            modelBuilder.Entity<EmployeeCollectionEvent>().HasOne(e => e.Employee).WithMany()
+                .HasForeignKey(e => e.EmployeeId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<PickupCheckIn>().HasOne(c => c.PickupRequest).WithOne()
+                .HasForeignKey<PickupCheckIn>(c => c.PickupRequestId).OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<PickupCheckIn>().HasOne(c => c.Employee).WithMany()
+                .HasForeignKey(c => c.EmployeeId).OnDelete(DeleteBehavior.Restrict);
+            if (Database.ProviderName == "Npgsql.EntityFrameworkCore.PostgreSQL")
+                modelBuilder.HasSequence<long>("depot_batch_number");
+            modelBuilder.Entity<InventoryBatch>().HasIndex(b => b.Code).IsUnique();
 
-        modelBuilder.Entity<Partnership>()
-            .Property(p => p.Status).HasConversion<string>();
+            // User - unique email
+            modelBuilder.Entity<User>()
+                .HasIndex(u => u.Email).IsUnique();
 
-        // ── Unique indexes ──
-        modelBuilder.Entity<User>()
-            .HasIndex(u => u.Email).IsUnique();
+            modelBuilder.Entity<PlatformTransaction>()
+                .HasIndex(t => new { t.SourceType, t.SourceId }).IsUnique();
+            // PickupRequest - multiple FK to User
+            modelBuilder.Entity<PickupRequest>()
+                .HasOne(p => p.Seller)
+                .WithMany(u => u.PickupRequests)
+                .HasForeignKey(p => p.SellerId)
+                .OnDelete(DeleteBehavior.Restrict);
 
-        modelBuilder.Entity<InventoryBatch>()
-            .HasIndex(b => b.BatchCode).IsUnique();
+            modelBuilder.Entity<PickupRequest>()
+                .HasOne(p => p.AcceptedCollector)
+                .WithMany()
+                .HasForeignKey(p => p.AcceptedCollectorId)
+                .OnDelete(DeleteBehavior.SetNull);
 
-        base.OnModelCreating(modelBuilder);
+            // FactoryDepotPartnership - unique constraint
+            modelBuilder.Entity<FactoryDepotPartnership>()
+                .HasIndex(p => new { p.DepotId, p.FactoryId }).IsUnique();
+
+            modelBuilder.Entity<InventoryBatch>()
+                .HasOne(batch => batch.DirectOfferFactory)
+                .WithMany()
+                .HasForeignKey(batch => batch.DirectOfferFactoryId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<FactoryDemand>().Property(x => x.UpdatedAt).HasDefaultValueSql("NOW()");
+
+            modelBuilder.Entity<MarketPrice>()
+                .Property(p => p.MaterialType).HasConversion<string>().HasMaxLength(100);
+
+            // TransportJob - unique batch_id
+            modelBuilder.Entity<TransportJob>()
+                .HasIndex(t => t.BatchId).IsUnique();
+
+            // BatchQualityCheck - unique batch_id
+            modelBuilder.Entity<BatchQualityCheck>()
+                .HasIndex(b => b.BatchId).IsUnique();
+
+            // Depot -> User (owner) - restrict delete
+            modelBuilder.Entity<Depot>()
+                .HasOne(d => d.Owner)
+                .WithMany(u => u.OwnedDepots)
+                .HasForeignKey(d => d.OwnerId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Factory -> User (owner) - restrict delete
+            modelBuilder.Entity<Factory>()
+                .HasOne(f => f.Owner)
+                .WithMany(u => u.OwnedFactories)
+                .HasForeignKey(f => f.OwnerId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // PlatformInvoice -> User (payer) - restrict delete, one invoice per payer per period
+            modelBuilder.Entity<PlatformInvoice>()
+                .HasOne(i => i.Payer)
+                .WithMany()
+                .HasForeignKey(i => i.PayerId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<PlatformInvoice>()
+                .HasIndex(i => new { i.PayerId, i.PeriodYear, i.PeriodMonth }).IsUnique();
+
+            // AuditLog -> User (nullable, keep log if user is deleted)
+            modelBuilder.Entity<AuditLog>()
+                .HasOne(a => a.User)
+                .WithMany()
+                .HasForeignKey(a => a.UserId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            // Notification -> User
+            modelBuilder.Entity<Notification>()
+                .HasOne(n => n.User)
+                .WithMany()
+                .HasForeignKey(n => n.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Schema chính thức dùng snake_case. Chặn entity mới vô tình sinh bảng PascalCase
+            // (ví dụ Users, BatchOrders) như DbContext scaffold đời đầu.
+            if (Database.ProviderName == "Npgsql.EntityFrameworkCore.PostgreSQL")
+            {
+                var invalidTableNames = modelBuilder.Model.GetEntityTypes()
+                    .Select(entity => entity.GetTableName())
+                    .Where(tableName => tableName is not null && tableName != tableName.ToLowerInvariant())
+                    .Distinct()
+                    .OrderBy(tableName => tableName)
+                    .ToArray();
+
+                if (invalidTableNames.Length > 0)
+                {
+                    throw new InvalidOperationException(
+                        $"Tên bảng EF phải dùng snake_case. Bảng không hợp lệ: {string.Join(", ", invalidTableNames)}");
+                }
+            }
+
+            // Seed data
+            modelBuilder.Entity<SystemConfig>().HasData(new SystemConfig
+            {
+                ConfigKey = "PLATFORM_FEE_PERCENTAGE",
+                ConfigValue = "5.00",
+                Description = "Phí nền tảng mặc định 5%",
+                UpdatedAt = new DateTime(2026, 9, 20, 7, 49, 15, 238, DateTimeKind.Utc).AddTicks(399)
+            });
+        }
     }
 }

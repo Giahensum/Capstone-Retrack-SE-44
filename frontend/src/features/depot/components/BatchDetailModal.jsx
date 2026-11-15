@@ -1,0 +1,73 @@
+import { useDepotQuery, number, money, batchLabels } from '../depotApi';
+import { Dialog, QueryState } from './DepotUI';
+import { materialLabel } from '../materialLabels';
+import { factoryProofPath, proofExtension } from '../proofDownload';
+import { useState } from 'react';
+import api from '@/lib/axios';
+import { depotError } from '../DepotContext';
+import BatchCostPanel from './BatchCostPanel';
+import DriverEventsPanel from './DriverEventsPanel';
+const missing = 'Chưa cập nhật';
+const kg = (v) => v == null ? missing : `${number(v)} kg`;
+const percent = (v) => v == null ? missing : `${number(v)}%`;
+const cash = (v) => v == null ? missing : money(v);
+const time = (v) => v ? new Date(v).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) : missing;
+function Rows({ title, items }) {
+  return <section className="rounded-2xl border border-d-border-subtle bg-white p-4"><h3 className="font-semibold text-d-primary mb-3">{title}</h3><dl className="grid grid-cols-1 sm:grid-cols-2 gap-4">{items.map(([label, value]) => <div key={label}><dt className="text-sm text-d-on-surface-variant">{label}</dt><dd className="mt-1 font-medium break-words">{value ?? missing}</dd></div>)}</dl></section>;
+}
+function Proof({ title, url }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const path = factoryProofPath(url);
+  if (path) return <div className="text-sm"><span>{title}: </span><button type="button" disabled={busy}
+    className="rounded-full border border-d-border-subtle px-4 py-2 text-d-primary disabled:opacity-40"
+    onClick={async () => {
+      setBusy(true); setError('');
+      try {
+        const response = await api.get(path, { responseType: 'blob' });
+        const extensions = { 'image/png': 'png', 'image/jpeg': 'jpg', 'application/pdf': 'pdf' };
+        const extension = extensions[response.data.type];
+        if (!extension || response.data.size > 700 * 1024) throw new Error('Chứng từ có định dạng hoặc dung lượng không hợp lệ.');
+        const objectUrl = URL.createObjectURL(response.data);
+        const link = document.createElement('a');
+        link.href = objectUrl; link.download = `chung-tu.${extension}`; link.click();
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+      } catch (e) { setError(e.response?.data?.message || (e.response ? depotError(e) : e.message)); }
+      finally { setBusy(false); }
+    }}>{busy ? 'Đang tải…' : `Tải ${title.toLocaleLowerCase('vi-VN')}`}</button>
+    {error && <p role="alert" className="text-d-error mt-2">{error}</p>}</div>;
+  const extension = proofExtension(url);
+  if (extension) return <p className="text-sm">{title}: <a className="text-d-primary underline" href={url} download={`chung-tu.${extension}`}>Tải {title.toLocaleLowerCase('vi-VN')}</a></p>;
+  let safe = false;
+  try { safe = ['https:', 'http:'].includes(new URL(url).protocol); } catch { /* Không mở URL chứng từ không hợp lệ. */ }
+  return <p className="text-sm">{title}: {safe ? <a className="text-d-primary underline" href={url} target="_blank" rel="noopener noreferrer">Mở chứng từ</a> : missing}</p>;
+}
+export default function BatchDetailModal({ id, onClose }) {
+  const query = useDepotQuery(`batches/${id}`);
+  const d = query.data, b = d?.batch, q = d?.quality, s = d?.settlement;
+  const transportLabels = { PENDING: 'Chờ phân công', ASSIGNED: 'Đã phân công', ACCEPTED: 'Tài xế đã nhận chuyến', PICKED_UP: 'Đã lấy hàng', IN_TRANSIT: 'Đang vận chuyển', ON_THE_WAY: 'Đang vận chuyển', DELIVERED: 'Đã giao' };
+  return <Dialog title={`Chi tiết lô ${b?.code ?? ''}`} onClose={onClose} wide><QueryState query={query}>{d && <div className="space-y-4">
+    <div className="rounded-xl bg-d-surface-accent p-4"><p className="font-bold text-d-primary">{batchLabels[b.status] ?? b.status}</p><p className="text-sm mt-2">Thời gian hiển thị theo giờ Việt Nam.</p></div>
+    {b.status === 'REJECTED' && <p role="status" className="rounded-xl border border-d-error p-3 text-d-error">Lô bị từ chối — cần kiểm tra lý do và hướng xử lý. Trạng thái này không xác nhận hàng đã quay về kho.</p>}
+    <Rows title="Thông tin lô" items={[["Mã lô", b.code ?? b.id], ["Vật liệu", materialLabel(b.materialType)], ["Khối lượng khai báo", kg(b.weightKg)], ["Nhà máy", b.factoryName ?? 'Đăng công khai'], ["Ngày tạo", time(b.createdAt)], ["Ghi chú kho", b.description]]}/>
+    <section className="rounded-2xl border border-d-border-subtle bg-white p-4"><h3 className="font-semibold text-d-primary mb-3">Ảnh vật liệu khi tạo lô</h3>
+      {b.imageUrls?.length ? <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">{b.imageUrls.filter((url) => { try { return new URL(url).protocol === 'https:'; } catch { return false; } }).map((url, index) =>
+        <a key={url} href={url} target="_blank" rel="noopener noreferrer"><img src={url} alt={`Ảnh vật liệu ${index + 1}`} className="h-32 w-full rounded-xl object-cover" /></a>)}</div>
+        : <p className="text-sm text-d-on-surface-variant">Lô này chưa có ảnh vật liệu.</p>}</section>
+    <Rows title="Vận chuyển và nhận hàng" items={[["Vận chuyển", transportLabels[d.transportStatus] ?? d.transportStatus], ["Tài xế", d.driverName], ["Nhà máy nhận hàng", time(d.receivedAt)], ["Quyết định chất lượng", time(d.decidedAt)]]}/>
+    <Rows title="Cân và kiểm tra chất lượng (KCS)" items={[["Khối lượng thực tế", kg(q?.actualWeightKg)], ["Khối lượng tổng", kg(q?.grossWeightKg)], ["Khối lượng bì", kg(q?.tareWeightKg)], ["Độ lệch", percent(q?.differencePercentage)], ["Phân hạng", q?.grade === 'PENDING' ? 'Chờ kiểm tra' : q?.grade], ["Kết quả", q?.isAccepted == null ? 'Chưa chốt' : q.isAccepted ? 'Chấp nhận' : 'Từ chối'], ["Độ tinh khiết", percent(q?.purityPercent)], ["Độ ẩm", percent(q?.moisturePercent)], ["Tạp chất", percent(q?.contaminationPercent)], ["Biên bản cân", q?.ticketNumber], ["Lý do từ chối", d.rejectionReason], ["Hướng xử lý", q?.resolution], ["Ghi chú nhà máy", q?.note]]}/>
+    <Proof title="Phiếu cân" url={q?.ticketImageUrl}/>
+    <Rows title="Quyết toán do nhà máy ghi nhận" items={[["Đơn giá thỏa thuận / kg", cash(s?.pricePerKg)],
+      ["Cơ sở đơn giá", s?.priceIncludesVat == null ? missing : s.priceIncludesVat ? 'Đã gồm VAT' : 'Chưa gồm VAT'],
+      ["Tiền hàng trước VAT", cash(s?.grossAmount)],
+      ["Cách khai VAT", ({ NOT_APPLICABLE: 'Không áp dụng VAT', ZERO_RATE: 'VAT 0%', TAXABLE: 'Có VAT theo hóa đơn' })[s?.vatTreatment] ?? missing],
+      ["Thuế suất VAT", percent(s?.vatPercentage)], ["Tiền VAT theo hóa đơn", cash(s?.vatAmount)],
+      ["Tổng tiền theo hóa đơn", cash(s?.invoiceTotalAmount)], [s?.feePolicy === "BUYER_SEPARATE_V1" ? "Phí do Factory trả riêng" : "Phí khấu trừ — lô cũ", cash(s?.feeAmount)],
+      ["Tiền thanh toán theo quyết toán, gồm VAT đã khai", cash(s?.netAmount)],
+      ["Tham chiếu thanh toán", s?.paymentReference], ["Ngày quyết toán", time(s?.settledAt)], ["Số hóa đơn", q?.invoiceNumber]]}/>
+    <p className="text-sm text-d-on-surface-variant">Số liệu do nhà máy ghi nhận; chưa phải xác nhận nhận tiền từ phía chủ kho.</p>
+    <Proof title="Hóa đơn nhà máy" url={q?.invoiceFileUrl}/><Proof title="Chứng từ thanh toán" url={s?.paymentProofUrl}/>
+    <BatchCostPanel id={id} quantity={b.weightKg} />
+    <DriverEventsPanel id={id} />
+  </div>}</QueryState></Dialog>;
+}

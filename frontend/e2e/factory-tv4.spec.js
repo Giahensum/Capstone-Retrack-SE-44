@@ -1,0 +1,389 @@
+import { test, expect } from "@playwright/test";
+
+const factoryId = "10000000-0000-0000-0000-000000000001";
+const depotId = "20000000-0000-0000-0000-000000000001";
+const batchId = "30000000-0000-0000-0000-000000000001";
+const orderId = "40000000-0000-0000-0000-000000000001";
+
+function apiFixture() {
+  const state = {
+    profile: {
+      ownerId: factoryId, companyName: "Nhà máy kiểm thử", taxCode: "TEST-001",
+      address: "Khu công nghiệp thử nghiệm", industrialZone: "KCN Test",
+      contactPhone: "0900000000", capacityKgPerMonth: 50000,
+      minimumPurityPercent: 80, platformFeePercentage: 1,
+      latitude: 10.8, longitude: 106.6, acceptedMaterials: ["PET"],
+    },
+    demands: [],
+    batches: [{
+      id: batchId, batchCode: "LO-TEST-001", depot: { id: depotId, companyName: "Vựa kiểm thử", address: "Địa chỉ vựa", contactPhone: "0900000001" },
+      materialType: "PET", estimatedWeightKg: 100, isDirectOffer: false,
+      status: "LISTED", createdAt: "2026-10-01T00:00:00Z", description: "Lô test", imageUrls: [],
+    }],
+    partners: [{ depotId, name: "Vựa kiểm thử", address: "Địa chỉ vựa", contactPhone: "0900000001", status: "APPROVED", blockedByFactory: false, blockedByDepot: false, legacyBlocked: false }],
+    orders: [{
+      id: orderId, batchId, batchCode: "LO-TEST-002", depotId, depotName: "Vựa kiểm thử",
+      depotAddress: "Địa chỉ vựa", depotPhone: "0900000001", materialType: "PET",
+      estimatedWeightKg: 100, status: "DELIVERED", createdAt: "2026-10-01T00:00:00Z",
+      transport: { status: "DELIVERED" },
+    }],
+    prices: [{ materialType: "PET", pricePerKg: 1000, effectiveDate: "2026-10-01", source: "Test" }],
+    calls: [],
+    loginRole: "FACTORY",
+    failProfileOnce: false,
+    failPrices: false,
+    priceCalls: 0,
+    demandPostCount: 0,
+    demandDelayMs: 0,
+  };
+  const envelope = (data) => ({ success: true, data });
+  const paged = (items) => ({ items, page: 1, pageSize: 100, totalCount: items.length, totalPages: 1 });
+  return { state, envelope, paged };
+}
+
+async function useFactoryApi(page, fixture) {
+  await page.route("**/api/**", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    const path = url.pathname;
+    const method = request.method();
+    const body = request.headers()["content-type"]?.includes("application/json")
+      ? request.postDataJSON() || {}
+      : {};
+    const { state, envelope, paged } = fixture;
+    let data;
+
+    if (path === "/api/auth/login" && method === "POST") {
+      data = { token: "test-factory-token", userId: factoryId, role: state.loginRole, fullName: "Factory Test", email: "factory@test.invalid" };
+    } else if (path === "/api/factory/profile" && method === "GET" && state.failProfileOnce) {
+      await route.fulfill({ status: 503, json: { success: false, message: "Mất kết nối thử nghiệm" } }); return;
+    } else if (path === "/api/factory/profile" && method === "GET") data = state.profile;
+    else if (path === "/api/factory/attachments/upload" && method === "POST") {
+      state.calls.push({ path });
+      data = { url: `/api/factory/attachments/${factoryId}/50000000000000000000000000000001` };
+    }
+    else if (path === "/api/factory/dashboard" && method === "GET") data = {
+      orderCount: state.orders.length, activeDemandCount: state.demands.length,
+      partnerCount: state.partners.length, pendingQcCount: state.orders.filter((x) => ["DELIVERED", "RECEIVED", "WEIGHED"].includes(x.status)).length,
+      pendingSettlementCount: state.orders.filter((x) => x.status === "VERIFIED").length,
+      monthlyPurchasedKg: 0, monthlyNetPayment: 0, periodPurchasedKg: 0,
+      periodGrossAmount: 0, periodNetPayment: 0, periodFeeAmount: 0,
+      materialVolumes: [], sixMonthPayments: [], priorityOrders: state.orders.slice(0, 10), recentOrders: state.orders.slice(0, 5),
+    };
+    else if (path === "/api/factory/profile" && method === "PUT") { state.profile = { ...state.profile, ...body }; data = state.profile; }
+    else if (path === "/api/factory/demands" && method === "GET") data = paged(state.demands);
+    else if (path === "/api/factory/demands" && method === "POST") {
+      state.demandPostCount += 1;
+      if (state.demandDelayMs) await new Promise((resolve) => setTimeout(resolve, state.demandDelayMs));
+      state.demands.push({ id: "demand-test", ...body }); data = state.demands.at(-1);
+    } else if (path.startsWith("/api/factory/demands/") && method === "DELETE") {
+      state.demands = state.demands.filter((d) => d.id !== path.split("/").at(-1)); data = true;
+    } else if (path.endsWith("/status") && method === "PATCH") {
+      const id = path.split("/").at(-2); state.demands = state.demands.map((d) => d.id === id ? { ...d, ...body } : d); data = true;
+    } else if (path === "/api/factory/orders" && method === "GET") data = paged(state.orders);
+    else if (path === `/api/factory/orders/${orderId}` && method === "GET") data = state.orders[0];
+    else if (path === `/api/factory/orders/${orderId}/receive` && method === "POST") {
+      state.orders[0] = { ...state.orders[0], status: "RECEIVED", receivedAt: new Date().toISOString() }; data = state.orders[0];
+    } else if (path === `/api/factory/qc/orders/${orderId}/weigh` && method === "POST") {
+      state.calls.push({ path, body });
+      state.orders[0] = { ...state.orders[0], status: "WEIGHED", weightTicket: { grossWeightKg: body.grossWeightKg, tareWeightKg: body.tareWeightKg, netWeightKg: body.grossWeightKg - body.tareWeightKg, ticketNumber: body.ticketNumber, ticketImageUrl: body.ticketImageUrl }, weightVerification: { factoryWeightKg: body.grossWeightKg - body.tareWeightKg, differencePercentage: 0, note: body.note } };
+      data = state.orders[0];
+    } else if (path === `/api/factory/qc/orders/${orderId}/quality` && method === "POST") {
+      state.calls.push({ path, body });
+      state.orders[0] = { ...state.orders[0], status: body.accept ? "VERIFIED" : "REJECTED", weightVerification: { ...state.orders[0].weightVerification, factoryWeightKg: 95, differencePercentage: 0, isVerified: body.accept, purityPercent: body.purityPercent, moisturePercent: body.moisturePercent, contaminationPercent: body.contaminationPercent, grade: body.grade, qualityNote: body.note } };
+      data = state.orders[0];
+    } else if (path === `/api/factory/orders/${orderId}/settle` && method === "POST") {
+      state.calls.push({ path, body });
+      const total = 95 * body.agreedPricePerKg; const vat = total * body.vatPercentage / 100; const fee = total * 0.01;
+      state.orders[0] = { ...state.orders[0], status: "COMPLETED", agreedPrice: body.agreedPricePerKg, totalAmount: total, vatTreatment: body.vatTreatment, vatPercentage: body.vatPercentage, vatAmount: vat, invoiceTotalAmount: total + vat, feeAmount: fee, platformFeePercentage: 1, netPayableAmount: total + vat - fee, paymentReference: body.paymentReference, settledAt: new Date().toISOString() };
+      data = state.orders[0];
+    } else if (path === `/api/factory/partners/orders/${orderId}/rating` && method === "POST") {
+      state.calls.push({ path, body });
+      state.orders[0] = { ...state.orders[0], rating: { rating: body.rating, comment: body.comment } };
+      if (body.partnershipStatus) {
+        state.partners = state.partners.map((partner) =>
+          partner.depotId === depotId ? { ...partner, status: body.partnershipStatus } : partner);
+      }
+      data = { id: "review-test", rating: body.rating, comment: body.comment, partnershipStatus: body.partnershipStatus };
+    } else if (path === "/api/factory/marketplace/batches" && method === "GET") {
+      const isDirect = url.searchParams.get("directOnly") === "true";
+      data = paged(state.batches.filter((b) => b.isDirectOffer === isDirect));
+    } else if (path === `/api/factory/marketplace/batches/${batchId}/accept` && method === "POST") {
+      state.calls.push({ path, body }); state.batches = state.batches.filter((b) => b.id !== batchId); data = { id: orderId };
+    } else if (path === "/api/factory/marketplace/prices" && method === "GET" && state.failPrices) {
+      state.priceCalls += 1;
+      await route.fulfill({ status: 503, json: { success: false, message: "Dịch vụ giá tạm thời không khả dụng" } }); return;
+    } else if (path === "/api/factory/marketplace/prices" && method === "GET") {
+      state.priceCalls += 1;
+      data = state.prices;
+    }
+    else if (path === "/api/factory/partners" && method === "GET") data = paged(state.partners);
+    else if (path === `/api/factory/partners/${depotId}/contract` && method === "POST") {
+      state.calls.push({ path, body });
+      state.partners = state.partners.map((partner) => partner.depotId === depotId
+        ? { ...partner, status: "PENDING", contractStatus: "PENDING_DEPOT", contractCode: "HDHT-TEST-001", contractTerms: body.terms }
+        : partner);
+      data = { depotId, status: "PENDING", contractStatus: "PENDING_DEPOT", contractCode: "HDHT-TEST-001" };
+    } else if (path === `/api/factory/partners/${depotId}/contract/termination` && method === "POST") {
+      state.calls.push({ path, body });
+      state.partners = state.partners.map((partner) => partner.depotId === depotId
+        ? { ...partner, terminationStatus: "PENDING_DEPOT", terminationReason: body.reason }
+        : partner);
+      data = { depotId, status: "APPROVED", contractStatus: "ACTIVE", terminationStatus: "PENDING_DEPOT" };
+    }
+    else if (path.startsWith("/api/factory/partners/") && method === "PUT") {
+      state.calls.push({ path, body });
+      state.partners = state.partners.map((partner) => partner.depotId === path.split("/").at(-2) ? { ...partner, status: body.status, blockedByFactory: body.status === "BLOCKED" } : partner);
+      data = true;
+    }
+    else { await route.fulfill({ status: 404, json: { success: false, message: `Unhandled API: ${method} ${path}` } }); return; }
+
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(envelope(data)) });
+  });
+}
+
+async function login(page) {
+  await page.goto("/login");
+  await page.getByPlaceholder("email@example.com").fill("factory@test.invalid");
+  await page.getByPlaceholder("••••••••").fill("password");
+  await page.getByRole("button", { name: "Đăng nhập" }).click();
+  await expect(page).toHaveURL(/\/factory/);
+  await expect(page.getByRole("link", { name: "Về tổng quan nhà máy" })).toBeVisible();
+}
+
+test.describe("Factory TV4 browser flow", () => {
+  test("redirects unauthenticated and non-Factory accounts away from Factory", async ({ page }) => {
+    await page.goto("/factory");
+    await expect(page).toHaveURL(/\/login/);
+    const fixture = apiFixture(); fixture.state.loginRole = "SELLER";
+    await useFactoryApi(page, fixture);
+    await page.getByPlaceholder("email@example.com").fill("seller@test.invalid");
+    await page.getByPlaceholder("••••••••").fill("password");
+    await page.getByRole("button", { name: "Đăng nhập" }).click();
+    await expect(page).toHaveURL(/\/seller/);
+    await page.goto("/factory"); await expect(page).toHaveURL(/\/unauthorized/);
+    await expect(page.getByText("FACTORY WORKSPACE")).toHaveCount(0);
+  });
+
+  test("shows loading, error, retry and useful empty states", async ({ page }) => {
+    const fixture = apiFixture(); fixture.state.failProfileOnce = true; fixture.state.orders = []; fixture.state.demands = []; fixture.state.partners = [];
+    await useFactoryApi(page, fixture);
+    await page.goto("/login"); await page.getByPlaceholder("email@example.com").fill("factory@test.invalid"); await page.getByPlaceholder("••••••••").fill("password"); await page.getByRole("button", { name: "Đăng nhập" }).click();
+    await expect(page).toHaveURL(/\/factory/);
+    await expect(page.getByRole("heading", { name: "Không tải được dữ liệu nhà máy" })).toBeVisible();
+    fixture.state.failProfileOnce = false;
+    await page.getByRole("button", { name: "Thử kết nối lại" }).click();
+    await expect(page.getByRole("button", { name: "Nhu cầu thu mua" })).toBeVisible();
+    await page.getByRole("button", { name: "Nhu cầu thu mua" }).click();
+    await expect(page.getByText("Chưa có dữ liệu phù hợp.")).toBeVisible();
+    await page.getByRole("button", { name: "Vựa đối tác" }).click();
+    await expect(page.getByText("Chưa có dữ liệu phù hợp.")).toBeVisible();
+  });
+
+  test("keeps mobile navigation usable and closes centered dialogs with Escape", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await useFactoryApi(page, apiFixture()); await login(page);
+    await page.getByRole("button", { name: "Nhu cầu thu mua" }).click();
+    await page.getByRole("button", { name: /Đăng nhu cầu/ }).click();
+    const dialog = page.getByRole("dialog"); await expect(dialog).toBeVisible();
+    const box = await dialog.boundingBox(); expect(Math.abs((box.x + box.width / 2) - 195)).toBeLessThan(3);
+    await page.keyboard.press("Escape"); await expect(dialog).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Tổng quan" })).toBeVisible();
+  });
+
+  test("locks mutation buttons and sends only one slow request", async ({ page }) => {
+    const fixture = apiFixture(); fixture.state.demandDelayMs = 500;
+    await useFactoryApi(page, fixture); await login(page);
+    await page.getByRole("button", { name: "Nhu cầu thu mua" }).click(); await page.getByRole("button", { name: /Đăng nhu cầu/ }).click();
+    await page.getByLabel("Khối lượng (kg)").fill("100"); await page.getByLabel("Giá từ (đ/kg)").fill("1000"); await page.getByLabel("Giá đến (đ/kg)").fill("1200"); await page.getByLabel("Hạn nhận hàng").fill("2027-12-31");
+    const save = page.getByRole("dialog").locator('button[type="submit"]'); await save.click(); await expect(save).toBeDisabled(); await expect(save).toHaveText("Đang lưu…");
+    await save.evaluate((button) => button.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    await expect(page.getByText("100 kg")).toBeVisible(); expect(fixture.state.demands).toHaveLength(1); expect(fixture.state.demandPostCount).toBe(1);
+  });
+  test("loads the price list separately so a price API error does not block Factory", async ({ page }) => {
+    const fixture = apiFixture(); fixture.state.failPrices = true;
+    await useFactoryApi(page, fixture); await login(page);
+    await expect(page.getByRole("heading", { name: /Chào ngày mới/ })).toBeVisible();
+    expect(fixture.state.priceCalls).toBe(0);
+    await page.getByRole("button", { name: "Giá tham khảo" }).click();
+    await expect(page.getByRole("alert")).toContainText("Dịch vụ giá tạm thời không khả dụng");
+    expect(fixture.state.priceCalls).toBeGreaterThan(0);
+  });
+  test("shows a Depot offer as pending until Factory accepts it", async ({ page }) => {
+    const fixture = apiFixture();
+    fixture.state.orders[0].status = "PENDING_APPROVAL";
+    fixture.state.orders[0].transport = null;
+    await useFactoryApi(page, fixture);
+    await login(page);
+    await page.getByRole("button", { name: "Đơn hàng & Vận chuyển" }).click();
+    await expect(page.getByRole("table").getByText("Chờ nhà máy duyệt")).toBeVisible();
+    await page.getByRole("button", { name: "Chi tiết" }).click();
+    await expect(page.getByText("Chờ nhà máy duyệt").last()).toBeVisible();
+    await expect(page.getByText("Đang chờ cập nhật vận chuyển")).toHaveCount(0);
+  });
+
+  test("shared login and logout use the common session", async ({ page }) => {
+    await page.setViewportSize({ width: 869, height: 768 });
+    await useFactoryApi(page, apiFixture());
+    await login(page);
+    await expect(page.getByText(/Đăng nhập nhà máy|Tạo tài khoản nhà máy/)).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Hồ sơ nhà máy" })).toBeVisible();
+    await page.getByRole("button", { name: "Đăng xuất" }).click();
+    await expect(page).toHaveURL(/\/login/);
+    await expect(page.getByRole("button", { name: "Đăng nhập" })).toBeVisible();
+  });
+
+  test("uploads a legal document before saving the Factory profile", async ({ page }) => {
+    const fixture = apiFixture();
+    await useFactoryApi(page, fixture);
+    await login(page);
+    await page.getByRole("button", { name: "Hồ sơ nhà máy" }).click();
+    await expect(page.getByText("Chọn tệp", { exact: true })).toHaveCount(2);
+    await expect(page.getByText("Chưa chọn tệp", { exact: true })).toHaveCount(2);
+    await page.getByLabel("Tên nhà máy").fill("Nhà máy đã lưu");
+    await page.getByLabel("Giấy phép kinh doanh").setInputFiles({
+      name: "giay-phep.png",
+      mimeType: "image/png",
+      buffer: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    });
+    await expect(page.locator(".factory-file-name").filter({ hasText: "giay-phep.png" })).toBeVisible();
+    await page.getByRole("button", { name: "Lưu hồ sơ nhà máy" }).click();
+    await expect(page.getByText("Đã lưu hồ sơ nhà máy.")).toBeVisible();
+    expect(fixture.state.calls).toContainEqual({ path: "/api/factory/attachments/upload" });
+    expect(fixture.state.profile.businessLicenseUrl).toContain("/api/factory/attachments/");
+
+    await page.getByRole("button", { name: "Tổng quan" }).click();
+    await page.getByRole("button", { name: "Hồ sơ nhà máy" }).click();
+    await expect(page.getByLabel("Tên nhà máy")).toHaveValue("Nhà máy đã lưu");
+    await expect(page.getByText("Đã lưu trên máy chủ:")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Xem giấy phép kinh doanh" })).toBeVisible();
+  });
+
+  test("receives Depot delivery, records weighing and QC, then settles once", async ({ page }) => {
+    const fixture = apiFixture();
+    await useFactoryApi(page, fixture);
+    await login(page);
+
+    await page.getByRole("button", { name: "Trạm cân & KCS" }).click();
+    await page.getByRole("button", { name: "Chi tiết" }).click();
+    await page.getByRole("button", { name: "Xác nhận nhận hàng" }).click();
+    await expect(page.getByText("Đã xác nhận xe giao hàng. Có thể lập phiếu cân.")).toBeVisible();
+
+    await page.getByRole("button", { name: "Lập phiếu cân" }).click();
+    await page.getByLabel("Gross • Xe có hàng (kg)").fill("105");
+    await page.getByLabel("Tare • Xe rỗng (kg)").fill("10");
+    await page.getByRole("button", { name: "Lưu và chuyển sang KCS" }).click();
+    await expect(page.getByText("Đã lưu phiếu cân. Tiếp tục nhập kết quả KCS.")).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Kiểm tra chất lượng/ })).toBeVisible();
+    await page.getByLabel("Độ tinh khiết (%)").fill("92");
+    await page.getByLabel("Độ ẩm (%)").fill("3");
+    await page.getByLabel("Tạp chất (%)").fill("2");
+    await page.getByLabel("Grade").selectOption("A");
+    await page.getByRole("button", { name: "Chốt kết quả KCS" }).click();
+    await expect(page.getByText("KCS đạt. Đã chuyển lô sang chờ quyết toán.")).toBeVisible();
+
+    await page.getByRole("button", { name: "Quyết toán", exact: true }).click();
+    await page.getByRole("button", { name: "Chi tiết" }).click();
+    await page.getByRole("button", { name: "Thỏa thuận giá & Quyết toán" }).click();
+    await page.getByLabel(/Đơn giá đã thỏa thuận sau KCS/).fill("1200");
+    await page.getByLabel("Mã tham chiếu chuyển khoản").fill("BANK-TEST-001");
+    await page.getByLabel("VAT theo hóa đơn của vựa").selectOption("TAXABLE:10");
+    await page.getByLabel("Số hóa đơn điện tử").fill("HD-E2E-001");
+    await page.getByLabel("Ngày hóa đơn").fill("2026-10-18");
+    await page.getByLabel("Mã số thuế bên bán (vựa)").fill("0314892841");
+    await expect(page.getByText("Tổng giá trị hóa đơn")).toBeVisible();
+    await page.getByLabel(/Tôi xác nhận giá đã thống nhất/).check();
+    await page.getByRole("button", { name: "Ghi nhận quyết toán" }).click();
+    await expect(page.getByText("Đã ghi nhận quyết toán. Có thể đánh giá lô hàng.")).toBeVisible();
+    expect(fixture.state.orders[0].status).toBe("COMPLETED");
+    expect(fixture.state.orders[0].vatPercentage).toBe(10);
+    await page.getByRole("button", { name: "Đánh giá lô & Hợp tác" }).click();
+    await page.getByLabel("Nhận xét").fill("Hàng đạt chất lượng");
+    await page.getByRole("button", { name: "Lưu đánh giá" }).click();
+    await expect(page.getByText("Đã lưu đánh giá lô hàng.")).toBeVisible();
+    expect(fixture.state.partners[0].status).toBe("APPROVED");
+    expect(fixture.state.calls.map((call) => call.path)).toEqual([
+      `/api/factory/qc/orders/${orderId}/weigh`,
+      `/api/factory/qc/orders/${orderId}/quality`,
+      `/api/factory/orders/${orderId}/settle`,
+      `/api/factory/partners/orders/${orderId}/rating`,
+    ]);
+    await page.reload();
+    await page.getByRole("button", { name: "Quyết toán", exact: true }).click();
+    await expect(page.getByRole("table").getByText("Đã quyết toán", { exact: true })).toBeVisible();
+  });
+
+  test("accepts an available Depot batch and creates a demand", async ({ page }) => {
+    const fixture = apiFixture();
+    await useFactoryApi(page, fixture);
+    await login(page);
+    await page.getByRole("button", { name: "Sàn nguyên liệu" }).click();
+    await page.getByRole("button", { name: "Xem lô & nhận hàng" }).click();
+    await page.getByRole("button", { name: "Nhận lô hàng" }).click();
+    await expect(page.getByText("Đã nhận lô. Đơn hàng đang chờ tài xế.")).toBeVisible();
+    expect(fixture.state.calls[0].path).toBe(`/api/factory/marketplace/batches/${batchId}/accept`);
+
+    await page.getByRole("button", { name: "Nhu cầu thu mua" }).click();
+    await page.getByRole("button", { name: /Đăng nhu cầu/ }).click();
+    await page.locator("dialog select").first().selectOption("PET");
+    await page.getByLabel("Khối lượng (kg)").fill("250");
+    await page.getByLabel("Giá từ (đ/kg)").fill("1000");
+    await page.getByLabel("Giá đến (đ/kg)").fill("1500");
+    await page.getByLabel("Hạn nhận hàng").fill("2027-12-31");
+    await page.getByRole("button", { name: "Lưu nhu cầu" }).click();
+    await expect(page.getByText("250 kg")).toBeVisible();
+    expect(fixture.state.demands).toHaveLength(1);
+  });
+
+  test("records the Factory decision to block a Depot partner", async ({ page }) => {
+    const fixture = apiFixture();
+    await useFactoryApi(page, fixture);
+    await login(page);
+    await page.getByRole("button", { name: "Vựa đối tác" }).click();
+    await page.getByRole("button", { name: "Chặn vựa" }).click();
+    await expect(page.getByText(/Ngừng nhận lô mới/)).toBeVisible();
+    await page.getByRole("button", { name: "Xác nhận" }).click();
+    await expect(page.getByText("Đã lưu thay đổi trên máy chủ.")).toBeVisible();
+    expect(fixture.state.calls.at(-1)).toMatchObject({
+      path: `/api/factory/partners/${depotId}/status`,
+      body: { status: "BLOCKED" },
+    });
+    await expect(page.getByRole("button", { name: "Bỏ chặn của nhà máy" })).toBeVisible();
+  });
+
+  test("sends an electronic partnership contract with the Depot id", async ({ page }) => {
+    const fixture = apiFixture();
+    await useFactoryApi(page, fixture);
+    await login(page);
+    await page.getByRole("button", { name: "Vựa đối tác" }).click();
+    await page.getByRole("button", { name: "Lập hợp đồng điện tử" }).click();
+    await page.getByLabel(/Tôi đã đọc, đồng ý nội dung/).check();
+    await page.getByRole("button", { name: "Ký và gửi chủ vựa" }).click();
+    await expect(page.getByText("Đã ký và gửi hợp đồng cho chủ vựa.")).toBeVisible();
+    expect(fixture.state.calls.at(-1)).toMatchObject({
+      path: `/api/factory/partners/${depotId}/contract`,
+      body: { validMonths: 12, confirmElectronicSignature: true },
+    });
+    await expect(page.getByText(/Chờ chủ vựa ký/)).toBeVisible();
+  });
+
+  test("requests contract termination and keeps the active contract for review", async ({ page }) => {
+    const fixture = apiFixture();
+    fixture.state.partners[0] = { ...fixture.state.partners[0], contractStatus: "ACTIVE", contractCode: "HDHT-TEST-001", contractVersion: 1, contractTerms: "Nội dung hợp đồng kiểm thử đủ dài để hiển thị và giữ lịch sử sau khi đề nghị chấm dứt.", contractTermsHash: "a".repeat(64) };
+    await useFactoryApi(page, fixture);
+    await login(page);
+    await page.getByRole("button", { name: "Vựa đối tác" }).click();
+    await expect(page.getByRole("button", { name: "Xem hợp đồng" })).toBeVisible();
+    await page.getByRole("button", { name: "Xem hợp đồng" }).click();
+    await expect(page.getByRole("heading", { name: /HỢP ĐỒNG HỢP TÁC THU MUA/ })).toBeVisible();
+    await expect(page.getByText("ĐẠI DIỆN BÊN MUA")).toBeVisible();
+    await expect(page.getByRole("button", { name: "In / Lưu PDF" })).toBeVisible();
+    await page.getByRole("button", { name: "Đóng hộp thoại" }).click();
+    await page.getByRole("button", { name: "Đề nghị chấm dứt" }).click();
+    await page.getByLabel("Lý do chấm dứt").fill("Hai bên đã hoàn tất kế hoạch hợp tác hiện tại.");
+    await page.getByRole("button", { name: "Gửi đề nghị" }).click();
+    await expect(page.getByText("Đã gửi đề nghị chấm dứt cho chủ vựa.")).toBeVisible();
+    expect(fixture.state.calls.at(-1)).toMatchObject({ path: `/api/factory/partners/${depotId}/contract/termination` });
+    await expect(page.getByText("Đang chờ chủ vựa xác nhận đề nghị chấm dứt.")).toBeVisible();
+  });
+});

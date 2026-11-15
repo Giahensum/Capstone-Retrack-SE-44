@@ -1,0 +1,97 @@
+using Microsoft.EntityFrameworkCore;
+using Retrack.API.Data;
+using Retrack.API.DTOs;
+using Retrack.API.DTOs.Liquidation;
+using Retrack.API.Models;
+using Retrack.API.Repositories.Interfaces;
+
+namespace Retrack.API.Repositories;
+
+public sealed class LiquidationRepository(AppDbContext db) : ILiquidationRepository
+{
+    public Task<bool> IsActiveSellerAsync(Guid id) => db.Users.AnyAsync(x => x.Id == id && x.Role == "SELLER" && x.IsActive);
+    public Task<LiquidationLot?> FindAsync(Guid id) => db.LiquidationLots.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id);
+    public Task LockCreateAsync(Guid id) => db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({id.ToString()}, 0))");
+    public async Task<LiquidationLot?> LockAsync(Guid id)
+    {
+        var lot = await db.LiquidationLots.FromSqlInterpolated($"SELECT * FROM liquidation_lots WHERE id = {id} FOR UPDATE").SingleOrDefaultAsync();
+        if (lot != null) await db.Entry(lot).ReloadAsync();
+        return lot;
+    }
+    public async Task<PagedResult<LiquidationListRow>> ListAsync(Guid userId, Guid depotId, LiquidationQuery query, DateTime now)
+    {
+        var source = db.LiquidationLots.AsNoTracking();
+        var participation = db.LiquidationParticipations.Where(p => p.OwnerId == userId && p.DepotId == depotId);
+        var purchases = db.LiquidationAgreements.Where(a => a.BuyerId == userId && a.DepotId == depotId);
+        var completed = purchases.Where(a => db.DepotStockReceipts.Any(r =>
+            r.BulkAgreementId == a.Id && r.DepotId == depotId && r.Status == "POSTED"));
+
+        source = query.View switch
+        {
+            "OPEN" => source.Where(x => x.Status == "PUBLISHED" && x.Seller.IsActive),
+            "PURCHASES" => source.Where(x => x.Status == "AWARDED"
+                && purchases.Any(a => a.LotId == x.Id) && !completed.Any(a => a.LotId == x.Id)),
+            "HISTORY" => source.Where(x =>
+                (x.Status == "AWARDED" && completed.Any(a => a.LotId == x.Id))
+                || ((x.Status == "AWARDED" || x.Status == "NO_SALE" || x.Status == "CANCELLED")
+                    && participation.Any(p => p.LotId == x.Id) && !purchases.Any(a => a.LotId == x.Id))),
+            _ => source.Where(x => x.Seller.IsActive && (x.Status != "CANCELLED" || participation.Any(p => p.LotId == x.Id)))
+        };
+        if (!string.IsNullOrWhiteSpace(query.Search)) source = source.Where(x => x.Title.Contains(query.Search) || x.PublicArea.Contains(query.Search));
+        if (query.ParticipatingOnly) source = source.Where(x => participation.Any(p => p.LotId == x.Id));
+        source = query.Status switch {
+            "SURVEY" => source.Where(x => x.Status == "PUBLISHED" && x.SurveyStart <= now && x.SurveyEnd > now),
+            "BIDDING" => source.Where(x => x.Status == "PUBLISHED" && x.BiddingStart <= now && x.BiddingEnd > now),
+            "UPCOMING" => source.Where(x => x.Status == "PUBLISHED" && now < x.BiddingStart && (now < x.SurveyStart || now >= x.SurveyEnd)),
+            "CLOSING" => source.Where(x => x.Status == "PUBLISHED" && now >= x.BiddingEnd),
+            "AWARDED" or "NO_SALE" or "CANCELLED" => source.Where(x => x.Status == query.Status),
+            _ => source
+        };
+        var total = await source.CountAsync();
+        var offset = (long)(query.Page - 1) * query.PageSize;
+        return new() { Page = query.Page, PageSize = query.PageSize, TotalCount = total,
+            Items = offset > int.MaxValue ? [] : await source.OrderByDescending(x => x.CreatedAt).ThenBy(x => x.Id)
+                .Skip((int)offset).Take(query.PageSize)
+                .Select(x => new LiquidationListRow(x, purchases.Any(a => a.LotId == x.Id)
+                    ? (completed.Any(a => a.LotId == x.Id) ? "COMPLETED" : "IN_PROGRESS")
+                    : null)).ToListAsync() };
+    }
+    public Task<LiquidationParticipation?> ParticipationAsync(Guid lotId, Guid ownerId) => db.LiquidationParticipations.SingleOrDefaultAsync(x => x.LotId == lotId && x.OwnerId == ownerId);
+    public void AddParticipation(LiquidationParticipation participation) => db.LiquidationParticipations.Add(participation);
+    public Task<LiquidationBid?> FindBidAsync(Guid id) => db.LiquidationBids.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id);
+    public void AddBid(LiquidationBid bid) => db.LiquidationBids.Add(bid);
+    public void AddNotice(Notification notice) => db.Notifications.Add(notice);
+    public Task<List<LiquidationParticipation>> ParticipantsAsync(Guid lotId) => db.LiquidationParticipations.AsNoTracking().Where(x => x.LotId == lotId).ToListAsync();
+    public async Task<PagedResult<MyLiquidationBidDto>> MyBidsAsync(Guid lotId, Guid ownerId, Guid depotId, int page)
+    {
+        var source = db.LiquidationBids.AsNoTracking().Where(x => x.LotId == lotId && x.OwnerId == ownerId && x.DepotId == depotId);
+        var total = await source.CountAsync();
+        var offset = (long)(page - 1) * 20;
+        return new() { Page = page, PageSize = 20, TotalCount = total,
+            Items = offset > int.MaxValue ? [] : await source.OrderByDescending(x => x.CreatedAt).ThenBy(x => x.Id).Skip((int)offset).Take(20)
+                .Select(x => new MyLiquidationBidDto(x.Id, x.Amount, x.CreatedAt)).ToListAsync() };
+    }
+    public async Task<LiquidationAgreement?> FindAgreementAsync(Guid id)
+    {
+        var agreement = await db.LiquidationAgreements.Include(x => x.Lot).SingleOrDefaultAsync(x => x.Id == id);
+        if (agreement != null) await db.Entry(agreement).ReloadAsync();
+        return agreement;
+    }
+    public Task<LiquidationAgreement?> LotAgreementAsync(Guid lotId) => db.LiquidationAgreements.AsNoTracking().SingleOrDefaultAsync(x => x.LotId == lotId);
+    public void AddAgreement(LiquidationAgreement agreement) => db.LiquidationAgreements.Add(agreement);
+    public Task<DepotStockReceipt?> AgreementReceiptAsync(Guid id) => db.DepotStockReceipts.AsNoTracking().SingleOrDefaultAsync(x => x.BulkAgreementId == id && x.Status != "VOIDED" && x.Status != "REJECTED");
+    public Task<ContractPartiesDto> ContractPartiesAsync(LiquidationAgreement agreement) => db.ContractPartiesAsync(agreement);
+    public async Task<PagedResult<LiquidationLadderDto>> LadderAsync(Guid lotId, Guid? leadingBidId, Guid ownerId, Guid depotId, int page)
+    {
+        const int pageSize = 20;
+        var source = db.LiquidationBids.AsNoTracking().Where(x => x.LotId == lotId);
+        var total = await source.CountAsync();
+        var offset = (long)(page - 1) * pageSize;
+        var rows = offset > int.MaxValue ? [] : await source.OrderByDescending(x => x.Amount).ThenBy(x => x.CreatedAt).ThenBy(x => x.Id)
+            .Skip((int)offset).Take(pageSize).Select(x => new { x.Id, x.Amount, x.CreatedAt, Mine = x.OwnerId == ownerId && x.DepotId == depotId }).ToListAsync();
+        return new() { Page = page, PageSize = pageSize, TotalCount = total,
+            Items = rows.Select((x, i) => new LiquidationLadderDto((int)offset + i + 1, x.Amount, x.CreatedAt, x.Mine, x.Id == leadingBidId)).ToList() };
+    }
+    public Task<List<Guid>> ExpiredAsync(DateTime now) => db.LiquidationLots.AsNoTracking()
+        .Where(x => x.Status == "PUBLISHED" && x.BiddingEnd <= now).OrderBy(x => x.BiddingEnd).ThenBy(x => x.Id).Take(100).Select(x => x.Id).ToListAsync();
+}

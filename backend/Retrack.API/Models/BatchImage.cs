@@ -1,4 +1,4 @@
-﻿namespace Retrack.API.Models;
+namespace Retrack.API.Models;
 
 public class BatchImage
 {
@@ -8,3 +8,5 @@ public class BatchImage
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public InventoryBatch Batch { get; set; } = null!;
 }
+
+

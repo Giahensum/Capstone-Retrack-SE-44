@@ -1,6 +1,8 @@
-﻿namespace Retrack.API.Services.Interfaces;
+namespace Retrack.API.Services.Interfaces;
 
 public interface IInventoryService
 {
-    // TODO: TV2 implement
+    Task<List<Retrack.API.DTOs.Depot.InventoryRowDto>> GetAsync(Guid ownerId, Guid depotId);
 }
+
+

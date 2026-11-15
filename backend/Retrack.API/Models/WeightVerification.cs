@@ -1,5 +1,8 @@
-﻿namespace Retrack.API.Models;
+using System.ComponentModel.DataAnnotations.Schema;
 
+namespace Retrack.API.Models;
+
+[NotMapped]
 public class WeightVerification
 {
     public Guid Id { get; set; }
@@ -12,3 +15,5 @@ public class WeightVerification
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public BatchOrder BatchOrder { get; set; } = null!;
 }
+
+

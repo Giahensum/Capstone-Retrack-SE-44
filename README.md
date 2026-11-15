@@ -2,6 +2,90 @@
 
 > Nền tảng số hóa chuỗi cung ứng phế liệu, kết nối Người bán → Kho vựa → Nhà máy tái chế.
 
+## Phiên bản và triển khai frontend
+
+Bản mã nguồn `v1.0.0` dùng quy trình PR `feature -> develop -> main`.
+Vercel triển khai frontend từ `main`, Root Directory là `frontend`.
+Xem [hướng dẫn triển khai và biến môi trường](docs/deploy-frontend-vercel.md)
+và [phạm vi/giới hạn bản phát hành](docs/releases/v1.0.0.md).
+Sau khi liên kết GitHub, commit mới vào `main` có thể tự build/deploy;
+không cần tạo lại project hoặc nhập lại biến môi trường mỗi lần cập nhật.
+
+Trước khi triển khai production, TV5 cần phối hợp nhóm nâng nền tảng:
+dự án hiện target .NET 8, đã hết hỗ trợ ngày 10/11/2026; hướng nâng là
+.NET 10 LTS kèm kiểm thử EF/Npgsql và các role. Vá dependency riêng không
+thay cho nâng runtime. [Chính sách hỗ trợ .NET](https://dotnet.microsoft.com/en-us/platform/support/policy/dotnet-core).
+
+## Bảo vệ hồ sơ Depot
+
+Schema/seed chung vẫn chỉ có `db/bootstrap/retrack-system.sql`; xem
+[hướng dẫn DB](db/README.md) khi pull backend mới, đặc biệt các khối
+`RETRACK_DEPOT_VERIFICATION_DOCUMENTS_V2` và
+`RETRACK_DEPOT_VERIFICATION_SCANNING_V1`.
+
+Hồ sơ kho hỗ trợ hai cách lưu, vẫn tải qua API kiểm quyền, không dùng URL
+Cloudinary công khai:
+
+- Mặc định `VerificationStorage__Provider=Database`: nội dung ở PostgreSQL,
+  chạy được khi máy chưa cấu hình cloud.
+- `VerificationStorage__Provider=Cloudinary`: dùng chính các biến
+  `Cloudinary__CloudName/ApiKey/ApiSecret` hiện có; tệp mới là raw asset
+  `authenticated`, DB chỉ giữ key, kích thước, SHA-256 và thông tin hồ sơ.
+  Backend tải qua API riêng tư có chữ ký hết hạn rồi trả byte; không đưa URL
+  ký hoặc credential cho frontend. Không resize/nén giấy tờ.
+- Hồ sơ cũ trong DB tiếp tục đọc được, không tự chuyển ra cloud hoặc xóa byte.
+  Chọn cloud mà provider lỗi thì báo lỗi, không âm thầm lưu sang DB.
+
+DB cũ cần nâng khối `RETRACK_DEPOT_PRIVATE_CLOUD_V1_BEGIN/END` trong SQL chung
+trước khi chạy backend mới; xem db/README.md. Ảnh lô/ảnh thông thường vẫn theo
+CloudinaryService hiện có, không đổi thành private và không đổi API role khác.
+pg_dump chỉ sao lưu metadata đối với tệp cloud; kế hoạch backup phải bao gồm
+nội dung trên cloud. Tài nguyên private không có tham chiếu do crash hoặc COMMIT
+chưa rõ kết quả cần đối soát; không xóa hàng loạt asset để dọn lỗi.
+
+Chỉ Owner đúng kho và Admin đang hoạt động được tải/xem. Upload tối đa 3 tệp,
+2 MB/tệp; giới hạn bổ sung 8 lần nộp/phút và 30 lần tải/phút theo tài khoản,
+ngoài giới hạn 5 bộ hồ sơ/24 giờ hiện có. Khi quá hạn mức, API trả 429,
+`Retry-After` và mã tra cứu. Giới hạn phút là trong một tiến trình API:
+khi chạy nhiều replica, TV5 cần bổ sung giới hạn dùng chung hoặc tại gateway.
+
+Biến môi trường ở `backend/Retrack.API/.env.example`:
+
+- `VerificationScanner__Mode=Disabled`: chỉ cho bỏ quét ở Development;
+  giao diện ghi rõ chưa quét và chỉ dùng giấy tờ kiểm thử.
+- `VerificationScanner__Mode=ClamAv`: quét bằng daemon ClamAV qua INSTREAM.
+  Điền Host/Port và TimeoutSeconds (1–30 giây); tối đa hai lượt quét đồng thời
+  trên một tiến trình, không giữ khóa DB trong lúc quét.
+- Production chưa cấu hình scanner sẽ từ chối **hồ sơ mới** bằng 503; xem
+  hồ sơ/lịch sử và các nghĩa vụ giao dịch đang có vẫn giữ quyền hiện tại.
+  Daemon lỗi/timeout/phản hồi không rõ không được coi là tệp sạch.
+
+ClamAV tự host không cần API key hay tài khoản dịch vụ. Nếu dùng Docker,
+mở Docker Desktop/daemon, chọn image chính thức thuộc phiên bản đang hỗ trợ,
+cấp RAM phù hợp và giữ bộ chữ ký FreshClam được cập nhật. Tài liệu chính thức
+khuyến nghị khoảng 4 GiB cho container. Sau staging, ghim phiên bản/digest đã
+nghiệm thu để triển khai. Không tự tải giấy tờ khách hàng lên dịch vụ quét công khai.
+[Cài ClamAV bằng Docker](https://docs.clamav.net/manual/Installing/Docker.html).
+
+Ví dụ chạy thử local sau khi chọn image và kiểm tra còn được hỗ trợ:
+
+```powershell
+$clamImage = 'clamav/clamav:stable'
+docker run -d --name retrack-clamav --restart unless-stopped --memory 4g -p 127.0.0.1:3310:3310 -v retrack-clamav-signatures:/var/lib/clamav $clamImage
+```
+
+Chờ daemon sẵn sàng rồi đặt Mode=ClamAv, Host=127.0.0.1, Port=3310 và khởi động
+lại API. Nếu API cũng ở Docker, dùng hostname dịch vụ trên network nội bộ,
+không dùng 127.0.0.1 trỏ về chính container API. Không công khai cổng 3310:
+giao thức TCP ClamAV không có xác thực/TLS.
+[Giao thức và mạng ClamAV](https://docs.clamav.net/manual/Usage/Scanning.html).
+
+`CLEAN` chỉ ghi khi daemon trả kết quả sạch, có thời điểm quét; hồ sơ cũ hoặc
+tệp bỏ quét ở Development giữ `NOT_SCANNED`. Antivirus không thay xét duyệt
+giấy tờ, làm sạch nội dung PDF (CDR) hoặc kiểm tra pháp lý. Chưa có tự xóa
+giấy tờ theo thời hạn; nhóm phải chốt chính sách lưu/xóa và xử lý bản sao lưu
+trước khi dùng hồ sơ thật.
+
 ## 🏗️ Tech Stack
 
 | Layer | Technology |
@@ -22,7 +106,7 @@ Capstone/
 │       ├── Controllers/            ← 🎮 API Endpoints (chia theo Role)
 │       │   ├── Auth/               ← Login, Register, Google OAuth
 │       │   ├── Seller/             ← TV1: Pickup request, confirm
-│       │   ├── Depot/              ← TV2: Dashboard, inventory, batch, payment, staff
+│       │   ├── Depot/              ← Ngô Sỹ Giá: tổng quan, tồn kho, lô hàng, thanh toán, nhân sự
 │       │   ├── Employee/           ← TV3: Accept order, check-in, sort & weigh
 │       │   ├── Driver/             ← TV3: Accept job, check-in/out
 │       │   ├── Factory/            ← TV4: Marketplace, QC, settlement, partner
@@ -32,7 +116,7 @@ Capstone/
 │       │   ├── Interfaces/         ← Interface definitions
 │       │   ├── Auth/               ← TV1
 │       │   ├── Seller/             ← TV1
-│       │   ├── Depot/              ← TV2
+│       │   ├── Depot/              ← Ngô Sỹ Giá (TV2)
 │       │   ├── Employee/           ← TV3
 │       │   ├── Driver/             ← TV3
 │       │   ├── Factory/            ← TV4
@@ -59,7 +143,7 @@ Capstone/
 │       ├── features/               ← ⭐ Mỗi người code trong folder role mình
 │       │   ├── auth/               ← TV1: Login, Register
 │       │   ├── seller/             ← TV1: Dashboard, CreateRequest
-│       │   ├── depot/              ← TV2: Dashboard, Inventory, Staff...
+│       │   ├── depot/              ← Ngô Sỹ Giá: tổng quan, tồn kho, nhân sự...
 │       │   ├── employee/           ← TV3: PickupPool, CheckIn, Weigh
 │       │   ├── driver/             ← TV3: TransportPool, CheckIn/Out
 │       │   ├── factory/            ← TV4: Marketplace, QC, Settlement
@@ -88,36 +172,77 @@ Capstone/
 | TV | Backend | Frontend |
 |----|---------|----------|
 | TV1 | `Controllers/Auth/` + `Services/Auth/` + `Controllers/Seller/` + `Services/Seller/` | `features/auth/` + `features/seller/` |
-| TV2 | `Controllers/Depot/` + `Services/Depot/` | `features/depot/` |
+| Ngô Sỹ Giá (TV2 — Chủ kho vựa) | `Controllers/Depot/` + `Services/Depot/` | `features/depot/` |
 | TV3 | `Controllers/Employee/` + `Services/Employee/` + `Controllers/Driver/` + `Services/Driver/` | `features/employee/` + `features/driver/` |
 | TV4 | `Controllers/Factory/` + `Services/Factory/` | `features/factory/` |
 | TV5 | `Controllers/Admin/` + `Services/Admin/` + Infrastructure setup | `features/admin/` |
 
-## 🚀 Getting Started
+## 🚀 Hướng Dẫn Cài Đặt và Chạy Dự Án (Getting Started)
 
-### Backend
+### Nhập kho đa nguồn và giá vốn Depot
+
+- Máy mới chạy **một file** `db/bootstrap/retrack-system.sql` trên database rỗng để dựng schema và seed demo. Máy đã có schema: trước backend mới, sao lưu và chạy **riêng khối từ `-- RETRACK_DEPOT_STOCK_V1` đến trước `-- RETRACK_SCHEMA_END`** trong Query Tool của đúng database; không chọn sang phần seed. Khối bổ sung này giữ nguyên đơn thu gom/lô cũ và có thể chạy lại. Ứng dụng không tự migrate.
+- Trong **Quản lý tồn kho**, tab **Phiếu nhập đa nguồn** ghi hàng mua ngoài/tồn đầu kỳ/lô thanh lý mua ngoài phiên giá. Lưu nháp → kiểm tra số thực, giá mua và chi phí → chủ kho duyệt ghi sổ. Không nhập lại đơn thu gom `DONE` vì đã được tính tồn. Phiếu còn nguyên, chưa giữ/xuất/bán có thể đảo toàn bộ với lý do; giữ lịch sử.
+- Tab **Đồ tái sử dụng** theo cái/bộ, ghi bán ngoài sau giao thực tế và giảm đúng lượng. Nhân viên có API lập/gửi phiếu, chỉ chủ kho được chốt chi phí/ghi sổ/bán. Giao diện mobile nhận hàng cần TV3 tích hợp API mới.
+- Lô xuất mới có snapshot nguồn giá vốn FIFO, chi phí giao/bán và chênh lệch trước thuế trong **Chi tiết lô hàng**. Hàng trộn chỉ truy vết phân bổ chi phí; lô cũ thiếu snapshot/nguồn thiếu giá vốn sẽ hiện chưa đủ dữ liệu. Giá mua pickup cũ chưa bao gồm các chi phí đầu vào khác. Đây là sổ quản trị phục vụ giao dịch, chưa phải phần mềm kế toán thuế.
+- Trang **Báo cáo doanh thu → Giá vốn và chênh lệch** tổng hợp riêng Factory đã quyết toán và đồ cũ đã ghi bán. Chỉ trừ giá vốn phần bán, không trừ toàn bộ lô nhập chưa bán hết; tiền ròng đã trừ phí không bị trừ phí lần nữa. Kỳ theo ngày quyết toán/ngày ghi bán ở Việt Nam; chi phí bổ sung sau kỳ gắn với giao dịch vẫn được cập nhật. Giao dịch thiếu nguồn vốn hoặc tiền ròng không được tự tính thành lãi. Tab quyết toán/thu mua cũ giữ nguyên cơ sở tính. Phần báo cáo không thêm bảng/cột so với module nhập kho đa nguồn.
+- Feature này chưa gồm phiên đấu giá Seller, tin rao đồ cũ công khai, tự điều phối Employee, chuyển đồ cũ thành vật liệu hay xác minh giấy phép. Nguồn lô thanh lý nhập tay không được gắn nhãn đã trúng đấu giá trong app.
+
+### 1. Yêu cầu hệ thống
+- **PostgreSQL** (đã kiểm thử local với PostgreSQL 17; dùng database riêng cho phát triển và test)
+- **.NET 8 SDK**
+- **Node.js** đáp ứng engine của Vite 8 trong lockfile (khuyến nghị Node 22.12+)
+
+### 2. Cấu hình Database
+Tạo database local riêng, ví dụ `Retrack_TV2_dev`. Với máy mới, sao chép `backend/Retrack.API/appsettings.example.json` thành `appsettings.json`, rồi sao chép `.env.example` thành `.env` cùng thư mục và điền thông tin riêng. Nếu đã có cấu hình local, giữ nguyên file hiện có. Cả `appsettings.json` và `.env` đều được Git bỏ qua; chỉ đưa các bản mẫu không có thông tin mật vào commit.
+
+Nguồn schema và dữ liệu mẫu nằm chung trong [`db/bootstrap/retrack-system.sql`](db/bootstrap/retrack-system.sql). Với **database local mới, rỗng**, tạo database, mở Query Tool pgAdmin của đúng database rồi mở file này và nhấn F5 chạy toàn bộ một lần; không cần terminal. Mặc định có seed demo cho mọi role tại Đà Nẵng; muốn chỉ tạo bảng thì đổi dòng `SET LOCAL retrack.seed_demo = 'on';` thành `'off'`. Kiểm tra trước khi áp dụng cho database đã có dữ liệu. Ứng dụng hiện **không tự chạy EF migration**. `Database__Initialize=true` chỉ seed dữ liệu demo khi chạy ở Development và schema đã tồn tại; mặc định để `false` khi đã dùng file SQL. Không bật trên database dùng chung/production. Biến môi trường tiến trình được ưu tiên hơn `.env`.
+
+Hướng dẫn chạy file SQL duy nhất và tùy chọn seed ở [`db/README.md`](db/README.md). Hai file schema/seed cũ đã được gộp, không cần tìm hay chạy thêm file thứ hai. SQL riêng trước đây chỉ chuyển dữ liệu demo cá nhân sang Đà Nẵng không còn trong repo; dữ liệu local và bản sao lưu tương ứng ở `.ai-context`.
+
+**Thành viên đã có database cũ:** `git pull` chỉ cập nhật code, không cập nhật bảng PostgreSQL trên máy đó. Trước khi chạy backend, kiểm tra `current_database()` trong pgAdmin có đúng database backend đang kết nối. Không dùng toàn bộ bootstrap và seed demo thay cho nâng cấp database có dữ liệu thật. Chỉ còn một file `db/bootstrap/retrack-system.sql`; sao lưu rồi chọn phần schema cần nâng cấp, kết thúc trước `-- RETRACK_SCHEMA_END`, theo `db/README.md`. Không chạy kèm seed demo trên DB có dữ liệu thật. Nếu lỗi báo cột/bảng khác, ghi lại nguyên văn lỗi và đối chiếu schema trước khi sửa; không chạy migration EF và SQL tổng hợp chồng lên nhau để thử vận may.
+
+Các file EF migration cũ vẫn còn trong source để đối chiếu lịch sử, chưa được hợp nhất/xóa. Nhóm sẽ chốt lại DB-first về sau; không tự áp dụng song song migration và script schema lên cùng database.
+
+Luồng thanh toán Seller ↔ Depot dùng các cột và bảng đã có (`pickup_requests.payment_proof_url`, `platform_transactions`); bản cập nhật giao diện/DTO thanh toán không thêm schema. Thành viên đã có database đúng cấu trúc không cần chạy SQL mới chỉ vì cập nhật này. Nếu máy cũ thiếu cột/bảng, đối chiếu với phần schema trong file SQL tổng hợp trên **đúng database local** trước khi sửa; không chạy lại toàn bộ SQL tổng hợp trên database có dữ liệu. Đơn chỉ thành `DONE` sau khi Seller xác nhận đã nhận tiền; khi đó tồn kho mới ghi nhận hàng.
+
+### 3. Cấu hình Frontend
+Mở thư mục `frontend/`, sao chép `.env.example` thành `.env` nếu cần cấu hình riêng.
+(Nếu có Client ID của Google để đăng nhập, bạn có thể điền vào `VITE_GOOGLE_CLIENT_ID`).
+
+### 4. Chạy Backend (.NET 8)
 ```bash
-cd backend/Retrack.API
-dotnet restore
-dotnet run
-# API: https://localhost:5001
-# Swagger: https://localhost:5001/swagger
+dotnet restore backend/Retrack.sln
+dotnet run --project backend/Retrack.API --launch-profile http
+# API Endpoint: http://localhost:5000
+# Swagger UI: http://localhost:5000/swagger
 ```
+> API dùng schema đã chuẩn bị trước; `Database__Initialize=true` chỉ seed dữ liệu Development.
 
-### Frontend
+### 5. Chạy Frontend (React + Vite)
 ```bash
 cd frontend
-npm install
+npm ci
 npm run dev
-# App: http://localhost:5173
+# Mở trình duyệt tại: http://localhost:5173
 ```
+
+### 6. Tài Khoản Mẫu (Seed Data)
+Khi seed dữ liệu demo ở Development, có tài khoản thử nghiệm cho các role: `admin@retrack.vn`, `seller@retrack.vn`, `depot@retrack.vn`, `employee@retrack.vn`, `driver@retrack.vn` và `factory@retrack.vn`. Người phụ trách chia sẻ mật khẩu thử nghiệm qua kênh riêng; không ghi mật khẩu trong README hoặc commit.
 
 ## 📝 Git Workflow
 ```bash
-git checkout -b feature/TV2-depot-dashboard    # Tạo branch theo TV + feature
+git checkout -b feature/TV2-ngo-sy-gia-depot-dashboard
 # ... code ...
-git add .
+git add <cac-file-cua-task>
 git commit -m "feat(depot): implement dashboard API"
-git push origin feature/TV2-depot-dashboard
-# → Tạo Pull Request trên GitHub
+# Push / tạo PR khi đã được phép
 ```
+
+## Kiểm thử và bàn giao Depot
+
+- `dotnet build backend/Retrack.sln --no-restore`
+- Tạo riêng `Retrack_TV2_test`, đặt cả `RETRACK_TEST_CONNECTION` và `RETRACK_TEST_POSTGRES` tới database đó, chạy `dotnet test backend/Retrack.sln --no-restore`. Tests PostgreSQL dùng database riêng và chỉ dọn fixture của chúng; không trỏ vào database ứng dụng.
+- Trong `frontend`: `npm run lint` và `npm run build`.
+- Quy tắc chung: [AGENTS.md](AGENTS.md). Cách chạy kiểm thử trình duyệt Depot–Factory và PayOS giả lập: [frontend/e2e/README.md](frontend/e2e/README.md). Hồ sơ tiến độ cá nhân ở `.ai-context/depot-owner` chỉ tồn tại local, không nằm trong Git.
+- Schema PostgreSQL DB-first và seed dùng chung cho **database mới** ở một file `db/bootstrap/retrack-system.sql`. Schema đã gồm Depot, Factory, Employee check-in và sổ nhập đa nguồn. Database cũ có dữ liệu cần bản vá tương ứng đã review như hướng dẫn ở mục Cấu hình Database, vì `CREATE TABLE IF NOT EXISTS` không tự bổ sung mọi cột của bảng cũ. Schema và các bộ demo Employee/Driver/điều phối đã hợp nhất trong cùng file; không cần SQL riêng theo role. Kiểm thử backend nằm ở `backend/Retrack.Tests` và `backend/Retrack.API.Tests`.
