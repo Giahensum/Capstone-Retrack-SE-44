@@ -91,7 +91,7 @@ export function Dashboard({ navigate }) {
             `${number(weight / 1000)} tấn`,
             "Theo đơn đã quyết toán",
           ],
-          ["Thực trả cho vựa", money(spend), "Sau khi trừ phí nền tảng"],
+          ["Thực trả cho vựa", money(spend), "Theo số tiền phải chuyển đã chốt từng lô"],
           [
             "Phí nền tảng tích lũy",
             money(fees),
@@ -156,7 +156,7 @@ export function Dashboard({ navigate }) {
             ))}
           </div>
           <p className="muted">
-            Tổng số tiền xác nhận trả cho vựa, sau phí nền tảng.
+            Tiền chuyển cho vựa theo từng quyết toán. Lô mới: phí Factory trả riêng, không trừ tiền của vựa.
           </p>
         </Card>
       </div>

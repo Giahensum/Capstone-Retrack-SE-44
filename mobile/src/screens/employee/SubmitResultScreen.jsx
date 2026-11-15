@@ -38,7 +38,7 @@ export default function SubmitResultScreen({ route, navigation }) {
       <View style={s.card}>
         <Text style={s.text}>Tổng khối lượng: {data.totalWeightKg} kg</Text>
         <Text style={s.text}>Tiền phế liệu: {money(data.grossAmount)}</Text>
-        <Text style={s.text}>Phí nền tảng ({data.platformFeePercentage}%): {money(data.platformFeeAmount)}</Text>
+        <Text style={s.text}>{data.feePolicy === 'BUYER_SEPARATE_V1' ? 'Phí kho trả riêng' : 'Phí khấu trừ — đơn cũ'} ({data.platformFeePercentage}%): {money(data.platformFeeAmount)}</Text>
         <Text style={s.title}>Người bán nhận: {money(data.netAmount)}</Text>
         <Text style={s.muted}>Theo mức phí đã lưu trên đơn. Đây chưa phải xác nhận đã trả tiền.</Text>
       </View>

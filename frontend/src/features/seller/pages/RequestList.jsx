@@ -143,7 +143,7 @@ export default function RequestList() {
                     <span>🕒 {formatDate(req.createdAt)}</span>
                     {req.grossAmount > 0 && (
                       <span className="font-bold text-d-primary">
-                        💰 {formatCurrency(req.grossAmount)}
+                        💰 {formatCurrency(req.netAmount)}
                       </span>
                     )}
                   </div>

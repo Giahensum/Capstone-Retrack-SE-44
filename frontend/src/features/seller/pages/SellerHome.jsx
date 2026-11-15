@@ -239,7 +239,7 @@ export default function SellerHome() {
                     {req.grossAmount > 0 && (
                       <>
                         <span>•</span>
-                        <span className="font-bold text-d-primary">{formatCurrency(req.grossAmount)}</span>
+                        <span className="font-bold text-d-primary">{formatCurrency(req.netAmount)}</span>
                       </>
                     )}
                   </div>

@@ -156,3 +156,16 @@ test("profile validation and attachments survive serialization; payment rounding
   assert.equal(inclusive.fee, 50000);
   assert.throws(() => settlement(100, 10000, 5, "NOT_APPLICABLE", 10));
 });
+
+test('phí bên mua trả riêng giữ nguyên tiền Depot và không tính trên VAT hàng', () => {
+  const value = settlement(100, 10000, 5, 'TAXABLE', 10, false, 'BUYER_SEPARATE_V1');
+  assert.equal(value.total, 1000000);
+  assert.equal(value.vat, 100000);
+  assert.equal(value.fee, 50000);
+  assert.equal(value.payable, 1100000);
+  assert.equal(value.buyerTotal, 1150000);
+  const legacy = settlement(100, 10000, 5, 'TAXABLE', 10);
+  assert.equal(legacy.payable, 1050000);
+  assert.equal(legacy.buyerTotal, 1100000);
+  assert.throws(() => settlement(100, 10000, 5, 'TAXABLE', 10, false, 'UNKNOWN'));
+});

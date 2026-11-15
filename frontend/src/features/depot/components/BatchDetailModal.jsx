@@ -62,7 +62,7 @@ export default function BatchDetailModal({ id, onClose }) {
       ["Tiền hàng trước VAT", cash(s?.grossAmount)],
       ["Cách khai VAT", ({ NOT_APPLICABLE: 'Không áp dụng VAT', ZERO_RATE: 'VAT 0%', TAXABLE: 'Có VAT theo hóa đơn' })[s?.vatTreatment] ?? missing],
       ["Thuế suất VAT", percent(s?.vatPercentage)], ["Tiền VAT theo hóa đơn", cash(s?.vatAmount)],
-      ["Tổng tiền theo hóa đơn", cash(s?.invoiceTotalAmount)], ["Phí trừ trong quyết toán", cash(s?.feeAmount)],
+      ["Tổng tiền theo hóa đơn", cash(s?.invoiceTotalAmount)], [s?.feePolicy === "BUYER_SEPARATE_V1" ? "Phí do Factory trả riêng" : "Phí khấu trừ — lô cũ", cash(s?.feeAmount)],
       ["Tiền thanh toán theo quyết toán, gồm VAT đã khai", cash(s?.netAmount)],
       ["Tham chiếu thanh toán", s?.paymentReference], ["Ngày quyết toán", time(s?.settledAt)], ["Số hóa đơn", q?.invoiceNumber]]}/>
     <p className="text-sm text-d-on-surface-variant">Số liệu do nhà máy ghi nhận; chưa phải xác nhận nhận tiền từ phía chủ kho.</p>
