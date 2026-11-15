@@ -2,6 +2,15 @@
 
 > Nền tảng số hóa chuỗi cung ứng phế liệu, kết nối Người bán → Kho vựa → Nhà máy tái chế.
 
+## Phiên bản và triển khai frontend
+
+Bản mã nguồn `v1.0.0` dùng quy trình PR `feature -> develop -> main`.
+Vercel triển khai frontend từ `main`, Root Directory là `frontend`.
+Xem [hướng dẫn triển khai và biến môi trường](docs/deploy-frontend-vercel.md)
+và [phạm vi/giới hạn bản phát hành](docs/releases/v1.0.0.md).
+Sau khi liên kết GitHub, commit mới vào `main` có thể tự build/deploy;
+không cần tạo lại project hoặc nhập lại biến môi trường mỗi lần cập nhật.
+
 Trước khi triển khai production, TV5 cần phối hợp nhóm nâng nền tảng:
 dự án hiện target .NET 8, đã hết hỗ trợ ngày 10/11/2026; hướng nâng là
 .NET 10 LTS kèm kiểm thử EF/Npgsql và các role. Vá dependency riêng không
