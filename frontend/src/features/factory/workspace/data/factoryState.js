@@ -21,7 +21,7 @@ export const labels = {
   WEIGHED: "Chờ KCS",
   VERIFIED: "Chờ quyết toán",
   REJECTED: "Từ chối nhận",
-  SETTLEMENT_RECORDED: "Đã quyết toán, chưa có chứng từ",
+  SETTLEMENT_RECORDED: "Đã quyết toán, chờ chuyển tiền",
   PAYMENT_REPORTED: "Đã báo chuyển khoản, chờ vựa xác nhận",
   PAID: "Vựa đã xác nhận nhận tiền",
   APPROVED: "Đã duyệt",

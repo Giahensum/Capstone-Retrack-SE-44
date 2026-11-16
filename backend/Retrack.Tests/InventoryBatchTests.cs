@@ -544,12 +544,10 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Success, (await qc.WeighAsync(factoryOwnerId, nextBatch.Id, new() { GrossWeightKg = 45, TareWeightKg = 5, TicketNumber = "VE-TEST-002" }, default)).Outcome);
         Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Success, (await qc.QualityAsync(factoryOwnerId, nextBatch.Id, new() { Accept = true, PurityPercent = 95, Grade = "A" }, default)).Outcome);
         await db.SystemConfigs.Where(x => x.ConfigKey == "PLATFORM_FEE_PERCENTAGE").ExecuteUpdateAsync(x => x.SetProperty(p => p.ConfigValue, "7.00"));
-        var secondSettlement = await orders.SettleAsync(factoryOwnerId, nextBatch.Id, new() { AgreedPricePerKg = 12000, VatTreatment = "TAXABLE", VatPercentage = 10, InvoiceNumber = "HD-TEST-002", InvoiceDate = DateOnly.FromDateTime(DateTime.UtcNow), SellerTaxCode = "0314892841", PaymentReference = "SIM-FACTORY-002", PaymentProofUrl = "https://example.invalid/proof.pdf" }, default);
+        var secondSettlement = await orders.SettleAsync(factoryOwnerId, nextBatch.Id, new() { AgreedPricePerKg = 12000, VatTreatment = "TAXABLE", VatPercentage = 10, InvoiceNumber = "HD-TEST-002", InvoiceDate = DateOnly.FromDateTime(DateTime.UtcNow), SellerTaxCode = "0314892841" }, default);
+        Assert.Equal("SETTLEMENT_RECORDED", secondSettlement.Data!.Status);
         Assert.Equal(5m, secondSettlement.Data!.FeePercentage); // Lô đã tạo trước khi config đổi sang 7%.
         Assert.Equal(5m, (await db.PlatformTransactions.SingleAsync(x => x.SourceId == first.Id)).FeePercentage);
-        await db.BatchQualityChecks.Where(x => x.BatchId == nextBatch.Id)
-            .ExecuteUpdateAsync(x => x.SetProperty(q => q.PaymentProofUrl, (string?)null));
-        db.ChangeTracker.Clear();
         Assert.Equal("SETTLEMENT_RECORDED", (await orders.GetAsync(factoryOwnerId, nextBatch.Id, default)).Data!.Status);
         var reported = await orders.ReportPaymentAsync(factoryOwnerId, nextBatch.Id,
             new() { PaymentReference = "ACTUAL-TRANSFER-002", PaymentProofUrl = "https://example.invalid/proof.pdf" }, default);
