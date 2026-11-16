@@ -10,6 +10,7 @@ import {
   Prices,
 } from "./pages/FactoryViews";
 import { Operations } from "./pages/FactoryOperations";
+import FactoryPlatformFees from "./pages/FactoryPlatformFees";
 import "./factory.css";
 
 const tabs = [
@@ -19,6 +20,7 @@ const tabs = [
   ["orders", "Đơn hàng & Vận chuyển", "⇄"],
   ["qc", "Trạm cân & KCS", "⚖"],
   ["settlements", "Quyết toán", "▣"],
+  ["platform-fees", "Phí nền tảng", "₫"],
   ["partners", "Vựa đối tác", "♧"],
   ["prices", "Giá tham khảo", "↗"],
   ["profile", "Hồ sơ nhà máy", "⚙"],
@@ -26,7 +28,7 @@ const tabs = [
 function Workspace() {
   const { state, user, logout, loading, retry } = useFactory();
   const navigateRoute = useNavigate();
-  const [tab, setTab] = useState("dashboard");
+  const [tab, setTab] = useState(new URLSearchParams(window.location.search).has("payos") ? "platform-fees" : "dashboard");
   const [focusId, setFocusId] = useState(null);
   function navigate(next, orderId = null) {
     setFocusId(orderId);
@@ -111,6 +113,7 @@ function Workspace() {
             />
           )}
           {tab === "partners" && <Partners navigate={navigate} />}
+          {tab === "platform-fees" && <FactoryPlatformFees />}
           {tab === "profile" && <Profile />}
           {tab === "prices" && <Prices />}
         </main>
