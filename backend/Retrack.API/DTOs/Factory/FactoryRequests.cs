@@ -93,8 +93,8 @@ public class SettlementRequest
     [RegularExpression(@"^\d{10}(-\d{3})?$", ErrorMessage = "Mã số thuế phải có 10 chữ số hoặc 10 chữ số kèm mã đơn vị phụ thuộc.")]
     public string? SellerTaxCode { get; set; }
     [StringLength(500)] public string? VatLegalBasis { get; set; }
-    [Required, StringLength(200)] public string PaymentReference { get; set; } = "";
-    [Required, StringLength(500)] public string PaymentProofUrl { get; set; } = "";
+    [StringLength(200)] public string? PaymentReference { get; set; }
+    [StringLength(500)] public string? PaymentProofUrl { get; set; }
 }
 
 public sealed class BatchPaymentProofRequest

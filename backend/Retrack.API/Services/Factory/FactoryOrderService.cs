@@ -129,8 +129,8 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
             var savedQc = batch.QualityCheck;
             var sameRequest = savedQc is not null && existing is not null &&
                 batch.AgreedPricePerKg == request.AgreedPricePerKg &&
-                string.Equals(batch.PaymentReference, request.PaymentReference.Trim(), StringComparison.Ordinal) &&
-                string.Equals(savedQc.PaymentProofUrl, request.PaymentProofUrl.Trim(), StringComparison.Ordinal) &&
+                string.Equals(batch.PaymentReference, request.PaymentReference?.Trim(), StringComparison.Ordinal) &&
+                string.Equals(savedQc.PaymentProofUrl, request.PaymentProofUrl?.Trim(), StringComparison.Ordinal) &&
                 string.Equals(batch.VatTreatment, request.VatTreatment.Trim().ToUpperInvariant(), StringComparison.Ordinal) &&
                 batch.VatPercentage == request.VatPercentage && batch.PriceIncludesVat == request.PriceIncludesVat;
             if (!sameRequest) return ServiceResult<OrderSettlementResponse>.Conflict("Đơn hàng đã được quyết toán với dữ liệu khác.");
@@ -149,9 +149,12 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
         if (batch.Status != "VERIFIED" || qc?.IsAccepted != true)
             return ServiceResult<OrderSettlementResponse>.Conflict("Chỉ quyết toán lô đã được KCS chấp nhận.");
         if (request.AgreedPricePerKg <= 0) return ServiceResult<OrderSettlementResponse>.Invalid("Đơn giá phải lớn hơn 0.");
-        if (string.IsNullOrWhiteSpace(request.PaymentProofUrl) ||
-            (attachments is not null && !attachments.IsOwnedUrl(request.PaymentProofUrl, userId)))
-            return ServiceResult<OrderSettlementResponse>.Invalid("Cần tải chứng từ chuyển khoản hợp lệ của nhà máy.");
+        if (!string.IsNullOrWhiteSpace(request.PaymentProofUrl) &&
+            (string.IsNullOrWhiteSpace(request.PaymentReference) ||
+             (attachments is not null && !attachments.IsOwnedUrl(request.PaymentProofUrl, userId))))
+            return ServiceResult<OrderSettlementResponse>.Invalid("Chứng từ chuyển khoản cần mã tham chiếu hợp lệ và tệp do nhà máy tải lên.");
+        if (string.IsNullOrWhiteSpace(request.PaymentProofUrl) && !string.IsNullOrWhiteSpace(request.PaymentReference))
+            return ServiceResult<OrderSettlementResponse>.Invalid("Chưa có chứng từ chuyển khoản; hãy gửi ở bước xác nhận đã chuyển tiền.");
         var vatTreatment = request.VatTreatment.Trim().ToUpperInvariant();
         if (vatTreatment is not ("NOT_APPLICABLE" or "ZERO_RATE" or "TAXABLE"))
             return ServiceResult<OrderSettlementResponse>.Invalid("Cách áp dụng VAT không hợp lệ.");
@@ -198,7 +201,7 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
         qc.PlatformFeePercentage = feePercent;
         qc.PlatformFeeAmount = fee;
         qc.NetAmount = money.SellerReceives;
-        qc.PaymentProofUrl = request.PaymentProofUrl.Trim();
+        qc.PaymentProofUrl = request.PaymentProofUrl?.Trim();
         batch.AgreedPricePerKg = request.AgreedPricePerKg;
         batch.GrossAmount = total;
         batch.VatTreatment = vatTreatment;
@@ -209,10 +212,15 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
         batch.PlatformFeeAmount = fee;
         batch.NetAmount = money.SellerReceives;
         batch.QualityCheck = qc;
-        batch.PaymentReference = request.PaymentReference.Trim();
+        batch.PaymentReference = request.PaymentReference?.Trim();
         batch.SettledAt = DateTime.UtcNow;
         batch.Status = "COMPLETED";
-        await NotifyDepotAsync(batch.DepotId, "Nhà máy báo đã chuyển khoản", $"Lô {batch.Code ?? batch.Id.ToString()} đã được {factory.Name} ghi nhận quyết toán và gửi chứng từ chuyển khoản. Vui lòng đối chiếu với tài khoản ngân hàng trước khi xác nhận nhận tiền.", batch.Id, ct: ct);
+        await NotifyDepotAsync(batch.DepotId,
+            qc.PaymentProofUrl is null ? "Nhà máy đã chốt quyết toán" : "Nhà máy báo đã chuyển khoản",
+            qc.PaymentProofUrl is null
+                ? $"Lô {batch.Code ?? batch.Id.ToString()} đã được {factory.Name} chốt giá; đang chờ chứng từ chuyển khoản."
+                : $"Lô {batch.Code ?? batch.Id.ToString()} đã được {factory.Name} gửi chứng từ chuyển khoản. Vui lòng đối chiếu tài khoản ngân hàng trước khi xác nhận nhận tiền.",
+            batch.Id, ct: ct);
         Db.PlatformTransactions.Add(new Retrack.API.Models.PlatformTransaction
         {
             SourceType = "BATCH_ORDER", SourceId = batch.Id, FeeAmount = fee,
@@ -224,7 +232,7 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
         return ServiceResult<OrderSettlementResponse>.Success(data: new OrderSettlementResponse
         {
             Id = batch.Id,
-            Status = "PAYMENT_REPORTED",
+            Status = qc.PaymentProofUrl is null ? "SETTLEMENT_RECORDED" : "PAYMENT_REPORTED",
             TotalAmount = total,
             PriceIncludesVat = request.PriceIncludesVat,
             VatTreatment = vatTreatment,
@@ -237,7 +245,7 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
             PaymentReference = batch.PaymentReference,
             SettledAt = batch.SettledAt,
             FeePercentage = feePercent
-        }, message: "Đã gửi chứng từ chuyển khoản; chờ vựa xác nhận đã nhận tiền.");
+        }, message: qc.PaymentProofUrl is null ? "Đã chốt quyết toán; chờ Factory xác nhận đã chuyển tiền." : "Đã gửi chứng từ chuyển khoản; chờ vựa xác nhận đã nhận tiền.");
     }
 
     public async Task<ServiceResult<OrderResponse>> ReportPaymentAsync(Guid userId, Guid id, BatchPaymentProofRequest request, CancellationToken ct)

@@ -256,7 +256,7 @@ export function Operations({ mode, focusId, navigate }) {
                   </Button>
                 )}
                 {order.status === "SETTLEMENT_RECORDED" && (
-                  <Button onClick={() => setAction("payment-proof")}>Bổ sung chứng từ chuyển khoản</Button>
+                  <Button onClick={() => setAction("payment-proof")}>Xác nhận đã chuyển tiền</Button>
                 )}
                 {order.status === "PAID" && !order.rating && (
                   <Button onClick={() => setAction("rate")}>
@@ -622,10 +622,6 @@ function QualityForm({ order, close }) {
 function SettlementForm({ order, close }) {
   const { act, state } = useFactory();
   const [price, setPrice] = useState("");
-  const [reference, setReference] = useState("");
-  const [paymentProof, setPaymentProof] = useState(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [uploadError, setUploadError] = useState("");
   const [vatOption, setVatOption] = useState("NOT_APPLICABLE:0");
   const [priceIncludesVat, setPriceIncludesVat] = useState(false);
   const [invoiceNumber, setInvoiceNumber] = useState("");
@@ -644,23 +640,16 @@ function SettlementForm({ order, close }) {
     <form
         onSubmit={async (e) => {
         e.preventDefault();
-        if (!confirmed || !paymentProof || submitting) return;
-        setSubmitting(true);
-        setUploadError("");
-        try {
-          const paymentProofUrl = await uploadFactoryFeeProof(paymentProof);
-          if (await act(
+        if (!confirmed) return;
+        if (await act(
             "SETTLE",
-            { id: order.id, price, priceIncludesVat, vatTreatment, vatPercentage, invoiceNumber, invoiceDate, sellerTaxCode, vatLegalBasis, reference, paymentProofUrl },
-            "Đã gửi chứng từ chuyển khoản; chờ vựa xác nhận nhận tiền.",
+            { id: order.id, price, priceIncludesVat, vatTreatment, vatPercentage, invoiceNumber, invoiceDate, sellerTaxCode, vatLegalBasis },
+            "Đã chốt quyết toán. Bước tiếp theo: xác nhận đã chuyển tiền và gửi chứng từ.",
           )) close();
-        } catch (error) { setUploadError(error.message); }
-        finally { setSubmitting(false); }
       }}
     >
       <div className="info-box">
-        KCS đạt · Grade {order.qc.grade}. Đây là ghi nhận xác nhận chuyển khoản,
-        không thực hiện giao dịch ngân hàng.
+        KCS đạt · Grade {order.qc.grade}. Chốt giá và tiền phải trả cho vựa. Sau bước này, Factory xác nhận chuyển tiền và gửi chứng từ riêng.
       </div>
       <Field
         label={`Đơn giá đã thỏa thuận sau KCS (đ/kg${priceIncludesVat ? ", đã gồm VAT" : ", chưa VAT"})`}
@@ -708,17 +697,6 @@ function SettlementForm({ order, close }) {
           <textarea value={vatLegalBasis} onChange={(e) => setVatLegalBasis(e.target.value)} maxLength={500} />
         </Field>
       )}
-      <Field
-        label="Mã tham chiếu chuyển khoản"
-        required
-        maxLength={200}
-        value={reference}
-        onChange={(e) => setReference(e.target.value)}
-      />
-      <Field label="Chứng từ chuyển khoản (PDF, JPG, PNG; tối đa 700 KB)" required>
-        <input type="file" required accept=".pdf,.jpg,.jpeg,.png" onChange={(e) => setPaymentProof(e.target.files?.[0] ?? null)} />
-      </Field>
-      {uploadError && <p role="alert" className="text-error">{uploadError}</p>}
       <p className="muted">Thuế suất được ghi nhận theo hóa đơn do vựa cung cấp. Hệ thống không tự xác định nghĩa vụ thuế.</p>
       {preview && <Financial values={preview} net={order.weight.net} />}
       <label className="checkbox-line">
@@ -728,14 +706,14 @@ function SettlementForm({ order, close }) {
           checked={confirmed}
           onChange={(e) => setConfirmed(e.target.checked)}
         />
-        Tôi xác nhận giá đã thống nhất và đã chuyển khoản cho vựa. Vựa sẽ đối chiếu và xác nhận nhận tiền.
+        Tôi xác nhận giá và số tiền quyết toán đã thống nhất với vựa.
       </label>
       <div className="form-actions">
         <Button secondary onClick={close}>
           Hủy
         </Button>
-        <Button type="submit" disabled={!preview || !confirmed || !paymentProof || submitting}>
-          {submitting ? "Đang gửi…" : "Gửi quyết toán và chứng từ"}
+        <Button type="submit" disabled={!preview || !confirmed}>
+          Chốt quyết toán
         </Button>
       </div>
     </form>
@@ -757,13 +735,13 @@ function PaymentProofForm({ order, close }) {
     } catch (cause) { setError(cause.message); }
     finally { setBusy(false); }
   }}>
-    <p className="muted">Lô này đã quyết toán trước khi có bước gửi chứng từ. Hãy đối chiếu số tiền {money(order.payment?.payable)} và gửi chứng từ chuyển khoản thực tế.</p>
+    <p className="muted">Sau khi chuyển khoản cho vựa, hãy đối chiếu số tiền {money(order.payment?.payable)} và gửi chứng từ thực tế. Vựa sẽ xác nhận khi tiền vào tài khoản.</p>
     <Field label="Mã tham chiếu chuyển khoản" required value={reference} maxLength={200} onChange={(e) => setReference(e.target.value)} />
     <Field label="Chứng từ chuyển khoản (PDF, JPG, PNG; tối đa 700 KB)" required>
       <input type="file" required accept=".pdf,.jpg,.jpeg,.png" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
     </Field>
     {error && <p role="alert" className="text-error">{error}</p>}
-    <div className="form-actions"><Button secondary onClick={close}>Hủy</Button><Button type="submit" disabled={!file || busy}>{busy ? "Đang gửi…" : "Gửi chứng từ"}</Button></div>
+    <div className="form-actions"><Button secondary onClick={close}>Hủy</Button><Button type="submit" disabled={!file || busy}>{busy ? "Đang gửi…" : "Xác nhận đã chuyển tiền"}</Button></div>
   </form>;
 }
 function RatingForm({ order, close }) {
