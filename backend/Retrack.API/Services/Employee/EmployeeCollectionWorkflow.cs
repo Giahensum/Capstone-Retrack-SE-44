@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Retrack.API.Services.Shared;
 using Retrack.API.DTOs.Employee;
 using Retrack.API.Models;
 using Retrack.API.Services.Depot;
@@ -35,9 +36,10 @@ public sealed partial class EmployeeCollectionService
             var items = CollectionValidation.Items(snapshot.Items.Select(i => new ClassificationItemInput(i.MaterialType, i.WeightKg, i.PricePerKg)).ToList());
             if (pickup.PlatformFeePercentage is < 0 or > 100) throw new DepotConflictException("Mức phí của đơn không hợp lệ. Liên hệ chủ kho.");
             pickup.GrossAmount = items.Sum(i => CollectionValidation.SubTotal(i.WeightKg, i.PricePerKg));
-            // Giữ contract tiền và mức phí đã chốt của đơn, không tự thay chính sách tài chính.
-            pickup.PlatformFeeAmount = decimal.Round(pickup.GrossAmount * pickup.PlatformFeePercentage / 100, 2);
-            pickup.NetAmount = pickup.GrossAmount - pickup.PlatformFeeAmount;
+            // Dùng chính sách/mức phí đã chốt của đơn, không đọc lại cấu hình khi gửi cân.
+            var money = PlatformFees.Pickup(pickup.GrossAmount, pickup.PlatformFeePercentage, pickup.FeePolicy);
+            pickup.PlatformFeeAmount = money.Fee;
+            pickup.NetAmount = money.SellerReceives;
             pickup.Status = "WEIGHED";
             Notify(pickup.SellerId, "Kết quả cân chờ xác nhận", $"Đơn {pickup.Id}: nhân viên đã gửi kết quả cân phiên bản {revision}. Vui lòng xem và xác nhận giá.", pickup.Id);
         }
@@ -57,7 +59,7 @@ public sealed partial class EmployeeCollectionService
                 ?? throw new DepotConflictException("Thiếu dữ liệu đối soát kết quả cân.");
             if (sent.GrossAmount != pickup.GrossAmount || sent.NetAmount != pickup.NetAmount
                 || sent.PlatformFeeAmount != pickup.PlatformFeeAmount || sent.PlatformFeePercentage != pickup.PlatformFeePercentage
-                || !sent.Items.SequenceEqual(snapshot.Items))
+                || sent.FeePolicy != pickup.FeePolicy || !sent.Items.SequenceEqual(snapshot.Items))
                 throw new DepotConflictException("Kết quả cân không còn khớp bản đã gửi. Liên hệ chủ kho để kiểm tra.");
             pickup.Status = "AWAITING_PAYMENT";
             pickup.StockReceivedAt ??= DateTime.UtcNow;
@@ -71,7 +73,7 @@ public sealed partial class EmployeeCollectionService
             PickupRequestId = pickupId, EmployeeId = userId, Kind = action, Revision = revision,
             FromStatus = from, ToStatus = pickup.Status,
             SnapshotJson = JsonSerializer.Serialize(new CollectionSubmissionSnapshot(snapshot.Items,
-                pickup.GrossAmount, pickup.PlatformFeePercentage, pickup.PlatformFeeAmount, pickup.NetAmount))
+                pickup.GrossAmount, pickup.PlatformFeePercentage, pickup.PlatformFeeAmount, pickup.NetAmount, pickup.FeePolicy))
         });
         Notify(userId, action == "SUBMITTED" ? "Đã gửi kết quả cân" : action == "REOPENED" ? "Đã mở lại kết quả cân" : "Đã bàn giao cho chủ kho",
             $"Đơn {pickup.Id} · phiên bản {revision} · {pickup.Status}. Bạn không thực hiện thanh toán cho người bán.", pickup.Id);
@@ -86,4 +88,5 @@ public sealed partial class EmployeeCollectionService
 }
 
 public sealed record CollectionSubmissionSnapshot(IReadOnlyList<ClassificationItemDto> Items,
-    decimal GrossAmount, decimal PlatformFeePercentage, decimal PlatformFeeAmount, decimal NetAmount);
+    decimal GrossAmount, decimal PlatformFeePercentage, decimal PlatformFeeAmount, decimal NetAmount,
+    string FeePolicy = PlatformFees.Legacy);

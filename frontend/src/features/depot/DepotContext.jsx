@@ -5,9 +5,8 @@ import api from '@/lib/axios';
 
 const DepotContext = createContext(null);
 export const useDepot = () => useContext(DepotContext);
-export const depotError = (error) => error?.response?.data?.message
-  ?? (Object.values(error?.response?.data?.errors ?? {}).flat().join(' ')
-  || 'Không thể tải dữ liệu. Vui lòng thử lại.');
+export { depotError } from './depotError';
+import { depotError } from './depotError';
 
 export function DepotProvider({ children }) {
   const userId = useAuthStore((s) => s.user?.userId);

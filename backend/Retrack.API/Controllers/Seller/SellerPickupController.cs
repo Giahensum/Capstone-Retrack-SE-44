@@ -105,6 +105,7 @@ public class SellerPickupController : ControllerBase
 
     /// <summary>Seller xác nhận giá sau khi NV cân</summary>
     [HttpPost("{id:guid}/confirm")]
+    [HttpPatch("{id:guid}/confirm")]
     public async Task<IActionResult> ConfirmWeigh(Guid id)
     {
         var result = await _pickupService.ConfirmBySellerAsync(id, GetUserId());
@@ -113,6 +114,7 @@ public class SellerPickupController : ControllerBase
 
     /// <summary>Seller từ chối kết quả cân → trả về cho NV</summary>
     [HttpPost("{id:guid}/reject")]
+    [HttpPatch("{id:guid}/reject")]
     public async Task<IActionResult> RejectWeigh(Guid id)
     {
         var (success, message, statusCode) = await _sellerService.RejectWeighAsync(id, GetUserId());
@@ -127,6 +129,7 @@ public class SellerPickupController : ControllerBase
 
     /// <summary>Seller xác nhận đã nhận tiền → DONE (UC-1.9)</summary>
     [HttpPost("{id:guid}/confirm-payment")]
+    [HttpPatch("{id:guid}/confirm-payment")]
     public async Task<IActionResult> ConfirmPayment(Guid id)
     {
         await _pickupService.MarkDoneAsync(id, GetUserId());

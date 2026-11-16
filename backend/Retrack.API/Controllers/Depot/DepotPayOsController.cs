@@ -16,15 +16,13 @@ public sealed class DepotPayOsController(IDepotPayOsService service) : Controlle
     [HttpPost("api/depot/reports/invoices/{id:guid}/payos-link"), Authorize(Roles = "DEPOT_OWNER")]
     public async Task<IActionResult> CreateLink(Guid id, [FromQuery] Guid depotId)
     {
-        try { return Ok(ApiResponse<PayOsLinkDto>.Ok(await service.CreateLinkAsync(OwnerId, depotId, id))); }
-        catch (PayOsException ex) { return StatusCode(502, ApiResponse<string>.Fail(ex.Message)); }
+        return Ok(ApiResponse<PayOsLinkDto>.Ok(await service.CreateLinkAsync(OwnerId, depotId, id)));
     }
 
     [HttpPost("api/depot/reports/invoices/{id:guid}/payos-sync"), Authorize(Roles = "DEPOT_OWNER")]
     public async Task<IActionResult> Sync(Guid id, [FromQuery] Guid depotId)
     {
-        try { return Ok(ApiResponse<string>.Ok(await service.SyncAsync(OwnerId, depotId, id))); }
-        catch (PayOsException ex) { return StatusCode(502, ApiResponse<string>.Fail(ex.Message)); }
+        return Ok(ApiResponse<string>.Ok(await service.SyncAsync(OwnerId, depotId, id)));
     }
 
     /// <summary>Webhook PayOS (khai báo URL tại my.payos.vn). Bảo vệ bằng chữ ký HMAC, không dùng JWT.</summary>

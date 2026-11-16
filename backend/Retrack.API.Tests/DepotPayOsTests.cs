@@ -118,10 +118,12 @@ public sealed class DepotPayOsTests
         var paid = f.Invoice(status: "PAID");
         await Assert.ThrowsAsync<DepotConflictException>(() => f.Service.CreateLinkAsync(Owner, Depot, paid.Id));
         var fraction = f.Invoice(amount: 1000.5m);
-        await Assert.ThrowsAsync<InvalidOperationException>(() => f.Service.CreateLinkAsync(Owner, Depot, fraction.Id));
+        var fractionError = await Assert.ThrowsAsync<DepotConflictException>(() => f.Service.CreateLinkAsync(Owner, Depot, fraction.Id));
+        Assert.Contains("Admin đối soát", fractionError.Message);
         f.Payos.Configured = false;
         var pending = f.Invoice();
-        await Assert.ThrowsAsync<InvalidOperationException>(() => f.Service.CreateLinkAsync(Owner, Depot, pending.Id));
+        await Assert.ThrowsAsync<DepotConflictException>(() => f.Service.CreateLinkAsync(Owner, Depot, pending.Id));
+        Assert.Equal(0, f.Payos.Creates);
     }
 
     // ---------- đối soát chủ động ----------

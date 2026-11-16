@@ -10,7 +10,8 @@ export async function request(path, { method = "GET", body } = {}) {
     if (response.data?.success === false) throw new Error(response.data.message);
     return response.data?.data;
   } catch (error) {
-    throw new Error(error.response?.data?.message || error.message || "Không kết nối được máy chủ.");
+    const validation = Object.values(error.response?.data?.errors || {}).flat().join(" ");
+    throw new Error(error.response?.data?.message || validation || error.message || "Không kết nối được máy chủ.");
   }
 }
 
@@ -117,6 +118,8 @@ export function mapOrder(order) {
   return {
     id: order.id,
     batchId: order.batchCode || order.batchId,
+    feePolicy: order.feePolicy || "LEGACY_SELLER_DEDUCTION_V1",
+    feePercentage: order.platformFeePercentage,
     depotId: order.depotId,
     material: order.materialType,
     kg: order.estimatedWeightKg,
@@ -133,6 +136,7 @@ export function mapOrder(order) {
       difference: verification?.differencePercentage || 0,
       flagged: Math.abs(verification?.differencePercentage || 0) > 5,
       note: verification?.note || "",
+      ticketNumber: ticket?.ticketNumber || "",
       attachment: ticket?.ticketImageUrl ? { name: ticket.ticketNumber || "Phiếu cân", data: ticket.ticketImageUrl } : null,
     } : null,
     qc: verification?.grade ? {
@@ -147,9 +151,16 @@ export function mapOrder(order) {
     payment: order.settledAt ? {
       price: order.agreedPrice,
       total: order.totalAmount || net * order.agreedPrice,
+      vatTreatment: order.vatTreatment || "NOT_APPLICABLE",
+      vatPercentage: order.vatPercentage || 0,
+      priceIncludesVat: order.priceIncludesVat || false,
+      vat: order.vatAmount || 0,
+      invoiceTotal: order.invoiceTotalAmount || order.totalAmount || net * order.agreedPrice,
       fee: order.feeAmount || 0,
       feePercentage: order.platformFeePercentage ?? 1,
       payable: order.netPayableAmount || 0,
+      feePolicy: order.feePolicy || "LEGACY_SELLER_DEDUCTION_V1",
+      buyerTotal: order.buyerTotalAmount ?? ((order.netPayableAmount || 0) + (order.feeAmount || 0)),
       reference: order.paymentReference || "",
       at: order.settledAt,
     } : null,
@@ -167,23 +178,25 @@ export function mapOrder(order) {
 }
 
 export async function loadFactoryState() {
-  const [profileResult, dashboard, pricesResult] = await Promise.all([
+  const [profileResult, dashboard] = await Promise.all([
     request("/api/factory/profile"),
     request("/api/factory/dashboard"),
-    request("/api/factory/marketplace/prices"),
   ]);
-  const prices = pricesResult.map((price) => ({
+  return {
+    version: 3,
+    profile: mapProfile(profileResult),
+    dashboard,
+  };
+}
+
+export async function loadFactoryPrices() {
+  const pricesResult = await request("/api/factory/marketplace/prices");
+  return pricesResult.map((price) => ({
     material: price.materialType,
     price: price.pricePerKg,
     date: dateOnly(price.effectiveDate),
     source: price.source || "",
   }));
-  return {
-    version: 3,
-    profile: mapProfile(profileResult),
-    dashboard,
-    prices,
-  };
 }
 
 export async function performFactoryAction(type, payload) {
@@ -257,6 +270,13 @@ export async function performFactoryAction(type, payload) {
     case "SETTLE":
       return request(`/api/factory/orders/${id}/settle`, { method: "POST", body: {
         agreedPricePerKg: Number(payload.price),
+        vatTreatment: payload.vatTreatment,
+        vatPercentage: Number(payload.vatPercentage),
+        priceIncludesVat: payload.priceIncludesVat,
+        invoiceNumber: payload.invoiceNumber || null,
+        invoiceDate: payload.invoiceDate || null,
+        sellerTaxCode: payload.sellerTaxCode || null,
+        vatLegalBasis: payload.vatLegalBasis || null,
         paymentReference: payload.reference,
       } });
     case "INVOICE":
@@ -265,7 +285,6 @@ export async function performFactoryAction(type, payload) {
       return request(`/api/factory/orders/${id}/invoice`, { method: "PUT", body: {
         invoiceNumber: payload.file.invoiceNumber || payload.file.name,
         invoiceFileUrl,
-        vatAmount: 0,
       } });
       }
     case "RATE":
@@ -277,6 +296,16 @@ export async function performFactoryAction(type, payload) {
       } });
     case "PARTNER_STATUS":
       return request(`/api/factory/partners/${encodeURIComponent(payload.id)}/status`, { method: "PUT", body: { status: payload.status } });
+    case "PROPOSE_CONTRACT":
+      return request(`/api/factory/partners/${encodeURIComponent(payload.id)}/contract`, { method: "POST", body: {
+        terms: payload.terms,
+        validMonths: Number(payload.validMonths),
+        confirmElectronicSignature: payload.confirmElectronicSignature,
+      } });
+    case "REQUEST_CONTRACT_TERMINATION":
+      return request(`/api/factory/partners/${encodeURIComponent(payload.id)}/contract/termination`, { method: "POST", body: { reason: payload.reason } });
+    case "DECIDE_CONTRACT_TERMINATION":
+      return request(`/api/factory/partners/${encodeURIComponent(payload.id)}/contract/termination/decision`, { method: "POST", body: { decision: payload.decision } });
     case "SIMULATE_TRANSPORT":
       throw new Error("Trạng thái vận chuyển do luồng tài xế cập nhật; Factory không thể tự mô phỏng trên dữ liệu máy chủ.");
     default:

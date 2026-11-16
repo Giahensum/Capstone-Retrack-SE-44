@@ -5,9 +5,16 @@ public sealed record OrderSettlementResponse
     public required Guid Id { get; init; }
     public required string Status { get; init; }
     public required decimal TotalAmount { get; init; }
+    public required bool PriceIncludesVat { get; init; }
+    public required string VatTreatment { get; init; }
+    public required decimal VatPercentage { get; init; }
+    public required decimal VatAmount { get; init; }
+    public required decimal InvoiceTotalAmount { get; init; }
     public required decimal FeeAmount { get; init; }
     public required decimal NetPayableAmount { get; init; }
     public required string? PaymentReference { get; init; }
     public required DateTime? SettledAt { get; init; }
     public required decimal FeePercentage { get; init; }
+    public string FeePolicy { get; init; } = Retrack.API.Services.Shared.PlatformFees.Legacy;
+    public decimal BuyerTotalAmount { get; init; }
 }

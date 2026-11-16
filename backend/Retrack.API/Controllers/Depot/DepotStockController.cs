@@ -61,8 +61,8 @@ public class DepotStockController(IDepotStockService service) : ControllerBase
     public async Task<IActionResult> Sales(Guid depotId, [FromQuery] DepotQuery query) =>
         Ok(ApiResponse<PagedResult<ReuseSaleDto>>.Ok(await service.SalesAsync(UserId, depotId, query)));
     [Authorize(Roles = "DEPOT_OWNER"), HttpGet("batches/{id:guid}/costs")]
-    public async Task<IActionResult> Costs(Guid depotId, Guid id) =>
-        Ok(ApiResponse<BatchCostDto>.Ok(await service.BatchCostsAsync(UserId, depotId, id)));
+    public async Task<IActionResult> Costs(Guid depotId, Guid id, [FromQuery] int? sourcePage, [FromQuery] int? expensePage) =>
+        Ok(ApiResponse<BatchCostDto>.Ok(await service.BatchCostsAsync(UserId, depotId, id, sourcePage, expensePage)));
     [Authorize(Roles = "DEPOT_OWNER"), HttpPost("batches/{id:guid}/expenses")]
     public async Task<IActionResult> Expense(Guid depotId, Guid id, CreateBatchExpenseDto dto)
     {

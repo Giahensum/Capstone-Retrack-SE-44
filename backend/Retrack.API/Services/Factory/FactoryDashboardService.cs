@@ -25,9 +25,39 @@ public class FactoryDashboardService(AppDbContext db) : FactoryServiceBase(db), 
         };
         var batches = Db.InventoryBatches.AsNoTracking().Where(x => x.TargetFactoryId == factory.Id && x.Status != "MARKETPLACE" && x.Status != "DRAFT");
         var settled = batches.Where(x => (x.Status == "COMPLETED" || x.Status == "PAID") && x.SettledAt >= periodStart);
-        var monthSettled = batches.Where(x => (x.Status == "COMPLETED" || x.Status == "PAID") && x.SettledAt >= monthStart);
+        var settledStatuses = batches.Where(x => x.Status == "COMPLETED" || x.Status == "PAID");
+        var summary = await batches.GroupBy(_ => 1)
+            .Select(g => new
+            {
+                OrderCount = g.Count(),
+                PendingQcCount = g.Count(x =>
+                    x.Status == "RECEIVED" || x.Status == "WEIGHED" || x.Status == "DELIVERED" ||
+                    ((x.Status == "ACCEPTED" || x.Status == "TRANSPORT_READY" || x.Status == "READY_FOR_PICKUP") &&
+                     x.TransportJob != null && x.TransportJob.Status == "DELIVERED")),
+                PendingSettlementCount = g.Count(x => x.Status == "VERIFIED"),
+                MonthlyPurchasedKg = g.Sum(x => (x.Status == "COMPLETED" || x.Status == "PAID") && x.SettledAt >= monthStart
+                    ? x.ActualWeightKg ?? 0 : 0),
+                MonthlyNetPayment = g.Sum(x => (x.Status == "COMPLETED" || x.Status == "PAID") && x.SettledAt >= monthStart
+                    ? x.NetAmount ?? 0 : 0),
+                PeriodPurchasedKg = g.Sum(x => (x.Status == "COMPLETED" || x.Status == "PAID") && x.SettledAt >= periodStart
+                    ? x.ActualWeightKg ?? 0 : 0),
+                PeriodGrossAmount = g.Sum(x => (x.Status == "COMPLETED" || x.Status == "PAID") && x.SettledAt >= periodStart
+                    ? x.GrossAmount ?? 0 : 0),
+                PeriodNetPayment = g.Sum(x => (x.Status == "COMPLETED" || x.Status == "PAID") && x.SettledAt >= periodStart
+                    ? x.NetAmount ?? 0 : 0),
+                PeriodFeeAmount = g.Sum(x => (x.Status == "COMPLETED" || x.Status == "PAID") && x.SettledAt >= periodStart
+                    ? x.PlatformFeeAmount ?? 0 : 0)
+            })
+            .SingleOrDefaultAsync(ct);
+        var counts = await Db.Factories.AsNoTracking().Where(x => x.Id == factory.Id)
+            .Select(x => new
+            {
+                ActiveDemandCount = Db.FactoryDemands.Count(d => d.FactoryId == x.Id && d.IsActive),
+                PartnerCount = Db.FactoryDepotPartnerships.Count(p => p.FactoryId == x.Id)
+            })
+            .SingleAsync(ct);
         var sixMonthStart = monthStart.AddMonths(-5);
-        var sixMonths = await batches.Where(x => (x.Status == "COMPLETED" || x.Status == "PAID") && x.SettledAt >= sixMonthStart)
+        var sixMonths = await settledStatuses.Where(x => x.SettledAt >= sixMonthStart)
             .GroupBy(x => new { x.SettledAt!.Value.Year, x.SettledAt!.Value.Month })
             .Select(g => new MonthlyPaymentResponse(g.Key.Year, g.Key.Month, g.Sum(x => x.NetAmount ?? 0)))
             .ToListAsync(ct);
@@ -38,21 +68,19 @@ public class FactoryDashboardService(AppDbContext db) : FactoryServiceBase(db), 
                 ((x.Status == "ACCEPTED" || x.Status == "TRANSPORT_READY" || x.Status == "READY_FOR_PICKUP") && x.TransportJob != null && x.TransportJob.Status == "DELIVERED"));
         var priority = await pendingQcQuery.OrderByDescending(x => x.CreatedAt).ThenBy(x => x.Id).Take(10).ToListAsync(ct);
         var recent = await FactoryOrderQueries.ForFactory(Db, factory.Id).OrderByDescending(x => x.CreatedAt).ThenBy(x => x.Id).Take(5).ToListAsync(ct);
-        var demands = await Db.FactoryDemands.CountAsync(x => x.FactoryId == factory.Id && x.IsActive, ct);
-        var partners = await Db.FactoryDepotPartnerships.CountAsync(x => x.FactoryId == factory.Id, ct);
         return ServiceResult<DashboardResponse>.Success(data: new DashboardResponse
         {
-            OrderCount = await batches.CountAsync(ct),
-            ActiveDemandCount = demands,
-            PartnerCount = partners,
-            PendingQcCount = await pendingQcQuery.CountAsync(x => x.Status != "VERIFIED", ct),
-            PendingSettlementCount = await batches.CountAsync(x => x.Status == "VERIFIED", ct),
-            MonthlyPurchasedKg = await monthSettled.SumAsync(x => x.ActualWeightKg ?? 0, ct),
-            MonthlyNetPayment = await monthSettled.SumAsync(x => x.NetAmount ?? 0, ct),
-            PeriodPurchasedKg = await settled.SumAsync(x => x.ActualWeightKg ?? 0, ct),
-            PeriodGrossAmount = await settled.SumAsync(x => x.GrossAmount ?? 0, ct),
-            PeriodNetPayment = await settled.SumAsync(x => x.NetAmount ?? 0, ct),
-            PeriodFeeAmount = await settled.SumAsync(x => x.PlatformFeeAmount ?? 0, ct),
+            OrderCount = summary?.OrderCount ?? 0,
+            ActiveDemandCount = counts.ActiveDemandCount,
+            PartnerCount = counts.PartnerCount,
+            PendingQcCount = summary?.PendingQcCount ?? 0,
+            PendingSettlementCount = summary?.PendingSettlementCount ?? 0,
+            MonthlyPurchasedKg = summary?.MonthlyPurchasedKg ?? 0,
+            MonthlyNetPayment = summary?.MonthlyNetPayment ?? 0,
+            PeriodPurchasedKg = summary?.PeriodPurchasedKg ?? 0,
+            PeriodGrossAmount = summary?.PeriodGrossAmount ?? 0,
+            PeriodNetPayment = summary?.PeriodNetPayment ?? 0,
+            PeriodFeeAmount = summary?.PeriodFeeAmount ?? 0,
             MaterialVolumes = materialVolumes,
             SixMonthPayments = sixMonths,
             PriorityOrders = priority.Select(FactoryOrderMapper.Map).ToList(),

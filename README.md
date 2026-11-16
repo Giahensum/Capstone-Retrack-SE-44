@@ -2,6 +2,90 @@
 
 > Nền tảng số hóa chuỗi cung ứng phế liệu, kết nối Người bán → Kho vựa → Nhà máy tái chế.
 
+## Phiên bản và triển khai frontend
+
+Bản mã nguồn `v1.0.0` dùng quy trình PR `feature -> develop -> main`.
+Vercel triển khai frontend từ `main`, Root Directory là `frontend`.
+Xem [hướng dẫn triển khai và biến môi trường](docs/deploy-frontend-vercel.md)
+và [phạm vi/giới hạn bản phát hành](docs/releases/v1.0.0.md).
+Sau khi liên kết GitHub, commit mới vào `main` có thể tự build/deploy;
+không cần tạo lại project hoặc nhập lại biến môi trường mỗi lần cập nhật.
+
+Trước khi triển khai production, TV5 cần phối hợp nhóm nâng nền tảng:
+dự án hiện target .NET 8, đã hết hỗ trợ ngày 10/11/2026; hướng nâng là
+.NET 10 LTS kèm kiểm thử EF/Npgsql và các role. Vá dependency riêng không
+thay cho nâng runtime. [Chính sách hỗ trợ .NET](https://dotnet.microsoft.com/en-us/platform/support/policy/dotnet-core).
+
+## Bảo vệ hồ sơ Depot
+
+Schema/seed chung vẫn chỉ có `db/bootstrap/retrack-system.sql`; xem
+[hướng dẫn DB](db/README.md) khi pull backend mới, đặc biệt các khối
+`RETRACK_DEPOT_VERIFICATION_DOCUMENTS_V2` và
+`RETRACK_DEPOT_VERIFICATION_SCANNING_V1`.
+
+Hồ sơ kho hỗ trợ hai cách lưu, vẫn tải qua API kiểm quyền, không dùng URL
+Cloudinary công khai:
+
+- Mặc định `VerificationStorage__Provider=Database`: nội dung ở PostgreSQL,
+  chạy được khi máy chưa cấu hình cloud.
+- `VerificationStorage__Provider=Cloudinary`: dùng chính các biến
+  `Cloudinary__CloudName/ApiKey/ApiSecret` hiện có; tệp mới là raw asset
+  `authenticated`, DB chỉ giữ key, kích thước, SHA-256 và thông tin hồ sơ.
+  Backend tải qua API riêng tư có chữ ký hết hạn rồi trả byte; không đưa URL
+  ký hoặc credential cho frontend. Không resize/nén giấy tờ.
+- Hồ sơ cũ trong DB tiếp tục đọc được, không tự chuyển ra cloud hoặc xóa byte.
+  Chọn cloud mà provider lỗi thì báo lỗi, không âm thầm lưu sang DB.
+
+DB cũ cần nâng khối `RETRACK_DEPOT_PRIVATE_CLOUD_V1_BEGIN/END` trong SQL chung
+trước khi chạy backend mới; xem db/README.md. Ảnh lô/ảnh thông thường vẫn theo
+CloudinaryService hiện có, không đổi thành private và không đổi API role khác.
+pg_dump chỉ sao lưu metadata đối với tệp cloud; kế hoạch backup phải bao gồm
+nội dung trên cloud. Tài nguyên private không có tham chiếu do crash hoặc COMMIT
+chưa rõ kết quả cần đối soát; không xóa hàng loạt asset để dọn lỗi.
+
+Chỉ Owner đúng kho và Admin đang hoạt động được tải/xem. Upload tối đa 3 tệp,
+2 MB/tệp; giới hạn bổ sung 8 lần nộp/phút và 30 lần tải/phút theo tài khoản,
+ngoài giới hạn 5 bộ hồ sơ/24 giờ hiện có. Khi quá hạn mức, API trả 429,
+`Retry-After` và mã tra cứu. Giới hạn phút là trong một tiến trình API:
+khi chạy nhiều replica, TV5 cần bổ sung giới hạn dùng chung hoặc tại gateway.
+
+Biến môi trường ở `backend/Retrack.API/.env.example`:
+
+- `VerificationScanner__Mode=Disabled`: chỉ cho bỏ quét ở Development;
+  giao diện ghi rõ chưa quét và chỉ dùng giấy tờ kiểm thử.
+- `VerificationScanner__Mode=ClamAv`: quét bằng daemon ClamAV qua INSTREAM.
+  Điền Host/Port và TimeoutSeconds (1–30 giây); tối đa hai lượt quét đồng thời
+  trên một tiến trình, không giữ khóa DB trong lúc quét.
+- Production chưa cấu hình scanner sẽ từ chối **hồ sơ mới** bằng 503; xem
+  hồ sơ/lịch sử và các nghĩa vụ giao dịch đang có vẫn giữ quyền hiện tại.
+  Daemon lỗi/timeout/phản hồi không rõ không được coi là tệp sạch.
+
+ClamAV tự host không cần API key hay tài khoản dịch vụ. Nếu dùng Docker,
+mở Docker Desktop/daemon, chọn image chính thức thuộc phiên bản đang hỗ trợ,
+cấp RAM phù hợp và giữ bộ chữ ký FreshClam được cập nhật. Tài liệu chính thức
+khuyến nghị khoảng 4 GiB cho container. Sau staging, ghim phiên bản/digest đã
+nghiệm thu để triển khai. Không tự tải giấy tờ khách hàng lên dịch vụ quét công khai.
+[Cài ClamAV bằng Docker](https://docs.clamav.net/manual/Installing/Docker.html).
+
+Ví dụ chạy thử local sau khi chọn image và kiểm tra còn được hỗ trợ:
+
+```powershell
+$clamImage = 'clamav/clamav:stable'
+docker run -d --name retrack-clamav --restart unless-stopped --memory 4g -p 127.0.0.1:3310:3310 -v retrack-clamav-signatures:/var/lib/clamav $clamImage
+```
+
+Chờ daemon sẵn sàng rồi đặt Mode=ClamAv, Host=127.0.0.1, Port=3310 và khởi động
+lại API. Nếu API cũng ở Docker, dùng hostname dịch vụ trên network nội bộ,
+không dùng 127.0.0.1 trỏ về chính container API. Không công khai cổng 3310:
+giao thức TCP ClamAV không có xác thực/TLS.
+[Giao thức và mạng ClamAV](https://docs.clamav.net/manual/Usage/Scanning.html).
+
+`CLEAN` chỉ ghi khi daemon trả kết quả sạch, có thời điểm quét; hồ sơ cũ hoặc
+tệp bỏ quét ở Development giữ `NOT_SCANNED`. Antivirus không thay xét duyệt
+giấy tờ, làm sạch nội dung PDF (CDR) hoặc kiểm tra pháp lý. Chưa có tự xóa
+giấy tờ theo thời hạn; nhóm phải chốt chính sách lưu/xóa và xử lý bản sao lưu
+trước khi dùng hồ sơ thật.
+
 ## 🏗️ Tech Stack
 
 | Layer | Technology |
