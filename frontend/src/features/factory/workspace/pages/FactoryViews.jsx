@@ -35,7 +35,7 @@ export function Dashboard({ navigate }) {
   const weight = dashboard?.periodPurchasedKg ?? 0;
   const spend = dashboard?.periodNetPayment ?? 0;
   const fees = dashboard?.periodFeeAmount ?? 0;
-  const feePercentage = state.profile?.platformFeePercentage ?? 1;
+  const feePercentage = state.profile?.platformFeePercentage ?? 5;
   const pending = (dashboard?.priorityOrders || []).map(mapOrder).filter((o) => ["DELIVERED", "RECEIVED", "WEIGHED"].includes(o.status));
   const ready = (dashboard?.priorityOrders || []).map(mapOrder).filter((o) => o.status === "VERIFIED");
   const volume = (dashboard?.materialVolumes || []).map((item) => ({ material: item.materialType, kg: item.weightKg }));
