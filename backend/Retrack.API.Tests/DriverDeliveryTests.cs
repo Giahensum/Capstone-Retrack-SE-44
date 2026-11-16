@@ -18,7 +18,7 @@ public sealed class DriverDeliveryTests : IAsyncLifetime
     private static User UserFor(string role) => new() { Role = role, Email = Guid.NewGuid() + "@test.local" };
     private readonly User driver = UserFor("DRIVER"), other = UserFor("DRIVER");
     private TransportJob job = null!;
-    private DriverDeliveryService Service => new(db, new(db), images);
+    private DriverDeliveryService Service => StaffTestServices.Delivery(db, StaffTestServices.Jobs(db), images);
     public async Task InitializeAsync()
     {
         await connection.OpenAsync();
@@ -69,7 +69,7 @@ public sealed class DriverDeliveryTests : IAsyncLifetime
         await Act("cancel", reason: "Xe hỏng chưa thể nhận hàng", operation: operation);
         Assert.Null(job.DriverId); Assert.Equal("PENDING", job.Status);
         Assert.Equal("TRANSPORT_READY", job.Batch.Status);
-        await new DriverJobService(db).AcceptAsync(other.Id, job.Id, default);
+        await StaffTestServices.Jobs(db).AcceptAsync(other.Id, job.Id, default);
         await Act("cancel", reason: "Xe hỏng chưa thể nhận hàng", operation: operation);
         await db.Entry(job).ReloadAsync();
         Assert.Equal(other.Id, job.DriverId); Assert.Equal("ACCEPTED", job.Status);
@@ -80,7 +80,7 @@ public sealed class DriverDeliveryTests : IAsyncLifetime
     {
         job.DriverId = null; job.Status = "PENDING"; await db.SaveChangesAsync();
         await Act("reject", reason: "Không phù hợp lịch làm việc");
-        var jobs = new DriverJobService(db);
+        var jobs = StaffTestServices.Jobs(db);
         Assert.Empty((await jobs.ListAsync(driver.Id, false, 1, default)).Items);
         Assert.Single((await jobs.ListAsync(other.Id, false, 1, default)).Items);
         Assert.Equal("PENDING", job.Status); Assert.Null(job.DriverId);

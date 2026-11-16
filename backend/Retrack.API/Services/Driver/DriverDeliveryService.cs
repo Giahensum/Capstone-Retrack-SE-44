@@ -1,5 +1,4 @@
-using Microsoft.EntityFrameworkCore;
-using Retrack.API.Data;
+using Retrack.API.Repositories.Interfaces;
 using Retrack.API.DTOs.Employee;
 using Retrack.API.Models;
 using Retrack.API.Services.Depot;
@@ -13,14 +12,12 @@ public sealed record DeliveryEventDto(string Action, string? Reason, string? Ima
     double? DistanceMeters, double? AccuracyMeters, DateTime CreatedAt);
 public sealed record DriverDeliveryDto(DriverJobDto Job, CollectionPolicyDto Policy, IReadOnlyList<DeliveryEventDto> Events);
 
-public sealed class DriverDeliveryService(AppDbContext db, DriverJobService jobs, ICloudinaryService images)
+public sealed class DriverDeliveryService(IDriverDeliveryRepository repository, IDriverJobRepository jobRepository, IStaffUnitOfWork work, DriverJobService jobs, ICloudinaryService images)
 {
     public async Task<DriverDeliveryDto> GetAsync(Guid userId, Guid id, CancellationToken ct)
     {
         var job = await jobs.DetailAsync(userId, id, ct);
-        var events = await db.DriverDeliveryEvents.AsNoTracking().Where(e => e.JobId == id && e.DriverId == userId)
-            .OrderByDescending(e => e.CreatedAt).ThenBy(e => e.Id).Take(50)
-            .Select(e => new DeliveryEventDto(e.Action, e.Reason, e.ImageUrl, e.DistanceMeters, e.AccuracyMeters, e.CreatedAt)).ToListAsync(ct);
+        var events = await repository.EventsAsync(userId, id, ct);
         return new(job, new(CollectionValidation.RadiusMeters, CollectionValidation.MaxAccuracyMeters,
             CollectionValidation.MaxLocationAgeSeconds), events);
     }
@@ -37,28 +34,14 @@ public sealed class DriverDeliveryService(AppDbContext db, DriverJobService jobs
             if (reason == null || reason.Length is < 10 or > 1000)
                 throw new ArgumentException("Lý do phải từ 10 đến 1.000 ký tự.");
         await jobs.RequireAsync(userId, ct);
-        var depotId = await db.TransportJobs.Where(j => j.Id == id).Select(j => (Guid?)j.Batch.DepotId).SingleOrDefaultAsync(ct)
+        var depotId = await repository.DepotIdAsync(id, ct)
             ?? throw new KeyNotFoundException("Không tìm thấy chuyến.");
-        await using var tx = await db.Database.BeginTransactionAsync(ct);
-        // Thứ tự khóa thống nhất với Depot: kho → lô → chuyến.
-        if (db.Database.IsNpgsql())
-            await db.Depots.FromSqlInterpolated($"SELECT * FROM depots WHERE id = {depotId} FOR UPDATE").LoadAsync(ct);
-        if (!await db.DepotStaffs.AnyAsync(s => s.UserId == userId && s.DepotId == depotId && s.IsActive
-            && s.StaffType == "DRIVER" && s.User.IsActive && s.User.Role == "DRIVER"
-            && s.Depot.Owner.IsActive && s.Depot.Owner.Role == "DEPOT_OWNER", ct)) throw new DepotForbiddenException();
-        var batchId = await db.TransportJobs.Where(j => j.Id == id).Select(j => j.BatchId).SingleAsync(ct);
-        if (db.Database.IsNpgsql())
-        {
-            await db.InventoryBatches.FromSqlInterpolated($"SELECT * FROM inventory_batches WHERE id = {batchId} FOR UPDATE").LoadAsync(ct);
-            await db.TransportJobs.FromSqlInterpolated($"SELECT * FROM transport_jobs WHERE id = {id} FOR UPDATE").LoadAsync(ct);
-        }
-        var job = await db.TransportJobs.Include(j => j.Batch).ThenInclude(b => b.Depot)
-            .Include(j => j.Batch).ThenInclude(b => b.TargetFactory).ThenInclude(f => f!.Owner)
-            .SingleAsync(j => j.Id == id, ct);
-        await db.Entry(job).ReloadAsync(ct);
-        await db.Entry(job.Batch).ReloadAsync(ct);
-        var previous = await db.DriverDeliveryEvents.AsNoTracking().SingleOrDefaultAsync(e => e.JobId == id
-            && e.DriverId == userId && e.OperationId == request.OperationId, ct);
+        await using var tx = await work.BeginAsync(ct);
+        // Cùng thứ tự khóa với Depot: kho → kiểm tra membership → lô → chuyến.
+        await jobRepository.LockDepotAsync(depotId, ct);
+        if (!await repository.HasActiveStaffAsync(userId, depotId, ct)) throw new DepotForbiddenException();
+        var job = await repository.LockJobAsync(id, ct);
+        var previous = await repository.FindOperationAsync(userId, id, request.OperationId, ct);
         if (previous != null)
         {
             if (previous.Action != action || previous.Reason != reason)
@@ -69,7 +52,7 @@ public sealed class DriverDeliveryService(AppDbContext db, DriverJobService jobs
         {
             await jobs.DetailAsync(userId, id, ct);
             if (job.DriverId != null || job.Status != "PENDING") throw new DepotConflictException("Chuyến đã được nhận. Hãy tải lại.");
-            if (await db.DriverDeliveryEvents.AnyAsync(e => e.JobId == id && e.DriverId == userId && e.Action == "reject", ct))
+            if (await repository.HasRejectionAsync(userId, id, ct))
                 throw new DepotConflictException("Bạn đã từ chối chuyến này.");
         }
         else if (job.DriverId != userId) throw new KeyNotFoundException("Chuyến không được giao cho bạn.");
@@ -118,7 +101,7 @@ public sealed class DriverDeliveryService(AppDbContext db, DriverJobService jobs
         }
         if (action is not ("reject" or "incident")) job.UpdatedAt = DateTime.UtcNow;
         if (action is "checkin" or "checkout") batch.UpdatedAt = DateTime.UtcNow;
-        db.DriverDeliveryEvents.Add(entry);
+        repository.AddEvent(entry);
         var title = action switch {
             "checkin" => "Tài xế đã lấy hàng", "start" => "Chuyến xe đã khởi hành",
             "checkout" => "Tài xế báo đã giao hàng", "cancel" => "Tài xế trả chuyến về pool",
@@ -127,10 +110,10 @@ public sealed class DriverDeliveryService(AppDbContext db, DriverJobService jobs
         if ((action is "start" or "checkout" or "incident") && batch.TargetFactory != null)
             recipients.Add(batch.TargetFactory.OwnerId);
         foreach (var recipient in recipients)
-            db.Notifications.Add(new Notification { UserId = recipient, TransportJobId = id, Title = title,
+            repository.AddNotification(new Notification { UserId = recipient, TransportJobId = id, Title = title,
                 Message = $"Lô {batch.Code ?? batch.Id.ToString()}. {reason ?? (action == "checkout" ? "Nhà máy vui lòng xác nhận nhận hàng và kiểm định." : title)}" });
-        if (action == "cancel") await DriverJobNotices.QueueAsync(db, depotId, id);
-        await db.SaveChangesAsync(ct);
+        if (action == "cancel") await DriverJobNotices.QueueAsync(repository, depotId, id, ct);
+        await work.SaveAsync(ct);
         await tx.CommitAsync(ct);
     }
 

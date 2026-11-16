@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Microsoft.EntityFrameworkCore;
 using Retrack.API.DTOs.Employee;
 using Retrack.API.Models;
 using Retrack.API.Services.Depot;
@@ -12,24 +11,23 @@ public sealed partial class EmployeeCollectionService
     {
         if (revision < 0 || action is not ("SUBMITTED" or "HANDED_OVER" or "REOPENED"))
             throw new ArgumentException("Thao tác hoặc phiên bản không hợp lệ.");
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        await using var transaction = await work.BeginAsync(ct);
         var pickup = await OwnAsync(userId, pickupId, true, ct);
-        var checkIn = await db.PickupCheckIns.SingleOrDefaultAsync(p => p.PickupRequestId == pickupId, ct)
+        var checkIn = await repository.FindCheckInAsync(pickupId, ct)
             ?? throw new DepotConflictException("Đơn chưa có bằng chứng check-in.");
         if (checkIn.EmployeeId != userId) throw new DepotConflictException("Bằng chứng check-in không thuộc nhân viên đang xử lý.");
-        if (await db.EmployeeCollectionEvents.AnyAsync(e => e.PickupRequestId == pickupId && e.Kind == action && e.Revision == revision, ct))
+        if (await repository.HasEventAsync(pickupId, action, revision, ct))
         {
             var existing = await Snapshot(pickup, ct);
             await transaction.CommitAsync(ct);
             return existing;
         }
         if (checkIn.Revision != revision) throw new DepotConflictException("Kết quả cân đã thay đổi. Hãy tải lại trước khi xác nhận.");
-        if (action != "REOPENED" && !await db.Users.AnyAsync(u => u.Id == pickup.SellerId && u.IsActive && u.Role == "SELLER", ct))
+        if (action != "REOPENED" && !await repository.ActiveSellerAsync(pickup.SellerId, ct))
             throw new DepotConflictException("Tài khoản người bán không còn hoạt động. Liên hệ chủ kho để xử lý.");
         var from = pickup.Status;
         var snapshot = await Snapshot(pickup, ct);
-        var submitted = await db.EmployeeCollectionEvents.AsNoTracking()
-            .SingleOrDefaultAsync(e => e.PickupRequestId == pickupId && e.Kind == "SUBMITTED" && e.Revision == revision, ct);
+        var submitted = await repository.SubmittedAsync(pickupId, revision, ct);
         if (action == "SUBMITTED")
         {
             if (from != "IN_PROGRESS" || snapshot.Items.Count == 0 || string.IsNullOrWhiteSpace(pickup.CheckinImageUrl))
@@ -63,12 +61,12 @@ public sealed partial class EmployeeCollectionService
                 throw new DepotConflictException("Kết quả cân không còn khớp bản đã gửi. Liên hệ chủ kho để kiểm tra.");
             pickup.Status = "AWAITING_PAYMENT";
             pickup.StockReceivedAt ??= DateTime.UtcNow;
-            var ownerId = await db.Depots.Where(d => d.Id == pickup.TargetDepotId).Select(d => d.OwnerId).SingleAsync(ct);
+            var ownerId = await repository.OwnerIdAsync(pickup.TargetDepotId, ct);
             Notify(ownerId, "Đơn thu gom chờ thanh toán", $"Đơn {pickup.Id}: người bán đã đồng ý kết quả cân. Nhân viên đã bàn giao; chủ kho kiểm tra và thanh toán.", pickup.Id);
             Notify(pickup.SellerId, "Đang chờ chủ kho thanh toán", $"Đơn {pickup.Id} đã được bàn giao cho chủ kho. Nhân viên không thu hoặc chi tiền.", pickup.Id);
         }
         pickup.UpdatedAt = DateTime.UtcNow;
-        db.EmployeeCollectionEvents.Add(new EmployeeCollectionEvent
+        repository.AddEvent(new EmployeeCollectionEvent
         {
             PickupRequestId = pickupId, EmployeeId = userId, Kind = action, Revision = revision,
             FromStatus = from, ToStatus = pickup.Status,
@@ -77,14 +75,14 @@ public sealed partial class EmployeeCollectionService
         });
         Notify(userId, action == "SUBMITTED" ? "Đã gửi kết quả cân" : action == "REOPENED" ? "Đã mở lại kết quả cân" : "Đã bàn giao cho chủ kho",
             $"Đơn {pickup.Id} · phiên bản {revision} · {pickup.Status}. Bạn không thực hiện thanh toán cho người bán.", pickup.Id);
-        await db.SaveChangesAsync(ct);
+        await work.SaveAsync(ct);
         var result = await Snapshot(pickup, ct);
         await transaction.CommitAsync(ct);
         return result;
     }
 
     private void Notify(Guid userId, string title, string message, Guid pickupId) =>
-        db.Notifications.Add(Notification.ForPickup(userId, pickupId, title, message));
+        repository.AddNotification(Notification.ForPickup(userId, pickupId, title, message));
 }
 
 public sealed record CollectionSubmissionSnapshot(IReadOnlyList<ClassificationItemDto> Items,

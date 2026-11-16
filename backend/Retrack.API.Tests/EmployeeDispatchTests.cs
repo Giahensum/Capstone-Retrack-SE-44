@@ -16,7 +16,7 @@ public sealed class EmployeeDispatchTests : IAsyncLifetime
     private readonly Depot depot = new() { Owner = NewUser("DEPOT_OWNER"), VerificationStatus = "APPROVED" };
     private EmployeeCollectionArea area = null!, nearby = null!;
     private EmployeeDispatchShift a = null!, b = null!;
-    private EmployeeDispatchService Service => new(db);
+    private EmployeeDispatchService Service => StaffTestServices.Dispatch(db);
     private static User NewUser(string role) => new() { Email = $"{Guid.NewGuid():N}@test.local", Role = role, FullName = role };
     public async Task InitializeAsync()
     {

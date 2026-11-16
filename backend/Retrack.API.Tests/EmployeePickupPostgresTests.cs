@@ -49,7 +49,7 @@ public class EmployeePickupPostgresTests
             setup.PickupRequests.Add(pickup);
             await setup.SaveChangesAsync();
 
-            EmployeePickupController Controller(AppDbContext context, Guid userId) => new(context, new NotificationService(context))
+            EmployeePickupController Controller(AppDbContext context, Guid userId) => new(new Retrack.API.Services.Employee.EmployeePickupService(new Retrack.API.Repositories.EmployeePickupRepository(context), StaffTestServices.Reports(context), new Retrack.API.Repositories.StaffUnitOfWork(context), new NotificationService(context)))
             {
                 ControllerContext = new() { HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity(
                     new[] { new Claim(ClaimTypes.NameIdentifier, userId.ToString()), new Claim(ClaimTypes.Role, "DEPOT_EMPLOYEE") }, "test")) } }

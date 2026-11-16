@@ -39,7 +39,7 @@ public sealed class DriverJobPostgresTests
             async Task<bool> Accept(Guid id)
             {
                 await using var attempt = Open(); await start.Task;
-                try { await new DriverJobService(attempt).AcceptAsync(id, job.Id, default); return true; }
+                try { await StaffTestServices.Jobs(attempt).AcceptAsync(id, job.Id, default); return true; }
                 catch (DepotConflictException) { return false; }
             }
             var a = Accept(first.Id); var b = Accept(second.Id); start.SetResult();
@@ -48,7 +48,7 @@ public sealed class DriverJobPostgresTests
             var saved = await verify.TransportJobs.SingleAsync();
             Assert.Equal("ACCEPTED", saved.Status); Assert.NotNull(saved.DriverId);
             Assert.Equal(depot.OwnerId, (await verify.Notifications.SingleAsync()).UserId);
-            await new DriverJobService(verify).AcceptAsync(saved.DriverId!.Value, job.Id, default);
+            await StaffTestServices.Jobs(verify).AcceptAsync(saved.DriverId!.Value, job.Id, default);
             Assert.Single(await verify.Notifications.ToListAsync());
         }
         finally
