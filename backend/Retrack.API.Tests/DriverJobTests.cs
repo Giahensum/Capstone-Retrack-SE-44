@@ -34,17 +34,15 @@ public sealed class DriverJobTests : IAsyncLifetime
         var mine = new Notification { UserId = driver.Id, TransportJobId = job.Id, Title = "Của tôi" };
         var foreign = new Notification { UserId = other.Id, TransportJobId = job.Id, Title = "Người khác" };
         db.Notifications.AddRange(mine, foreign); await db.SaveChangesAsync();
-        var controller = new Retrack.API.Controllers.Driver.DriverNoticeController(db, new(db))
-        {
-            ControllerContext = new Microsoft.AspNetCore.Mvc.ControllerContext
+        var controller = StaffTestServices.Notices(db, StaffTestServices.Jobs(db));
+        controller.ControllerContext = new Microsoft.AspNetCore.Mvc.ControllerContext
             {
                 HttpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext
                 {
                     User = new System.Security.Claims.ClaimsPrincipal(new System.Security.Claims.ClaimsIdentity(
                         new[] { new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.NameIdentifier, driver.Id.ToString()) }, "test"))
                 }
-            }
-        };
+            };
         var result = Assert.IsType<Microsoft.AspNetCore.Mvc.OkObjectResult>(await controller.List(1));
         var response = Assert.IsType<Retrack.API.DTOs.ApiResponse<object>>(result.Value);
         var json = System.Text.Json.JsonSerializer.SerializeToElement(response.Data);
@@ -61,7 +59,7 @@ public sealed class DriverJobTests : IAsyncLifetime
     [Fact]
     public async Task PoolAcceptRetryAndCompetingDriver()
     {
-        var service = new DriverJobService(db);
+        var service = StaffTestServices.Jobs(db);
         Assert.Single((await service.ListAsync(driver.Id, false, 1, default)).Items);
         Assert.Equal("ACCEPTED", (await service.AcceptAsync(driver.Id, job.Id, default)).Status);
         await service.AcceptAsync(driver.Id, job.Id, default);
@@ -79,7 +77,7 @@ public sealed class DriverJobTests : IAsyncLifetime
     public async Task InvalidBatchNeverEntersPool(string status)
     {
         job.Batch.Status = status; await db.SaveChangesAsync();
-        var service = new DriverJobService(db);
+        var service = StaffTestServices.Jobs(db);
         Assert.Empty((await service.ListAsync(driver.Id, false, 1, default)).Items);
         await Assert.ThrowsAsync<DepotConflictException>(() => service.AcceptAsync(driver.Id, job.Id, default));
         Assert.Empty(await db.Notifications.ToListAsync());
@@ -90,7 +88,7 @@ public sealed class DriverJobTests : IAsyncLifetime
         var stranger = UserFor("DRIVER");
         db.DepotStaffs.Add(new() { User = stranger, Depot = new() { Owner = UserFor("DEPOT_OWNER") }, StaffType = "DRIVER" });
         await db.SaveChangesAsync();
-        var service = new DriverJobService(db);
+        var service = StaffTestServices.Jobs(db);
         Assert.Empty((await service.ListAsync(stranger.Id, false, 1, default)).Items);
         await Assert.ThrowsAsync<KeyNotFoundException>(() => service.AcceptAsync(stranger.Id, job.Id, default));
         driver.IsActive = false; await db.SaveChangesAsync();
@@ -100,7 +98,7 @@ public sealed class DriverJobTests : IAsyncLifetime
     public async Task NoticeRecipientsAreActiveDriversOfThisDepotOnly()
     {
         other.IsActive = false; await db.SaveChangesAsync();
-        await DriverJobNotices.QueueAsync(db, depot.Id, job.Id); await db.SaveChangesAsync();
+        await DriverJobNotices.QueueAsync(new Retrack.API.Repositories.DriverDeliveryRepository(db), depot.Id, job.Id); await db.SaveChangesAsync();
         var notice = await db.Notifications.SingleAsync();
         Assert.Equal(driver.Id, notice.UserId); Assert.Equal(job.Id, notice.TransportJobId);
     }
@@ -108,7 +106,7 @@ public sealed class DriverJobTests : IAsyncLifetime
     public async Task MissingFactoryAndInvalidPaginationAreRejected()
     {
         job.Batch.TargetFactory = null; job.Batch.TargetFactoryId = null; await db.SaveChangesAsync();
-        var service = new DriverJobService(db);
+        var service = StaffTestServices.Jobs(db);
         Assert.Empty((await service.ListAsync(driver.Id, false, 1, default)).Items);
         await Assert.ThrowsAsync<ArgumentException>(() => service.ListAsync(driver.Id, false, 0, default));
         await Assert.ThrowsAsync<DepotConflictException>(() => service.AcceptAsync(driver.Id, job.Id, default));

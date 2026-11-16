@@ -60,7 +60,7 @@ public sealed class DriverDeliveryPostgresTests
                     PhotoTakenAt = DateTimeOffset.UtcNow, LocationRecordedAt = DateTimeOffset.UtcNow,
                     ImageFile = new FormFile(new MemoryStream(new byte[] {255,216,255,224,0,0,0,0}), 0, 8, "imageFile", "test.jpg") };
                 try {
-                    await new DriverDeliveryService(attempt, new(attempt), images).ExecuteAsync(driver.Id, id, action,
+                    await StaffTestServices.Delivery(attempt, StaffTestServices.Jobs(attempt), images).ExecuteAsync(driver.Id, id, action,
                         new(operation, action == "cancel" ? "Xe chưa thể tiếp tục nhận hàng" : null), evidence, default);
                     return true;
                 } catch (DepotConflictException) { return false; }

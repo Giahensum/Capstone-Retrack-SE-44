@@ -61,7 +61,7 @@ public sealed class EmployeeCollectionPostgresTests
             var before = await depot.GetPaymentSummaryAsync(ownerId, pickup.TargetDepotId.Value);
             await Assert.ThrowsAsync<DepotConflictException>(() => service.MarkPaymentSentAsync(pickupId, ownerId, "https://example.com/proof.png"));
             Assert.False(await db.PlatformTransactions.AnyAsync(t => t.SourceId == pickupId));
-            var handedOver = await new EmployeeCollectionService(db, new ConcurrentImages())
+            var handedOver = await StaffTestServices.Collection(db, new ConcurrentImages())
                 .TransitionAsync(pickup.AcceptedCollectorId!.Value, pickupId, "HANDED_OVER", 1, default);
             Assert.Equal("AWAITING_PAYMENT", handedOver.Status);
             var after = await depot.GetPaymentSummaryAsync(ownerId, pickup.TargetDepotId.Value);
@@ -126,7 +126,7 @@ public sealed class EmployeeCollectionPostgresTests
             }
             await using (var handoverDb = Open())
             {
-                var handedOver = await new EmployeeCollectionService(handoverDb, new ConcurrentImages())
+                var handedOver = await StaffTestServices.Collection(handoverDb, new ConcurrentImages())
                     .TransitionAsync(employee.Id, pickup.Id, "HANDED_OVER", 1, default);
                 Assert.Equal("AWAITING_PAYMENT", handedOver.Status);
                 Assert.Equal(2, await handoverDb.EmployeeCollectionEvents.CountAsync(e => e.PickupRequestId == pickup.Id));
@@ -168,7 +168,7 @@ public sealed class EmployeeCollectionPostgresTests
             async Task<EmployeeCollectionDto> CheckIn()
             {
                 await using var db = Open();
-                return await new EmployeeCollectionService(db, images).CheckInAsync(employee.Id, pickup.Id, new()
+                return await StaffTestServices.Collection(db, images).CheckInAsync(employee.Id, pickup.Id, new()
                 {
                     Latitude = 16, Longitude = 108, AccuracyMeters = 5, PhotoTakenAt = DateTimeOffset.UtcNow,
                     LocationRecordedAt = DateTimeOffset.UtcNow,
@@ -186,7 +186,7 @@ public sealed class EmployeeCollectionPostgresTests
                 await using var db = Open(); await start.Task;
                 try
                 {
-                    await new EmployeeCollectionService(db, images).SaveAsync(employee.Id, pickup.Id,
+                    await StaffTestServices.Collection(db, images).SaveAsync(employee.Id, pickup.Id,
                         new(0, [new("PET", weight, 5000)]), default);
                     return true;
                 }
@@ -201,12 +201,12 @@ public sealed class EmployeeCollectionPostgresTests
             async Task Submit()
             {
                 await using var context = Open();
-                await new EmployeeCollectionService(context, images).TransitionAsync(employee.Id, pickup.Id, "SUBMITTED", 1, default);
+                await StaffTestServices.Collection(context, images).TransitionAsync(employee.Id, pickup.Id, "SUBMITTED", 1, default);
             }
             await Task.WhenAll(Submit(), Submit());
             Assert.Single(await verify.EmployeeCollectionEvents.AsNoTracking().ToListAsync());
             Assert.Equal("WEIGHED", (await verify.PickupRequests.AsNoTracking().SingleAsync()).Status);
-            var reports = new EmployeeReportingService(verify);
+            var reports = StaffTestServices.Reports(verify);
             Assert.Equal(0, (await reports.StatsAsync(employee.Id, default)).AllTime.Pickups);
             // Fixture xác nhận hoàn tất để kiểm chứng SUM PostgreSQL; không gọi API tài chính role khác.
             await verify.PickupRequests.ExecuteUpdateAsync(s => s.SetProperty(p => p.Status, "DONE"));

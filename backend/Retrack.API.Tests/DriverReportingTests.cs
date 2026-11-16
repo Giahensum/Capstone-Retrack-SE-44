@@ -27,7 +27,7 @@ public sealed class DriverReportingTests : IAsyncLifetime
             new DepotStaff { User = other, Depot = depot, StaffType = "DRIVER" });
         db.Factories.Add(factory);
         await db.SaveChangesAsync();
-        service = new(db, new(db));
+        service = StaffTestServices.DriverReports(db);
     }
     public async Task DisposeAsync() { await db.DisposeAsync(); await connection.DisposeAsync(); }
     private TransportJob Add(string state = "DELIVERED", Guid? who = null, Depot? at = null)
@@ -126,7 +126,7 @@ public sealed class DriverReportingTests : IAsyncLifetime
         db.Notifications.Add(new() { UserId = other.Id, Title = "Test" });
         await db.SaveChangesAsync();
         var dashboard = await service.DashboardAsync(driver.Id, default);
-        Assert.Equal((await new DriverJobService(db).ListAsync(driver.Id, false, 1, default)).TotalCount, dashboard.AvailableJobs);
+        Assert.Equal((await StaffTestServices.Jobs(db).ListAsync(driver.Id, false, 1, default)).TotalCount, dashboard.AvailableJobs);
         Assert.Equal(1, dashboard.AvailableJobs); Assert.Equal(4, dashboard.ActiveJobs);
         Assert.Equal(3, dashboard.ActivePreview.Count); Assert.Equal(1, dashboard.UnreadNotifications);
     }

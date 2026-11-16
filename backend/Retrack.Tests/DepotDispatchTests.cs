@@ -59,7 +59,7 @@ public sealed class DepotDispatchTests : IAsyncLifetime
         Assert.Single((await service.HistoryAsync(owner, depot, pickup, new())).Items); Assert.Equal(2, await db.Notifications.CountAsync(x => x.DepotId == depot));
         Assert.Equal(0, (await service.SummaryAsync(owner, depot)).WaitingCount); Assert.Single((await service.PickupsAsync(owner, depot, new() { Status = "SCHEDULED" })).Items);
         Assert.Empty((await service.ShiftsAsync(owner, depot, new(), true, employee)).Items);
-        await new Retrack.API.Services.Employee.EmployeeDispatchService(db).DispatchAsync(default);
+        await new Retrack.API.Services.Employee.EmployeeDispatchService(new Retrack.API.Repositories.EmployeeDispatchRepository(db), new Retrack.API.Repositories.StaffUnitOfWork(db)).DispatchAsync(default);
         Assert.Equal(employee, (await service.DetailAsync(owner, depot, pickup)).EmployeeId);
         Assert.Equal(pickup, Assert.Single(await service.LegacyHistoryAsync(owner, depot, pickup, 1)).PickupId);
         using var configuration = System.Text.Json.JsonDocument.Parse(System.Text.Json.JsonSerializer.Serialize(await service.ConfigurationAsync(owner, depot, 1), new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)));
@@ -109,7 +109,7 @@ public sealed class DepotDispatchTests : IAsyncLifetime
         Assert.Empty((await service.ShiftsAsync(owner, depot, new(), true)).Items);
         // Owner không trực tiếp sửa giao nhận/tồn khi ngừng ca; worker TV3 xử lý đơn chưa check-in.
         Assert.Equal("SCHEDULED", (await service.DetailAsync(owner, depot, pickup)).Status);
-        await new Retrack.API.Services.Employee.EmployeeDispatchService(db).DispatchAsync(default);
+        await new Retrack.API.Services.Employee.EmployeeDispatchService(new Retrack.API.Repositories.EmployeeDispatchRepository(db), new Retrack.API.Repositories.StaffUnitOfWork(db)).DispatchAsync(default);
         Assert.Equal("PENDING", (await service.DetailAsync(owner, depot, pickup)).Status);
         Assert.Equal(1, await db.Notifications.CountAsync(x => x.Title == "Chủ kho đã ngừng ca thu gom" && x.DepotId == depot));
         await Assert.ThrowsAsync<DepotForbiddenException>(() => service.StopShiftAsync(other, depot, shift.Id, "Không đúng chủ kho của nhân viên"));

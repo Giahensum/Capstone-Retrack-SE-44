@@ -46,13 +46,13 @@ public sealed class EmployeeDispatchPostgresTests
             var eligible = await db.PickupRequests.CountAsync(p => p.TargetDepotId == depotId
                 && !p.Description!.Contains("[NGOAI-VUNG]")
                 && (p.PreferredDatetime == null || p.PreferredDatetime < dayEnd));
-            await new EmployeeDispatchService(db).DispatchAsync(default);
+            await StaffTestServices.Dispatch(db).DispatchAsync(default);
             Assert.Equal(eligible,await db.PickupRequests.CountAsync(p => p.TargetDepotId == depotId && p.Status == "SCHEDULED"));
             Assert.Equal(completed,await db.PickupRequests.AsNoTracking().Where(p => p.Status == "DONE")
                 .Select(p => new {p.Id,p.AcceptedCollectorId,p.GrossAmount,p.NetAmount}).OrderBy(p => p.Id).ToListAsync());
             var count = await db.EmployeeDispatchEvents.CountAsync();
             await Run("db/bootstrap/retrack-system.sql");
-            await new EmployeeDispatchService(db).DispatchAsync(default);
+            await StaffTestServices.Dispatch(db).DispatchAsync(default);
             Assert.Equal(count,await db.EmployeeDispatchEvents.CountAsync());
             Assert.Equal(36,await db.PickupRequests.CountAsync(p => p.TargetDepotId == depotId));
         }
@@ -93,7 +93,7 @@ public sealed class EmployeeDispatchPostgresTests
                 Address = "Test", Latitude = 16.05m, Longitude = 108.22m };
             setup.PickupRequests.Add(pickup);
             await setup.SaveChangesAsync();
-            async Task Dispatch() { await using var db = NewDb(); await new EmployeeDispatchService(db).DispatchAsync(default); }
+            async Task Dispatch() { await using var db = NewDb(); await StaffTestServices.Dispatch(db).DispatchAsync(default); }
             await Task.WhenAll(Dispatch(), Dispatch());
             Assert.Single(await setup.EmployeeDispatchEvents.ToListAsync());
             Assert.Equal(2,await setup.Notifications.CountAsync());
@@ -104,14 +104,14 @@ public sealed class EmployeeDispatchPostgresTests
             async Task Pause()
             {
                 await using var db = NewDb();
-                await new EmployeeDispatchService(db).ChangeAvailabilityAsync(first.Id, shift.Id,
+                await StaffTestServices.Dispatch(db).ChangeAvailabilityAsync(first.Id, shift.Id,
                     new("FULL","Xe đầy cần về kho bàn giao"),default);
             }
             await Task.WhenAll(Pause(), Dispatch());
             Assert.Equal(second.Id,(await setup.PickupRequests.AsNoTracking().SingleAsync()).AcceptedCollectorId);
             Assert.Equal(2,await setup.EmployeeDispatchEvents.CountAsync());
             await using var proofDb = NewDb();
-            await new EmployeeCollectionService(proofDb,new EmployeeCollectionTests.TestImages())
+            await StaffTestServices.Collection(proofDb,new EmployeeCollectionTests.TestImages())
                 .CheckInAsync(second.Id,pickup.Id,new() {
                     PhotoTakenAt = DateTimeOffset.UtcNow,
                     ImageFile = new Microsoft.AspNetCore.Http.FormFile(new MemoryStream(new byte[] {255,216,255,224,0,0,0,0}),
@@ -119,7 +119,7 @@ public sealed class EmployeeDispatchPostgresTests
                 },default);
             var secondShift = await setup.EmployeeDispatchShifts.AsNoTracking().SingleAsync(s => s.EmployeeId == second.Id);
             await using var pauseDb = NewDb();
-            await new EmployeeDispatchService(pauseDb).ChangeAvailabilityAsync(second.Id,secondShift.Id,
+            await StaffTestServices.Dispatch(pauseDb).ChangeAvailabilityAsync(second.Id,secondShift.Id,
                 new("STOPPED","Không thể tiếp tục ca thu gom"),default);
             var final = await setup.PickupRequests.AsNoTracking().SingleAsync();
             Assert.Equal(second.Id,final.AcceptedCollectorId); Assert.Equal("IN_PROGRESS",final.Status);

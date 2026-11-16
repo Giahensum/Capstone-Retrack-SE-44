@@ -112,6 +112,8 @@ builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IDepotReportRepos
 builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IDepotPartnershipRepository, DepotPartnershipRepository>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IDepotPartnershipService, Retrack.API.Services.Depot.DepotPartnershipService>();
 
+Retrack.API.Services.Staff.StaffWorkflowRegistration.AddStaffWorkflows(builder.Services);
+
 // Services - Admin
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IEmailService, Retrack.API.Services.Shared.EmailService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
@@ -119,8 +121,6 @@ builder.Services.AddScoped<IStaffProfileRepository, StaffProfileRepository>();
 builder.Services.AddScoped<Retrack.API.Services.Staff.IStaffProfileService, Retrack.API.Services.Staff.StaffProfileService>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.ICloudinaryService, Retrack.API.Services.Shared.CloudinaryService>();
 builder.Services.AddScoped<IPickupService, PickupService>();
-builder.Services.AddScoped<Retrack.API.Services.Employee.IEmployeeCollectionService, Retrack.API.Services.Employee.EmployeeCollectionService>();
-builder.Services.AddScoped<Retrack.API.Services.Employee.EmployeeReportingService>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IDepotService, Retrack.API.Services.Depot.DepotService>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IInventoryService, Retrack.API.Services.Depot.InventoryService>();
 builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IDepotInventoryRepository, DepotInventoryRepository>();
@@ -146,9 +146,6 @@ builder.Services.AddHttpClient<Retrack.API.Services.Depot.IPayOsClient, Retrack.
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IDepotPayOsService, Retrack.API.Services.Depot.DepotPayOsService>();
 builder.Services.AddHostedService<Retrack.API.Services.Depot.PayOsReconciliationWorker>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.INotificationService, Retrack.API.Services.Shared.NotificationService>();
-builder.Services.AddScoped<Retrack.API.Services.Driver.DriverJobService>();
-builder.Services.AddScoped<Retrack.API.Services.Driver.DriverReportingService>();
-builder.Services.AddScoped<Retrack.API.Services.Driver.DriverDeliveryService>();
 
 
 // Services - Factory
@@ -200,7 +197,6 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 // ===== BUILD =====
-builder.Services.AddScoped<Retrack.API.Services.Employee.EmployeeDispatchService>();
 builder.Services.AddHostedService<Retrack.API.Services.Employee.EmployeeDispatchWorker>();
 var app = builder.Build();
 
