@@ -159,6 +159,9 @@ function InvoicesTab() {
                   {/^https?:\/\//i.test(inv.paymentProofUrl || '') && (
                     <a href={inv.paymentProofUrl} target="_blank" rel="noopener noreferrer" className="mt-0.5 flex items-center gap-1 text-xs font-semibold text-d-secondary underline"><ExternalLink size={12} />Xem chứng từ</a>
                   )}
+                  {inv.paymentProofUrl?.startsWith('/api/factory/attachments/') && (
+                    <button type="button" onClick={() => adminApi.downloadInvoiceProof(inv.paymentProofUrl).catch((error) => toast.error(apiErrorMessage(error, 'Không tải được chứng từ.')))} className="mt-0.5 flex items-center gap-1 text-xs font-semibold text-d-secondary underline"><ExternalLink size={12} />Tải chứng từ Factory</button>
+                  )}
                 </Td>
                 <Td className="text-right">
                   {paid ? <span className="text-d-on-surface-variant">—</span> : (
@@ -190,7 +193,9 @@ function InvoicesTab() {
 function FeeConfigTab() {
   const queryClient = useQueryClient();
   const { data, isLoading } = useQuery({ queryKey: ['admin', 'billing', 'fee-config'], queryFn: adminApi.getFeeConfig });
+  const account = useQuery({ queryKey: ['admin', 'billing', 'payment-account'], queryFn: adminApi.getPaymentAccount });
   const [value, setValue] = useState(null);
+  const [accountDraft, setAccountDraft] = useState(null);
 
   const mutation = useMutation({
     mutationFn: (dto) => adminApi.updateFeeConfig(dto),
@@ -198,8 +203,15 @@ function FeeConfigTab() {
     onError: (err) => toast.error(apiErrorMessage(err, 'Không thể cập nhật.')),
   });
   const current = value ?? data?.platformFeePercentage ?? '';
+  const paymentAccount = accountDraft ?? account.data ?? { bankName: '', accountNumber: '', accountHolder: '' };
+  const accountMutation = useMutation({
+    mutationFn: adminApi.updatePaymentAccount,
+    onSuccess: () => { toast.success('Đã lưu tài khoản nhận phí.'); setAccountDraft(null); queryClient.invalidateQueries({ queryKey: ['admin', 'billing', 'payment-account'] }); },
+    onError: (err) => toast.error(apiErrorMessage(err, 'Không thể lưu tài khoản nhận phí.')),
+  });
 
   return (
+    <div className="flex flex-wrap items-start gap-5">
     <Panel icon={Percent} title="Cấu hình phí nền tảng" className="max-w-lg">
       <div className="p-5">
         {isLoading ? <div className="h-24 animate-pulse rounded-2xl bg-d-surface-container" /> : (
@@ -212,6 +224,18 @@ function FeeConfigTab() {
         )}
       </div>
     </Panel>
+    <Panel icon={Banknote} title="Tài khoản nhận phí từ Factory" className="max-w-lg">
+      <div className="p-5">
+        {account.isLoading ? <div className="h-24 animate-pulse rounded-2xl bg-d-surface-container" /> : <form className="flex flex-col gap-4" onSubmit={(event) => { event.preventDefault(); accountMutation.mutate(paymentAccount); }}>
+          <p className="text-sm text-d-on-surface-variant">Factory sẽ thấy thông tin này trên hóa đơn phí tháng. Chỉ nhập tài khoản của đơn vị vận hành RETRACK.</p>
+          <Field label="Ngân hàng"><input required maxLength={100} className={inputClass} value={paymentAccount.bankName} onChange={(event) => setAccountDraft({ ...paymentAccount, bankName: event.target.value })} /></Field>
+          <Field label="Số tài khoản"><input required inputMode="numeric" pattern="[0-9]{4,30}" maxLength={30} className={inputClass} value={paymentAccount.accountNumber} onChange={(event) => setAccountDraft({ ...paymentAccount, accountNumber: event.target.value })} /></Field>
+          <Field label="Tên chủ tài khoản"><input required maxLength={120} className={inputClass} value={paymentAccount.accountHolder} onChange={(event) => setAccountDraft({ ...paymentAccount, accountHolder: event.target.value })} /></Field>
+          <PrimaryButton icon={Save} type="submit" disabled={accountMutation.isPending} className="self-start">{accountMutation.isPending ? 'Đang lưu…' : 'Lưu tài khoản nhận phí'}</PrimaryButton>
+        </form>}
+      </div>
+    </Panel>
+    </div>
   );
 }
 

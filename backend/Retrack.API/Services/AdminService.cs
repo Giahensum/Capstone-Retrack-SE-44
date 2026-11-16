@@ -32,6 +32,8 @@ namespace Retrack.API.Services
         // Fee config
         Task<FeeConfigDto> GetFeeConfigAsync();
         Task<FeeConfigDto> UpdateFeeConfigAsync(UpdateFeeConfigDto dto, Guid actorId);
+        Task<PlatformPaymentAccountDto> GetPaymentAccountAsync();
+        Task<PlatformPaymentAccountDto> UpdatePaymentAccountAsync(PlatformPaymentAccountDto dto, Guid actorId);
 
         // Revenue & transactions
         Task<RevenueReportDto> GetRevenueReportAsync(DateTime from, DateTime to, string groupBy);
@@ -333,6 +335,42 @@ namespace Retrack.API.Services
 
         // ── Fee Config ─────────────────────────────────────────────────
         private const string FeeConfigKey = "PLATFORM_FEE_PERCENTAGE";
+        private static readonly string[] PaymentAccountKeys = ["PLATFORM_FEE_BANK_NAME", "PLATFORM_FEE_ACCOUNT_NUMBER", "PLATFORM_FEE_ACCOUNT_HOLDER"];
+
+        public async Task<PlatformPaymentAccountDto> GetPaymentAccountAsync()
+        {
+            var settings = await _db.SystemConfigs.AsNoTracking().Where(c => PaymentAccountKeys.Contains(c.ConfigKey))
+                .ToDictionaryAsync(c => c.ConfigKey, c => c.ConfigValue);
+            return new(settings.GetValueOrDefault(PaymentAccountKeys[0], ""),
+                settings.GetValueOrDefault(PaymentAccountKeys[1], ""), settings.GetValueOrDefault(PaymentAccountKeys[2], ""));
+        }
+
+        public async Task<PlatformPaymentAccountDto> UpdatePaymentAccountAsync(PlatformPaymentAccountDto dto, Guid actorId)
+        {
+            var bankName = dto.BankName?.Trim() ?? "";
+            var accountNumber = dto.AccountNumber?.Trim() ?? "";
+            var accountHolder = dto.AccountHolder?.Trim() ?? "";
+            if (bankName.Length is < 2 or > 100 || accountHolder.Length is < 2 or > 120 ||
+                !System.Text.RegularExpressions.Regex.IsMatch(accountNumber, "^[0-9]{4,30}$"))
+                throw new ArgumentException("Cần nhập tên ngân hàng, số tài khoản 4–30 chữ số và tên chủ tài khoản hợp lệ.");
+            var values = new[] { bankName, accountNumber, accountHolder };
+            var settings = await _db.SystemConfigs.Where(c => PaymentAccountKeys.Contains(c.ConfigKey))
+                .ToDictionaryAsync(c => c.ConfigKey);
+            for (var index = 0; index < PaymentAccountKeys.Length; index++)
+            {
+                var key = PaymentAccountKeys[index];
+                if (!settings.TryGetValue(key, out var config))
+                {
+                    config = new SystemConfig { ConfigKey = key };
+                    _db.SystemConfigs.Add(config);
+                }
+                config.ConfigValue = values[index];
+                config.UpdatedAt = DateTime.UtcNow;
+            }
+            await _db.SaveChangesAsync();
+            await LogAsync(actorId, "UPDATE", "PlatformPaymentAccount", null, null, new { Configured = true });
+            return new(bankName, accountNumber, accountHolder);
+        }
 
         public async Task<FeeConfigDto> GetFeeConfigAsync()
         {

@@ -102,6 +102,11 @@ namespace Retrack.API.DTOs
         public decimal PlatformFeePercentage { get; set; }
     }
 
+    public sealed record PlatformPaymentAccountDto(string BankName, string AccountNumber, string AccountHolder)
+    {
+        public bool IsConfigured => !string.IsNullOrWhiteSpace(BankName) && !string.IsNullOrWhiteSpace(AccountNumber) && !string.IsNullOrWhiteSpace(AccountHolder);
+    }
+
     // ===== REVENUE & TRANSACTIONS =====
     public class RevenuePointDto
     {

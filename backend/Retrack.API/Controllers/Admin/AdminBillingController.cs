@@ -37,6 +37,14 @@ public class AdminBillingController : ControllerBase
         return Ok(ApiResponse<FeeConfigDto>.Ok(result, "Đã cập nhật phí nền tảng."));
     }
 
+    [HttpGet("payment-account")]
+    public async Task<IActionResult> GetPaymentAccount() =>
+        Ok(ApiResponse<PlatformPaymentAccountDto>.Ok(await _adminService.GetPaymentAccountAsync()));
+
+    [HttpPut("payment-account")]
+    public async Task<IActionResult> UpdatePaymentAccount([FromBody] PlatformPaymentAccountDto dto) =>
+        Ok(ApiResponse<PlatformPaymentAccountDto>.Ok(await _adminService.UpdatePaymentAccountAsync(dto, GetUserId()), "Đã lưu tài khoản nhận phí nền tảng."));
+
     /// <summary>Doanh thu nền tảng theo khoảng thời gian (UC-7.9)</summary>
     [HttpGet("revenue")]
     public async Task<IActionResult> GetRevenue([FromQuery] DateTime? from, [FromQuery] DateTime? to, [FromQuery] string groupBy = "day")

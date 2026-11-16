@@ -28,6 +28,17 @@ async function attachmentUrl(attachment) {
   }
 }
 
+export async function uploadFactoryFeeProof(file) {
+  const form = new FormData();
+  form.append("file", file);
+  try {
+    const response = await api.post("/factory/attachments/upload", form, { headers: { "Content-Type": undefined } });
+    return response.data.data.url;
+  } catch (error) {
+    throw new Error(error.response?.data?.message || "Không tải được chứng từ.");
+  }
+}
+
 export async function downloadFactoryAttachment(url, name = "chung-tu") {
   if (!url) return;
   if (!url.startsWith("/api/factory/attachments/")) {
