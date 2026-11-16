@@ -23,8 +23,10 @@ public sealed class DepotBatchRepository(AppDbContext db) : IDepotBatchRepositor
                 b.QualityCheck.QualityNote, b.QualityCheck.Resolution, b.QualityCheck.TicketNumber,
                 b.QualityCheck.TicketImageUrl, b.QualityCheck.InvoiceNumber, b.QualityCheck.InvoiceFileUrl),
             b.SettledAt == null ? null : new DepotBatchSettlementDto(b.AgreedPricePerKg, b.GrossAmount,
-                b.PlatformFeeAmount, b.NetAmount, b.PaymentReference, b.SettledAt.Value,
-                b.QualityCheck == null ? null : b.QualityCheck.PaymentProofUrl)))
+                b.PlatformFeeAmount, b.NetAmount, b.VatTreatment, b.VatPercentage, b.VatAmount,
+                b.InvoiceTotalAmount, b.PaymentReference, b.SettledAt.Value,
+                b.QualityCheck == null ? null : b.QualityCheck.PaymentProofUrl,
+                b.VatTreatment == null ? null : b.PriceIncludesVat, b.FeePolicy)))
         .SingleOrDefaultAsync();
     public async Task<PagedResult<DepotBatchDto>> ListAsync(Guid depotId, DepotQuery query)
     {
@@ -59,6 +61,8 @@ public sealed class DepotBatchRepository(AppDbContext db) : IDepotBatchRepositor
     public Task<InventoryBatch?> FindOperationAsync(Guid id) => db.InventoryBatches.AsNoTracking().Include(b => b.TargetFactory).Include(b => b.DirectOfferFactory).SingleOrDefaultAsync(b => b.Id == id);
     public Task<Factory?> FindActiveFactoryAsync(Guid id) => db.Factories.SingleOrDefaultAsync(f => f.Id == id && f.Owner != null && f.Owner.IsActive);
     public Task<FactoryDepotPartnership?> FindPartnerAsync(Guid depotId, Guid factoryId) => db.FactoryDepotPartnerships.AsNoTracking().SingleOrDefaultAsync(p => p.DepotId == depotId && p.FactoryId == factoryId);
+    public Task<string?> FeeConfigurationAsync() => db.SystemConfigs.AsNoTracking()
+        .Where(x => x.ConfigKey == "PLATFORM_FEE_PERCENTAGE").Select(x => x.ConfigValue).SingleOrDefaultAsync();
     public void AddPartner(FactoryDepotPartnership partner) => db.FactoryDepotPartnerships.Add(partner);
     public Task<long> NextNumberAsync() => db.Database.SqlQueryRaw<long>("SELECT nextval('depot_batch_number') AS \"Value\"").SingleAsync();
     public void AddBatch(InventoryBatch batch) => db.InventoryBatches.Add(batch);

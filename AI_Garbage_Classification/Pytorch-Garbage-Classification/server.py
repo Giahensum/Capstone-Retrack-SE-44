@@ -169,8 +169,12 @@ if os.path.exists(WEIGHTS_PATH):
         logger.info("Tai model EfficientNet-B4 thanh cong!")
     except Exception as e:
         logger.error(f"Loi tai model weights: {e}")
+        if os.environ.get('AI_REQUIRE_WEIGHTS', '').lower() == 'true':
+            raise RuntimeError('Không nạp được model.pth; dừng dịch vụ AI container.') from e
 else:
     logger.warning(f"Khong tim thay weights o {WEIGHTS_PATH}!")
+    if os.environ.get('AI_REQUIRE_WEIGHTS', '').lower() == 'true':
+        raise RuntimeError('Thiếu model.pth; cần mount model đã huấn luyện trước khi chạy container.')
 classifier_model.eval()
 
 logger.info("Dang khoi tao YOLOv8n...")
@@ -191,6 +195,82 @@ YOLO_CONF_THRESH   = 0.20
 MIN_BOX_AREA_RATIO = 0.02
 CENTER_CROP_RATIO  = 0.65
 CROP_PADDING       = 0.08
+
+# ── Bảng ánh xạ tri thức ngữ nghĩa từ 80 lớp COCO của YOLOv8 sang 12 nhóm rác ReTrack ──
+# Cơ chế Multi-Model Knowledge Stacking (Late Fusion Ensemble)
+YOLO_TO_RETRACK_PRIOR = {
+    # 1. Chai lọ & đồ chứa
+    'bottle': {'plastic': 3.2, 'white-glass': 2.2, 'brown-glass': 1.8, 'green-glass': 1.8, 'cardboard': -3.5, 'paper': -3.0, 'clothes': -3.0, 'biological': -3.0, 'shoes': -3.0},
+    'wine glass': {'white-glass': 3.5, 'green-glass': 2.5, 'brown-glass': 2.2, 'plastic': 1.0, 'cardboard': -3.5, 'paper': -3.0, 'clothes': -3.0},
+    'cup': {'plastic': 2.8, 'paper': 2.2, 'white-glass': 1.8, 'metal': 1.2, 'cardboard': -2.0, 'clothes': -3.0},
+    'bowl': {'white-glass': 2.2, 'plastic': 2.2, 'metal': 1.8, 'cardboard': -2.5, 'clothes': -3.0},
+    'vase': {'white-glass': 3.0, 'brown-glass': 2.2, 'green-glass': 2.2, 'plastic': 1.5, 'cardboard': -3.0, 'paper': -3.0, 'clothes': -3.0},
+
+    # 2. Dụng cụ kim loại
+    'fork': {'metal': 4.5, 'plastic': 1.0, 'cardboard': -3.0, 'paper': -3.0, 'clothes': -3.0},
+    'knife': {'metal': 4.5, 'plastic': 1.0, 'cardboard': -3.0, 'paper': -3.0, 'clothes': -3.0},
+    'spoon': {'metal': 4.5, 'plastic': 1.0, 'cardboard': -3.0, 'paper': -3.0, 'clothes': -3.0},
+    'scissors': {'metal': 5.0, 'plastic': 1.0, 'cardboard': -3.0, 'paper': -3.0, 'clothes': -3.0},
+
+    # 3. Giấy & sách báo
+    'book': {'paper': 5.0, 'cardboard': -2.0, 'plastic': -3.0, 'metal': -3.0, 'clothes': -3.0, 'biological': -3.0},
+
+    # 4. Rác điện tử & pin
+    'laptop': {'battery': 4.5, 'plastic': 1.2, 'metal': 1.5, 'paper': -3.5, 'cardboard': -3.5, 'clothes': -3.5},
+    'mouse': {'battery': 4.0, 'plastic': 2.0, 'cardboard': -3.0, 'paper': -3.0},
+    'remote': {'battery': 4.2, 'plastic': 2.0, 'cardboard': -3.0, 'paper': -3.0},
+    'keyboard': {'battery': 4.0, 'plastic': 2.0, 'cardboard': -3.0, 'paper': -3.0},
+    'cell phone': {'battery': 4.8, 'plastic': 1.2, 'metal': 1.5, 'cardboard': -3.5, 'paper': -3.5},
+    'clock': {'battery': 3.8, 'metal': 2.0, 'plastic': 1.5, 'cardboard': -2.5},
+    'microwave': {'metal': 3.5, 'battery': 2.5, 'plastic': 1.2},
+    'oven': {'metal': 3.5, 'battery': 2.5},
+    'toaster': {'metal': 3.8, 'battery': 2.2, 'plastic': 1.2},
+    'refrigerator': {'metal': 3.5, 'battery': 2.5, 'plastic': 1.5},
+    'hair drier': {'metal': 2.5, 'battery': 2.5, 'plastic': 1.8},
+
+    # 5. Vải vóc, trang phục
+    'backpack': {'clothes': 4.5, 'cardboard': -2.5, 'metal': -3.0, 'paper': -3.0},
+    'handbag': {'clothes': 4.5, 'cardboard': -2.5, 'metal': -3.0, 'paper': -3.0},
+    'suitcase': {'clothes': 4.0, 'plastic': 1.8, 'cardboard': -2.5},
+    'tie': {'clothes': 4.8, 'cardboard': -3.0},
+    'umbrella': {'clothes': 3.0, 'metal': 2.0, 'cardboard': -2.5},
+    'teddy bear': {'clothes': 4.5, 'cardboard': -3.0},
+
+    # 6. Rác hữu cơ / Thức ăn thừa
+    'banana': {'biological': 5.5, 'plastic': -3.0, 'paper': -3.0, 'metal': -3.0, 'cardboard': -3.0},
+    'apple': {'biological': 5.5, 'plastic': -3.0, 'paper': -3.0, 'metal': -3.0, 'cardboard': -3.0},
+    'sandwich': {'biological': 5.5, 'plastic': -3.0, 'paper': -3.0, 'metal': -3.0, 'cardboard': -3.0},
+    'orange': {'biological': 5.5, 'plastic': -3.0, 'paper': -3.0, 'metal': -3.0, 'cardboard': -3.0},
+    'broccoli': {'biological': 5.5, 'plastic': -3.0, 'paper': -3.0, 'metal': -3.0, 'cardboard': -3.0},
+    'carrot': {'biological': 5.5, 'plastic': -3.0, 'paper': -3.0, 'metal': -3.0, 'cardboard': -3.0},
+    'hot dog': {'biological': 5.5, 'plastic': -3.0, 'paper': -3.0, 'metal': -3.0, 'cardboard': -3.0},
+    'pizza': {'biological': 5.5, 'plastic': -3.0, 'paper': -3.0, 'metal': -3.0, 'cardboard': -3.0},
+    'donut': {'biological': 5.5, 'plastic': -3.0, 'paper': -3.0, 'metal': -3.0, 'cardboard': -3.0},
+    'cake': {'biological': 5.5, 'plastic': -3.0, 'paper': -3.0, 'metal': -3.0, 'cardboard': -3.0},
+    'potted plant': {'biological': 4.2, 'plastic': 1.5, 'paper': -3.0},
+
+    # 7. Đồ dùng nhựa & khác
+    'toothbrush': {'plastic': 4.2, 'cardboard': -3.0, 'paper': -3.0},
+    'sports ball': {'plastic': 3.5, 'shoes': 1.2, 'trash': 1.5},
+    'frisbee': {'plastic': 4.0, 'cardboard': -3.0},
+}
+
+
+def _get_yolo_semantic_prior(cls_name: Optional[str], conf: float) -> np.ndarray:
+    """Chuyển đổi dự đoán nhãn vật thể từ YOLO thành vector logit prior 12 chiều cho ReTrack."""
+    prior = np.zeros(12, dtype=np.float32)
+    if not cls_name or conf <= 0.0:
+        return prior
+    mapping = YOLO_TO_RETRACK_PRIOR.get(cls_name.lower())
+    if not mapping:
+        return prior
+    for target_class, weight in mapping.items():
+        if target_class in CLASS_IDX:
+            prior[CLASS_IDX[target_class]] += weight * conf
+        elif target_class == 'glass':
+            for g in ['white-glass', 'brown-glass', 'green-glass']:
+                prior[CLASS_IDX[g]] += (weight / 3.0) * conf
+    return prior
 
 
 def _apply_visual_heuristics(logits_np, crop_img, ocr_text=''):
@@ -261,13 +341,18 @@ def _apply_visual_heuristics(logits_np, crop_img, ocr_text=''):
 
 
 def _pick_best_box(boxes, img_h, img_w):
-    best_box, best_score = None, -1.0
+    best_box = None
+    best_score = -1.0
+    best_cls_name = None
+    best_conf = 0.0
     img_area = img_h * img_w
     for box in boxes:
         conf = float(box.conf[0])
         if conf < YOLO_CONF_THRESH:
             continue
         bx1, by1, bx2, by2 = map(int, box.xyxy[0])
+        cls_id = int(box.cls[0])
+        cls_name = yolo_model.names.get(cls_id, "")
         area_ratio = max((bx2 - bx1) * (by2 - by1), 1) / img_area
         if area_ratio < MIN_BOX_AREA_RATIO:
             continue
@@ -275,7 +360,9 @@ def _pick_best_box(boxes, img_h, img_w):
         if score > best_score:
             best_score = score
             best_box = (bx1, by1, bx2, by2)
-    return best_box
+            best_cls_name = cls_name
+            best_conf = conf
+    return best_box, best_cls_name, best_conf
 
 
 def _padded_crop(image, x1, y1, x2, y2, pad=CROP_PADDING):
@@ -316,7 +403,8 @@ def health_check():
     return {
         "status": "healthy",
         "service": "ReTrack AI Computer Vision",
-        "model": "EfficientNet-B4 + YOLOv8n + EasyOCR",
+        "model": "Multi-Model Knowledge Stacking (EfficientNet-B4 + YOLOv8n + EasyOCR)",
+        "fusion_mode": "Late Fusion / Logit Stacking Ensemble",
         "classes_count": len(CLASSES),
         "device": "cuda" if torch.cuda.is_available() else "cpu",
     }
@@ -343,16 +431,18 @@ def _run_classification(image_np_rgb: np.ndarray):
     ih, iw = image_np_rgb.shape[:2]
     annotated = image_np_rgb.copy()
 
-    # 1. YOLO Detection
+    # 1. YOLO Detection & Semantic Prior Extraction
     yolo_res = yolo_model(image_np_rgb, verbose=False)
     best_box = None
+    detected_yolo_class = None
+    yolo_conf = 0.0
     if yolo_res and len(yolo_res[0].boxes) > 0:
-        best_box = _pick_best_box(yolo_res[0].boxes, ih, iw)
+        best_box, detected_yolo_class, yolo_conf = _pick_best_box(yolo_res[0].boxes, ih, iw)
 
     if best_box is not None:
         x1, y1, x2, y2 = best_box
         crop_img = _padded_crop(image_np_rgb, x1, y1, x2, y2)
-        box_status = "YOLO"
+        box_status = f"YOLO: {detected_yolo_class}" if detected_yolo_class else "YOLO"
         color = (0, 220, 80)
     else:
         x1, y1, x2, y2 = _center_crop_coords(ih, iw)
@@ -370,7 +460,7 @@ def _run_classification(image_np_rgb: np.ndarray):
         logger.warning(f"OCR warning: {e}")
         ocr_text = ""
 
-    # 3. EfficientNet-B4 + Heuristic Boost
+    # 3. EfficientNet-B4 Material Classification
     pil_crop = Image.fromarray(crop_img).convert('RGB')
     tensor = img_transform(pil_crop).unsqueeze(0)
 
@@ -378,8 +468,18 @@ def _run_classification(image_np_rgb: np.ndarray):
         raw_logits = classifier_model(tensor)
         logits_np = raw_logits[0].cpu().numpy()
 
+    raw_eff_idx = int(logits_np.argmax())
+    raw_eff_class = CLASSES[raw_eff_idx]
+
+    # 4. Multi-Model Knowledge Stacking (Ensemble Late Fusion)
+    # Tri thức 1: Phân loại chất liệu & vân bề mặt từ EfficientNet-B4 (logits_np)
+    # Tri thức 2: Định danh hình thái & ngữ nghĩa đồ vật từ YOLOv8 (yolo_prior)
+    # Tri thức 3: Thị giác máy tính truyền thống (HSV, Texture STD) & OCR Text (boost)
+    yolo_prior = _get_yolo_semantic_prior(detected_yolo_class, yolo_conf)
     boost = _apply_visual_heuristics(logits_np, crop_img, ocr_text)
-    adj_logits = torch.tensor(logits_np + boost)
+
+    # Chồng kiến thức (Logit Stacking)
+    adj_logits = torch.tensor(logits_np + yolo_prior + boost)
     probs = torch.softmax(adj_logits, dim=0)
 
     pred_idx = probs.argmax().item()
@@ -437,6 +537,17 @@ def _run_classification(image_np_rgb: np.ndarray):
         "suggested_description": meta.get("suggested_desc", ""),
         "top_predictions": top_predictions,
         "annotated_image": annotated_b64,
+        "ensemble_details": {
+            "fusion_mode": "MULTI_MODEL_KNOWLEDGE_STACKING",
+            "yolo_detected_class": detected_yolo_class,
+            "yolo_confidence": round(yolo_conf * 100.0, 1) if yolo_conf > 0 else 0.0,
+            "efficientnet_raw_class": raw_eff_class,
+            "models_combined": [
+                "YOLOv8n (Object & Shape Prior)",
+                "EfficientNet-B4 (Material & Texture)",
+                "Visual Heuristics & EasyOCR",
+            ],
+        },
     }
 
 

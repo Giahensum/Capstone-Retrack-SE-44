@@ -87,6 +87,12 @@ namespace Retrack.API.Data
             modelBuilder.Entity<DepotCostReconciliation>().HasOne(x => x.ReuseSale).WithMany().HasForeignKey(x => x.ReuseSaleId).OnDelete(DeleteBehavior.Cascade);
             modelBuilder.Entity<DepotVerificationSubmission>().HasOne(x => x.Depot).WithMany().OnDelete(DeleteBehavior.Cascade);
             modelBuilder.Entity<DepotVerificationDocument>().HasOne(x => x.Submission).WithMany(x => x.Documents).HasForeignKey(x => x.SubmissionId).OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<DepotVerificationDocument>().HasIndex(x => x.SubmissionId)
+                .HasDatabaseName("ix_depot_verification_documents_submission");
+            modelBuilder.Entity<DepotVerificationSubmission>().HasIndex(x => new { x.DepotId, x.SubmittedAt, x.Id })
+                .IsDescending(false, true, false).HasDatabaseName("ix_depot_verification_history");
+            modelBuilder.Entity<InventoryBatch>().HasIndex(x => new { x.DepotId, x.CreatedAt, x.Id })
+                .IsDescending(false, true, false).HasDatabaseName("ix_inventory_batches_depot_newest");
             modelBuilder.Entity<DepotStockReceipt>().HasIndex(x => new { x.DepotId, x.CreatedAt });
             modelBuilder.Entity<DepotStockLine>().HasIndex(x => new { x.ReceiptId, x.Position }).IsUnique();
             modelBuilder.Entity<DepotBatchCostSource>().HasIndex(x => new { x.BatchId, x.SourceType, x.SourceId }).IsUnique();

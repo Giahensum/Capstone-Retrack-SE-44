@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Retrack.API.Services.Shared;
 using Microsoft.EntityFrameworkCore;
 using Retrack.API.Data;
 using Retrack.API.DTOs;
@@ -67,7 +68,7 @@ namespace Retrack.API.Services
 
             // Get platform fee from system config
             var feeConfig = await _db.SystemConfigs.FindAsync("PLATFORM_FEE_PERCENTAGE");
-            var feePercent = decimal.Parse(feeConfig?.ConfigValue ?? "5.00", System.Globalization.CultureInfo.InvariantCulture);
+            var feePercent = PlatformFees.Rate(feeConfig?.ConfigValue);
             if (feePercent is < 0 or > 100) throw new InvalidOperationException("Cấu hình phí nền tảng không hợp lệ.");
 
             var request = new PickupRequest
@@ -81,6 +82,7 @@ namespace Retrack.API.Services
                 PreferredDatetime = dto.PreferredDatetime,
                 RequestImageUrl = dto.RequestImageUrl,
                 PlatformFeePercentage = feePercent,
+                FeePolicy = PlatformFees.BuyerSeparate,
                 Status = "PENDING"
             };
 
@@ -184,7 +186,7 @@ namespace Retrack.API.Services
             if (req.AcceptedCollectorId != collectorId || !await _db.DepotStaffs.AnyAsync(s =>
                 s.UserId == collectorId && s.DepotId == req.TargetDepotId && s.IsActive && s.User.IsActive &&
                 s.StaffType == "DEPOT_EMPLOYEE" && s.User.Role == "DEPOT_EMPLOYEE" && s.Depot.Owner.IsActive)) throw new DepotForbiddenException();
-            if (req.Status != "IN_PROGRESS") throw new DepotConflictException("Đơn phải được check-in trước khi cân.");
+            if (req.Status is not ("IN_PROGRESS" or "SCHEDULED")) throw new DepotConflictException("Đơn phải được check-in trước khi cân.");
             var checkin = await _db.PickupCheckIns.SingleOrDefaultAsync(c => c.PickupRequestId == requestId);
             if (string.IsNullOrWhiteSpace(req.CheckinImageUrl) || checkin is null || checkin.EmployeeId != collectorId)
                 throw new DepotConflictException("Đơn chưa có bằng chứng check-in camera và GPS hợp lệ.");
@@ -212,8 +214,9 @@ namespace Retrack.API.Services
             }
 
             req.GrossAmount = gross;
-            req.PlatformFeeAmount = Math.Round(gross * req.PlatformFeePercentage / 100, 2);
-            req.NetAmount = gross - req.PlatformFeeAmount;
+            var money = PlatformFees.Pickup(gross, req.PlatformFeePercentage, req.FeePolicy);
+            req.PlatformFeeAmount = money.Fee;
+            req.NetAmount = money.SellerReceives;
             // Bằng chứng check-in chỉ được ghi bởi luồng camera + GPS, không lấy URL từ request cân.
             req.Status = "WEIGHED";
             req.UpdatedAt = DateTime.UtcNow;
@@ -227,7 +230,7 @@ namespace Retrack.API.Services
                 PickupRequestId = requestId, EmployeeId = collectorId, Kind = "SUBMITTED",
                 Revision = checkin.Revision, FromStatus = "IN_PROGRESS", ToStatus = "WEIGHED",
                 SnapshotJson = JsonSerializer.Serialize(new Employee.CollectionSubmissionSnapshot(snapshotItems,
-                    req.GrossAmount, req.PlatformFeePercentage, req.PlatformFeeAmount, req.NetAmount))
+                    req.GrossAmount, req.PlatformFeePercentage, req.PlatformFeeAmount, req.NetAmount, req.FeePolicy))
             });
 
             _db.Notifications.Add(new Notification
@@ -238,7 +241,7 @@ namespace Retrack.API.Services
                 TargetType = "PICKUP_REQUEST",
                 TargetId = requestId,
                 Title = "Đã có kết quả cân phế liệu",
-                Message = $"Đơn #{requestId.ToString()[..8].ToUpper()} đã được cân xong. Tổng thực nhận: {req.NetAmount:N0} đ. Vui lòng kiểm tra và xác nhận.",
+                Message = $"Đơn #{requestId.ToString()[..8].ToUpper()} đã được cân xong. Tổng tiền thanh toán: {req.NetAmount:N0} đ. Vui lòng kiểm tra và xác nhận.",
                 CreatedAt = DateTime.UtcNow
             });
 
@@ -334,6 +337,10 @@ namespace Retrack.API.Services
                 Status = r.Status,
                 GrossAmount = r.GrossAmount,
                 NetAmount = r.NetAmount,
+                FeePolicy = r.FeePolicy,
+                PlatformFeePercentage = r.PlatformFeePercentage,
+                PlatformFeeAmount = r.PlatformFeeAmount,
+                BuyerTotalAmount = r.NetAmount + r.PlatformFeeAmount,
                 PaymentProofUrl = r.PaymentProofUrl,
                 CreatedAt = r.CreatedAt,
                 UpdatedAt = r.UpdatedAt,

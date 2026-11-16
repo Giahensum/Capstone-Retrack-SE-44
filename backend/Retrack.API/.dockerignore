@@ -1,0 +1,15 @@
+bin/
+obj/
+uploads/
+.env
+.env.*
+appsettings*.json
+!appsettings.example.json
+*.user
+*.suo
+*.pfx
+*.p12
+*.pem
+*.key
+.vs/
+TestResults/

@@ -1,0 +1,6 @@
+# Chỉ gửi mã inference; không gửi dataset, model, backup hoặc secret vào build context.
+**
+!Dockerfile
+!.dockerignore
+!requirements.docker.txt
+!server.py
