@@ -238,7 +238,7 @@ public sealed class DepotPayOsTests
         public bool Configured = true; public int Creates; public long CreatedAmount; public string? CreatedDescription;
         public PayOsPayment Remote = new("PENDING", 0, null, null);
         public bool IsConfigured => Configured;
-        public Task<PayOsLink> CreatePaymentLinkAsync(long orderCode, long amount, string description, CancellationToken ct = default, string? returnUrl = null, string? cancelUrl = null)
+        public Task<PayOsLink> CreatePaymentLinkAsync(long orderCode, long amount, string description, CancellationToken ct = default)
         { Creates++; CreatedAmount = amount; CreatedDescription = description; return Task.FromResult(new PayOsLink("https://pay.test/checkout", "link-1")); }
         public Task<PayOsPayment> GetPaymentAsync(long orderCode, CancellationToken ct = default) => Task.FromResult(Remote);
         public bool VerifyWebhookData(JsonElement data, string signature) => NewClient().VerifyWebhookData(data, signature);

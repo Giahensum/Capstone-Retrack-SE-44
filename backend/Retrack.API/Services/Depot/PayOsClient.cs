@@ -27,7 +27,7 @@ public sealed class PayOsException(string message) : Exception(message);
 public interface IPayOsClient
 {
     bool IsConfigured { get; }
-    Task<PayOsLink> CreatePaymentLinkAsync(long orderCode, long amount, string description, CancellationToken ct = default, string? returnUrl = null, string? cancelUrl = null);
+    Task<PayOsLink> CreatePaymentLinkAsync(long orderCode, long amount, string description, CancellationToken ct = default);
     Task<PayOsPayment> GetPaymentAsync(long orderCode, CancellationToken ct = default);
     bool VerifyWebhookData(JsonElement data, string signature);
 }
@@ -67,14 +67,12 @@ public sealed class PayOsClient(HttpClient http, IOptions<PayOsOptions> options)
         return CryptographicOperations.FixedTimeEquals(expected, Encoding.UTF8.GetBytes(signature.ToLowerInvariant()));
     }
 
-    public async Task<PayOsLink> CreatePaymentLinkAsync(long orderCode, long amount, string description, CancellationToken ct = default, string? returnUrl = null, string? cancelUrl = null)
+    public async Task<PayOsLink> CreatePaymentLinkAsync(long orderCode, long amount, string description, CancellationToken ct = default)
     {
         EnsureConfigured();
-        returnUrl ??= cfg.ReturnUrl;
-        cancelUrl ??= cfg.CancelUrl;
-        var signature = Sign(cfg.ChecksumKey, CreateRequestPayload(amount, cancelUrl, description, orderCode, returnUrl));
+        var signature = Sign(cfg.ChecksumKey, CreateRequestPayload(amount, cfg.CancelUrl, description, orderCode, cfg.ReturnUrl));
         using var req = Request(HttpMethod.Post, "/v2/payment-requests");
-        req.Content = JsonContent.Create(new { orderCode, amount, description, cancelUrl, returnUrl, signature });
+        req.Content = JsonContent.Create(new { orderCode, amount, description, cancelUrl = cfg.CancelUrl, returnUrl = cfg.ReturnUrl, signature });
         using var res = await http.SendAsync(req, ct);
         var root = await ReadAsync(res, ct);
         var data = root.GetProperty("data");

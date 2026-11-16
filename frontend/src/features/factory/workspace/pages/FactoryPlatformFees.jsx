@@ -1,24 +1,22 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, Card, Empty, Field, Modal, PageHead, Pagination, useFactory } from "../components/FactoryUI";
+import { Button, Card, Empty, Field, Modal, PageHead, Pagination, readAttachment, useFactory } from "../components/FactoryUI";
 import { money } from "../data/factoryState";
-import { request } from "../data/factoryApi";
+import { downloadFactoryAttachment, request, uploadFactoryFeeProof } from "../data/factoryApi";
 
 const statuses = { UNPAID: "Chưa thanh toán", SUBMITTED: "Chờ Admin đối soát", PAID: "Đã thanh toán" };
-const orderCodeOf = (url) => { try { return new URL(url).searchParams.get("orderCode"); } catch { return null; } };
 const date = (value) => value ? new Date(value).toLocaleDateString("vi-VN") : "—";
+const transferReference = (invoice) => `RETRACK ${invoice.periodStart?.slice(0, 7)?.replace("-", "")} ${invoice.id.slice(0, 8).toUpperCase()}`;
 
 export default function FactoryPlatformFees() {
   const [section, setSection] = useState("invoices");
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState(null);
   const [proof, setProof] = useState("");
-  const [message, setMessage] = useState("");
+  const [uploading, setUploading] = useState(false);
   const { notify } = useFactory();
   const client = useQueryClient();
-  const returned = new URLSearchParams(window.location.search).get("payos") === "return";
-  const returnCode = new URLSearchParams(window.location.search).get("orderCode");
-  const synced = useRef(false);
+  const account = useQuery({ queryKey: ["factory", "platform-fees", "payment-account"], queryFn: () => request("/api/factory/platform-fees/payment-account") });
   const invoices = useQuery({ queryKey: ["factory", "platform-fees", "invoices", page], queryFn: () => request(`/api/factory/platform-fees/invoices?page=${page}&pageSize=20`) });
   const fees = useQuery({ queryKey: ["factory", "platform-fees", "transactions", page], queryFn: () => request(`/api/factory/platform-fees/transactions?page=${page}&pageSize=20`), enabled: section === "transactions" });
   const mutation = useMutation({
@@ -26,29 +24,23 @@ export default function FactoryPlatformFees() {
     onSuccess: () => client.invalidateQueries({ queryKey: ["factory", "platform-fees"] }),
   });
 
-  useEffect(() => {
-    if (!returned || !returnCode || synced.current || !invoices.data) return;
-    const invoice = invoices.data.items.find((item) => orderCodeOf(item.paymentProofUrl) === returnCode);
-    if (!invoice) { setMessage("Chưa tìm thấy hóa đơn PayOS trong trang này. Hãy mở hóa đơn tương ứng để kiểm tra lại."); return; }
-    synced.current = true;
-    request(`/api/factory/platform-fees/invoices/${invoice.id}/payos-sync`, { method: "POST" })
-      .then((result) => setMessage(result === "PAID" ? "PayOS đã xác nhận thanh toán hóa đơn." : "PayOS chưa xác nhận thanh toán. Hệ thống sẽ tiếp tục đối soát."))
-      .catch((error) => setMessage(error.message))
-      .finally(() => client.invalidateQueries({ queryKey: ["factory", "platform-fees"] }));
-  }, [returned, returnCode, invoices.data, client]);
-
   const data = section === "invoices" ? invoices.data : fees.data;
   const query = section === "invoices" ? invoices : fees;
-  const busy = mutation.isPending;
-  async function pay(invoice) {
+  const busy = mutation.isPending || uploading;
+  async function upload(file) {
+    if (!file) return;
+    setUploading(true);
     try {
-      const link = await mutation.mutateAsync({ id: invoice.id, path: "payos-link" });
-      window.location.assign(link.checkoutUrl);
-    } catch (error) { notify(error.message, true); client.invalidateQueries({ queryKey: ["factory", "platform-fees"] }); }
+      await readAttachment(file);
+      setProof(await uploadFactoryFeeProof(file));
+      notify("Đã tải chứng từ lên. Hãy kiểm tra rồi gửi xác nhận.");
+    } catch (error) { notify(error.message, true); }
+    finally { setUploading(false); }
   }
   async function submit(event) {
     event.preventDefault();
     try {
+      if (!proof) throw new Error("Hãy tải chứng từ chuyển khoản trước khi gửi.");
       await mutation.mutateAsync({ id: selected.id, path: "confirmation", method: "PATCH", body: { paymentProofUrl: proof } });
       setSelected(null); setProof(""); notify("Đã gửi chứng từ; hóa đơn đang chờ Admin đối soát.");
     } catch (error) { notify(error.message, true); }
@@ -57,20 +49,21 @@ export default function FactoryPlatformFees() {
     <PageHead title="Phí nền tảng" text="Theo dõi phí thu mua và thanh toán hóa đơn do hệ thống phát hành." />
     <Card>
       <p>Với lô mới, Factory trả phí nền tảng riêng. Tiền hàng và VAT theo hóa đơn được chuyển cho vựa. Hóa đơn phí do Admin phát hành theo tháng.</p>
-      <p>Chuyển khoản theo thông tin do Admin cung cấp rồi gửi chứng từ, hoặc dùng PayOS khi đã được cấu hình. Gửi chứng từ chưa đồng nghĩa đã thanh toán.</p>
+      <p>Admin phát hành hóa đơn theo tháng. Chuyển khoản đúng số tiền và nội dung ghi trên hóa đơn, sau đó tải chứng từ để Admin đối soát. Gửi chứng từ chưa đồng nghĩa đã thanh toán.</p>
+    </Card>
+    <Card title="Tài khoản nhận phí của hệ thống">
+      {account.isPending ? <p role="status">Đang tải thông tin chuyển khoản…</p> : account.error ? <div role="alert">{account.error.message} <Button secondary onClick={() => account.refetch()}>Thử lại</Button></div> : account.data?.isConfigured ? <dl className="financial"><div><dt>Ngân hàng</dt><dd>{account.data.bankName}</dd></div><div><dt>Số tài khoản</dt><dd>{account.data.accountNumber}</dd></div><div><dt>Chủ tài khoản</dt><dd>{account.data.accountHolder}</dd></div></dl> : <p role="status">Admin chưa cấu hình tài khoản nhận phí. Chưa thực hiện chuyển khoản cho đến khi thông tin được công bố tại đây.</p>}
     </Card>
     <nav className="factory-fee-tabs" aria-label="Nội dung phí nền tảng">
       <Button secondary={section !== "invoices"} aria-current={section === "invoices" ? "page" : undefined} onClick={() => { setSection("invoices"); setPage(1); }}>Hóa đơn tháng</Button>
       <Button secondary={section !== "transactions"} aria-current={section === "transactions" ? "page" : undefined} onClick={() => { setSection("transactions"); setPage(1); }}>Phí từng lô</Button>
     </nav>
-    {message && <p role="status" className="info-box">{message}</p>}
-    {new URLSearchParams(window.location.search).get("payos") === "cancel" && <p role="status" className="info-box">Bạn đã hủy thanh toán PayOS. Hóa đơn vẫn chờ thanh toán.</p>}
     <Card title={section === "invoices" ? "Hóa đơn phí nền tảng" : "Phí Factory trả riêng theo lô"}>
       {query.isPending ? <p role="status">Đang tải dữ liệu…</p> : query.error ? <div role="alert">{query.error.message} <Button secondary onClick={() => query.refetch()}>Thử lại</Button></div> : !data?.items?.length ? <Empty text={section === "invoices" ? "Admin chưa phát hành hóa đơn phí." : "Chưa có phí Factory trả riêng từ lô mới."} /> : <div className="table-wrap"><table className="factory-fee-table"><thead><tr>{(section === "invoices" ? ["Kỳ", "Số tiền", "Trạng thái", "Thao tác"] : ["Lô", "Ngày ghi nhận", "Phí nền tảng"]).map((heading) => <th key={heading}>{heading}</th>)}</tr></thead><tbody>
-        {section === "invoices" ? data.items.map((invoice) => <tr key={invoice.id}><td>{date(invoice.periodStart)}</td><td>{money(invoice.amount)}</td><td>{statuses[invoice.status] || invoice.status}</td><td>{invoice.status === "UNPAID" ? <div className="factory-fee-actions"><Button disabled={busy} onClick={() => pay(invoice)}>{orderCodeOf(invoice.paymentProofUrl) ? "Tiếp tục PayOS" : "Thanh toán PayOS"}</Button>{!orderCodeOf(invoice.paymentProofUrl) && <Button secondary disabled={busy} onClick={() => { setSelected(invoice); setProof(""); }}>Gửi chứng từ chuyển khoản</Button>}</div> : invoice.status === "SUBMITTED" ? "Đang đối soát" : "Đã xác nhận"}</td></tr>) : data.items.map((fee) => <tr key={fee.id}><td>{fee.batchCode || fee.id.slice(0, 8)}</td><td>{date(fee.date)}</td><td>{money(fee.feeAmount)}</td></tr>)}
+        {section === "invoices" ? data.items.map((invoice) => <tr key={invoice.id}><td>{date(invoice.periodStart)}</td><td>{money(invoice.amount)}</td><td>{statuses[invoice.status] || invoice.status}</td><td>{invoice.status === "UNPAID" ? invoice.paymentProofUrl?.includes("orderCode=") ? "Đang đối soát giao dịch PayOS trước đó" : account.data?.isConfigured ? <Button disabled={busy} onClick={() => { setSelected(invoice); setProof(""); }}>Gửi chứng từ chuyển khoản</Button> : "Chờ Admin cấu hình tài khoản" : invoice.status === "SUBMITTED" ? "Đang đối soát" : "Đã xác nhận"}</td></tr>) : data.items.map((fee) => <tr key={fee.id}><td>{fee.batchCode || fee.id.slice(0, 8)}</td><td>{date(fee.date)}</td><td>{money(fee.feeAmount)}</td></tr>)}
       </tbody></table></div>}
       <Pagination page={page} totalCount={data?.totalCount || 0} totalPages={Math.ceil((data?.totalCount || 0) / 20)} onChange={setPage} />
     </Card>
-    {selected && <Modal title="Gửi chứng từ chuyển khoản" onClose={() => setSelected(null)} busy={busy}><form onSubmit={submit}><p>Hóa đơn {date(selected.periodStart)}: <strong>{money(selected.amount)}</strong></p><p>Chỉ gửi sau khi bạn đã chuyển khoản theo hướng dẫn của Admin. Hóa đơn sẽ chờ Admin xác nhận.</p><Field label="Đường dẫn chứng từ"><input type="url" required pattern="https?://.+" value={proof} onChange={(event) => setProof(event.target.value)} placeholder="https://..." /></Field><div className="actions"><Button secondary disabled={busy} onClick={() => setSelected(null)}>Hủy</Button><button className="btn" type="submit" disabled={busy}>{busy ? "Đang gửi…" : "Gửi xác nhận"}</button></div></form></Modal>}
+    {selected && <Modal title="Gửi chứng từ chuyển khoản" onClose={() => setSelected(null)} busy={busy}><form onSubmit={submit}><p>Hóa đơn {date(selected.periodStart)}: <strong>{money(selected.amount)}</strong></p><p>Chuyển vào <strong>{account.data?.accountNumber} · {account.data?.bankName}</strong>, tên <strong>{account.data?.accountHolder}</strong>.</p><p>Nội dung chuyển khoản: <strong>{transferReference(selected)}</strong>. Sau khi chuyển khoản, tải chứng từ và gửi để Admin đối soát.</p><Field label="Ảnh hoặc PDF chứng từ"><input type="file" accept=".pdf,.jpg,.jpeg,.png" disabled={busy} onChange={(event) => { upload(event.target.files?.[0]); event.target.value = ""; }} /></Field><p>PDF, JPG hoặc PNG, tối đa 700 KB. {proof ? "Đã tải tệp lên." : "Chưa có chứng từ."}</p>{proof && <Button secondary onClick={() => downloadFactoryAttachment(proof, "chung-tu-chuyen-khoan")}>Xem chứng từ</Button>}<div className="actions"><Button secondary disabled={busy} onClick={() => setSelected(null)}>Hủy</Button><button className="btn" type="submit" disabled={busy || !proof}>{busy ? "Đang gửi…" : "Gửi xác nhận"}</button></div></form></Modal>}
   </>;
 }

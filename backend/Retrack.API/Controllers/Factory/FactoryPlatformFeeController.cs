@@ -23,20 +23,16 @@ public sealed class FactoryPlatformFeeController(FactoryPlatformFeeService servi
         return Ok(ApiResponse<PagedResult<FeeInvoiceDto>>.Ok(await service.InvoicesAsync(CurrentUserId, page, pageSize, ct)));
     }
 
+    [HttpGet("payment-account")]
+    public async Task<IActionResult> PaymentAccount(CancellationToken ct) =>
+        Ok(ApiResponse<PlatformPaymentAccountDto>.Ok(await service.PaymentAccountAsync(CurrentUserId, ct)));
+
     [HttpPatch("invoices/{id:guid}/confirmation")]
-    public async Task<IActionResult> Confirm(Guid id, PaymentProofDto proof, CancellationToken ct)
+    public async Task<IActionResult> Confirm(Guid id, FactoryPaymentProofDto proof, CancellationToken ct)
     {
         await service.ConfirmAsync(CurrentUserId, id, proof, ct);
         return Ok(ApiResponse<string>.Ok("Đã gửi chứng từ, chờ Admin đối soát."));
     }
-
-    [HttpPost("invoices/{id:guid}/payos-link")]
-    public async Task<IActionResult> CreateLink(Guid id, CancellationToken ct) =>
-        Ok(ApiResponse<PayOsLinkDto>.Ok(await service.CreatePayOsLinkAsync(CurrentUserId, id, ct)));
-
-    [HttpPost("invoices/{id:guid}/payos-sync")]
-    public async Task<IActionResult> Sync(Guid id, CancellationToken ct) =>
-        Ok(ApiResponse<string>.Ok(await service.SyncPayOsAsync(CurrentUserId, id, ct)));
 
     private static void ValidatePage(int page, int pageSize)
     {

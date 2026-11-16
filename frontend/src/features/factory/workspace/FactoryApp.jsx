@@ -28,7 +28,7 @@ const tabs = [
 function Workspace() {
   const { state, user, logout, loading, retry } = useFactory();
   const navigateRoute = useNavigate();
-  const [tab, setTab] = useState(new URLSearchParams(window.location.search).has("payos") ? "platform-fees" : "dashboard");
+  const [tab, setTab] = useState("dashboard");
   const [focusId, setFocusId] = useState(null);
   function navigate(next, orderId = null) {
     setFocusId(orderId);
