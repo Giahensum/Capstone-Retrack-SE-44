@@ -34,6 +34,14 @@ public class DepotBatchController(IBatchService service) : ControllerBase
         await service.CancelAsync(OwnerId, depotId, id);
         return Ok(ApiResponse<string>.Ok("Đã hủy lô."));
     }
+    [HttpPatch("{id:guid}/confirm-payment")]
+    public async Task<IActionResult> ConfirmPayment(Guid id, [FromQuery] Guid depotId, [FromBody] ConfirmBatchPaymentRequest request)
+    {
+        await service.ConfirmPaymentAsync(OwnerId, depotId, id, request.Amount, request.PaymentReference);
+        return Ok(ApiResponse<string>.Ok("Vựa đã xác nhận nhận đủ tiền của lô."));
+    }
 }
+
+public sealed record ConfirmBatchPaymentRequest(decimal Amount, string PaymentReference);
 
 

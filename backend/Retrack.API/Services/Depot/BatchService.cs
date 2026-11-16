@@ -136,6 +136,28 @@ public sealed class BatchService(IDepotBatchRepository batches, IDepotUnitOfWork
         await tx.CommitAsync();
     }
 
+    public async Task ConfirmPaymentAsync(Guid ownerId, Guid depotId, Guid batchId, decimal amount, string paymentReference)
+    {
+        await scope.RequireOwnerAsync(ownerId, depotId);
+        await using var tx = await work.BeginAsync();
+        await batches.LockDepotAsync(depotId);
+        var batch = await batches.LockBatchAsync(batchId) ?? throw new KeyNotFoundException("Không tìm thấy lô.");
+        if (batch.DepotId != depotId) throw new DepotForbiddenException();
+        if (batch.Status is not ("COMPLETED" or "PAID") || batch.SettledAt is null ||
+            string.IsNullOrWhiteSpace(batch.QualityCheck?.PaymentProofUrl))
+            throw new DepotConflictException("Lô chưa có quyết toán và chứng từ chuyển khoản để xác nhận.");
+        if (amount <= 0 || amount != batch.NetAmount ||
+            !string.Equals(paymentReference?.Trim(), batch.PaymentReference, StringComparison.Ordinal))
+            throw new DepotConflictException("Số tiền hoặc mã tham chiếu chưa khớp với quyết toán của lô.");
+        if (batch.Status == "PAID") return;
+        batch.Status = "PAID";
+        batch.DepotPaymentConfirmedAt = DateTime.UtcNow;
+        batch.DepotPaymentConfirmedBy = ownerId;
+        batch.UpdatedAt = DateTime.UtcNow;
+        await work.SaveAsync();
+        await tx.CommitAsync();
+    }
+
     private static DepotBatchDto Map(InventoryBatch b) => new(b.Id, b.DepotId, b.MaterialType,
         b.DeclaredWeightKg, b.Description, b.Status, b.TargetFactoryId ?? b.DirectOfferFactoryId,
         b.TargetFactory?.Name ?? b.DirectOfferFactory?.Name, b.CreatedAt, b.Code, b.ImageUrls);

@@ -24,7 +24,7 @@ public class OrderQuery : PageQuery
 {
     [EnumDataType(typeof(BatchStatus))] public BatchStatus? Status { get; set; }
     [RegularExpression("^(orders|qc|settlements)$")] public string? Stage { get; set; }
-    [RegularExpression("^(PENDING_APPROVAL|ACCEPTED|IN_TRANSIT|DELIVERED|RECEIVED|WEIGHED|VERIFIED|PAID|REJECTED)$")] public string? DisplayStatus { get; set; }
+    [RegularExpression("^(PENDING_APPROVAL|ACCEPTED|IN_TRANSIT|DELIVERED|RECEIVED|WEIGHED|VERIFIED|SETTLEMENT_RECORDED|PAYMENT_REPORTED|PAID|REJECTED)$")] public string? DisplayStatus { get; set; }
     [StringLength(200)] public string? Search { get; set; }
 }
 
@@ -94,6 +94,13 @@ public class SettlementRequest
     public string? SellerTaxCode { get; set; }
     [StringLength(500)] public string? VatLegalBasis { get; set; }
     [Required, StringLength(200)] public string PaymentReference { get; set; } = "";
+    [Required, StringLength(500)] public string PaymentProofUrl { get; set; } = "";
+}
+
+public sealed class BatchPaymentProofRequest
+{
+    [Required, StringLength(200)] public string PaymentReference { get; set; } = "";
+    [Required, StringLength(500)] public string PaymentProofUrl { get; set; } = "";
 }
 
 public class PartnerRequest
