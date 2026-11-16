@@ -149,8 +149,12 @@ public sealed class BuyerFeeWorkflowTests : IAsyncLifetime
             new AuditLogRepository(saved), new PlatformInvoiceRepository(saved), new NotificationService(saved), saved);
         var now = DateTime.UtcNow.AddHours(7);
         var invoices = await adminService.GenerateMonthlyInvoicesAsync(now.Year, now.Month, depot.OwnerId);
-        var invoice = Assert.Single(invoices);
-        Assert.Equal(chargedOwnerId, invoice.PayerId); Assert.Equal(500, invoice.TotalFeeAmount);
+        if (policy == PlatformFees.BuyerSeparate)
+        {
+            var invoice = Assert.Single(invoices);
+            Assert.Equal(chargedOwnerId, invoice.PayerId); Assert.Equal(500, invoice.TotalFeeAmount);
+        }
+        else Assert.Empty(invoices); // Lô cũ đã khấu trừ phí, không phát hành hóa đơn thu lần hai.
         Assert.Empty(await adminService.GenerateMonthlyInvoicesAsync(now.Year, now.Month, depot.OwnerId));
     }
 

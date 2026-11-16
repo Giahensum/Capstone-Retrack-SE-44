@@ -60,8 +60,8 @@ export function Operations({ mode, focusId, navigate }) {
         <div className="info-box">
           <strong>Phí nền tảng được tính trên từng đơn đã quyết toán.</strong>
           <span>
-            Phí được giữ lại từ tiền hàng và chờ đối soát công nợ. Bản demo chưa
-            có hóa đơn thu phí từ Admin.
+            Lô mới: Factory trả phí riêng, không trừ tiền của vựa. Xem hóa đơn
+            và gửi chứng từ tại mục Phí nền tảng; chỉ PayOS hoặc Admin mới xác nhận đã thanh toán.
           </span>
         </div>
       )}

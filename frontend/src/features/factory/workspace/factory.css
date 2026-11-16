@@ -513,6 +513,18 @@
   width: 100%;
   overflow-x: auto;
 }
+.factory-fee-tabs,
+.factory-fee-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.factory-fee-tabs {
+  margin: 22px 0 0;
+}
+.factory-fee-table td:last-child {
+  min-width: 190px;
+}
 .factory-shell table {
   width: 100%;
   border-collapse: collapse;
