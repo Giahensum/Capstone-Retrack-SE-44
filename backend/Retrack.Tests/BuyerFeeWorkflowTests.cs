@@ -119,7 +119,7 @@ public sealed class BuyerFeeWorkflowTests : IAsyncLifetime
         var configured = policy == PlatformFees.BuyerSeparate ? "7.00" : "5.00";
         await db.SystemConfigs.Where(x => x.ConfigKey == "PLATFORM_FEE_PERCENTAGE").ExecuteUpdateAsync(x => x.SetProperty(p => p.ConfigValue, configured));
         await db.SaveChangesAsync();
-        var request = new Retrack.API.DTOs.Factory.SettlementRequest { AgreedPricePerKg = 1000, PaymentReference = "FIXTURE-CK",
+        var request = new Retrack.API.DTOs.Factory.SettlementRequest { AgreedPricePerKg = 1000, PaymentReference = "FIXTURE-CK", PaymentProofUrl = "https://example.invalid/proof.pdf",
             VatTreatment = "TAXABLE", VatPercentage = 10, InvoiceNumber = "FIXTURE-HD", SellerTaxCode = "TEST",
             InvoiceDate = DateOnly.FromDateTime(DateTime.UtcNow) };
         async Task<Retrack.API.DTOs.Factory.OrderSettlementResponse> Settle()

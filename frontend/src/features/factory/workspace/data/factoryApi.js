@@ -109,7 +109,7 @@ export function mapOrder(order) {
   const net = verification?.factoryWeightKg || ticket?.netWeightKg || 0;
   const invoice = order.invoice;
   const transportStatus = order.transport?.status;
-  const apiStatus = order.status === "COMPLETED" ? "PAID" : order.status;
+  const apiStatus = order.status === "COMPLETED" ? "SETTLEMENT_RECORDED" : order.status;
   const status = ["ACCEPTED", "IN_TRANSIT"].includes(apiStatus) && transportStatus === "DELIVERED"
     ? "DELIVERED"
     : ["ACCEPTED", "IN_TRANSIT"].includes(apiStatus) && ["PICKED_UP", "ON_THE_WAY", "IN_PROGRESS"].includes(transportStatus)
@@ -120,11 +120,11 @@ export function mapOrder(order) {
     ? ["PENDING_APPROVAL"]
     : normalizedStatus === "REJECTED"
       ? ["ACCEPTED", "IN_TRANSIT", "DELIVERED", "RECEIVED", "WEIGHED", "REJECTED"]
-      : ["ACCEPTED", "IN_TRANSIT", "DELIVERED", "RECEIVED", "WEIGHED", "VERIFIED", "PAID"];
+      : ["ACCEPTED", "IN_TRANSIT", "DELIVERED", "RECEIVED", "WEIGHED", "VERIFIED", ...(normalizedStatus === "SETTLEMENT_RECORDED" ? ["SETTLEMENT_RECORDED"] : ["PAYMENT_REPORTED", "PAID"])];
   const reached = statusSteps.indexOf(normalizedStatus);
   const history = statusSteps.slice(0, reached >= 0 ? reached + 1 : 1).map((itemStatus) => ({
     status: itemStatus,
-    at: itemStatus === "RECEIVED" ? order.receivedAt || order.createdAt : itemStatus === "VERIFIED" || itemStatus === "REJECTED" ? order.decidedAt || order.createdAt : itemStatus === "PAID" ? order.settledAt || order.createdAt : order.createdAt,
+    at: itemStatus === "RECEIVED" ? order.receivedAt || order.createdAt : itemStatus === "VERIFIED" || itemStatus === "REJECTED" ? order.decidedAt || order.createdAt : itemStatus === "PAID" ? order.depotPaymentConfirmedAt || order.settledAt || order.createdAt : itemStatus === "PAYMENT_REPORTED" || itemStatus === "SETTLEMENT_RECORDED" ? order.settledAt || order.createdAt : order.createdAt,
   }));
   return {
     id: order.id,
@@ -173,6 +173,8 @@ export function mapOrder(order) {
       feePolicy: order.feePolicy || "LEGACY_SELLER_DEDUCTION_V1",
       buyerTotal: order.buyerTotalAmount ?? ((order.netPayableAmount || 0) + (order.feeAmount || 0)),
       reference: order.paymentReference || "",
+      proofUrl: order.paymentProofUrl || "",
+      confirmedAt: order.depotPaymentConfirmedAt || null,
       at: order.settledAt,
     } : null,
     invoice: invoice?.invoiceFileUrl ? {
@@ -289,6 +291,12 @@ export async function performFactoryAction(type, payload) {
         sellerTaxCode: payload.sellerTaxCode || null,
         vatLegalBasis: payload.vatLegalBasis || null,
         paymentReference: payload.reference,
+        paymentProofUrl: payload.paymentProofUrl,
+      } });
+    case "REPORT_PAYMENT":
+      return request(`/api/factory/orders/${id}/payment-proof`, { method: "POST", body: {
+        paymentReference: payload.reference,
+        paymentProofUrl: payload.paymentProofUrl,
       } });
     case "INVOICE":
       {

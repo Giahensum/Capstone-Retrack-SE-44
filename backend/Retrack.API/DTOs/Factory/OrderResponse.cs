@@ -33,6 +33,8 @@ public sealed record OrderResponse
     public decimal? BuyerTotalAmount { get; init; }
     public required decimal? NetPayableAmount { get; init; }
     public required string? PaymentReference { get; init; }
+    public string? PaymentProofUrl { get; init; }
+    public DateTime? DepotPaymentConfirmedAt { get; init; }
     public required DateTime CreatedAt { get; init; }
     public required OrderTransportResponse? Transport { get; init; }
     public required OrderWeightVerificationResponse? WeightVerification { get; init; }

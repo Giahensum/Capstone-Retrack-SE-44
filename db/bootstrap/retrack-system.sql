@@ -261,6 +261,8 @@ CREATE TABLE IF NOT EXISTS inventory_batches (
     net_amount          DECIMAL(18, 2),
     payment_reference   VARCHAR(200),
     settled_at          TIMESTAMPTZ,
+    depot_payment_confirmed_at TIMESTAMPTZ,
+    depot_payment_confirmed_by UUID REFERENCES users(id),
     code                VARCHAR(40),
     image_urls          TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
     -- MARKETPLACE, PENDING_APPROVAL, TRANSPORT_READY, COMPLETED
@@ -274,6 +276,8 @@ ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS vat_percentage DECIMAL(5,
 ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS vat_amount DECIMAL(18, 2);
 ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS invoice_total_amount DECIMAL(18, 2);
 ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS price_includes_vat BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS depot_payment_confirmed_at TIMESTAMPTZ;
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS depot_payment_confirmed_by UUID REFERENCES users(id);
 CREATE SEQUENCE IF NOT EXISTS depot_batch_number START WITH 1 INCREMENT BY 1 NO MINVALUE NO MAXVALUE NO CYCLE;
 CREATE UNIQUE INDEX IF NOT EXISTS ix_inventory_batches_code ON inventory_batches(code);
 

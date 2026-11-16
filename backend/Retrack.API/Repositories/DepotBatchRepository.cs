@@ -26,7 +26,7 @@ public sealed class DepotBatchRepository(AppDbContext db) : IDepotBatchRepositor
                 b.PlatformFeeAmount, b.NetAmount, b.VatTreatment, b.VatPercentage, b.VatAmount,
                 b.InvoiceTotalAmount, b.PaymentReference, b.SettledAt.Value,
                 b.QualityCheck == null ? null : b.QualityCheck.PaymentProofUrl,
-                b.VatTreatment == null ? null : b.PriceIncludesVat, b.FeePolicy)))
+                b.VatTreatment == null ? null : b.PriceIncludesVat, b.FeePolicy, b.DepotPaymentConfirmedAt)))
         .SingleOrDefaultAsync();
     public async Task<PagedResult<DepotBatchDto>> ListAsync(Guid depotId, DepotQuery query)
     {

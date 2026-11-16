@@ -249,7 +249,7 @@ public class FactoryPartnerService(AppDbContext db) : FactoryServiceBase(db), IF
         await using var tx = Db.Database.IsRelational() ? await Db.Database.BeginTransactionAsync(ct) : null;
         var batch = await Db.InventoryBatches.SingleOrDefaultAsync(x => x.Id == orderId && x.TargetFactoryId == factory.Id, ct);
         if (batch is null) return ServiceResult<PartnerRatingResponse>.NotFound("Không tìm thấy đơn hàng.");
-        if (batch.Status is not ("PAID" or "COMPLETED")) return ServiceResult<PartnerRatingResponse>.Conflict("Chỉ đánh giá sau khi đã quyết toán.");
+        if (batch.Status != "PAID") return ServiceResult<PartnerRatingResponse>.Conflict("Chỉ đánh giá sau khi vựa xác nhận đã nhận tiền.");
         var review = await Db.FactoryDepotReviews.SingleOrDefaultAsync(x => x.BatchId == batch.Id && x.FactoryId == factory.Id, ct);
         if (review is null)
         {
