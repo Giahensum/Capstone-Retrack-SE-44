@@ -1,0 +1,91 @@
+name: Backend CI
+
+# Chạy cho mọi PR và push vào develop/main có đụng tới backend: build + toàn bộ test (kể cả test PostgreSQL).
+on:
+  pull_request:
+    paths:
+      - "backend/**"
+      - "db/**"
+      - ".github/workflows/backend-ci.yml"
+  push:
+    branches: [develop, main]
+    paths:
+      - "backend/**"
+      - "db/**"
+      - ".github/workflows/backend-ci.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: backend-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci_only_password
+          POSTGRES_DB: Retrack_TV2_test   # đúng tên DB test mà AGENTS.md yêu cầu
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGPASSWORD: ci_only_password
+      RETRACK_TEST_CONNECTION: Host=localhost;Port=5432;Database=Retrack_TV2_test;Username=postgres;Password=ci_only_password
+      RETRACK_TEST_POSTGRES: Host=localhost;Port=5432;Database=Retrack_TV2_test;Username=postgres;Password=ci_only_password
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Dựng schema (không seed demo)
+        run: |
+          # Tắt seed demo: test tự tạo dữ liệu fixture riêng.
+          sed "s/SET LOCAL retrack.seed_demo = 'on';/SET LOCAL retrack.seed_demo = 'off';/" \
+            db/bootstrap/retrack-system.sql > /tmp/schema-only.sql
+          grep -q "retrack.seed_demo = 'off'" /tmp/schema-only.sql
+          psql -h localhost -U postgres -d Retrack_TV2_test -v ON_ERROR_STOP=1 -f /tmp/schema-only.sql
+
+      - name: Restore
+        run: dotnet restore backend/Retrack.sln
+
+      - name: Build
+        run: dotnet build backend/Retrack.sln --no-restore -c Release
+
+      - name: Test
+        run: dotnet test backend/Retrack.sln --no-build -c Release --logger "trx;LogFileName=results.trx"
+
+      - name: Lưu kết quả test
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-results
+          path: "**/TestResults/*.trx"
+          if-no-files-found: ignore
+
+  docker-build:
+    # Kiểm tra Dockerfile build được trước khi merge; không push image.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: backend/Retrack.API
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
