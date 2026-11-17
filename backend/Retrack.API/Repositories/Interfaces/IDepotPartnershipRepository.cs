@@ -11,4 +11,5 @@ public interface IDepotPartnershipRepository
     Task SaveAsync(CancellationToken ct);
     Task LockDepotAsync(Guid depotId, CancellationToken ct);
     Task<bool> HasOpenOrdersAsync(Guid depotId, Guid factoryId, CancellationToken ct);
+    Task QueueFactoryNoticeAsync(FactoryDepotPartnership partner, string title, string message, CancellationToken ct);
 }

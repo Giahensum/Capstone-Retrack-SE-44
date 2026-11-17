@@ -41,7 +41,8 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         var batchIds = await db.InventoryBatches.Where(b => b.DepotId == depotId).Select(b => b.Id).ToListAsync();
         var transportIds = await db.TransportJobs.Where(t => batchIds.Contains(t.BatchId)).Select(t => t.Id).ToListAsync();
         await db.PlatformTransactions.Where(t => t.SourceType == "BATCH_ORDER" && batchIds.Contains(t.SourceId)).ExecuteDeleteAsync();
-        await db.Notifications.Where(n => (n.TransportJobId != null && transportIds.Contains(n.TransportJobId.Value)) ||
+        await db.Notifications.Where(n => n.DepotId == depotId || n.UserId == factoryOwnerId ||
+            (n.TransportJobId != null && transportIds.Contains(n.TransportJobId.Value)) ||
             (n.BatchId != null && batchIds.Contains(n.BatchId.Value))).ExecuteDeleteAsync();
         await db.TransportJobs.Where(t => t.Batch.DepotId == depotId).ExecuteDeleteAsync();
         await db.InventoryBatches.Where(b => b.DepotId == depotId).ExecuteDeleteAsync();
@@ -1101,7 +1102,14 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         await Assert.ThrowsAsync<ArgumentException>(() => depotService.RequestTerminationAsync(ownerId, depotId, factory.Id, new("ngắn"), default));
         await Assert.ThrowsAsync<ArgumentException>(() => depotService.RequestTerminationAsync(ownerId, depotId, factory.Id, new(new string('x', 2001)), default));
         Assert.Equal("PENDING_FACTORY", (await depotService.RequestTerminationAsync(ownerId, depotId, factory.Id, new("Chủ vựa đề nghị kết thúc hợp đồng."), default)).TerminationStatus);
+        var noticeService = new Retrack.API.Services.Factory.FactoryNotificationService(db);
+        var terminationNotices = await noticeService.ListAsync(factoryOwnerId, 1, 20, false, default);
+        var terminationNotice = Assert.Single(terminationNotices.Items, x => x.Title == "Vựa đề nghị chấm dứt hợp đồng");
+        Assert.Equal(depotId, terminationNotice.DepotId);
+        Assert.Equal("PARTNERS", terminationNotice.TargetType);
+        Assert.Equal(1, await noticeService.UnreadCountAsync(factoryOwnerId, default));
         await Assert.ThrowsAsync<DepotConflictException>(() => depotService.RequestTerminationAsync(ownerId, depotId, factory.Id, new("Không được tạo đề nghị trùng lặp."), default));
+        Assert.Equal(1, await noticeService.UnreadCountAsync(factoryOwnerId, default));
         await Assert.ThrowsAsync<DepotConflictException>(() => depotService.DecideTerminationAsync(ownerId, depotId, factory.Id, new("ACCEPT"), default));
         Assert.Equal("REJECTED", (await factoryService.DecideTerminationAsync(factoryOwnerId, depotId, new() { Decision = "REJECT" }, default)).Data!.TerminationStatus);
         await db.Entry(partner).ReloadAsync(); Assert.Equal("ACTIVE", partner.ContractStatus);

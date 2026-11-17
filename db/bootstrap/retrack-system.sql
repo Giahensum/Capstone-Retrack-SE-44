@@ -946,6 +946,26 @@ BEGIN
 END $$;
 -- RETRACK_BUYER_FEES_V1_END
 
+-- Bổ sung thông báo cho đề nghị chấm dứt đang chờ Factory từ dữ liệu trước khi có nút chuông.
+-- Chạy lại an toàn: chỉ tạo khi chưa có thông báo của đúng lần đề nghị hiện tại.
+INSERT INTO notifications (id, user_id, depot_id, category, target_type, target_id, title, message, is_read, created_at)
+SELECT gen_random_uuid(), f.owner_id, p.depot_id, 'FACTORY', 'PARTNERS', p.depot_id,
+       'Vựa đề nghị chấm dứt hợp đồng',
+       'Hợp đồng ' || COALESCE(p.contract_code, p.id::text) || ' có đề nghị chấm dứt từ chủ vựa. Mở Vựa đối tác để xem lý do và phản hồi.',
+       FALSE, NOW()
+FROM factory_depot_partnerships p
+JOIN factories f ON f.id = p.factory_id
+JOIN depots d ON d.id = p.depot_id
+WHERE p.termination_status = 'PENDING_FACTORY'
+  AND p.termination_requested_by = d.owner_id
+  AND p.termination_requested_at IS NOT NULL
+  AND NOT EXISTS (
+      SELECT 1 FROM notifications n
+      WHERE n.user_id = f.owner_id AND n.depot_id = p.depot_id
+        AND n.target_type = 'PARTNERS' AND n.title = 'Vựa đề nghị chấm dứt hợp đồng'
+        AND n.created_at >= p.termination_requested_at
+  );
+
 -- RETRACK_SCHEMA_END
 
 -- RETRACK_SEED_BEGIN
