@@ -1015,6 +1015,7 @@ CREATE TABLE IF NOT EXISTS batch_workflow_events (
 ALTER TABLE batch_workflow_events ADD COLUMN IF NOT EXISTS price_per_kg NUMERIC(18,2);
 ALTER TABLE batch_workflow_events ADD COLUMN IF NOT EXISTS net_amount NUMERIC(18,2);
 CREATE INDEX IF NOT EXISTS ix_batch_workflow_events_batch_created ON batch_workflow_events(batch_id,created_at DESC,id);
+-- RETRACK_BATCH_SETTLEMENT_APPROVAL_V1_END
 -- RETRACK_DEMAND_ORIGIN_V1: giữ nguồn nhu cầu, không đổi giá hoặc trạng thái lô cũ.
 ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS source_demand_id UUID;
 DO $demand_origin$
@@ -1024,6 +1025,7 @@ BEGIN
     END IF;
 END $demand_origin$;
 CREATE INDEX IF NOT EXISTS ix_batches_source_demand ON inventory_batches(source_demand_id) WHERE source_demand_id IS NOT NULL;
+-- RETRACK_DEMAND_ORIGIN_V1_END
 
 -- RETRACK_BATCH_QUALITY_RESOLUTION_V1_BEGIN
 -- Chỉ trả lại nguồn tồn khi kho xác nhận nhận đủ lô, không tự hoàn từ QC từ chối.

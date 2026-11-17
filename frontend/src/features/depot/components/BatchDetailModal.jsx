@@ -59,16 +59,16 @@ export default function BatchDetailModal({ id, onClose }) {
         <a key={url} href={url} target="_blank" rel="noopener noreferrer"><img src={url} alt={`Ảnh vật liệu ${index + 1}`} className="h-32 w-full rounded-xl object-cover" /></a>)}</div>
         : <p className="text-sm text-d-on-surface-variant">Lô này chưa có ảnh vật liệu.</p>}</section>
     <Rows title="Vận chuyển và nhận hàng" items={[["Vận chuyển", transportLabels[d.transportStatus] ?? d.transportStatus], ["Tài xế", d.driverName], ["Nhà máy nhận hàng", time(d.receivedAt)], ["Quyết định chất lượng", time(d.decidedAt)]]}/>
-    <Rows title="Cân và kiểm tra chất lượng (KCS)" items={[["Khối lượng thực tế", kg(q?.actualWeightKg)], ["Khối lượng tổng", kg(q?.grossWeightKg)], ["Khối lượng bì", kg(q?.tareWeightKg)], ["Độ lệch", percent(q?.differencePercentage)], ["Phân hạng", q?.grade === 'PENDING' ? 'Chờ kiểm tra' : q?.grade], ["Kết quả", q?.isAccepted == null ? 'Chưa chốt' : q.isAccepted ? 'Chấp nhận' : 'Từ chối'], ["Độ tinh khiết", percent(q?.purityPercent)], ["Độ ẩm", percent(q?.moisturePercent)], ["Tạp chất", percent(q?.contaminationPercent)], ["Biên bản cân", q?.ticketNumber], ["Lý do từ chối", d.rejectionReason], ["Hướng xử lý", q?.resolution], ["Ghi chú nhà máy", q?.note]]}/>
+    <Rows title="Cân và kiểm tra chất lượng (KCS)" items={[["Khối lượng thực tế", kg(q?.actualWeightKg)], ["Khối lượng tổng", kg(q?.grossWeightKg)], ["Khối lượng bì", kg(q?.tareWeightKg)], ["Độ lệch", percent(q?.differencePercentage)], ["Phân hạng", q?.grade === 'PENDING' ? 'Chờ kiểm tra' : q?.grade], ["Kết quả", q?.isAccepted == null ? 'Chưa chốt' : q.isAccepted ? 'Chấp nhận' : 'Từ chối'], ["Độ tinh khiết", percent(q?.purityPercent)], ["Độ ẩm", percent(q?.moisturePercent)], ["Tạp chất", percent(q?.contaminationPercent)], ["Biên bản cân", q?.ticketNumber], ["Lý do từ chối", d.rejectionReason], ["Hướng xử lý", ({ RETURN: 'Trả toàn bộ lô', RENEGOTIATE: 'Thương lượng mua theo hiện trạng' })[q?.resolution] ?? q?.resolution], ["Ghi chú nhà máy", q?.note?.replace(/^(RENEGOTIATE|RETURN):\s*/, '')]]}/>
     <Proof title="Phiếu cân" url={q?.ticketImageUrl}/>
-    <Rows title="Quyết toán do nhà máy ghi nhận" items={[["Đơn giá thỏa thuận / kg", cash(s?.pricePerKg)],
+    {s && <Rows title={d.workflow?.version && b.status !== 'PAID' ? 'Đề xuất giá và số tiền' : 'Quyết toán do nhà máy ghi nhận'} items={[["Đơn giá thỏa thuận / kg", cash(s?.pricePerKg)],
       ["Cơ sở đơn giá", s?.priceIncludesVat == null ? missing : s.priceIncludesVat ? 'Đã gồm VAT' : 'Chưa gồm VAT'],
       ["Tiền hàng trước VAT", cash(s?.grossAmount)],
       ["Cách khai VAT", ({ NOT_APPLICABLE: 'Không áp dụng VAT', ZERO_RATE: 'VAT 0%', TAXABLE: 'Có VAT theo hóa đơn' })[s?.vatTreatment] ?? missing],
       ["Thuế suất VAT", percent(s?.vatPercentage)], ["Tiền VAT theo hóa đơn", cash(s?.vatAmount)],
       ["Tổng tiền theo hóa đơn", cash(s?.invoiceTotalAmount)], [s?.feePolicy === "BUYER_SEPARATE_V1" ? "Phí do Factory trả riêng" : "Phí khấu trừ — lô cũ", cash(s?.feeAmount)],
       ["Tiền thanh toán theo quyết toán, gồm VAT đã khai", cash(s?.netAmount)],
-      ["Tham chiếu thanh toán", s?.paymentReference], ["Ngày quyết toán", time(s?.settledAt)], ["Vựa xác nhận nhận tiền", time(s?.paymentConfirmedAt)], ["Số hóa đơn", q?.invoiceNumber]]}/>
+      ["Tham chiếu thanh toán", s?.paymentReference], [d.workflow?.version && b.status !== 'PAID' ? "Ngày đề xuất giá" : "Ngày quyết toán", time(s?.settledAt)], ["Vựa xác nhận nhận tiền", time(s?.paymentConfirmedAt)], ["Số hóa đơn", q?.invoiceNumber]]}/> }
     <BatchReturnPanel key={id} detail={d} id={id} handoverProof={<Proof title="Biên bản bàn giao trả" url={d.return?.handoverProofUrl}/>} />
     <BatchSettlementPanel key={`${id}-${d.workflow?.revision ?? 0}`} detail={d} id={id} />
     {b.status === 'COMPLETED' && s?.paymentProofUrl && <section className="rounded-2xl border border-d-border-subtle bg-white p-4 space-y-3">
@@ -88,3 +88,4 @@ export default function BatchDetailModal({ id, onClose }) {
     <DriverEventsPanel id={id} />
   </div>}</QueryState></Dialog>;
 }
+
