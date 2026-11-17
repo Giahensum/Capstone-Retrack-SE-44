@@ -3,8 +3,10 @@ import fs from 'node:fs';
 test('KCS không đạt → chọn trả → Factory bàn giao → Depot nhận đủ và hoàn tồn sau reload', async ({ page, browser, request }) => {
   test.skip(!process.env.E2E_QUALITY_FIXTURE || !process.env.E2E_QUALITY_PASSWORD, 'Cần fixture QC riêng trong DB test.');
   test.setTimeout(120000);
+  page.setDefaultTimeout(15000);
   const f=JSON.parse(fs.readFileSync(process.env.E2E_QUALITY_FIXTURE,'utf8'));
   const ownerContext=await browser.newContext({baseURL:process.env.E2E_BASE_URL}),owner=await ownerContext.newPage();
+  owner.setDefaultTimeout(15000);
   const errors=[];for(const p of [page,owner])p.on('pageerror',e=>errors.push(e.message));
   const login=async(p,email)=>{await p.goto('/login');await p.getByLabel('Email',{exact:true}).fill(email);await p.getByLabel('Mật khẩu',{exact:true}).fill(process.env.E2E_QUALITY_PASSWORD);await p.getByRole('button',{name:'Đăng nhập',exact:true}).click();await expect(p).not.toHaveURL(/\/login$/);};
   const ownerOpen=async()=>{await owner.goto('/depot/batches');await owner.getByRole('row').filter({hasText:f.Code}).getByTitle('Chi tiết lô hàng',{exact:true}).click();};
@@ -13,8 +15,8 @@ test('KCS không đạt → chọn trả → Factory bàn giao → Depot nhận 
     await page.getByRole('button',{name:/Trạm cân & KCS/}).click();
     await page.getByRole('row').filter({hasText:f.Code}).getByRole('button',{name:/Chi tiết/}).click();
     await page.getByRole('button',{name:'Kiểm tra & Chốt KCS',exact:true}).click();
-    await page.getByLabel('Độ tinh khiết (%)').fill('50');await page.getByLabel('Độ ẩm (%)').fill('10');await page.getByLabel('Tạp chất (%)').fill('40');await page.getByLabel('Grade',{exact:true}).selectOption('C');
-    await page.getByLabel('Quyết định',{exact:true}).selectOption('reject');await page.getByLabel('Hướng xử lý',{exact:true}).selectOption('RENEGOTIATE');
+    await page.getByLabel('Độ tinh khiết (%)').fill('50');await page.getByLabel('Độ ẩm (%)').fill('10');await page.getByLabel('Tạp chất (%)').fill('40');await page.getByLabel(/^Grade/).selectOption('C');
+    await page.getByLabel(/^Quyết định/).selectOption('reject');await page.getByLabel(/^Hướng xử lý/).selectOption('RENEGOTIATE');
     await page.getByLabel(/Lý do từ chối/).fill('Vật liệu không đạt ngưỡng; xem xét mua theo hiện trạng');
     await page.getByRole('button',{name:'Chốt kết quả KCS',exact:true}).click();
     await expect(page.getByRole('button',{name:'Gửi đề xuất giá cho vựa',exact:true})).toBeVisible();
@@ -22,7 +24,7 @@ test('KCS không đạt → chọn trả → Factory bàn giao → Depot nhận 
     await expect(page.getByRole('dialog')).toContainText('Mua theo hiện trạng KCS không đạt');
     await page.getByRole('dialog').getByRole('button',{name:'Hủy',exact:true}).click();
     await page.getByRole('button',{name:'Chọn hướng xử lý KCS',exact:true}).click();
-    await page.getByLabel('Hướng xử lý KCS',{exact:true}).selectOption('RETURN');await page.getByLabel('Ghi chú lựa chọn hướng xử lý').fill('Hai bên chọn trả toàn bộ lô về kho');await page.getByRole('button',{name:'Lưu hướng xử lý',exact:true}).click();
+    await page.getByRole('dialog').getByRole('combobox').selectOption('RETURN');await page.getByLabel('Ghi chú lựa chọn hướng xử lý').fill('Hai bên chọn trả toàn bộ lô về kho');await page.getByRole('button',{name:'Lưu hướng xử lý',exact:true}).click();
     await page.getByRole('button',{name:'Xác nhận bàn giao trả',exact:true}).click();
     const handover=page.getByRole('dialog');
     await handover.getByLabel('Tham chiếu bàn giao trả').fill('TRA-QC-UI');await handover.getByLabel('Ghi chú bàn giao trả').fill('Đã bàn giao nguyên lô để chở về kho');
@@ -40,3 +42,6 @@ test('KCS không đạt → chọn trả → Factory bàn giao → Depot nhận 
     expect(errors).toEqual([]);
   } finally {await ownerContext.close();}
 });
+
+
+
