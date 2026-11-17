@@ -1,0 +1,122 @@
+[
+  {
+    "id": "DEMO_01",
+    "file_name": "01_Chai_Thuy_Tinh_Trang_Exi.jpg",
+    "src": "D:\\Ky 9\\Capstone-Retrack-SE-44\\AI_Garbage_Classification\\Pytorch-Garbage-Classification\\Exi.jpg",
+    "category_expected": "white-glass",
+    "name_vi": "Thủy tinh trắng trong suốt",
+    "highlight": "Điểm nhấn Đỉnh cao: Chai trong suốt trên nền gạch men vàng. Minh chứng cơ chế Late Fusion Stacking (YOLO phát hiện vase 53.8% cứu nguy cho EfficientNet bị gạch vàng lừa).",
+    "price_ref": "500 - 1.500 đ/vỏ chai",
+    "council_scenario": "Trình bày trường hợp: Người bán chụp chai thủy tinh trên sàn nhà hoa văn bóng gương.",
+    "file_path": "D:\\Ky 9\\Capstone-Retrack-SE-44\\DEMO_TEST_IMAGES_COUNCIL\\01_Chai_Thuy_Tinh_Trang_Exi.jpg",
+    "file_size_kb": 1569.4
+  },
+  {
+    "id": "DEMO_02",
+    "file_name": "02_Lon_Bia_Tiger_Bep_Kim_Loai.jpg",
+    "src": "D:\\Ky 9\\Capstone-Retrack-SE-44\\AI_Garbage_Classification\\Pytorch-Garbage-Classification\\custom_dataset\\dataset_split\\val\\metal\\clean_edge_crushed_can_tiger_silver_ceramic_tile.jpg",
+    "category_expected": "metal",
+    "name_vi": "Kim loại (Lon nhôm, Sắt thép)",
+    "highlight": "Điểm nhấn Biến dạng & OCR: Vỏ lon bia Tiger bị giẫm bẹp dí. EasyOCR đọc chữ 'TIGER' + EfficientNet nhận diện ánh kim nhôm (63.5% conf).",
+    "price_ref": "15.000 - 28.000 đ/kg",
+    "council_scenario": "Trình bày trường hợp: Phế liệu bị biến dạng hình học thực tế, kiểm tra khả năng đọc chữ thương hiệu.",
+    "file_path": "D:\\Ky 9\\Capstone-Retrack-SE-44\\DEMO_TEST_IMAGES_COUNCIL\\02_Lon_Bia_Tiger_Bep_Kim_Loai.jpg",
+    "file_size_kb": 22.8
+  },
+  {
+    "id": "DEMO_03",
+    "file_name": "03_Thung_Carton_Shopee_Bia_Giay.jpg",
+    "src": "D:\\Ky 9\\Capstone-Retrack-SE-44\\AI_Garbage_Classification\\Pytorch-Garbage-Classification\\custom_dataset\\dataset_split\\val\\cardboard\\clean_edge_flattened_shopee_carton_tape_ceramic_tile.jpg",
+    "category_expected": "cardboard",
+    "name_vi": "Bìa Carton & Thùng giấy",
+    "highlight": "Điểm nhấn E-Commerce: Hộp carton Shopee dán băng keo bóng vàng. Độ tin cậy đạt 82.9% sau khi tối ưu.",
+    "price_ref": "3.000 - 5.500 đ/kg",
+    "council_scenario": "Trình bày trường hợp: Phế liệu đóng gói thương mại điện tử phổ biến nhất của các hộ gia đình.",
+    "file_path": "D:\\Ky 9\\Capstone-Retrack-SE-44\\DEMO_TEST_IMAGES_COUNCIL\\03_Thung_Carton_Shopee_Bia_Giay.jpg",
+    "file_size_kb": 19.5
+  },
+  {
+    "id": "DEMO_04",
+    "file_name": "04_Can_Dau_An_Nhua_Tai_Che.jpg",
+    "src": "D:\\Ky 9\\Capstone-Retrack-SE-44\\AI_Garbage_Classification\\Pytorch-Garbage-Classification\\custom_dataset\\dataset_split\\val\\plastic\\clean_edge_yellow_cooking_oil_jug_ceramic_tile.jpg",
+    "category_expected": "plastic",
+    "name_vi": "Nhựa tái chế (Chai PET, Can HDPE)",
+    "highlight": "Điểm nhấn Độ tin cậy siêu cao: Can nhựa dầu ăn màu vàng có quai xách. Mô hình nhận diện chuẩn xác 99.8% độ tin cậy.",
+    "price_ref": "6.000 - 11.000 đ/kg",
+    "council_scenario": "Trình bày trường hợp: Đồ nhựa gia dụng thể tích lớn, có cặn mỡ thực tế.",
+    "file_path": "D:\\Ky 9\\Capstone-Retrack-SE-44\\DEMO_TEST_IMAGES_COUNCIL\\04_Can_Dau_An_Nhua_Tai_Che.jpg",
+    "file_size_kb": 21.0
+  },
+  {
+    "id": "DEMO_05",
+    "file_name": "05_Pin_Dua_AAA_Rac_Nguy_Hai.jpg",
+    "src": "D:\\Ky 9\\Capstone-Retrack-SE-44\\AI_Garbage_Classification\\Pytorch-Garbage-Classification\\custom_dataset\\dataset_split\\val\\battery\\clean_edge_aaa_alkaline_gold_black_woven_mat.jpg",
+    "category_expected": "battery",
+    "name_vi": "Pin & Ắc quy cũ (Rác nguy hại)",
+    "highlight": "Điểm nhấn Trách nhiệm môi trường: Pin đũa AAA vỏ kim loại nhỏ đặt trên chiếu cói. Độ tin cậy đạt 95.0%. Hệ thống cảnh báo không vứt chung rác thường.",
+    "price_ref": "Thu gom an toàn / Điểm đổi pin",
+    "council_scenario": "Trình bày trường hợp: Phân loại rác độc hại cần thu gom riêng theo tiêu chuẩn ESG.",
+    "file_path": "D:\\Ky 9\\Capstone-Retrack-SE-44\\DEMO_TEST_IMAGES_COUNCIL\\05_Pin_Dua_AAA_Rac_Nguy_Hai.jpg",
+    "file_size_kb": 6.3
+  },
+  {
+    "id": "DEMO_06",
+    "file_name": "06_Chai_Bia_Heineken_Thuy_Tinh_Xanh.jpg",
+    "src": "D:\\Ky 9\\Capstone-Retrack-SE-44\\AI_Garbage_Classification\\Pytorch-Garbage-Classification\\custom_dataset\\dataset_split\\val\\green-glass\\clean_edge_green_heineken_beer_bottle_wooden_table.jpg",
+    "category_expected": "green-glass",
+    "name_vi": "Thủy tinh màu xanh lá",
+    "highlight": "Điểm nhấn Phân tách màu sắc: Chai bia Heineken xanh lục đặt trên bàn gỗ tối màu. Độ tin cậy 64.0%.",
+    "price_ref": "500 - 1.200 đ/vỏ chai",
+    "council_scenario": "Trình bày trường hợp: Phân loại sâu 3 nhánh màu thủy tinh để vựa xuất thẳng về nhà máy tái chế.",
+    "file_path": "D:\\Ky 9\\Capstone-Retrack-SE-44\\DEMO_TEST_IMAGES_COUNCIL\\06_Chai_Bia_Heineken_Thuy_Tinh_Xanh.jpg",
+    "file_size_kb": 22.3
+  },
+  {
+    "id": "DEMO_07",
+    "file_name": "07_Chai_Bia_Saigon_Thuy_Tinh_Nau.jpg",
+    "src": "D:\\Ky 9\\Capstone-Retrack-SE-44\\AI_Garbage_Classification\\Pytorch-Garbage-Classification\\custom_dataset\\dataset_split\\val\\brown-glass\\clean_edge_brown_beer_bottle_saigon_dark_concrete_floor.jpg",
+    "category_expected": "brown-glass",
+    "name_vi": "Thủy tinh màu nâu",
+    "highlight": "Điểm nhấn Thủy tinh sẫm màu: Chai bia Sài Gòn nâu trên sàn bê tông công trường. Độ tin cậy 62.5%.",
+    "price_ref": "500 - 1.200 đ/vỏ chai",
+    "council_scenario": "Trình bày trường hợp: Chai bia thủy tinh hổ phách/nâu dược phẩm.",
+    "file_path": "D:\\Ky 9\\Capstone-Retrack-SE-44\\DEMO_TEST_IMAGES_COUNCIL\\07_Chai_Bia_Saigon_Thuy_Tinh_Nau.jpg",
+    "file_size_kb": 12.3
+  },
+  {
+    "id": "DEMO_08",
+    "file_name": "08_Quan_Jean_Denim_Vai_Cu.jpg",
+    "src": "D:\\Ky 9\\Capstone-Retrack-SE-44\\AI_Garbage_Classification\\Pytorch-Garbage-Classification\\custom_dataset\\dataset_split\\val\\clothes\\clean_edge_folded_old_denim_jeans_ceramic_tile.jpg",
+    "category_expected": "clothes",
+    "name_vi": "Quần áo cũ & Vải vụn",
+    "highlight": "Điểm nhấn Tái chế dệt may: Quần jean denim cũ gấp gọn trên gạch men. Mô hình phân biệt được vật liệu sợi vải.",
+    "price_ref": "2.000 - 5.000 đ/kg",
+    "council_scenario": "Trình bày trường hợp: Thu gom vải vụn và quần áo cũ làm nguyên liệu kéo sợi tái chế.",
+    "file_path": "D:\\Ky 9\\Capstone-Retrack-SE-44\\DEMO_TEST_IMAGES_COUNCIL\\08_Quan_Jean_Denim_Vai_Cu.jpg",
+    "file_size_kb": 20.8
+  },
+  {
+    "id": "DEMO_09",
+    "file_name": "09_Hop_Xop_Tu_Choi_Thu_Gom.jpg",
+    "src": "D:\\Ky 9\\Capstone-Retrack-SE-44\\AI_Garbage_Classification\\Pytorch-Garbage-Classification\\custom_dataset\\dataset_split\\val\\trash\\clean_edge_greasy_dirty_styrofoam_food_box_woven_mat.jpg",
+    "category_expected": "trash",
+    "name_vi": "Rác thải hỗn hợp / Không tái chế",
+    "highlight": "Điểm nhấn Cơ chế Kiểm soát: Hộp xốp đựng cơm dầu mỡ lấm lem. Hệ thống cảnh báo TỪ CHỐI THU GOM, hướng dẫn người bán bỏ vào thùng rác đô thị.",
+    "price_ref": "Không thu mua (Từ chối)",
+    "council_scenario": "Trình bày trường hợp: AI bảo vệ kho vựa không bị thu gom rác bẩn gây ô nhiễm kho bãi.",
+    "file_path": "D:\\Ky 9\\Capstone-Retrack-SE-44\\DEMO_TEST_IMAGES_COUNCIL\\09_Hop_Xop_Tu_Choi_Thu_Gom.jpg",
+    "file_size_kb": 8.4
+  },
+  {
+    "id": "DEMO_10",
+    "file_name": "10_Thung_Carton_Gap_Det_San_Be_Tong.jpg",
+    "src": "D:\\Ky 9\\Capstone-Retrack-SE-44\\AI_Garbage_Classification\\Pytorch-Garbage-Classification\\custom_dataset\\dataset_split\\val\\cardboard\\clean_edge_corrugated_box_folded_flat_concrete_floor.jpg",
+    "category_expected": "cardboard",
+    "name_vi": "Bìa Carton & Thùng giấy",
+    "highlight": "Điểm nhấn Mặt bằng công trường: Thùng carton gấp dẹt trên sàn bê tông xám. Độ tin cậy đạt 79.9%.",
+    "price_ref": "3.000 - 5.500 đ/kg",
+    "council_scenario": "Trình bày trường hợp: Thu gom bìa giấy tại các công trình hoặc kho bãi lớn.",
+    "file_path": "D:\\Ky 9\\Capstone-Retrack-SE-44\\DEMO_TEST_IMAGES_COUNCIL\\10_Thung_Carton_Gap_Det_San_Be_Tong.jpg",
+    "file_size_kb": 12.0
+  }
+]

@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends libgl1 libglib2
 COPY requirements.docker.txt ./
 RUN pip install --no-cache-dir torch==2.6.0 torchvision==0.21.0 --index-url https://download.pytorch.org/whl/cpu \
     && pip install --no-cache-dir -r requirements.docker.txt
-COPY server.py ./
+COPY --chown=ai:ai server.py model.pth yolov8n.pt ./
 USER ai
 EXPOSE 5005
 HEALTHCHECK --interval=30s --timeout=10s --start-period=300s --retries=5 \
