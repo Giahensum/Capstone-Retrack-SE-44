@@ -56,6 +56,35 @@ Các SQL cũ đã gộp/xóa khỏi Git. Script kiểm kê/dọn PascalCase lưu
 
 ## Khi nhóm thêm bảng/cột hoặc seed
 
+### Cập nhật 17/11/2026: lô Factory, trả hàng và hóa đơn cuối kỳ
+
+Máy mới vẫn chạy toàn bộ **một file SQL duy nhất** như hướng dẫn đầu trang.
+DB đã có dữ liệu cần sao lưu và dừng backend trước khi nâng; không chạy seed.
+Trong Query Tool của đúng database, chạy các khối sau trong một transaction
+riêng, bao bởi BEGIN; và COMMIT;:
+
+- RETRACK_CLOSED_PERIOD_BILLING_V1 đến RETRACK_CLOSED_PERIOD_BILLING_V1_END:
+  revision/liên kết hóa đơn bổ sung và unique index theo lần phát hành.
+- RETRACK_BATCH_SETTLEMENT_APPROVAL_V1 đến RETRACK_BATCH_SETTLEMENT_APPROVAL_V1_END:
+  phiên bản thỏa thuận giá, xác nhận Depot và bảng lịch sử.
+- RETRACK_DEMAND_ORIGIN_V1 đến RETRACK_DEMAND_ORIGIN_V1_END:
+  liên kết lô với nhu cầu Factory.
+- RETRACK_BATCH_QUALITY_RESOLUTION_V1_BEGIN đến RETRACK_BATCH_QUALITY_RESOLUTION_V1_END:
+  chứng từ bàn giao trả và xác nhận nhận đủ.
+
+Nếu chưa nâng các cập nhật trước, cần đối chiếu toàn bộ phần schema trước
+RETRACK_SCHEMA_END; các khối trên không thay thế lịch sử nâng DB.
+Develop cũng có thêm các cột esign_* trong factory_depot_partnerships cho
+DocuSign; cần giữ phần này khi nâng schema từ bản cũ. Chưa cấu hình DocuSign
+thì ký điện tử chưa sẵn sàng; không ảnh hưởng đăng nhập hoặc nhập kho.
+
+Lô cũ giữ settlement_workflow_version=0. Lô mới tạo qua API dùng phiên bản 1:
+Factory đề xuất giá → Depot đồng ý → Factory gửi chứng từ → Depot xác nhận
+nhận đủ tiền mới PAID. Chỉ bước cuối ghi nhận tiền/phí của lô mới.
+QC bị từ chối chưa có nghĩa hàng đã về; chỉ RETURNED sau xác nhận hai phía
+mới hoàn nguồn tồn. Không cập nhật hàng loạt trạng thái cũ để ép theo luồng mới.
+Backend không tự chạy các khối SQL khi dotnet run.
+
 Bổ sung 14/11/2026: hồ sơ kho có phân loại giấy tờ kinh doanh, ảnh kho và tài liệu
 bổ sung. DB cũ cần chạy khối
 `RETRACK_DEPOT_VERIFICATION_DOCUMENTS_V2_BEGIN/END` trong chính file SQL chung
