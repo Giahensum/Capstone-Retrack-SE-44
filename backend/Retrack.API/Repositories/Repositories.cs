@@ -17,6 +17,21 @@ namespace Retrack.API.Repositories
             return await _db.Users.FirstOrDefaultAsync(u => u.Email.ToLower() == normalized);
         }
 
+        public async Task<User?> GetByPhoneAsync(string phone)
+        {
+            if (string.IsNullOrWhiteSpace(phone))
+                return null;
+
+            var clean = phone.Trim().Replace(" ", "").Replace("-", "").Replace(".", "");
+            if (clean.StartsWith("+84"))
+                clean = "0" + clean.Substring(3);
+
+            var withPlus84 = "+84" + clean.TrimStart('0');
+
+            return await _db.Users.FirstOrDefaultAsync(u =>
+                u.Phone != null && (u.Phone == clean || u.Phone == withPlus84));
+        }
+
         public async Task<User?> GetByIdAsync(Guid id)
             => await _db.Users.FindAsync(id);
 
