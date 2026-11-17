@@ -76,6 +76,7 @@ public static class FactoryOrderMapper
             SettlementProposedAt = batch.SettlementProposedAt,
             SettlementApprovedAt = batch.SettlementApprovedAt,
             SettlementDecisionReason = batch.SettlementDecisionReason,
+            Return = new(batch.ReturnHandedOverAt, batch.ReturnHandoverProofUrl, batch.ReturnHandoverReference, batch.ReturnHandoverNote, batch.ReturnReceivedAt, batch.ReturnReceiptReference, batch.ReturnReceiptNote),
             CreatedAt = batch.CreatedAt,
             Transport = transport == null ? null : new OrderTransportResponse
             {
@@ -93,7 +94,7 @@ public static class FactoryOrderMapper
                 ContaminationPercent = qc.ContaminationPercent,
                 Grade = qc.Grade == "PENDING" ? null : qc.Grade,
                 QualityNote = qc.QualityNote,
-                Note = qc.QualityNote
+                Note = qc.QualityNote, Resolution = qc.Resolution
             },
             WeightTicket = qc == null ? null : new OrderWeightTicketResponse
             {

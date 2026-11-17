@@ -27,7 +27,8 @@ public sealed class DepotBatchRepository(AppDbContext db) : IDepotBatchRepositor
                 b.InvoiceTotalAmount, b.PaymentReference, (b.SettledAt ?? b.SettlementProposedAt)!.Value,
                 b.QualityCheck == null ? null : b.QualityCheck.PaymentProofUrl,
                 b.VatTreatment == null ? null : b.PriceIncludesVat, b.FeePolicy, b.DepotPaymentConfirmedAt),
-            new BatchWorkflowDto(b.SettlementWorkflowVersion, b.SettlementRevision, b.SettlementProposedAt, b.SettlementApprovedAt, b.SettlementDecisionReason)))
+            new BatchWorkflowDto(b.SettlementWorkflowVersion, b.SettlementRevision, b.SettlementProposedAt, b.SettlementApprovedAt, b.SettlementDecisionReason),
+            new BatchReturnDto(b.ReturnHandedOverAt, b.ReturnHandoverProofUrl, b.ReturnHandoverReference, b.ReturnHandoverNote, b.ReturnReceivedAt, b.ReturnReceiptReference, b.ReturnReceiptNote)))
         .SingleOrDefaultAsync();
     public async Task<PagedResult<DepotBatchDto>> ListAsync(Guid depotId, DepotQuery query)
     {

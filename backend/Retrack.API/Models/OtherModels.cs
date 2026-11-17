@@ -219,6 +219,14 @@ namespace Retrack.API.Models
         [Column("settlement_approved_at")] public DateTime? SettlementApprovedAt { get; set; }
         [Column("settlement_approved_by")] public Guid? SettlementApprovedBy { get; set; }
         [Column("settlement_decision_reason"), MaxLength(2000)] public string? SettlementDecisionReason { get; set; }
+        [Column("return_handed_over_at")] public DateTime? ReturnHandedOverAt { get; set; }
+        [Column("return_handover_proof_url")] public string? ReturnHandoverProofUrl { get; set; }
+        [Column("return_handover_reference"), MaxLength(200)] public string? ReturnHandoverReference { get; set; }
+        [Column("return_handover_note"), MaxLength(2000)] public string? ReturnHandoverNote { get; set; }
+        [Column("return_received_at")] public DateTime? ReturnReceivedAt { get; set; }
+        [Column("return_received_by")] public Guid? ReturnReceivedBy { get; set; }
+        [Column("return_receipt_reference"), MaxLength(200)] public string? ReturnReceiptReference { get; set; }
+        [Column("return_receipt_note"), MaxLength(2000)] public string? ReturnReceiptNote { get; set; }
 
         // Navigation
         [ForeignKey("DepotId")]

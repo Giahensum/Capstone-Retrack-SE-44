@@ -16,10 +16,10 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
         IQueryable<InventoryBatch> source = FactoryOrderQueries.ForFactory(Db, factory.Id);
         var status = query.DisplayStatus ?? (query.Status == BatchStatus.IN_PROGRESS ? "IN_TRANSIT" : query.Status?.ToString());
         if (query.Stage == "qc")
-            source = source.Where(x => x.Status == "RECEIVED" || x.Status == "WEIGHED" || x.Status == "VERIFIED" || x.Status == "REJECTED" ||
+            source = source.Where(x => x.Status == "RECEIVED" || x.Status == "WEIGHED" || x.Status == "VERIFIED" || x.Status == "REJECTED" || x.Status == "NEGOTIATING" || x.Status == "RETURN_REQUESTED" || x.Status == "RETURNING" || x.Status == "RETURNED" ||
                 x.Status == "DELIVERED" || ((x.Status == "ACCEPTED" || x.Status == "TRANSPORT_READY" || x.Status == "READY_FOR_PICKUP" || x.Status == "IN_PROGRESS" || x.Status == "IN_TRANSIT") && x.TransportJob != null && x.TransportJob.Status == "DELIVERED"));
         else if (query.Stage == "settlements")
-            source = source.Where(x => x.Status == "VERIFIED" || x.Status == "SETTLEMENT_PENDING" || x.Status == "SETTLEMENT_ACCEPTED" || x.Status == "SETTLEMENT_DISPUTED" || x.Status == "COMPLETED" || x.Status == "PAID");
+            source = source.Where(x => x.Status == "VERIFIED" || x.Status == "NEGOTIATING" || x.Status == "SETTLEMENT_PENDING" || x.Status == "SETTLEMENT_ACCEPTED" || x.Status == "SETTLEMENT_DISPUTED" || x.Status == "COMPLETED" || x.Status == "PAID");
         if (!string.IsNullOrWhiteSpace(query.Search))
         {
             var search = query.Search.Trim();
@@ -40,7 +40,7 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
             "PAYMENT_REPORTED" => source.Where(x => x.Status == "COMPLETED" && x.QualityCheck != null && x.QualityCheck.PaymentProofUrl != null),
             "SETTLEMENT_RECORDED" => source.Where(x => x.Status == "COMPLETED" && (x.QualityCheck == null || x.QualityCheck.PaymentProofUrl == null)),
             "REJECTED" => source.Where(x => x.Status == "REJECTED" || x.Status == "CANCELLED"),
-            "RECEIVED" or "WEIGHED" or "VERIFIED" or "SETTLEMENT_PENDING" or "SETTLEMENT_ACCEPTED" or "SETTLEMENT_DISPUTED" => source.Where(x => x.Status == status),
+            "RECEIVED" or "WEIGHED" or "VERIFIED" or "NEGOTIATING" or "RETURN_REQUESTED" or "RETURNING" or "RETURNED" or "SETTLEMENT_PENDING" or "SETTLEMENT_ACCEPTED" or "SETTLEMENT_DISPUTED" => source.Where(x => x.Status == status),
             _ => source
         };
         var total = await source.CountAsync(ct);
@@ -122,6 +122,8 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
         await using var transaction = await Db.Database.BeginTransactionAsync(ct);
         var batch = await LockOrderAsync(id, factory.Id, ct);
         if (batch is null) return ServiceResult<OrderSettlementResponse>.NotFound("Không tìm thấy đơn hàng.");
+        if (batch.Status is "RETURN_REQUESTED" or "RETURNING" or "RETURNED")
+            return ServiceResult<OrderSettlementResponse>.Conflict("Lô đang trả hoặc đã nhận trả; không đề xuất quyết toán.");
         if (batch.SettlementWorkflowVersion > 0 && batch.SettlementProposedAt != null &&
             batch.Status is "SETTLEMENT_PENDING" or "SETTLEMENT_ACCEPTED" or "COMPLETED" or "PAID")
         {
@@ -158,7 +160,7 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
             }, message: "Đơn hàng đã được quyết toán; trả lại kết quả đã lưu.");
         }
         var qc = batch.QualityCheck;
-        if ((batch.Status != "VERIFIED" || qc?.IsAccepted != true) && !(batch.SettlementWorkflowVersion > 0 && batch.Status == "SETTLEMENT_DISPUTED" && qc != null))
+        if ((batch.Status != "VERIFIED" || qc?.IsAccepted != true) && !(batch.SettlementWorkflowVersion > 0 && (batch.Status is "SETTLEMENT_DISPUTED" or "NEGOTIATING") && qc != null))
             return ServiceResult<OrderSettlementResponse>.Conflict("Chỉ quyết toán lô đã được KCS chấp nhận.");
         if (batch.SettlementWorkflowVersion > 0 && (!string.IsNullOrWhiteSpace(request.PaymentReference) || !string.IsNullOrWhiteSpace(request.PaymentProofUrl)))
             return ServiceResult<OrderSettlementResponse>.Invalid("Gửi đề xuất giá trước; chỉ chuyển tiền sau khi vựa đồng ý.");
@@ -312,7 +314,7 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
         await using var tx = Db.Database.IsRelational() ? await Db.Database.BeginTransactionAsync(ct) : null;
         var batch = await LockOrderAsync(id, factory.Id, ct);
         if (batch is null) return ServiceResult<InvoiceUpdatedResponse>.NotFound("Không tìm thấy đơn hàng.");
-        if (batch.QualityCheck is null || batch.Status is not ("VERIFIED" or "COMPLETED" or "PAID" or "SETTLEMENT_PENDING" or "SETTLEMENT_ACCEPTED" or "SETTLEMENT_DISPUTED"))
+        if (batch.QualityCheck is null || batch.Status is not ("VERIFIED" or "NEGOTIATING" or "COMPLETED" or "PAID" or "SETTLEMENT_PENDING" or "SETTLEMENT_ACCEPTED" or "SETTLEMENT_DISPUTED"))
             return ServiceResult<InvoiceUpdatedResponse>.Conflict("Chỉ đính kèm hóa đơn sau khi chốt KCS.");
         if (string.IsNullOrWhiteSpace(request.InvoiceFileUrl))
             return ServiceResult<InvoiceUpdatedResponse>.Invalid("Chọn tệp hóa đơn trước khi lưu.");

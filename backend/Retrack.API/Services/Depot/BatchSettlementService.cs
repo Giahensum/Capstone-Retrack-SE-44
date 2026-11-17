@@ -83,6 +83,11 @@ public sealed class BatchSettlementService(IDepotBatchRepository repository, IDe
             batch.VatAmount, batch.NetAmount, batch.PlatformFeeAmount, batch.FeePolicy, batch.PaymentReference,
             InvoiceNumber = batch.QualityCheck?.InvoiceNumber, InvoiceDate = batch.QualityCheck?.InvoiceDate,
             SellerTaxCode = batch.QualityCheck?.SellerTaxCode, VatLegalBasis = batch.QualityCheck?.VatLegalBasis
+            , Quality = batch.QualityCheck == null ? null : new { batch.QualityCheck.IsAccepted, batch.QualityCheck.Grade,
+                batch.QualityCheck.PurityPercent, batch.QualityCheck.MoisturePercent, batch.QualityCheck.ContaminationPercent,
+                batch.QualityCheck.ActualWeightKg, batch.QualityCheck.QualityNote, batch.QualityCheck.Resolution },
+            batch.ReturnHandedOverAt, batch.ReturnHandoverProofUrl, batch.ReturnHandoverReference, batch.ReturnHandoverNote,
+            batch.ReturnReceivedAt, batch.ReturnReceivedBy, batch.ReturnReceiptReference, batch.ReturnReceiptNote
         })
     };
 }
