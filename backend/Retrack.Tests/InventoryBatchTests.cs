@@ -53,6 +53,7 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         await db.FactoryDepotPartnerships.Where(p => p.DepotId == depotId).ExecuteDeleteAsync();
         await db.FactoryDemands.Where(d => d.Factory.OwnerId == factoryOwnerId).ExecuteDeleteAsync();
         await db.Factories.Where(f => f.OwnerId == factoryOwnerId).ExecuteDeleteAsync();
+        await db.AuditLogs.Where(a => a.UserId == factoryOwnerId || a.UserId == ownerId).ExecuteDeleteAsync();
         await db.PickupRequests.Where(p => p.TargetDepotId == depotId).ExecuteDeleteAsync();
         var staffUsers = await db.DepotStaffs.Where(s => s.DepotId == depotId).Select(s => s.UserId).ToListAsync();
         await db.DepotStaffs.Where(s => s.DepotId == depotId).ExecuteDeleteAsync();
@@ -1087,6 +1088,120 @@ public sealed class InventoryBatchTests : IAsyncLifetime
             else await Assert.ThrowsAsync<DepotConflictException>(() => Batches(db).CancelAsync(ownerId, depotId, input.OperationId));
         }
         Assert.Equal(jobs, await db.TransportJobs.CountAsync(t => t.BatchId == input.OperationId));
+    }
+    [Theory]
+    [InlineData("ACTIVE", -2, -1, "PENDING_APPROVAL")]
+    [InlineData("ACTIVE", 1, 2, "PENDING_APPROVAL")]
+    [InlineData("TERMINATED", -2, 2, "PENDING_APPROVAL")]
+    [InlineData("PENDING_DEPOT", -2, 2, "PENDING_APPROVAL")]
+    [InlineData(null, -2, -1, "PENDING_APPROVAL")]
+    [InlineData("ACTIVE", -1, 2, "TRANSPORT_READY")]
+    public async Task Direct_delivery_requires_current_contract_when_contract_exists(string? contract, int effectiveDays, int expiryDays, string expected)
+    {
+        await using var db = Open();
+        var factory = new Factory { Owner = new User { Id = factoryOwnerId, Email = $"expiry-{factoryOwnerId}@test.invalid", Role = "FACTORY" }, Name = "Factory expiry", AcceptedMaterialsCsv = "PET" };
+        db.FactoryDepotPartnerships.Add(new FactoryDepotPartnership { DepotId = depotId, Factory = factory, Status = "APPROVED", ContractStatus = contract,
+            ContractEffectiveAt = DateTime.UtcNow.AddDays(effectiveDays), ContractExpiresAt = DateTime.UtcNow.AddDays(expiryDays) });
+        await db.SaveChangesAsync();
+        var input = Input(10); input.TargetFactoryId = factory.Id;
+        Assert.Equal(expected, (await Batches(db).CreateAsync(ownerId, depotId, input)).Status);
+        var selected = await new Retrack.API.Repositories.DepotOwnerRepository(db).FactoriesAsync(depotId, new FactorySearchQuery { FactoryId = factory.Id });
+        Assert.Equal(expected == "TRANSPORT_READY", Assert.Single(selected.Items).CanDirectDelivery);
+        Assert.Equal(expected == "TRANSPORT_READY" ? 1 : 0, await db.TransportJobs.CountAsync(t => t.BatchId == input.OperationId));
+        await db.Entry(db.FactoryDepotPartnerships.Local.Single()).ReloadAsync();
+        Assert.Equal(contract, db.FactoryDepotPartnerships.Local.Single().ContractStatus);
+    }
+    [Theory]
+    [InlineData("inactive")]
+    [InlineData("expired")]
+    [InlineData("material")]
+    [InlineData("factory")]
+    [InlineData("weight")]
+    [InlineData("missing")]
+    [InlineData("public")]
+    public async Task Demand_context_is_validated_on_server_before_reserving_stock(string scenario)
+    {
+        await using var db = Open();
+        var factory = new Factory { Owner = new User { Id = factoryOwnerId, Email = $"demand-{factoryOwnerId}@test.invalid", Role = "FACTORY" }, Name = "Factory demand", AcceptedMaterialsCsv = "PET,IRON" };
+        db.Factories.Add(factory);
+        var demand = new FactoryDemand { Factory = factory, MaterialType = scenario == "material" ? "IRON" : "PET", RequiredWeightKg = scenario == "weight" ? 5 : 50,
+            Deadline = DateTime.UtcNow.AddDays(scenario == "expired" ? -1 : 1), IsActive = scenario != "inactive" };
+        db.FactoryDemands.Add(demand);
+        var target = factory.Id;
+        if (scenario == "factory") { var other = new Factory { OwnerId = factoryOwnerId, Name = "Other factory", AcceptedMaterialsCsv = "PET" }; db.Factories.Add(other); target = other.Id; }
+        await db.SaveChangesAsync();
+        var input = Input(10); input.TargetFactoryId = scenario == "public" ? null : target;
+        input.SourceDemandId = scenario == "missing" ? Guid.NewGuid() : demand.Id;
+        await Assert.ThrowsAsync<DepotConflictException>(() => Batches(db).CreateAsync(ownerId, depotId, input));
+        Assert.False(await db.InventoryBatches.AnyAsync(b => b.DepotId == depotId));
+        Assert.Equal(100, Assert.Single(await new InventoryService(new Retrack.API.Repositories.DepotInventoryRepository(db), new DepotService(new Retrack.API.Repositories.DepotOwnerRepository(db), new Retrack.API.Repositories.DepotPaymentReadRepository(db))).GetAsync(ownerId, depotId)).AvailableKg);
+    }
+    [Fact]
+    public async Task Demand_origin_is_preserved_but_prices_are_only_reference_and_retry_keeps_same_origin()
+    {
+        await using var db = Open();
+        var factory = new Factory { Owner = new User { Id = factoryOwnerId, Email = $"origin-{factoryOwnerId}@test.invalid", Role = "FACTORY" }, Name = "Factory demand origin", AcceptedMaterialsCsv = "PET" };
+        var demand = new FactoryDemand { Factory = factory, MaterialType = "Nhựa PET", RequiredWeightKg = 50, MinPricePerKg = 5000, MaxPricePerKg = 8000, Deadline = DateTime.UtcNow.AddDays(1) };
+        db.FactoryDemands.Add(demand); await db.SaveChangesAsync();
+        var ownerService = new DepotService(new Retrack.API.Repositories.DepotOwnerRepository(db), new Retrack.API.Repositories.DepotPaymentReadRepository(db));
+        Assert.Equal("PET", Assert.Single((await ownerService.GetDemandsAsync(ownerId, depotId, new())).Items).MaterialType);
+        var input = Input(10); input.TargetFactoryId = factory.Id; input.SourceDemandId = demand.Id;
+        var created = await Batches(db).CreateAsync(ownerId, depotId, input);
+        Assert.Equal("PENDING_APPROVAL", created.Status);
+        Assert.Equal(demand.Id, created.SourceDemandId);
+        var saved = await db.InventoryBatches.SingleAsync(b => b.Id == created.Id);
+        Assert.Equal(demand.Id, saved.SourceDemandId); Assert.Null(saved.AgreedPricePerKg);
+        demand.IsActive = false; await db.SaveChangesAsync();
+        Assert.Equal(created.Id, (await Batches(db).CreateAsync(ownerId, depotId, input)).Id);
+        input.SourceDemandId = null;
+        await Assert.ThrowsAsync<DepotConflictException>(() => Batches(db).CreateAsync(ownerId, depotId, input));
+        var deleted = await new Retrack.API.Services.Factory.FactoryDemandService(db).DeleteAsync(factoryOwnerId, demand.Id, default);
+        Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Conflict, deleted.Outcome);
+        Assert.True(await db.FactoryDemands.AnyAsync(d => d.Id == demand.Id));
+    }
+    [Fact]
+    public async Task Expired_contract_can_be_renewed_with_audited_previous_signed_terms()
+    {
+        await using var db = Open();
+        var factory = new Factory { Owner = new User { Id = factoryOwnerId, Email = $"renew-{factoryOwnerId}@test.invalid", Role = "FACTORY" }, Name = "Renew factory" };
+        var partner = new FactoryDepotPartnership { Factory = factory, DepotId = depotId, Status = "APPROVED", ContractStatus = "ACTIVE", ContractVersion = 1,
+            ContractCode = "RENEW-TEST", ContractTerms = new string('A', 80), ContractTermsHash = new string('a', 64), ContractExpiresAt = DateTime.UtcNow.AddDays(-1) };
+        db.FactoryDepotPartnerships.Add(partner);
+        var inspected = new InventoryBatch { DepotId = depotId, TargetFactory = factory, MaterialType = "PET", DeclaredWeightKg = 1, Status = "VERIFIED" };
+        inspected.QualityCheck = new BatchQualityCheck { Batch = inspected, Factory = factory, Grade = "A", IsAccepted = true, ActualWeightKg = 1 };
+        db.InventoryBatches.Add(inspected); await db.SaveChangesAsync();
+        Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Success,
+            (await new Retrack.API.Services.Factory.FactoryPartnerService(db).UpdateStatusAsync(factoryOwnerId, depotId, new() { Status = Retrack.API.Models.Enums.PartnershipStatus.DECLINED }, default)).Outcome);
+        var result = await new Retrack.API.Services.Factory.FactoryPartnerService(db).ProposeContractAsync(factoryOwnerId, depotId, new() { Terms = new string('B', 80), ValidMonths = 12, ConfirmElectronicSignature = true }, default);
+        Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Success, result.Outcome);
+        await db.Entry(partner).ReloadAsync(); Assert.Equal(2, partner.ContractVersion); Assert.Equal("PENDING_DEPOT", partner.ContractStatus);
+        var history = await db.AuditLogs.SingleAsync(a => a.EntityId == partner.Id && a.Action == "RENEW_CONTRACT");
+        Assert.Contains(new string('A', 80), history.OldData); Assert.Contains("RENEW-TEST", history.OldData);
+    }
+    [Fact]
+    public async Task Depot_cannot_sign_an_expired_contract_proposal()
+    {
+        await using var db = Open();
+        var factory = new Factory { Owner = new User { Id = factoryOwnerId, Email = $"stale-contract-{factoryOwnerId}@test.invalid", Role = "FACTORY" }, Name = "Stale proposal" };
+        var partner = new FactoryDepotPartnership { Factory = factory, DepotId = depotId, ContractStatus = "PENDING_DEPOT", ContractTermsHash = new string('a', 64), ContractExpiresAt = DateTime.UtcNow.AddDays(-1) };
+        db.FactoryDepotPartnerships.Add(partner); await db.SaveChangesAsync();
+        var service = new DepotPartnershipService(new DepotService(new Retrack.API.Repositories.DepotOwnerRepository(db), new Retrack.API.Repositories.DepotPaymentReadRepository(db)), new Retrack.API.Repositories.DepotPartnershipRepository(db), new Retrack.API.Repositories.DepotUnitOfWork(db));
+        await Assert.ThrowsAsync<DepotConflictException>(() => service.DecideContractAsync(ownerId, depotId, factory.Id, new("ACCEPT", true), default));
+        await db.Entry(partner).ReloadAsync(); Assert.Equal("PENDING_DEPOT", partner.ContractStatus);
+    }
+    [Theory]
+    [InlineData("REJECTED", true)]
+    [InlineData("NEGOTIATING", true)]
+    [InlineData("RETURNING", true)]
+    [InlineData("RETURNED", false)]
+    public async Task Partnership_termination_waits_for_unresolved_QC_returns(string status, bool open)
+    {
+        await using var db = Open();
+        var factory = new Factory { Owner = new User { Id = factoryOwnerId, Email = $"return-contract-{factoryOwnerId}@test.invalid", Role = "FACTORY" }, Name = "Return factory" };
+        var batch = new InventoryBatch { DepotId = depotId, TargetFactory = factory, MaterialType = "PET", DeclaredWeightKg = 1, Status = status };
+        batch.QualityCheck = new BatchQualityCheck { Batch = batch, Factory = factory, ActualWeightKg = 1, Grade = "C", IsAccepted = false };
+        db.InventoryBatches.Add(batch); await db.SaveChangesAsync();
+        Assert.Equal(open, await new Retrack.API.Repositories.DepotPartnershipRepository(db).HasOpenOrdersAsync(depotId, factory.Id, default));
     }
     [Fact] public async Task Cancel_restores_stock_once()
     {

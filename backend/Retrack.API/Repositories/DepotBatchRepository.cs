@@ -12,7 +12,7 @@ public sealed class DepotBatchRepository(AppDbContext db) : IDepotBatchRepositor
         .Where(b => b.DepotId == depotId && b.Id == batchId)
         .Select(b => new DepotBatchDetailDto(
             new DepotBatchDto(b.Id, b.DepotId, b.MaterialType, b.DeclaredWeightKg, b.Description, b.Status,
-                b.TargetFactoryId ?? b.DirectOfferFactoryId, b.TargetFactory != null ? b.TargetFactory.Name : b.DirectOfferFactory != null ? b.DirectOfferFactory.Name : null, b.CreatedAt, b.Code, b.ImageUrls),
+                b.TargetFactoryId ?? b.DirectOfferFactoryId, b.TargetFactory != null ? b.TargetFactory.Name : b.DirectOfferFactory != null ? b.DirectOfferFactory.Name : null, b.CreatedAt, b.Code, b.ImageUrls, b.SourceDemandId),
             b.TransportJob == null ? null : b.TransportJob.Status,
             b.TransportJob == null || b.TransportJob.Driver == null ? null : b.TransportJob.Driver.FullName,
             b.FactoryReceivedAt, b.FactoryDecidedAt, b.RejectionReason,
@@ -50,7 +50,7 @@ public sealed class DepotBatchRepository(AppDbContext db) : IDepotBatchRepositor
         return new() { Page = query.Page, PageSize = query.PageSize, TotalCount = total,
             Items = offset > int.MaxValue ? [] : await source.Skip((int)offset).Take(query.PageSize)
                 .Select(b => new DepotBatchDto(b.Id, b.DepotId, b.MaterialType, b.DeclaredWeightKg,
-                    b.Description, b.Status, b.TargetFactoryId ?? b.DirectOfferFactoryId, b.TargetFactory == null ? b.DirectOfferFactory == null ? null : b.DirectOfferFactory.Name : b.TargetFactory.Name, b.CreatedAt, b.Code, b.ImageUrls)).ToListAsync() };
+                    b.Description, b.Status, b.TargetFactoryId ?? b.DirectOfferFactoryId, b.TargetFactory == null ? b.DirectOfferFactory == null ? null : b.DirectOfferFactory.Name : b.TargetFactory.Name, b.CreatedAt, b.Code, b.ImageUrls, b.SourceDemandId)).ToListAsync() };
     }
 
 
@@ -61,6 +61,9 @@ public sealed class DepotBatchRepository(AppDbContext db) : IDepotBatchRepositor
     }
     public Task<InventoryBatch?> FindOperationAsync(Guid id) => db.InventoryBatches.AsNoTracking().Include(b => b.TargetFactory).Include(b => b.DirectOfferFactory).SingleOrDefaultAsync(b => b.Id == id);
     public Task<Factory?> FindActiveFactoryAsync(Guid id) => db.Factories.SingleOrDefaultAsync(f => f.Id == id && f.Owner != null && f.Owner.IsActive);
+    public Task<FactoryDemand?> FindDemandAsync(Guid id) => db.FactoryDemands
+        .FromSqlInterpolated($"SELECT * FROM factory_demands WHERE id = {id} FOR SHARE")
+        .AsNoTracking().SingleOrDefaultAsync();
     public Task<FactoryDepotPartnership?> FindPartnerAsync(Guid depotId, Guid factoryId) => db.FactoryDepotPartnerships.AsNoTracking().SingleOrDefaultAsync(p => p.DepotId == depotId && p.FactoryId == factoryId);
     public Task<string?> FeeConfigurationAsync() => db.SystemConfigs.AsNoTracking()
         .Where(x => x.ConfigKey == "PLATFORM_FEE_PERCENTAGE").Select(x => x.ConfigValue).SingleOrDefaultAsync();

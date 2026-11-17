@@ -79,8 +79,15 @@ public class FactoryDemandService(AppDbContext db) : FactoryServiceBase(db), IFa
         var factory = await CurrentFactory(userId, ct);
         var demand = await Db.FactoryDemands.SingleOrDefaultAsync(x => x.Id == id && x.FactoryId == factory.Id, ct);
         if (demand is null) return ServiceResult.NotFound("Không tìm thấy nhu cầu.");
+        if (await Db.InventoryBatches.AnyAsync(b => b.SourceDemandId == id, ct))
+            return ServiceResult.Conflict("Nhu cầu đã có lô gửi tới; hãy ngừng nhận thay vì xóa để giữ lịch sử giao dịch.");
         Db.FactoryDemands.Remove(demand);
-        await Db.SaveChangesAsync(ct);
+        try { await Db.SaveChangesAsync(ct); }
+        catch (DbUpdateException exception) when (exception.InnerException is Npgsql.PostgresException { SqlState: "23503" })
+        {
+            Db.Entry(demand).State = EntityState.Unchanged;
+            return ServiceResult.Conflict("Nhu cầu vừa có lô gửi tới; hãy ngừng nhận thay vì xóa.");
+        }
         return ServiceResult.Success(message: "Đã xóa nhu cầu.");
     }
 
