@@ -10,7 +10,7 @@ public interface IDepotDispatchRepository
     Task<object> ConfigurationAsync(Guid depot, int page);
     Task<List<DispatchEventCompatDto>> LegacyHistoryAsync(Guid pickup, int page);
     Task<PagedResult<DispatchAreaDto>> AreasAsync(Guid depot, DepotQuery query);
-    Task<PagedResult<DispatchShiftDto>> ShiftsAsync(Guid depot, DepotQuery query, DateTime now, bool availableOnly = false, Guid? excludeEmployeeId = null);
+    Task<PagedResult<DispatchShiftDto>> ShiftsAsync(Guid depot, DepotQuery query, DateTime now, bool availableOnly = false, Guid? excludeEmployeeId = null, DateTime? preferredDatetime = null);
     Task<PagedResult<DispatchPickupDto>> PickupsAsync(Guid depot, DepotQuery query);
     Task<DispatchSummaryDto> SummaryAsync(Guid depot, DateTime now);
     Task<DispatchPickupDto?> DetailAsync(Guid depot, Guid id);
