@@ -32,9 +32,13 @@ public class FactoryDashboardService(AppDbContext db) : FactoryServiceBase(db), 
                 OrderCount = g.Count(),
                 PendingQcCount = g.Count(x =>
                     x.Status == "RECEIVED" || x.Status == "WEIGHED" || x.Status == "DELIVERED" ||
+                    x.Status == "NEGOTIATING" || x.Status == "RETURN_REQUESTED" || x.Status == "RETURNING" ||
+                    (x.Status == "REJECTED" && x.QualityCheck != null) ||
                     ((x.Status == "ACCEPTED" || x.Status == "TRANSPORT_READY" || x.Status == "READY_FOR_PICKUP") &&
                      x.TransportJob != null && x.TransportJob.Status == "DELIVERED")),
-                PendingSettlementCount = g.Count(x => x.Status == "VERIFIED"),
+                PendingSettlementCount = g.Count(x => x.Status == "VERIFIED" || x.Status == "SETTLEMENT_PENDING" ||
+                    x.Status == "SETTLEMENT_DISPUTED" || x.Status == "SETTLEMENT_ACCEPTED" ||
+                    (x.Status == "COMPLETED" && x.SettlementWorkflowVersion > 0)),
                 MonthlyPurchasedKg = g.Sum(x => ((x.Status == "COMPLETED" && x.SettlementWorkflowVersion == 0) || x.Status == "PAID") && x.SettledAt >= monthStart
                     ? x.ActualWeightKg ?? 0 : 0),
                 MonthlyNetPayment = g.Sum(x => ((x.Status == "COMPLETED" && x.SettlementWorkflowVersion == 0) || x.Status == "PAID") && x.SettledAt >= monthStart
@@ -65,6 +69,10 @@ public class FactoryDashboardService(AppDbContext db) : FactoryServiceBase(db), 
             .Select(g => new MaterialVolumeResponse(g.Key, g.Sum(x => x.ActualWeightKg ?? 0))).ToListAsync(ct);
         var pendingQcQuery = FactoryOrderQueries.ForFactory(Db, factory.Id)
             .Where(x => x.Status == "RECEIVED" || x.Status == "WEIGHED" || x.Status == "DELIVERED" || x.Status == "VERIFIED" ||
+                x.Status == "NEGOTIATING" || x.Status == "RETURN_REQUESTED" || x.Status == "RETURNING" ||
+                (x.Status == "REJECTED" && x.QualityCheck != null) ||
+                x.Status == "SETTLEMENT_PENDING" || x.Status == "SETTLEMENT_DISPUTED" || x.Status == "SETTLEMENT_ACCEPTED" ||
+                (x.Status == "COMPLETED" && x.SettlementWorkflowVersion > 0) ||
                 ((x.Status == "ACCEPTED" || x.Status == "TRANSPORT_READY" || x.Status == "READY_FOR_PICKUP") && x.TransportJob != null && x.TransportJob.Status == "DELIVERED"));
         var priority = await pendingQcQuery.OrderByDescending(x => x.CreatedAt).ThenBy(x => x.Id).Take(10).ToListAsync(ct);
         var recent = await FactoryOrderQueries.ForFactory(Db, factory.Id).OrderByDescending(x => x.CreatedAt).ThenBy(x => x.Id).Take(5).ToListAsync(ct);

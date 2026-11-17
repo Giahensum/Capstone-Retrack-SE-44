@@ -35,8 +35,8 @@ public sealed partial class DepotReportRepository
                 LEFT JOIN sources s ON s.batch_id = b.id LEFT JOIN expenses e ON e.batch_id = b.id
                 LEFT JOIN batch_quality_checks q ON q.batch_id = b.id
                 WHERE b.depot_id = {depotId}
-                    AND ((b.settled_at IS NOT NULL AND b.status IN ('COMPLETED', 'PAID')) OR
-                         (b.settled_at IS NULL AND b.status NOT IN ('CANCELLED', 'REJECTED') AND q.is_accepted AND q.payment_proof_url IS NOT NULL))
+                    AND ((b.settled_at IS NOT NULL AND (b.status = 'PAID' OR (b.status = 'COMPLETED' AND b.settlement_workflow_version = 0))) OR
+                         (b.settlement_workflow_version = 0 AND b.settled_at IS NULL AND b.status NOT IN ('CANCELLED', 'REJECTED') AND q.is_accepted AND q.payment_proof_url IS NOT NULL))
                     AND COALESCE(b.settled_at, q.created_at) >= {start} AND COALESCE(b.settled_at, q.created_at) < {end}
                 UNION ALL
                 SELECT 'REUSABLE', x.quantity * x.unit_price, 0, x.quantity * x.unit_price, 0,
