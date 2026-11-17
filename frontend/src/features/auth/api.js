@@ -13,4 +13,12 @@ export const authApi = {
     const res = await api.post('/auth/reset-password', { email, otp, newPassword });
     return res.data;
   },
+  checkPhone: async (phone) => {
+    const res = await api.get('/auth/check-phone', { params: { phone } });
+    return res.data?.data;
+  },
+  checkEmail: async (email) => {
+    const res = await api.get('/auth/check-email', { params: { email } });
+    return res.data?.data;
+  },
 };

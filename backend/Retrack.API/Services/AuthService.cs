@@ -21,6 +21,8 @@ namespace Retrack.API.Services
         Task ForgotPasswordAsync(string email);
         Task<bool> VerifyOtpAsync(string email, string otp);
         Task ResetPasswordAsync(string email, string otp, string newPassword);
+        Task<bool> IsPhoneAvailableAsync(string phone);
+        Task<bool> IsEmailAvailableAsync(string email);
     }
 
     public class AuthService : IAuthService
@@ -70,32 +72,74 @@ namespace Retrack.API.Services
             if (role is not ("SELLER" or "DEPOT_OWNER" or "FACTORY"))
                 throw new ArgumentException("Vai trò không được phép tự đăng ký.");
 
-            var normalizedEmail = dto.Email?.Trim().ToLowerInvariant() ?? string.Empty;
             var fullName = dto.FullName?.Trim() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(fullName))
+                throw new ArgumentException("Họ và tên không được để trống.");
+            if (fullName.Length < 2 || fullName.Length > 100)
+                throw new ArgumentException("Họ và tên phải có độ dài từ 2 đến 100 ký tự.");
+
+            var normalizedEmail = dto.Email?.Trim().ToLowerInvariant() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(normalizedEmail))
+                throw new ArgumentException("Email không được để trống.");
+
+            var emailRegex = new System.Text.RegularExpressions.Regex(@"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$");
+            if (!emailRegex.IsMatch(normalizedEmail))
+                throw new ArgumentException("Email không đúng định dạng.");
+
             var phone = dto.Phone?.Trim() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(phone))
+                throw new ArgumentException("Số điện thoại không được để trống.");
 
-            if (string.IsNullOrWhiteSpace(fullName) || fullName.Length > 255 ||
-                string.IsNullOrWhiteSpace(normalizedEmail) ||
-                !new System.ComponentModel.DataAnnotations.EmailAddressAttribute().IsValid(normalizedEmail) ||
-                dto.Password == null || dto.Password.Length < 6 || Encoding.UTF8.GetByteCount(dto.Password) > 72)
-                throw new ArgumentException("Tên, email hoặc mật khẩu không hợp lệ (mật khẩu ít nhất 6 ký tự, tối đa 72 byte).");
+            var cleanPhone = phone.Replace(" ", "").Replace("-", "").Replace(".", "");
+            if (cleanPhone.StartsWith("+84"))
+                cleanPhone = "0" + cleanPhone.Substring(3);
 
-            var existing = await _userRepo.GetByEmailAsync(normalizedEmail);
-            if (existing != null)
-                throw new InvalidOperationException("Email đã được sử dụng.");
+            var phoneRegex = new System.Text.RegularExpressions.Regex(@"^0(3[2-9]|5[25689]|7[06-9]|8[1-9]|9[0-9])\d{7}$");
+            if (!phoneRegex.IsMatch(cleanPhone))
+                throw new ArgumentException("Số điện thoại không hợp lệ (phải là 10 chữ số thuộc các đầu số di động Việt Nam, VD: 0912345678).");
+
+            // Kiểm tra mật khẩu chuẩn độ an toàn cao
+            ValidatePassword(dto.Password);
+
+            // Kiểm tra trùng lặp Email
+            var existingEmail = await _userRepo.GetByEmailAsync(normalizedEmail);
+            if (existingEmail != null)
+                throw new InvalidOperationException("Email này đã được đăng ký. Vui lòng đăng nhập hoặc sử dụng email khác.");
+
+            // Kiểm tra trùng lặp Số điện thoại
+            var existingPhone = await _userRepo.GetByPhoneAsync(cleanPhone);
+            if (existingPhone != null)
+                throw new InvalidOperationException("Số điện thoại này đã được đăng ký trong hệ thống. Vui lòng đăng nhập hoặc sử dụng số khác.");
 
             var user = new User
             {
                 Email = normalizedEmail,
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password),
                 FullName = fullName,
-                Phone = phone,
+                Phone = cleanPhone,
                 Role = role,
                 IsActive = true
             };
 
             await _userRepo.CreateAsync(user);
             return BuildResponse(user);
+        }
+
+        public async Task<bool> IsPhoneAvailableAsync(string phone)
+        {
+            if (string.IsNullOrWhiteSpace(phone)) return false;
+            var clean = phone.Trim().Replace(" ", "").Replace("-", "").Replace(".", "");
+            if (clean.StartsWith("+84")) clean = "0" + clean.Substring(3);
+            var user = await _userRepo.GetByPhoneAsync(clean);
+            return user == null;
+        }
+
+        public async Task<bool> IsEmailAvailableAsync(string email)
+        {
+            if (string.IsNullOrWhiteSpace(email)) return false;
+            var clean = email.Trim().ToLowerInvariant();
+            var user = await _userRepo.GetByEmailAsync(clean);
+            return user == null;
         }
 
         // ── Google OAuth Login ──────────────────────────────────────────
@@ -192,8 +236,7 @@ namespace Retrack.API.Services
 
         public async Task ResetPasswordAsync(string email, string otp, string newPassword)
         {
-            if (string.IsNullOrWhiteSpace(newPassword) || newPassword.Length < 6 || Encoding.UTF8.GetByteCount(newPassword) > 72)
-                throw new ArgumentException("Mật khẩu mới phải có ít nhất 6 ký tự và tối đa 72 byte.");
+            ValidatePassword(newPassword);
 
             if (_otpRepo == null)
                 throw new InvalidOperationException("OTP repository is not configured.");
@@ -215,6 +258,36 @@ namespace Retrack.API.Services
             // Đánh dấu mã OTP đã được dùng
             validOtp.IsUsed = true;
             await _otpRepo.SaveChangesAsync();
+        }
+
+        private static void ValidatePassword(string? password)
+        {
+            if (string.IsNullOrEmpty(password))
+                throw new ArgumentException("Mật khẩu không được để trống.");
+
+            if (password.Length < 8)
+                throw new ArgumentException("Mật khẩu phải có ít nhất 8 ký tự.");
+
+            if (password.Length > 64)
+                throw new ArgumentException("Mật khẩu không được vượt quá 64 ký tự.");
+
+            if (Encoding.UTF8.GetByteCount(password) > 72)
+                throw new ArgumentException("Mật khẩu quá dài (vượt quá 72 byte).");
+
+            if (password.Contains(" "))
+                throw new ArgumentException("Mật khẩu không được chứa khoảng trắng.");
+
+            if (!password.Any(char.IsUpper))
+                throw new ArgumentException("Mật khẩu phải chứa ít nhất 1 chữ cái in hoa (A-Z).");
+
+            if (!password.Any(char.IsLower))
+                throw new ArgumentException("Mật khẩu phải chứa ít nhất 1 chữ cái thường (a-z).");
+
+            if (!password.Any(char.IsDigit))
+                throw new ArgumentException("Mật khẩu phải chứa ít nhất 1 chữ số (0-9).");
+
+            if (!password.Any(ch => !char.IsLetterOrDigit(ch)))
+                throw new ArgumentException("Mật khẩu phải chứa ít nhất 1 ký tự đặc biệt (@, #, $, %, !, &, *, ...).");
         }
 
         // ── Helpers ─────────────────────────────────────────────────────
