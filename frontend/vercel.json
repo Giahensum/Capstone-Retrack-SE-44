@@ -7,7 +7,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "http://retrack-api-se44.japaneast.cloudapp.azure.com:8080/api/:path*"
+      "destination": "https://api.160.191.242.187.sslip.io/api/:path*"
     },
     {
       "source": "/(.*)",

@@ -59,6 +59,14 @@ services:
       PayOS__CancelUrl: ${PAYOS_CANCEL_URL:-http://localhost:5173/depot/payments/fees?payos=cancel}
       PayOS__PollSeconds: ${PAYOS_POLL_SECONDS:-15}
       AiService__Url: ${AI_SERVICE_URL:-http://127.0.0.1:5005}
+      # Ký điện tử hợp đồng (DocuSign sandbox); để trống thì tính năng tắt
+      DocuSign__IntegrationKey: ${DOCUSIGN_INTEGRATION_KEY:-}
+      DocuSign__UserId: ${DOCUSIGN_USER_ID:-}
+      DocuSign__AccountId: ${DOCUSIGN_ACCOUNT_ID:-}
+      DocuSign__BaseUri: ${DOCUSIGN_BASE_URI:-https://demo.docusign.net}
+      DocuSign__OAuthHost: ${DOCUSIGN_OAUTH_HOST:-account-d.docusign.com}
+      DocuSign__PrivateKeyBase64: ${DOCUSIGN_PRIVATE_KEY_BASE64:-}
+      DocuSign__WebhookUrl: ${DOCUSIGN_WEBHOOK_URL:-}
       VerificationScanner__Mode: ${VERIFICATION_SCANNER_MODE:-Disabled}
       VerificationStorage__Provider: ${VERIFICATION_STORAGE_PROVIDER:-Database}
     ports:

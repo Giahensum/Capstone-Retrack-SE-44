@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Chuẩn bị VPS lần đầu cho RETRACK (chạy TRÊN VPS, quyền root, MỘT LẦN):
-#   bash /opt/retrack/server-setup.sh [--with-swap]
+#   bash /opt/retrack/server-setup.sh [--with-swap] [--enable-https]
 # Việc làm: cài Docker nếu thiếu → tạo thư mục → sinh .env.production với mật khẩu/khoá ngẫu nhiên → mở cổng tường lửa (nếu có ufw) → (tuỳ chọn) tạo swap 2 GB.
 # KHÔNG xoá gì, KHÔNG đụng tới hệ thống khác trên máy. Chạy lại an toàn: không ghi đè .env.production đã có.
 set -euo pipefail
@@ -11,9 +11,11 @@ cd "$DIR"
 [ -f .env.production.example ] || { echo "Không thấy $DIR/.env.production.example — hãy chép thư mục deploy/ lên $DIR trước (xem deploy/README.md)"; exit 1; }
 
 WITH_SWAP=0
+ENABLE_HTTPS=0
 for a in "$@"; do
   case "$a" in
     --with-swap) WITH_SWAP=1 ;;
+    --enable-https) ENABLE_HTTPS=1 ;;   # đặt DOMAIN=api.<IP>.sslip.io + API_BIND=127.0.0.1 (Caddy tự xin HTTPS), như FITLY
     *) echo "Tham số không hợp lệ: $a"; exit 2 ;;
   esac
 done
@@ -39,6 +41,23 @@ else
   done
   chmod 600 .env.production
   echo ">> Đã tạo .env.production (quyền 600) với mật khẩu Postgres và JWT_KEY ngẫu nhiên"
+fi
+
+if [ "$ENABLE_HTTPS" -eq 1 ]; then
+  # Không có tên miền riêng: sslip.io phân giải api.<IP-bằng-dấu-chấm>.sslip.io về đúng IP đó, đủ để Caddy xin chứng chỉ Let's Encrypt.
+  IP=$(curl -4fsS --max-time 10 https://api.ipify.org 2>/dev/null || true)
+  if ! echo "$IP" | grep -Eq '^[0-9]{1,3}(\.[0-9]{1,3}){3}$'; then
+    echo "Không lấy được IPv4 công khai của máy — tự điền DOMAIN=api.<IP>.sslip.io trong .env.production rồi chạy lại"; exit 1
+  fi
+  CUR=$(grep -E '^DOMAIN=' .env.production | cut -d= -f2- || true)
+  if [ -n "$CUR" ]; then
+    echo ">> DOMAIN đã có ($CUR) — giữ nguyên"
+  else
+    sed -i "s|^DOMAIN=.*|DOMAIN=api.${IP}.sslip.io|" .env.production
+    echo ">> Đặt DOMAIN=api.${IP}.sslip.io"
+  fi
+  sed -i 's|^API_BIND=.*|API_BIND=127.0.0.1|' .env.production   # chỉ Caddy (80/443) nhận kết nối từ ngoài; API chỉ nghe loopback
+  echo ">> Đặt API_BIND=127.0.0.1. Cổng 80 và 443 phải mở trong firewall của nhà cung cấp VPS."
 fi
 
 if [ "$WITH_SWAP" -eq 1 ]; then
