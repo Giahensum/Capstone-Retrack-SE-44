@@ -154,6 +154,7 @@ public sealed class BatchService(IDepotBatchRepository batches, IDepotUnitOfWork
         batch.DepotPaymentConfirmedAt = DateTime.UtcNow;
         batch.DepotPaymentConfirmedBy = ownerId;
         batch.UpdatedAt = DateTime.UtcNow;
+        await batches.QueuePaymentConfirmedNoticeAsync(batch);
         await work.SaveAsync();
         await tx.CommitAsync();
     }

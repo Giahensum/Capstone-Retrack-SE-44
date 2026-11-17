@@ -41,7 +41,8 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         var batchIds = await db.InventoryBatches.Where(b => b.DepotId == depotId).Select(b => b.Id).ToListAsync();
         var transportIds = await db.TransportJobs.Where(t => batchIds.Contains(t.BatchId)).Select(t => t.Id).ToListAsync();
         await db.PlatformTransactions.Where(t => t.SourceType == "BATCH_ORDER" && batchIds.Contains(t.SourceId)).ExecuteDeleteAsync();
-        await db.Notifications.Where(n => n.TransportJobId != null && transportIds.Contains(n.TransportJobId.Value)).ExecuteDeleteAsync();
+        await db.Notifications.Where(n => (n.TransportJobId != null && transportIds.Contains(n.TransportJobId.Value)) ||
+            (n.BatchId != null && batchIds.Contains(n.BatchId.Value))).ExecuteDeleteAsync();
         await db.TransportJobs.Where(t => t.Batch.DepotId == depotId).ExecuteDeleteAsync();
         await db.InventoryBatches.Where(b => b.DepotId == depotId).ExecuteDeleteAsync();
         await db.FactoryDepotPartnerships.Where(p => p.DepotId == depotId).ExecuteDeleteAsync();
@@ -535,6 +536,12 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         await Batches(db).ConfirmPaymentAsync(ownerId, depotId, first.Id, settled.Data.NetPayableAmount, "SIM-FACTORY-001");
         Assert.Equal("PAID", (await orders.GetAsync(factoryOwnerId, first.Id, default)).Data!.Status);
         Assert.NotNull((await Batches(db).DetailAsync(ownerId, depotId, first.Id)).Settlement!.PaymentConfirmedAt);
+        var notifications = new Retrack.API.Services.Factory.FactoryNotificationService(db);
+        var factoryNotices = await notifications.ListAsync(factoryOwnerId, 1, 20, false, default);
+        var paymentNotice = Assert.Single(factoryNotices.Items, x => x.BatchId == first.Id && x.Title == "Vựa đã xác nhận nhận tiền");
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => notifications.ListAsync(ownerId, 1, 20, false, default));
+        await notifications.MarkReadAsync(factoryOwnerId, paymentNotice.Id, true, default);
+        Assert.True((await notifications.ListAsync(factoryOwnerId, 1, 20, false, default)).Items.Single(x => x.Id == paymentNotice.Id).IsRead);
 
         var followUp = Input(40); followUp.TargetFactoryId = factory.Id;
         Assert.Equal("TRANSPORT_READY", (await Batches(db).CreateAsync(ownerId, depotId, followUp)).Status);
