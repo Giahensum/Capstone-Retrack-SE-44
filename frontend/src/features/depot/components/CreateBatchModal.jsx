@@ -1,5 +1,5 @@
 import { materialLabel } from '../materialLabels';
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { useDepotQuery, useDepotMutation, number, money, date } from '../depotApi';
 import { Dialog, QueryState, MutationError, inputClass, buttonClass, Pager } from './DepotUI';
 
@@ -7,6 +7,7 @@ export default function CreateBatchModal({ isOpen, onClose, initialMaterial = ''
   return isOpen ? <CreateBatchForm onClose={onClose} initialMaterial={initialMaterial} initialFactoryId={initialFactoryId} initialDemand={initialDemand} /> : null;
 }
 function CreateBatchForm({ onClose, initialMaterial, initialFactoryId, initialDemand }) {
+  const formId = useId();
   const [form, setForm] = useState({ operationId: crypto.randomUUID(), materialType: initialMaterial, weightKg: '', description: '', targetFactoryId: initialFactoryId, sourceDemandId: initialDemand?.id ?? null });
   const [strategy, setStrategy] = useState(initialFactoryId ? 'direct' : 'public');
   const [factorySearch, setFactorySearch] = useState('');
@@ -31,8 +32,11 @@ function CreateBatchForm({ onClose, initialMaterial, initialFactoryId, initialDe
   const selectedFactoryUnavailable = strategy === 'direct' && !selectedFactory;
   const maximumWeight = initialDemand ? Math.min(available, initialDemand.requiredWeightKg) : available;
   const field = (key, value) => setForm({ ...form, [key]: value });
-  return <Dialog title="Tạo Lô Xuất Hàng" onClose={onClose} busy={save.isPending} wide>
-    <form className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4" onSubmit={(e) => {
+  return <Dialog title="Tạo Lô Xuất Hàng" onClose={onClose} busy={save.isPending} wide footer={<div className="flex flex-wrap justify-end gap-3">
+    <button type="button" className={buttonClass} onClick={onClose} disabled={save.isPending}>Hủy bỏ</button>
+    <button type="submit" form={formId} className={buttonClass} disabled={save.isPending || stock.isPending || stock.isError || !!photoError || available <= 0 || selectedFactoryBlocked || selectedFactoryUnavailable || strategy === 'direct' && (factories.isPending || factories.isError)}>{save.isPending ? 'Đang tạo…' : 'Tạo lô xuất hàng'}</button>
+  </div>}>
+    <form id={formId} className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4" onSubmit={(e) => {
       e.preventDefault();
       const body = { ...form, weightKg: Number(form.weightKg), targetFactoryId: strategy === 'direct' ? form.targetFactoryId : null };
       if (photos.length === 0) return save.mutate({ body });
@@ -79,8 +83,6 @@ function CreateBatchForm({ onClose, initialMaterial, initialFactoryId, initialDe
       </div>
       <p className="text-sm text-d-on-surface-variant sm:col-span-2">Giá được thỏa thuận sau QC tại nhà máy. Khối lượng tạo lô sẽ được giữ khỏi tồn khả dụng.</p>
       <div className="sm:col-span-2"><MutationError mutation={save} /></div>
-      <div className="sm:col-span-2 sticky bottom-0 z-10 -mx-4 sm:-mx-6 -mb-4 sm:-mb-6 px-4 sm:px-6 py-3 bg-d-surface border-t border-d-border-subtle flex flex-wrap justify-end gap-3"><button type="button" className={buttonClass} onClick={onClose} disabled={save.isPending}>Hủy bỏ</button>
-        <button className={buttonClass} disabled={save.isPending || stock.isPending || stock.isError || !!photoError || available <= 0 || selectedFactoryBlocked || selectedFactoryUnavailable || strategy === 'direct' && (factories.isPending || factories.isError)}>{save.isPending ? 'Đang tạo…' : 'Tạo lô xuất hàng'}</button></div>
     </form>
   </Dialog>;
 }
