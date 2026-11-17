@@ -13,6 +13,7 @@ public class DepotQuery
 
 public sealed class FactorySearchQuery : DepotQuery
 {
+    public Guid? FactoryId { get; set; }
     [Range(1, 2000)] public double? MaxDistanceKm { get; set; }
     public bool NearestFirst { get; set; }
     [StringLength(100)] public string? MaterialType { get; set; }

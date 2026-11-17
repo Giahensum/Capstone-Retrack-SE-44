@@ -36,6 +36,6 @@ public sealed class UpdateStaffDto
     public bool IsActive { get; set; }
 }
 public record FactoryPartnerDto(Guid Id, string Name, string Address, decimal Rating, string? PartnershipStatus,
-    string AcceptedMaterialsCsv, double? DistanceKm);
+    string AcceptedMaterialsCsv, double? DistanceKm, bool CanDirectDelivery = false);
 public record DemandDto(Guid Id, Guid FactoryId, string FactoryName, string MaterialType, decimal RequiredWeightKg,
     decimal? MinPricePerKg, decimal? MaxPricePerKg, DateTime Deadline, bool IsBlocked);

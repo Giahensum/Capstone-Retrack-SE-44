@@ -656,6 +656,7 @@ export function Partners({ navigate }) {
       </div>
       <div className="partner-grid">
         {depots.map((d) => {
+            const contractExpired = d.contractStatus === "ACTIVE" && d.contractExpiresAt && new Date(d.contractExpiresAt) <= new Date();
             return (
               <Card
                 key={d.id}
@@ -691,13 +692,13 @@ export function Partners({ navigate }) {
                   {d.contractTerms && <Button secondary onClick={() => setContractView(d)}>Xem hợp đồng</Button>}
                   {d.contractStatus === "ACTIVE" && !["PENDING_DEPOT", "PENDING_FACTORY"].includes(d.terminationStatus) && <Button danger onClick={() => setTermination({ ...d, mode: "request", reason: "" })}>Đề nghị chấm dứt</Button>}
                   {d.terminationStatus === "PENDING_FACTORY" && <Button danger onClick={() => setTermination({ ...d, mode: "decision" })}>Xử lý đề nghị chấm dứt</Button>}
-                  {d.status !== "BLOCKED" && d.contractStatus !== "ACTIVE" && <><Button onClick={() => setContract({ ...d, terms: d.contractTerms || `HỢP ĐỒNG HỢP TÁC THU MUA NGUYÊN LIỆU TÁI CHẾ\n\nBên mua: Nhà máy trên hệ thống RETRACK.\nBên bán: ${d.name}.\n\nHai bên thống nhất giao nhận nguyên liệu theo từng lô trên RETRACK; khối lượng và chất lượng được chốt theo kết quả cân và KCS; đơn giá, VAT, phí nền tảng và thanh toán được ghi nhận riêng cho từng lô. Hai bên cam kết cung cấp thông tin hợp pháp, bảo mật dữ liệu và xử lý tranh chấp theo pháp luật Việt Nam.`, validMonths: 12, confirmed: false })}>{d.contractStatus === "PENDING_DEPOT" ? "Cập nhật và gửi lại" : "Lập hợp đồng điện tử"}</Button>
+                  {d.status !== "BLOCKED" && (d.contractStatus !== "ACTIVE" || contractExpired) && <><Button onClick={() => setContract({ ...d, terms: d.contractTerms || `HỢP ĐỒNG HỢP TÁC THU MUA NGUYÊN LIỆU TÁI CHẾ\n\nBên mua: Nhà máy trên hệ thống RETRACK.\nBên bán: ${d.name}.\n\nHai bên thống nhất giao nhận nguyên liệu theo từng lô trên RETRACK; khối lượng và chất lượng được chốt theo kết quả cân và KCS; đơn giá, VAT, phí nền tảng và thanh toán được ghi nhận riêng cho từng lô. Hai bên cam kết cung cấp thông tin hợp pháp, bảo mật dữ liệu và xử lý tranh chấp theo pháp luật Việt Nam.`, validMonths: 12, confirmed: false })}>{contractExpired ? "Đề nghị gia hạn hợp đồng" : d.contractStatus === "PENDING_DEPOT" ? "Cập nhật và gửi lại" : "Lập hợp đồng điện tử"}</Button>
                   <Button secondary onClick={() => setChange({...d, action:'DECLINED', title:'Không hợp tác lâu dài?', message:'Các lô sau phải qua quy trình duyệt lô đầu. Quyết định này không hủy lô đã nhận và không chặn mọi giao dịch.'})}>Không hợp tác</Button></>}
                   <Button danger={!d.blockedByFactory} onClick={() => setChange({...d, action:d.blockedByFactory?'UNBLOCKED':'BLOCKED', title:d.blockedByFactory?'Bỏ chặn của nhà máy?':'Chặn vựa?', message:d.blockedByFactory?'Chỉ bỏ chặn của nhà máy. Kho còn chặn hoặc trạng thái chặn cũ chưa đối chiếu thì vẫn không giao dịch mới.':'Ngừng nhận lô mới; không tự hủy các lô đang xử lý.'})}>{d.blockedByFactory?'Bỏ chặn của nhà máy':'Chặn vựa'}</Button>
                   {d.blockedByDepot && <p>Kho đang chặn giao dịch.</p>}{d.legacyBlocked && <p>Trạng thái chặn cũ cần đối chiếu với quản trị viên.</p>}
                 </div>
                 {d.comment && <p className="review">Đánh giá gần nhất: {d.comment}</p>}
-                {d.contractStatus && <p className="muted">Hợp đồng {d.contractCode || ""}: {{ PENDING_DEPOT: "Chờ chủ vựa ký", ACTIVE: "Đang hiệu lực", REJECTED: "Đã bị từ chối", TERMINATED: "Đã chấm dứt" }[d.contractStatus] || d.contractStatus}</p>}
+                {d.contractStatus && <p className="muted">Hợp đồng {d.contractCode || ""}: {contractExpired ? "Đã hết hạn" : { PENDING_DEPOT: "Chờ chủ vựa ký", ACTIVE: "Đang hiệu lực", REJECTED: "Đã bị từ chối", TERMINATED: "Đã chấm dứt" }[d.contractStatus] || d.contractStatus}</p>}
                 {d.terminationStatus === "PENDING_DEPOT" && <p className="info-box warning">Đang chờ chủ vựa xác nhận đề nghị chấm dứt.</p>}
                 {d.terminationStatus === "PENDING_FACTORY" && <p className="info-box warning">Chủ vựa đề nghị chấm dứt: {d.terminationReason}</p>}
               </Card>

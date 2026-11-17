@@ -31,7 +31,8 @@ public sealed class DepotPartnershipRepository(AppDbContext db) : IDepotPartners
     public Task LockDepotAsync(Guid depotId, CancellationToken ct) => db.Depots.FromSqlInterpolated($"SELECT * FROM depots WHERE id = {depotId} FOR UPDATE").LoadAsync(ct);
     public Task<bool> HasOpenOrdersAsync(Guid depotId, Guid factoryId, CancellationToken ct) =>
         db.InventoryBatches.AnyAsync(x => x.DepotId == depotId && x.TargetFactoryId == factoryId &&
-            x.Status != "COMPLETED" && x.Status != "PAID" && x.Status != "REJECTED" && x.Status != "CANCELLED", ct);
+            x.Status != "COMPLETED" && x.Status != "PAID" && x.Status != "CANCELLED" && x.Status != "RETURNED" &&
+            (x.Status != "REJECTED" || x.QualityCheck != null || x.FactoryReceivedAt != null), ct);
     public async Task QueueFactoryNoticeAsync(FactoryDepotPartnership partner, string title, string message, CancellationToken ct)
     {
         var ownerId = await db.Factories.AsNoTracking().Where(x => x.Id == partner.FactoryId)

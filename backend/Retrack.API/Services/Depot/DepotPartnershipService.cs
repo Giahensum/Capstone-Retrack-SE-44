@@ -52,6 +52,8 @@ public sealed class DepotPartnershipService(IDepotService scope, IDepotPartnersh
         if (partnership.ContractStatus != "PENDING_DEPOT" || string.IsNullOrWhiteSpace(partnership.ContractTermsHash))
             throw new DepotConflictException("Không có hợp đồng đang chờ chủ vựa xác nhận.");
         var now = DateTime.UtcNow;
+        if (decision == "ACCEPT" && partnership.ContractExpiresAt.HasValue && partnership.ContractExpiresAt <= now)
+            throw new DepotConflictException("Đề nghị hợp đồng đã hết hạn. Hãy yêu cầu nhà máy cập nhật và gửi lại trước khi ký.");
         partnership.ContractStatus = decision == "ACCEPT" ? "ACTIVE" : "REJECTED";
         partnership.Status = decision == "ACCEPT" ? "APPROVED" : "DECLINED";
         partnership.DepotSignedBy = decision == "ACCEPT" ? ownerId : null;
