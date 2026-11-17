@@ -6,6 +6,7 @@ import logging
 from typing import Optional, List
 from fastapi import FastAPI, File, UploadFile, HTTPException, Form
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import torch
 import torchvision.transforms as transforms
@@ -154,6 +155,9 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 WEIGHTS_PATH = os.path.join(BASE_DIR, 'model.pth')
 YOLO_PATH = os.path.join(BASE_DIR, 'yolov8n.pt')
 
+DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+logger.info(f"Khoi tao ReTrack AI tren thiet bi: {DEVICE}")
+
 logger.info("Dang khoi tao EfficientNet-B4...")
 classifier_model = models.efficientnet_b4(weights=None)
 classifier_model.classifier[1] = torch.nn.Linear(classifier_model.classifier[1].in_features, 12)
@@ -176,12 +180,13 @@ else:
     if os.environ.get('AI_REQUIRE_WEIGHTS', '').lower() == 'true':
         raise RuntimeError('Thiếu model.pth; cần mount model đã huấn luyện trước khi chạy container.')
 classifier_model.eval()
+classifier_model = classifier_model.to(DEVICE)
 
 logger.info("Dang khoi tao YOLOv8n...")
 yolo_model = YOLO(YOLO_PATH if os.path.exists(YOLO_PATH) else 'yolov8n.pt')
 
 logger.info("Dang khoi tao EasyOCR...")
-ocr_reader = easyocr.Reader(['vi', 'en'], gpu=False)
+ocr_reader = easyocr.Reader(['vi', 'en'], gpu=torch.cuda.is_available())
 
 # Transforms
 img_transform = transforms.Compose([
@@ -191,75 +196,66 @@ img_transform = transforms.Compose([
 ])
 
 # Heuristics & Crop configs
-YOLO_CONF_THRESH   = 0.20
-MIN_BOX_AREA_RATIO = 0.02
-CENTER_CROP_RATIO  = 0.65
+YOLO_CONF_THRESH   = 0.35
+MIN_BOX_AREA_RATIO = 0.03
+CENTER_CROP_RATIO  = 0.85
 CROP_PADDING       = 0.08
 
 # ── Bảng ánh xạ tri thức ngữ nghĩa từ 80 lớp COCO của YOLOv8 sang 12 nhóm rác ReTrack ──
 # Cơ chế Multi-Model Knowledge Stacking (Late Fusion Ensemble)
 YOLO_TO_RETRACK_PRIOR = {
     # 1. Chai lọ & đồ chứa
-    'bottle': {'plastic': 3.2, 'white-glass': 2.2, 'brown-glass': 1.8, 'green-glass': 1.8, 'cardboard': -3.5, 'paper': -3.0, 'clothes': -3.0, 'biological': -3.0, 'shoes': -3.0},
-    'wine glass': {'white-glass': 3.5, 'green-glass': 2.5, 'brown-glass': 2.2, 'plastic': 1.0, 'cardboard': -3.5, 'paper': -3.0, 'clothes': -3.0},
-    'cup': {'plastic': 2.8, 'paper': 2.2, 'white-glass': 1.8, 'metal': 1.2, 'cardboard': -2.0, 'clothes': -3.0},
-    'bowl': {'white-glass': 2.2, 'plastic': 2.2, 'metal': 1.8, 'cardboard': -2.5, 'clothes': -3.0},
-    'vase': {'white-glass': 3.0, 'brown-glass': 2.2, 'green-glass': 2.2, 'plastic': 1.5, 'cardboard': -3.0, 'paper': -3.0, 'clothes': -3.0},
+    'bottle': {'plastic': 2.5, 'white-glass': 2.0, 'brown-glass': 1.8, 'green-glass': 1.8, 'cardboard': -2.5, 'paper': -2.5, 'clothes': -2.5, 'biological': -2.5, 'shoes': -2.5},
+    'wine glass': {'white-glass': 3.0, 'green-glass': 2.2, 'brown-glass': 2.0, 'plastic': 1.0, 'cardboard': -2.5, 'paper': -2.5, 'clothes': -2.5},
+    'cup': {'plastic': 2.2, 'paper': 1.8, 'white-glass': 1.5, 'metal': 1.2, 'cardboard': -2.0, 'clothes': -2.5},
+    'bowl': {'white-glass': 2.0, 'plastic': 2.0, 'metal': 1.5, 'cardboard': -2.0, 'clothes': -2.5},
+    'vase': {'white-glass': 2.8, 'brown-glass': 2.0, 'green-glass': 2.0, 'plastic': 1.2, 'cardboard': -2.5, 'paper': -2.5, 'clothes': -2.5},
 
     # 2. Dụng cụ kim loại
-    'fork': {'metal': 4.5, 'plastic': 1.0, 'cardboard': -3.0, 'paper': -3.0, 'clothes': -3.0},
-    'knife': {'metal': 4.5, 'plastic': 1.0, 'cardboard': -3.0, 'paper': -3.0, 'clothes': -3.0},
-    'spoon': {'metal': 4.5, 'plastic': 1.0, 'cardboard': -3.0, 'paper': -3.0, 'clothes': -3.0},
-    'scissors': {'metal': 5.0, 'plastic': 1.0, 'cardboard': -3.0, 'paper': -3.0, 'clothes': -3.0},
+    'fork': {'metal': 4.0, 'cardboard': -2.5, 'paper': -2.5, 'clothes': -2.5},
+    'knife': {'metal': 4.0, 'cardboard': -2.5, 'paper': -2.5, 'clothes': -2.5},
+    'spoon': {'metal': 4.0, 'cardboard': -2.5, 'paper': -2.5, 'clothes': -2.5},
+    'scissors': {'metal': 4.5, 'cardboard': -2.5, 'paper': -2.5, 'clothes': -2.5},
 
     # 3. Giấy & sách báo
-    'book': {'paper': 5.0, 'cardboard': -2.0, 'plastic': -3.0, 'metal': -3.0, 'clothes': -3.0, 'biological': -3.0},
+    'book': {'paper': 4.5, 'cardboard': -1.5, 'plastic': -2.5, 'metal': -2.5, 'clothes': -2.5, 'biological': -2.5},
 
     # 4. Rác điện tử & pin
-    'laptop': {'battery': 4.5, 'plastic': 1.2, 'metal': 1.5, 'paper': -3.5, 'cardboard': -3.5, 'clothes': -3.5},
-    'mouse': {'battery': 4.0, 'plastic': 2.0, 'cardboard': -3.0, 'paper': -3.0},
-    'remote': {'battery': 4.2, 'plastic': 2.0, 'cardboard': -3.0, 'paper': -3.0},
-    'keyboard': {'battery': 4.0, 'plastic': 2.0, 'cardboard': -3.0, 'paper': -3.0},
-    'cell phone': {'battery': 4.8, 'plastic': 1.2, 'metal': 1.5, 'cardboard': -3.5, 'paper': -3.5},
-    'clock': {'battery': 3.8, 'metal': 2.0, 'plastic': 1.5, 'cardboard': -2.5},
-    'microwave': {'metal': 3.5, 'battery': 2.5, 'plastic': 1.2},
-    'oven': {'metal': 3.5, 'battery': 2.5},
-    'toaster': {'metal': 3.8, 'battery': 2.2, 'plastic': 1.2},
-    'refrigerator': {'metal': 3.5, 'battery': 2.5, 'plastic': 1.5},
-    'hair drier': {'metal': 2.5, 'battery': 2.5, 'plastic': 1.8},
+    'laptop': {'battery': 4.0, 'plastic': 1.2, 'metal': 1.5, 'paper': -2.5, 'cardboard': -2.5, 'clothes': -2.5},
+    'mouse': {'battery': 3.5, 'plastic': 1.8, 'cardboard': -2.5, 'paper': -2.5},
+    'remote': {'battery': 3.8, 'plastic': 1.8, 'cardboard': -2.5, 'paper': -2.5},
+    'keyboard': {'battery': 3.5, 'plastic': 1.8, 'cardboard': -2.5, 'paper': -2.5},
 
     # 5. Vải vóc, trang phục
-    'backpack': {'clothes': 4.5, 'cardboard': -2.5, 'metal': -3.0, 'paper': -3.0},
-    'handbag': {'clothes': 4.5, 'cardboard': -2.5, 'metal': -3.0, 'paper': -3.0},
-    'suitcase': {'clothes': 4.0, 'plastic': 1.8, 'cardboard': -2.5},
-    'tie': {'clothes': 4.8, 'cardboard': -3.0},
-    'umbrella': {'clothes': 3.0, 'metal': 2.0, 'cardboard': -2.5},
-    'teddy bear': {'clothes': 4.5, 'cardboard': -3.0},
+    'backpack': {'clothes': 4.0, 'cardboard': -2.0, 'metal': -2.5, 'paper': -2.5},
+    'handbag': {'clothes': 4.0, 'cardboard': -2.0, 'metal': -2.5, 'paper': -2.5},
+    'suitcase': {'clothes': 3.5, 'cardboard': -2.0},
+    'tie': {'clothes': 4.0, 'cardboard': -2.5},
+    'teddy bear': {'clothes': 4.0, 'cardboard': -2.5},
 
     # 6. Rác hữu cơ / Thức ăn thừa
-    'banana': {'biological': 5.5, 'plastic': -3.0, 'paper': -3.0, 'metal': -3.0, 'cardboard': -3.0},
-    'apple': {'biological': 5.5, 'plastic': -3.0, 'paper': -3.0, 'metal': -3.0, 'cardboard': -3.0},
-    'sandwich': {'biological': 5.5, 'plastic': -3.0, 'paper': -3.0, 'metal': -3.0, 'cardboard': -3.0},
-    'orange': {'biological': 5.5, 'plastic': -3.0, 'paper': -3.0, 'metal': -3.0, 'cardboard': -3.0},
-    'broccoli': {'biological': 5.5, 'plastic': -3.0, 'paper': -3.0, 'metal': -3.0, 'cardboard': -3.0},
-    'carrot': {'biological': 5.5, 'plastic': -3.0, 'paper': -3.0, 'metal': -3.0, 'cardboard': -3.0},
-    'hot dog': {'biological': 5.5, 'plastic': -3.0, 'paper': -3.0, 'metal': -3.0, 'cardboard': -3.0},
-    'pizza': {'biological': 5.5, 'plastic': -3.0, 'paper': -3.0, 'metal': -3.0, 'cardboard': -3.0},
-    'donut': {'biological': 5.5, 'plastic': -3.0, 'paper': -3.0, 'metal': -3.0, 'cardboard': -3.0},
-    'cake': {'biological': 5.5, 'plastic': -3.0, 'paper': -3.0, 'metal': -3.0, 'cardboard': -3.0},
-    'potted plant': {'biological': 4.2, 'plastic': 1.5, 'paper': -3.0},
+    'banana': {'biological': 5.0, 'plastic': -2.5, 'paper': -2.5, 'metal': -2.5, 'cardboard': -2.5},
+    'apple': {'biological': 5.0, 'plastic': -2.5, 'paper': -2.5, 'metal': -2.5, 'cardboard': -2.5},
+    'sandwich': {'biological': 5.0, 'plastic': -2.5, 'paper': -2.5, 'metal': -2.5, 'cardboard': -2.5},
+    'orange': {'biological': 5.0, 'plastic': -2.5, 'paper': -2.5, 'metal': -2.5, 'cardboard': -2.5},
+    'broccoli': {'biological': 5.0, 'plastic': -2.5, 'paper': -2.5, 'metal': -2.5, 'cardboard': -2.5},
+    'carrot': {'biological': 5.0, 'plastic': -2.5, 'paper': -2.5, 'metal': -2.5, 'cardboard': -2.5},
+    'hot dog': {'biological': 5.0, 'plastic': -2.5, 'paper': -2.5, 'metal': -2.5, 'cardboard': -2.5},
+    'pizza': {'biological': 5.0, 'plastic': -2.5, 'paper': -2.5, 'metal': -2.5, 'cardboard': -2.5},
+    'donut': {'biological': 5.0, 'plastic': -2.5, 'paper': -2.5, 'metal': -2.5, 'cardboard': -2.5},
+    'cake': {'biological': 5.0, 'plastic': -2.5, 'paper': -2.5, 'metal': -2.5, 'cardboard': -2.5},
+    'potted plant': {'biological': 3.5, 'plastic': 1.2, 'paper': -2.5},
 
     # 7. Đồ dùng nhựa & khác
-    'toothbrush': {'plastic': 4.2, 'cardboard': -3.0, 'paper': -3.0},
-    'sports ball': {'plastic': 3.5, 'shoes': 1.2, 'trash': 1.5},
-    'frisbee': {'plastic': 4.0, 'cardboard': -3.0},
+    'toothbrush': {'plastic': 3.5, 'cardboard': -2.5, 'paper': -2.5},
+    'frisbee': {'plastic': 3.5, 'cardboard': -2.5},
 }
 
 
 def _get_yolo_semantic_prior(cls_name: Optional[str], conf: float) -> np.ndarray:
     """Chuyển đổi dự đoán nhãn vật thể từ YOLO thành vector logit prior 12 chiều cho ReTrack."""
     prior = np.zeros(12, dtype=np.float32)
-    if not cls_name or conf <= 0.0:
+    if not cls_name or conf < YOLO_CONF_THRESH:
         return prior
     mapping = YOLO_TO_RETRACK_PRIOR.get(cls_name.lower())
     if not mapping:
@@ -278,64 +274,51 @@ def _apply_visual_heuristics(logits_np, crop_img, ocr_text=''):
     if crop_img is None or crop_img.size == 0:
         return boost
 
+    # 1. Phân tích OCR nhận diện nhãn hiệu và từ khóa ngành phế liệu
+    ocr_lower = ocr_text.lower().strip()
+    if len(ocr_lower) > 2 and ocr_lower not in ['(khong co chu)', '(ocr loi)']:
+        metal_kws = ['tiger', 'heineken', 'bia', 'beer', 'saigon', 'hanoi', '333', 'coca', 'pepsi', 'sprite', 'fanta', 'redbull', 'sting']
+        carton_kws = ['shopee', 'lazada', 'tiki', 'giaohang', 'ghn', 'viettelpost', 'j&t', 'carton', 'box']
+        paper_kws = ['tập', 'sách', 'báo', 'tạp chí', 'photo', 'a4', 'hóa đơn', 'chứng từ', 'vở', 'document', 'paper']
+        battery_kws = ['panasonic', 'pin', 'alkaline', 'battery', 'dry cell', 'accumulator', 'mah', '1.5v', '12v', 'lion', 'li-ion']
+        plastic_kws = ['aquafina', 'lavie', 'dasani', 'pet', 'hdpe', 'dầu ăn', 'cooking oil', 'cái lân', 'neptune', 'simply']
+
+        for kw in metal_kws:
+            if kw in ocr_lower:
+                boost[CLASS_IDX['metal']] += 1.8
+                break
+        for kw in carton_kws:
+            if kw in ocr_lower:
+                boost[CLASS_IDX['cardboard']] += 2.0
+                break
+        for kw in paper_kws:
+            if kw in ocr_lower:
+                boost[CLASS_IDX['paper']] += 2.0
+                break
+        for kw in battery_kws:
+            if kw in ocr_lower:
+                boost[CLASS_IDX['battery']] += 2.5
+                break
+        for kw in plastic_kws:
+            if kw in ocr_lower:
+                boost[CLASS_IDX['plastic']] += 1.5
+                break
+
+    # 2. Phân tích màu sắc đặc trưng nhẹ nhàng (không áp đảo mạng nơ-ron)
     hsv = cv2.cvtColor(crop_img, cv2.COLOR_RGB2HSV).astype(np.float32)
     h_ch, s_ch, v_ch = hsv[:, :, 0], hsv[:, :, 1], hsv[:, :, 2]
     mean_s = float(s_ch.mean() / 255.0)
-    mean_v = float(v_ch.mean() / 255.0)
 
-    gray = cv2.cvtColor(crop_img, cv2.COLOR_RGB2GRAY).astype(np.float32)
-    texture_std = float(gray.std() / 255.0)
+    brown_ratio = float(((h_ch >= 8) & (h_ch <= 26) & (s_ch > 60) & (v_ch > 70) & (v_ch < 205)).mean())
+    green_ratio = float(((h_ch >= 35) & (h_ch <= 85) & (s_ch > 50)).mean())
 
-    light_neutral = float(((v_ch > 115) & (s_ch < 55)).mean())
-    brown_ratio   = float(((h_ch >= 8) & (h_ch <= 26) & (s_ch > 60) & (v_ch > 70) & (v_ch < 205)).mean())
-    gray_ratio    = float(((s_ch < 40) & (v_ch > 80) & (v_ch < 210)).mean())
-    dark_ratio    = float((v_ch < 60).mean())
-    green_ratio   = float(((h_ch >= 35) & (h_ch <= 85) & (s_ch > 50)).mean())
+    # Thùng carton màu nâu tự nhiên
+    if brown_ratio > 0.35 and mean_s > 0.25:
+        boost[CLASS_IDX['cardboard']] += 1.2
 
-    has_text = len(ocr_text.strip()) > 3 and ocr_text not in ['(Khong co chu)', '(OCR loi)']
-
-    if light_neutral > 0.30:
-        boost[CLASS_IDX['paper']]     += 2.2 * light_neutral
-        boost[CLASS_IDX['cardboard']] -= 1.8 * light_neutral
-
-    if mean_s < 0.20 and mean_v > 0.45:
-        boost[CLASS_IDX['paper']]     += 1.6
-        boost[CLASS_IDX['cardboard']] -= 1.2
-
-    if has_text:
-        boost[CLASS_IDX['paper']]     += 2.2
-        boost[CLASS_IDX['cardboard']] -= 1.2
-
-    if texture_std < 0.18 and light_neutral > 0.25:
-        boost[CLASS_IDX['paper']]     += 0.8
-
-    if brown_ratio > 0.25 and mean_s > 0.22:
-        boost[CLASS_IDX['cardboard']] += 2.8
-        boost[CLASS_IDX['paper']]     -= 1.8
-
-    if gray_ratio > 0.35 and mean_v > 0.50 and texture_std < 0.15:
-        boost[CLASS_IDX['metal']]     += 1.5
-        boost[CLASS_IDX['cardboard']] -= 1.0
-
-    if mean_s > 0.12 and mean_v > 0.65 and texture_std < 0.18:
-        boost[CLASS_IDX['plastic']] += 0.8
-
-    if green_ratio > 0.15:
-        boost[CLASS_IDX['green-glass']] += 1.8
-        boost[CLASS_IDX['brown-glass']] += 0.5
-
-    if light_neutral > 0.45 and mean_s < 0.08 and texture_std < 0.10:
-        boost[CLASS_IDX['white-glass']] += 1.2
-
-    if dark_ratio > 0.35 and texture_std < 0.20:
-        boost[CLASS_IDX['battery']] += 1.2
-
-    if texture_std > 0.25 and mean_s > 0.20:
-        boost[CLASS_IDX['trash']] += 0.8
-        boost[CLASS_IDX['paper']] -= 0.5
-
-    if light_neutral > 0.35 or brown_ratio > 0.20 or dark_ratio > 0.35:
-        boost[CLASS_IDX['clothes']] -= 1.5
+    # Thủy tinh xanh Heineken / nước ngọt
+    if green_ratio > 0.20:
+        boost[CLASS_IDX['green-glass']] += 1.5
 
     return boost
 
@@ -393,6 +376,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+COUNCIL_DEMO_DIR = os.path.abspath(os.path.join(BASE_DIR, '..', '..', 'DEMO_TEST_IMAGES_COUNCIL'))
+if os.path.exists(COUNCIL_DEMO_DIR):
+    app.mount("/demo-images", StaticFiles(directory=COUNCIL_DEMO_DIR), name="demo-images")
+    logger.info(f"Mounted Council Demo Images at /demo-images from {COUNCIL_DEMO_DIR}")
+
 
 class ClassifyBase64Request(BaseModel):
     image_base64: str
@@ -444,14 +432,15 @@ def _run_classification(image_np_rgb: np.ndarray):
         crop_img = _padded_crop(image_np_rgb, x1, y1, x2, y2)
         box_status = f"YOLO: {detected_yolo_class}" if detected_yolo_class else "YOLO"
         color = (0, 220, 80)
+        ocr_crop = _padded_crop(image_np_rgb, x1, y1, x2, y2, pad=0.15)
     else:
-        x1, y1, x2, y2 = _center_crop_coords(ih, iw)
-        crop_img = image_np_rgb[y1:y2, x1:x2]
-        box_status = "AUTO"
+        x1, y1, x2, y2 = 0, 0, iw, ih
+        crop_img = image_np_rgb
+        box_status = "FULL"
         color = (255, 200, 0)
+        ocr_crop = image_np_rgb
 
     # 2. EasyOCR on Crop
-    ocr_crop = _padded_crop(image_np_rgb, x1, y1, x2, y2, pad=0.15)
     try:
         ocr_res = ocr_reader.readtext(ocr_crop, detail=1, paragraph=False, text_threshold=0.6, low_text=0.3)
         ocr_texts = [t for (_, t, c) in ocr_res if c >= 0.3]
@@ -462,7 +451,7 @@ def _run_classification(image_np_rgb: np.ndarray):
 
     # 3. EfficientNet-B4 Material Classification
     pil_crop = Image.fromarray(crop_img).convert('RGB')
-    tensor = img_transform(pil_crop).unsqueeze(0)
+    tensor = img_transform(pil_crop).unsqueeze(0).to(DEVICE)
 
     with torch.no_grad():
         raw_logits = classifier_model(tensor)
