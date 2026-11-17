@@ -45,7 +45,7 @@ public class FactoryPartnerService(AppDbContext db) : FactoryServiceBase(db), IF
                 .Select(group => new PartnerOrderStats(
                     group.Key,
                     group.Count(),
-                    group.Count(batch => batch.Status == "COMPLETED")))
+                    group.Count(batch => batch.Status == "PAID" || (batch.Status == "COMPLETED" && batch.SettlementWorkflowVersion == 0))))
                 .ToDictionaryAsync(x => x.DepotId, ct);
         var items = partnerships.Select(x =>
         {
@@ -236,7 +236,7 @@ public class FactoryPartnerService(AppDbContext db) : FactoryServiceBase(db), IF
 
     private Task<bool> HasOpenOrders(Guid factoryId, Guid depotId, CancellationToken ct) =>
         Db.InventoryBatches.AnyAsync(x => x.TargetFactoryId == factoryId && x.DepotId == depotId &&
-            x.Status != "COMPLETED" && x.Status != "PAID" && x.Status != "CANCELLED" && x.Status != "RETURNED" &&
+            (x.Status != "COMPLETED" || x.SettlementWorkflowVersion > 0) && x.Status != "PAID" && x.Status != "CANCELLED" && x.Status != "RETURNED" &&
             (x.Status != "REJECTED" || x.QualityCheck != null || x.FactoryReceivedAt != null), ct);
 
     private static void ApplyTerminationDecision(FactoryDepotPartnership partner, string decision)
