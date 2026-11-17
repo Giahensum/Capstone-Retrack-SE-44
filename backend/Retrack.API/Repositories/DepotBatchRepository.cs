@@ -78,4 +78,18 @@ public sealed class DepotBatchRepository(AppDbContext db) : IDepotBatchRepositor
         return batch;
     }
     public Task<bool> HasTransportAsync(Guid batchId) => db.TransportJobs.AnyAsync(t => t.BatchId == batchId);
+    public async Task QueuePaymentConfirmedNoticeAsync(InventoryBatch batch)
+    {
+        if (batch.TargetFactoryId is not Guid factoryId) return;
+        var ownerId = await db.Factories.AsNoTracking().Where(x => x.Id == factoryId)
+            .Select(x => (Guid?)x.OwnerId).SingleOrDefaultAsync();
+        if (ownerId is null) return;
+        db.Notifications.Add(new Notification
+        {
+            UserId = ownerId.Value, BatchId = batch.Id, Category = "FACTORY",
+            TargetType = "BATCH", TargetId = batch.Id,
+            Title = "Vựa đã xác nhận nhận tiền",
+            Message = $"Lô {batch.Code ?? batch.Id.ToString()} đã được vựa đối chiếu và xác nhận nhận đủ tiền."
+        });
+    }
 }

@@ -11,6 +11,7 @@ import {
 } from "./pages/FactoryViews";
 import { Operations } from "./pages/FactoryOperations";
 import FactoryPlatformFees from "./pages/FactoryPlatformFees";
+import FactoryNotifications, { FactoryNotificationBell } from "./pages/FactoryNotifications";
 import "./factory.css";
 
 const tabs = [
@@ -21,6 +22,7 @@ const tabs = [
   ["qc", "Trạm cân & KCS", "⚖"],
   ["settlements", "Quyết toán", "▣"],
   ["platform-fees", "Phí nền tảng", "₫"],
+  ["notifications", "Thông báo", "♧"],
   ["partners", "Vựa đối tác", "♧"],
   ["prices", "Giá tham khảo", "↗"],
   ["profile", "Hồ sơ nhà máy", "⚙"],
@@ -93,7 +95,7 @@ function Workspace() {
             Nhà máy <span>/</span>{" "}
             <strong>{tabs.find((t) => t[0] === tab)?.[1]}</strong>
           </div>
-          <span className="user-chip"><span>{(user?.fullName || "F").slice(0, 2).toUpperCase()}</span>{user?.fullName || user?.email}<button className="logout-button" onClick={() => { logout(); navigateRoute("/login", { replace: true }); }}>Đăng xuất</button></span>
+          <div className="factory-topbar-actions"><FactoryNotificationBell navigate={navigate} /><span className="user-chip"><span>{(user?.fullName || "F").slice(0, 2).toUpperCase()}</span>{user?.fullName || user?.email}<button className="logout-button" onClick={() => { logout(); navigateRoute("/login", { replace: true }); }}>Đăng xuất</button></span></div>
         </header>
         <main className="factory-main">
           <div className="demo-banner">
@@ -114,6 +116,7 @@ function Workspace() {
           )}
           {tab === "partners" && <Partners navigate={navigate} />}
           {tab === "platform-fees" && <FactoryPlatformFees />}
+          {tab === "notifications" && <FactoryNotifications navigate={navigate} />}
           {tab === "profile" && <Profile />}
           {tab === "prices" && <Prices />}
         </main>
