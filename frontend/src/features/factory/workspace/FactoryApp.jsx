@@ -104,7 +104,7 @@ function Workspace() {
             <span>Dữ liệu hồ sơ, nhu cầu, lô hàng và quyết toán được tải từ API. Trạng thái vận chuyển do luồng tài xế cập nhật.</span>
           </div>
           {tab === "dashboard" && <Dashboard navigate={navigate} />}
-          {tab === "marketplace" && <Marketplace navigate={navigate} />}
+          {tab === "marketplace" && <Marketplace navigate={navigate} directOnly={Boolean(focusId)} />}
           {tab === "demands" && <Demands />}
           {["orders", "qc", "settlements"].includes(tab) && (
             <Operations

@@ -5,13 +5,21 @@ import { Button, Card, PageHead, Pagination, useFactory } from "../components/Fa
 import { request } from "../data/factoryApi";
 
 const time = (value) => new Date(value).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
+const targetFor = (notice) => notice.targetType === "PARTNERS" && notice.depotId
+  ? { tab: "partners", label: "Xem vựa đối tác" }
+  : notice.targetType === "FEES" ? { tab: "platform-fees", label: "Xem phí nền tảng" }
+    : notice.targetType === "MARKETPLACE" ? { tab: "marketplace", label: "Xem yêu cầu chỉ định", id: notice.batchId }
+    : notice.targetType === "NONE" ? null
+    : notice.batchId ? { tab: "orders", label: "Xem lô hàng", id: notice.batchId } : null;
 
 function useNotices(page, pageSize, unreadOnly = false, enabled = true) {
+  const { user } = useFactory();
+  const accountKey = user?.id ?? user?.email;
   return useQuery({
-    queryKey: ["factory", "notifications", page, pageSize, unreadOnly],
+    queryKey: ["factory", "notifications", accountKey, page, pageSize, unreadOnly],
     queryFn: () => request(`/api/factory/notifications?page=${page}&pageSize=${pageSize}&unreadOnly=${unreadOnly}`),
-    enabled,
-    refetchInterval: enabled ? 30000 : false,
+    enabled: enabled && Boolean(accountKey),
+    refetchInterval: enabled && accountKey ? 30000 : false,
   });
 }
 
@@ -24,14 +32,14 @@ function useNoticeActions() {
 }
 
 function Notice({ notice, onOpen, onRead, busy }) {
-  const target = notice.targetType === "PARTNERS" && notice.depotId ? "partners" : notice.batchId ? "orders" : null;
+  const target = targetFor(notice);
   return <article className={`factory-notice ${notice.isRead ? "" : "unread"}`}>
     <div className="factory-notice-head"><strong>{notice.title}</strong>{!notice.isRead && <span>Chưa đọc</span>}</div>
     <p>{notice.message}</p>
     <small>{time(notice.createdAt)}</small>
     <div className="factory-notice-actions">
       <button type="button" disabled={busy} onClick={() => onRead(notice)}>{notice.isRead ? "Đánh dấu chưa đọc" : "Đánh dấu đã đọc"}</button>
-      {target && <button type="button" disabled={busy} onClick={() => onOpen(notice)}>{target === "partners" ? "Xem vựa đối tác" : "Xem lô hàng"}</button>}
+      {target && <button type="button" disabled={busy} onClick={() => onOpen(notice)}>{target.label}</button>}
     </div>
   </article>;
 }
@@ -39,10 +47,11 @@ function Notice({ notice, onOpen, onRead, busy }) {
 export function FactoryNotificationBell({ navigate }) {
   const [open, setOpen] = useState(false);
   const box = useRef(null), trigger = useRef(null), panel = useRef(null);
-  const count = useQuery({ queryKey: ["factory", "notifications", "count"], queryFn: () => request("/api/factory/notifications/unread-count"), refetchInterval: 30000 });
+  const { user, notify } = useFactory();
+  const accountKey = user?.id ?? user?.email;
+  const count = useQuery({ queryKey: ["factory", "notifications", accountKey, "count"], queryFn: () => request("/api/factory/notifications/unread-count"), enabled: Boolean(accountKey), refetchInterval: accountKey ? 30000 : false });
   const notices = useNotices(1, 5, false, open);
   const action = useNoticeActions();
-  const { notify } = useFactory();
   useEffect(() => {
     if (!open) return;
     panel.current?.focus();
@@ -57,13 +66,13 @@ export function FactoryNotificationBell({ navigate }) {
     catch (error) { notify(error.message, true); }
   };
   const show = async (notice) => {
-    const isPartner = notice.targetType === "PARTNERS" && notice.depotId;
-    if (!isPartner && !notice.batchId) return;
+    const target = targetFor(notice);
+    if (!target) return;
     if (!notice.isRead) {
       try { await action.mutateAsync({ id: notice.id, isRead: true }); }
       catch (error) { notify(error.message, true); return; }
     }
-    setOpen(false); navigate(isPartner ? "partners" : "orders", isPartner ? null : notice.batchId);
+    setOpen(false); navigate(target.tab, target.id);
   };
   return <div className="factory-notification-box" ref={box}>
     <button ref={trigger} type="button" className="factory-bell" aria-label={count.isError ? "Thông báo: chưa tải được số chưa đọc" : `Mở thông báo, ${count.data ?? 0} chưa đọc`}
@@ -105,7 +114,7 @@ export default function FactoryNotifications({ navigate }) {
       {notices.isPending && <p role="status">Đang tải thông báo…</p>}
       {notices.isError && <p role="alert">{notices.error.message} <Button secondary onClick={() => notices.refetch()}>Thử lại</Button></p>}
       {notices.data?.items.map((notice) => <Notice key={notice.id} notice={notice} busy={action.isPending}
-        onOpen={async (item) => { if (!item.isRead && !await run({ id: item.id, isRead: true })) return; navigate(item.targetType === "PARTNERS" ? "partners" : "orders", item.batchId); }}
+        onOpen={async (item) => { const target = targetFor(item); if (!target || (!item.isRead && !await run({ id: item.id, isRead: true }))) return; navigate(target.tab, target.id); }}
         onRead={(item) => void run({ id: item.id, isRead: !item.isRead })} />)}
       {notices.data?.totalCount === 0 && <p role="status">Chưa có thông báo phù hợp.</p>}
       {notices.data && <Pagination page={page} totalCount={notices.data.totalCount} totalPages={notices.data.totalPages} onChange={setPage} />}

@@ -345,6 +345,10 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         await service.CancelAsync(ownerId, depotId, input.OperationId);
         await service.CancelAsync(ownerId, depotId, input.OperationId);
         await using var verify = Open();
+        var directNotices = await verify.Notifications.AsNoTracking().Where(x => x.UserId == factoryOwnerId && x.BatchId == input.OperationId).ToListAsync();
+        Assert.Single(directNotices, x => x.Title == "Vựa gửi đề nghị nhận lô" && x.TargetType == "MARKETPLACE");
+        Assert.Single(directNotices, x => x.Title == "Vựa đã hủy đề nghị nhận lô" && x.TargetType == "NONE");
+        Assert.Equal(2, directNotices.Count);
         Assert.Equal("CANCELLED", (await verify.InventoryBatches.SingleAsync(b => b.Id == input.OperationId)).Status);
         Assert.Empty(await verify.TransportJobs.Where(t => t.BatchId == input.OperationId).ToListAsync());
         Assert.Equal("LISTED", (await Batches(verify).CreateAsync(ownerId, depotId, Input(100))).Status);
@@ -398,7 +402,18 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         await db.SaveChangesAsync();
         Assert.Equal("PENDING_DEPOT", (await partnerService.RequestTerminationAsync(factoryOwnerId, depotId,
             new() { Reason = "Hai bên thống nhất dừng hợp tác." }, default)).Data!.TerminationStatus);
+        Assert.Equal("REJECTED", (await depot.DecideTerminationAsync(ownerId, depotId, factory.Id, new("REJECT"), default)).TerminationStatus);
+        Assert.Equal("PENDING_DEPOT", (await partnerService.RequestTerminationAsync(factoryOwnerId, depotId,
+            new() { Reason = "Hai bên thống nhất dừng hợp tác sau khi xem lại." }, default)).Data!.TerminationStatus);
         Assert.Equal("TERMINATED", (await depot.DecideTerminationAsync(ownerId, depotId, factory.Id, new("ACCEPT"), default)).ContractStatus);
+        var noticesForFactory = await db.Notifications.AsNoTracking().Where(x => x.UserId == factoryOwnerId).ToListAsync();
+        Assert.Single(noticesForFactory, x => x.Title == "Vựa gửi đề nghị nhận lô" && x.BatchId == input.OperationId);
+        Assert.Single(noticesForFactory, x => x.Title == "Vựa đã ký hợp đồng" && x.DepotId == depotId);
+        Assert.Equal(2, noticesForFactory.Count(x => x.Title == "Vựa đã tạo lô giao cho nhà máy" && x.TargetType == "BATCH"));
+        Assert.Single(noticesForFactory, x => x.Title == "Vựa đã chặn hợp tác");
+        Assert.Single(noticesForFactory, x => x.Title == "Vựa đã bỏ chặn hợp tác");
+        Assert.Single(noticesForFactory, x => x.Title == "Vựa đã từ chối chấm dứt hợp đồng");
+        Assert.Single(noticesForFactory, x => x.Title == "Vựa đã chấp thuận chấm dứt hợp đồng");
         await db.Entry(pendingContract).ReloadAsync();
         Assert.Equal("TERMINATED", pendingContract.TerminationStatus);
         Assert.NotNull(pendingContract.TerminatedAt);
@@ -1107,14 +1122,25 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         var terminationNotice = Assert.Single(terminationNotices.Items, x => x.Title == "Vựa đề nghị chấm dứt hợp đồng");
         Assert.Equal(depotId, terminationNotice.DepotId);
         Assert.Equal("PARTNERS", terminationNotice.TargetType);
-        Assert.Equal(1, await noticeService.UnreadCountAsync(factoryOwnerId, default));
+        var unreadBefore = await noticeService.UnreadCountAsync(factoryOwnerId, default);
+        await noticeService.MarkReadAsync(factoryOwnerId, terminationNotice.Id, true, default);
+        Assert.Equal(unreadBefore - 1, await noticeService.UnreadCountAsync(factoryOwnerId, default));
+        await noticeService.MarkReadAsync(factoryOwnerId, terminationNotice.Id, false, default);
+        Assert.Equal(unreadBefore, await noticeService.UnreadCountAsync(factoryOwnerId, default));
+        Assert.Equal(1, terminationNotices.Items.Count(x => x.Title == "Vựa đề nghị chấm dứt hợp đồng"));
         await Assert.ThrowsAsync<DepotConflictException>(() => depotService.RequestTerminationAsync(ownerId, depotId, factory.Id, new("Không được tạo đề nghị trùng lặp."), default));
-        Assert.Equal(1, await noticeService.UnreadCountAsync(factoryOwnerId, default));
+        Assert.Equal(1, await db.Notifications.CountAsync(x => x.UserId == factoryOwnerId && x.Title == "Vựa đề nghị chấm dứt hợp đồng"));
         await Assert.ThrowsAsync<DepotConflictException>(() => depotService.DecideTerminationAsync(ownerId, depotId, factory.Id, new("ACCEPT"), default));
         Assert.Equal("REJECTED", (await factoryService.DecideTerminationAsync(factoryOwnerId, depotId, new() { Decision = "REJECT" }, default)).Data!.TerminationStatus);
         await db.Entry(partner).ReloadAsync(); Assert.Equal("ACTIVE", partner.ContractStatus);
         Assert.Equal("PENDING_FACTORY", (await depotService.RequestTerminationAsync(ownerId, depotId, factory.Id, new("Đề nghị kết thúc lần hai hợp lệ."), default)).TerminationStatus);
         Assert.Equal("TERMINATED", (await factoryService.DecideTerminationAsync(factoryOwnerId, depotId, new() { Decision = "ACCEPT" }, default)).Data!.TerminationStatus);
+        var contractNotices = await db.Notifications.AsNoTracking().Where(x => x.UserId == factoryOwnerId).ToListAsync();
+        Assert.Single(contractNotices, x => x.Title == "Vựa đã từ chối hợp đồng");
+        Assert.Single(contractNotices, x => x.Title == "Vựa đã ký hợp đồng");
+        Assert.Equal(2, contractNotices.Count(x => x.Title == "Vựa đề nghị chấm dứt hợp đồng"));
+        Assert.Equal(await noticeService.UnreadCountAsync(factoryOwnerId, default), await noticeService.ReadAllAsync(factoryOwnerId, default));
+        Assert.Equal(0, await noticeService.UnreadCountAsync(factoryOwnerId, default));
         db.ChangeTracker.Clear();
         var saved = await db.FactoryDepotPartnerships.AsNoTracking().SingleAsync(x => x.Id == partner.Id);
         Assert.Equal("TERMINATED", saved.ContractStatus); Assert.NotNull(saved.TerminatedAt); Assert.Equal("Đề nghị kết thúc lần hai hợp lệ.", saved.TerminationReason);

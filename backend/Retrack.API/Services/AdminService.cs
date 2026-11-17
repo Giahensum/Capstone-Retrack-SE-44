@@ -573,6 +573,10 @@ namespace Retrack.API.Services
             invoice.PaidAt = DateTime.UtcNow;
             await _invoiceRepo.UpdateAsync(invoice);
 
+            await _notificationService.SendInvoiceAsync(invoice.PayerId,
+                $"Đã xác nhận thanh toán phí nền tảng tháng {invoice.PeriodMonth}/{invoice.PeriodYear}",
+                $"Hóa đơn phí nền tảng {invoice.TotalFeeAmount:N0}đ đã được Admin xác nhận thanh toán.");
+
             await LogAsync(actorId, "MARK_PAID", "PlatformInvoice", invoice.Id, null, new { invoice.Status, invoice.PaidAt });
             if (transaction != null) await transaction.CommitAsync();
             return await MapInvoiceAsync(invoice);

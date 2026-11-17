@@ -109,6 +109,12 @@ public sealed class BatchService(IDepotBatchRepository batches, IDepotUnitOfWork
             FeePercentageSnapshot = Retrack.API.Services.Shared.PlatformFees.Rate(await batches.FeeConfigurationAsync())
         };
         batches.AddBatch(batch);
+        if (dto.TargetFactoryId is Guid recipientFactoryId)
+            await batches.QueueFactoryBatchNoticeAsync(recipientFactoryId, batch,
+                isApproved ? "Vựa đã tạo lô giao cho nhà máy" : "Vựa gửi đề nghị nhận lô",
+                isApproved ? $"Lô {code} đã được chủ vựa tạo để giao cho nhà máy. Mở Đơn hàng để theo dõi vận chuyển."
+                    : $"Lô {code} đang chờ nhà máy xem và quyết định nhận hàng. Mở Yêu cầu chỉ định để phản hồi.",
+                isApproved ? "BATCH" : "MARKETPLACE");
         await stockLedger.ReserveCostsAsync(depotId, batch.Id, dto.MaterialType, dto.WeightKg);
         if (status == "TRANSPORT_READY") await batches.AddTransportAsync(new TransportJob { BatchId = batch.Id }, depotId);
         await work.SaveAsync();
@@ -132,6 +138,9 @@ public sealed class BatchService(IDepotBatchRepository batches, IDepotUnitOfWork
             throw new DepotConflictException("Chỉ hủy lô chưa có nhà máy nhận.");
         batch.Status = "CANCELLED";
         batch.UpdatedAt = DateTime.UtcNow;
+        if (batch.DirectOfferFactoryId is Guid recipientFactoryId)
+            await batches.QueueFactoryBatchNoticeAsync(recipientFactoryId, batch, "Vựa đã hủy đề nghị nhận lô",
+                $"Lô {batch.Code ?? batch.Id.ToString()} đã được chủ vựa hủy trước khi nhà máy nhận.", "NONE");
         await work.SaveAsync();
         await tx.CommitAsync();
     }
