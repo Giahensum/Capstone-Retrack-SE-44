@@ -90,6 +90,8 @@ public sealed class BatchSettlementWorkflowTests : IAsyncLifetime
             Assert.Equal("Success", (await factory.ReportPaymentAsync(f.FactoryOwner, f.Batch, Proof(f.FactoryOwner), default)).Outcome.ToString());
             Assert.Empty(await db.PlatformTransactions.ToListAsync());
             Assert.Null((await db.InventoryBatches.SingleAsync()).SettledAt);
+            var row = await db.InventoryBatches.SingleAsync();
+            Assert.True(await new DepotPartnershipRepository(db).HasOpenOrdersAsync(f.Depot, row.TargetFactoryId!.Value, default));
         }
         async Task Confirm() { await using var db = Open(); await Decisions(db).ConfirmPaymentAsync(f.Owner, f.Depot, f.Batch, 10000, "CK-FIXTURE"); }
         await Task.WhenAll(Confirm(), Confirm()); await Confirm();
