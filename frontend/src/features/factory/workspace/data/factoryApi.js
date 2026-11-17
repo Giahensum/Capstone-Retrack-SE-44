@@ -116,19 +116,21 @@ export function mapOrder(order) {
       ? "IN_TRANSIT"
       : apiStatus;
   const normalizedStatus = status === "CANCELLED" ? "REJECTED" : status;
-  const statusSteps = normalizedStatus === "PENDING_APPROVAL"
-    ? ["PENDING_APPROVAL"]
-    : normalizedStatus === "REJECTED"
-      ? ["ACCEPTED", "IN_TRANSIT", "DELIVERED", "RECEIVED", "WEIGHED", "REJECTED"]
-      : ["ACCEPTED", "IN_TRANSIT", "DELIVERED", "RECEIVED", "WEIGHED", "VERIFIED", ...(normalizedStatus === "SETTLEMENT_RECORDED" ? ["SETTLEMENT_RECORDED"] : ["PAYMENT_REPORTED", "PAID"])];
-  const reached = statusSteps.indexOf(normalizedStatus);
-  const history = statusSteps.slice(0, reached >= 0 ? reached + 1 : 1).map((itemStatus) => ({
-    status: itemStatus,
-    at: itemStatus === "RECEIVED" ? order.receivedAt || order.createdAt : itemStatus === "VERIFIED" || itemStatus === "REJECTED" ? order.decidedAt || order.createdAt : itemStatus === "PAID" ? order.depotPaymentConfirmedAt || order.settledAt || order.createdAt : itemStatus === "PAYMENT_REPORTED" || itemStatus === "SETTLEMENT_RECORDED" ? order.settledAt || order.createdAt : order.createdAt,
-  }));
+  // Chỉ dùng timestamp thực có trong API, không gán giờ tạo lô cho các bước chưa xảy ra.
+  const history = [
+    { label: "Tạo lô", at: order.createdAt },
+    { status: "RECEIVED", at: order.receivedAt },
+    verification?.grade && verification.grade !== "PENDING" ? { status: verification.isVerified ? "VERIFIED" : "REJECTED", at: order.decidedAt } : null,
+    { status: "SETTLEMENT_PENDING", at: order.settlementProposedAt },
+    { status: "SETTLEMENT_ACCEPTED", at: order.settlementApprovedAt },
+    { status: "PAID", at: order.depotPaymentConfirmedAt },
+    { status: "RETURNING", at: order.return?.handedOverAt },
+    { status: "RETURNED", at: order.return?.receivedAt },
+  ].filter(entry => entry?.at).sort((a,b)=>new Date(a.at)-new Date(b.at));
   return {
     id: order.id,
     batchId: order.batchCode || order.batchId,
+    return: order.return || null,
     settlementWorkflowVersion: order.settlementWorkflowVersion || 0,
     settlementRevision: order.settlementRevision || 0,
     settlementDecisionReason: order.settlementDecisionReason || "",
@@ -160,7 +162,7 @@ export function mapOrder(order) {
       grade: verification.grade,
       decision: verification.isVerified ? "accept" : "reject",
       note: verification.qualityNote || order.rejectionReason || "",
-      resolution: verification.qualityNote?.startsWith("RENEGOTIATE:") ? "RENEGOTIATE" : "RETURN",
+      resolution: verification.resolution === "RENEGOTIATE" || verification.qualityNote?.startsWith("RENEGOTIATE:") ? "RENEGOTIATE" : "RETURN",
     } : null,
     payment: order.settledAt || order.settlementProposedAt ? {
       price: order.agreedPrice,
@@ -296,6 +298,10 @@ export async function performFactoryAction(type, payload) {
         paymentReference: payload.reference,
         paymentProofUrl: payload.paymentProofUrl,
       } });
+    case "QUALITY_RESOLUTION":
+      return request(`/api/factory/orders/${id}/quality-resolution`,{method:"POST",body:{resolution:payload.resolution,note:payload.note}});
+    case "RETURN_HANDOVER":
+      return request(`/api/factory/orders/${id}/return-handover`,{method:"POST",body:{reference:payload.reference,proofUrl:payload.proofUrl,note:payload.note}});
     case "REPORT_PAYMENT":
       return request(`/api/factory/orders/${id}/payment-proof`, { method: "POST", body: {
         paymentReference: payload.reference,

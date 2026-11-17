@@ -90,7 +90,7 @@ public sealed partial class DepotStockRepository(AppDbContext db) : IDepotStockR
     }
 
     private IQueryable<InventoryBatch> ActiveBatches(Guid depotId, string[] names) => db.InventoryBatches.Where(b =>
-        b.DepotId == depotId && names.Contains(b.MaterialType) && b.Status != "CANCELLED" &&
+        b.DepotId == depotId && names.Contains(b.MaterialType) && b.Status != "CANCELLED" && b.Status != "RETURNED" &&
         (b.Status != "REJECTED" || b.FactoryReceivedAt != null || b.QualityCheck != null ||
             (b.TransportJob != null && (b.TransportJob.Status == "PICKED_UP" || b.TransportJob.Status == "DELIVERED"))));
 
