@@ -521,9 +521,9 @@ namespace Retrack.API.Services
             var created = new List<PlatformInvoiceDto>();
             foreach (var payerId in totalsByPayer.Keys.Union(invoicedPayers).Order())
             {
-                // Tuần tự hóa việc phát hành theo người trả phí giữa các yêu cầu đồng thời.
+                // Tuần tự hóa phát hành nhưng cho phép FK KEY SHARE của thông báo khi luồng khác giữ hóa đơn.
                 if (_db.Database.IsRelational())
-                    await _db.Users.FromSqlInterpolated($"SELECT * FROM users WHERE id = {payerId} FOR UPDATE").LoadAsync();
+                    await _db.Users.FromSqlInterpolated($"SELECT * FROM users WHERE id = {payerId} FOR NO KEY UPDATE").LoadAsync();
                 var periodInvoices = _db.Database.IsRelational()
                     ? await _db.PlatformInvoices.FromSqlInterpolated($"SELECT * FROM platform_invoices WHERE payer_id = {payerId} AND period_year = {year} AND period_month = {month} FOR UPDATE").ToListAsync()
                     : await _db.PlatformInvoices.Where(i => i.PayerId == payerId && i.PeriodYear == year && i.PeriodMonth == month).ToListAsync();
