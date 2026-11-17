@@ -73,7 +73,9 @@ services:
     restart: unless-stopped
     depends_on: [api]
     environment:
-      DOMAIN: ${DOMAIN:?đặt DOMAIN trong .env.production khi dùng profile tls}
+      # Không dùng ":?" ở đây: compose nội suy biến của MỌI service, kể cả service thuộc profile đang tắt — bắt buộc sẽ làm hỏng cả lần deploy không có tên miền.
+      # deploy-remote.sh chỉ bật profile tls khi DOMAIN có giá trị.
+      DOMAIN: ${DOMAIN:-}
     ports:
       - "80:80"
       - "443:443"
