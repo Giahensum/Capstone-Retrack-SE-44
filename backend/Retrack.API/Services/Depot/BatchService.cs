@@ -109,6 +109,12 @@ public sealed class BatchService(IDepotBatchRepository batches, IDepotUnitOfWork
             FeePercentageSnapshot = Retrack.API.Services.Shared.PlatformFees.Rate(await batches.FeeConfigurationAsync())
         };
         batches.AddBatch(batch);
+        if (dto.TargetFactoryId is Guid recipientFactoryId)
+            await batches.QueueFactoryBatchNoticeAsync(recipientFactoryId, batch,
+                isApproved ? "Vựa đã tạo lô giao cho nhà máy" : "Vựa gửi đề nghị nhận lô",
+                isApproved ? $"Lô {code} đã được chủ vựa tạo để giao cho nhà máy. Mở Đơn hàng để theo dõi vận chuyển."
+                    : $"Lô {code} đang chờ nhà máy xem và quyết định nhận hàng. Mở Yêu cầu chỉ định để phản hồi.",
+                isApproved ? "BATCH" : "MARKETPLACE");
         await stockLedger.ReserveCostsAsync(depotId, batch.Id, dto.MaterialType, dto.WeightKg);
         if (status == "TRANSPORT_READY") await batches.AddTransportAsync(new TransportJob { BatchId = batch.Id }, depotId);
         await work.SaveAsync();
@@ -132,6 +138,32 @@ public sealed class BatchService(IDepotBatchRepository batches, IDepotUnitOfWork
             throw new DepotConflictException("Chỉ hủy lô chưa có nhà máy nhận.");
         batch.Status = "CANCELLED";
         batch.UpdatedAt = DateTime.UtcNow;
+        if (batch.DirectOfferFactoryId is Guid recipientFactoryId)
+            await batches.QueueFactoryBatchNoticeAsync(recipientFactoryId, batch, "Vựa đã hủy đề nghị nhận lô",
+                $"Lô {batch.Code ?? batch.Id.ToString()} đã được chủ vựa hủy trước khi nhà máy nhận.", "NONE");
+        await work.SaveAsync();
+        await tx.CommitAsync();
+    }
+
+    public async Task ConfirmPaymentAsync(Guid ownerId, Guid depotId, Guid batchId, decimal amount, string paymentReference)
+    {
+        await scope.RequireOwnerAsync(ownerId, depotId);
+        await using var tx = await work.BeginAsync();
+        await batches.LockDepotAsync(depotId);
+        var batch = await batches.LockBatchAsync(batchId) ?? throw new KeyNotFoundException("Không tìm thấy lô.");
+        if (batch.DepotId != depotId) throw new DepotForbiddenException();
+        if (batch.Status is not ("COMPLETED" or "PAID") || batch.SettledAt is null ||
+            string.IsNullOrWhiteSpace(batch.QualityCheck?.PaymentProofUrl))
+            throw new DepotConflictException("Lô chưa có quyết toán và chứng từ chuyển khoản để xác nhận.");
+        if (amount <= 0 || amount != batch.NetAmount ||
+            !string.Equals(paymentReference?.Trim(), batch.PaymentReference, StringComparison.Ordinal))
+            throw new DepotConflictException("Số tiền hoặc mã tham chiếu chưa khớp với quyết toán của lô.");
+        if (batch.Status == "PAID") return;
+        batch.Status = "PAID";
+        batch.DepotPaymentConfirmedAt = DateTime.UtcNow;
+        batch.DepotPaymentConfirmedBy = ownerId;
+        batch.UpdatedAt = DateTime.UtcNow;
+        await batches.QueuePaymentConfirmedNoticeAsync(batch);
         await work.SaveAsync();
         await tx.CommitAsync();
     }

@@ -1,0 +1,41 @@
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Retrack.API.DTOs;
+using Retrack.API.DTOs.Depot;
+using Retrack.API.Services.Factory;
+
+namespace Retrack.API.Controllers.Factory;
+
+[Route("api/factory/platform-fees"), Authorize(Roles = "FACTORY")]
+public sealed class FactoryPlatformFeeController(FactoryPlatformFeeService service) : FactoryControllerBase
+{
+    [HttpGet("transactions")]
+    public async Task<IActionResult> Transactions([FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default)
+    {
+        ValidatePage(page, pageSize);
+        return Ok(ApiResponse<PagedResult<FactoryFeeEntry>>.Ok(await service.FeesAsync(CurrentUserId, page, pageSize, ct)));
+    }
+
+    [HttpGet("invoices")]
+    public async Task<IActionResult> Invoices([FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default)
+    {
+        ValidatePage(page, pageSize);
+        return Ok(ApiResponse<PagedResult<FeeInvoiceDto>>.Ok(await service.InvoicesAsync(CurrentUserId, page, pageSize, ct)));
+    }
+
+    [HttpGet("payment-account")]
+    public async Task<IActionResult> PaymentAccount(CancellationToken ct) =>
+        Ok(ApiResponse<PlatformPaymentAccountDto>.Ok(await service.PaymentAccountAsync(CurrentUserId, ct)));
+
+    [HttpPatch("invoices/{id:guid}/confirmation")]
+    public async Task<IActionResult> Confirm(Guid id, FactoryPaymentProofDto proof, CancellationToken ct)
+    {
+        await service.ConfirmAsync(CurrentUserId, id, proof, ct);
+        return Ok(ApiResponse<string>.Ok("Đã gửi chứng từ, chờ Admin đối soát."));
+    }
+
+    private static void ValidatePage(int page, int pageSize)
+    {
+        if (page < 1 || pageSize is < 1 or > 100) throw new ArgumentException("Trang hoặc kích thước trang không hợp lệ.");
+    }
+}

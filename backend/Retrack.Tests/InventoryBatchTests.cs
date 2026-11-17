@@ -41,7 +41,9 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         var batchIds = await db.InventoryBatches.Where(b => b.DepotId == depotId).Select(b => b.Id).ToListAsync();
         var transportIds = await db.TransportJobs.Where(t => batchIds.Contains(t.BatchId)).Select(t => t.Id).ToListAsync();
         await db.PlatformTransactions.Where(t => t.SourceType == "BATCH_ORDER" && batchIds.Contains(t.SourceId)).ExecuteDeleteAsync();
-        await db.Notifications.Where(n => n.TransportJobId != null && transportIds.Contains(n.TransportJobId.Value)).ExecuteDeleteAsync();
+        await db.Notifications.Where(n => n.DepotId == depotId || n.UserId == factoryOwnerId ||
+            (n.TransportJobId != null && transportIds.Contains(n.TransportJobId.Value)) ||
+            (n.BatchId != null && batchIds.Contains(n.BatchId.Value))).ExecuteDeleteAsync();
         await db.TransportJobs.Where(t => t.Batch.DepotId == depotId).ExecuteDeleteAsync();
         // Schema DB-first không có ON DELETE CASCADE: phải xóa phiếu QC trước khi xóa lô.
         await db.BatchQualityChecks.Where(q => batchIds.Contains(q.BatchId)).ExecuteDeleteAsync();
@@ -346,6 +348,10 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         await service.CancelAsync(ownerId, depotId, input.OperationId);
         await service.CancelAsync(ownerId, depotId, input.OperationId);
         await using var verify = Open();
+        var directNotices = await verify.Notifications.AsNoTracking().Where(x => x.UserId == factoryOwnerId && x.BatchId == input.OperationId).ToListAsync();
+        Assert.Single(directNotices, x => x.Title == "Vựa gửi đề nghị nhận lô" && x.TargetType == "MARKETPLACE");
+        Assert.Single(directNotices, x => x.Title == "Vựa đã hủy đề nghị nhận lô" && x.TargetType == "NONE");
+        Assert.Equal(2, directNotices.Count);
         Assert.Equal("CANCELLED", (await verify.InventoryBatches.SingleAsync(b => b.Id == input.OperationId)).Status);
         Assert.Empty(await verify.TransportJobs.Where(t => t.BatchId == input.OperationId).ToListAsync());
         Assert.Equal("LISTED", (await Batches(verify).CreateAsync(ownerId, depotId, Input(100))).Status);
@@ -399,7 +405,18 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         await db.SaveChangesAsync();
         Assert.Equal("PENDING_DEPOT", (await partnerService.RequestTerminationAsync(factoryOwnerId, depotId,
             new() { Reason = "Hai bên thống nhất dừng hợp tác." }, default)).Data!.TerminationStatus);
+        Assert.Equal("REJECTED", (await depot.DecideTerminationAsync(ownerId, depotId, factory.Id, new("REJECT"), default)).TerminationStatus);
+        Assert.Equal("PENDING_DEPOT", (await partnerService.RequestTerminationAsync(factoryOwnerId, depotId,
+            new() { Reason = "Hai bên thống nhất dừng hợp tác sau khi xem lại." }, default)).Data!.TerminationStatus);
         Assert.Equal("TERMINATED", (await depot.DecideTerminationAsync(ownerId, depotId, factory.Id, new("ACCEPT"), default)).ContractStatus);
+        var noticesForFactory = await db.Notifications.AsNoTracking().Where(x => x.UserId == factoryOwnerId).ToListAsync();
+        Assert.Single(noticesForFactory, x => x.Title == "Vựa gửi đề nghị nhận lô" && x.BatchId == input.OperationId);
+        Assert.Single(noticesForFactory, x => x.Title == "Vựa đã ký hợp đồng" && x.DepotId == depotId);
+        Assert.Equal(2, noticesForFactory.Count(x => x.Title == "Vựa đã tạo lô giao cho nhà máy" && x.TargetType == "BATCH"));
+        Assert.Single(noticesForFactory, x => x.Title == "Vựa đã chặn hợp tác");
+        Assert.Single(noticesForFactory, x => x.Title == "Vựa đã bỏ chặn hợp tác");
+        Assert.Single(noticesForFactory, x => x.Title == "Vựa đã từ chối chấm dứt hợp đồng");
+        Assert.Single(noticesForFactory, x => x.Title == "Vựa đã chấp thuận chấm dứt hợp đồng");
         await db.Entry(pendingContract).ReloadAsync();
         Assert.Equal("TERMINATED", pendingContract.TerminationStatus);
         Assert.NotNull(pendingContract.TerminatedAt);
@@ -481,7 +498,7 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         var settled = await orders.SettleAsync(factoryOwnerId, first.Id,
             new() { AgreedPricePerKg = 12000, VatTreatment = "TAXABLE", VatPercentage = 10,
                 InvoiceNumber = "HD-TEST-001", InvoiceDate = DateOnly.FromDateTime(DateTime.UtcNow),
-                SellerTaxCode = "0314892841", PaymentReference = "SIM-FACTORY-001" }, default);
+                SellerTaxCode = "0314892841", PaymentReference = "SIM-FACTORY-001", PaymentProofUrl = "https://example.invalid/proof.pdf" }, default);
         Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Success, settled.Outcome);
         Assert.Equal(720000m, settled.Data!.TotalAmount);
         Assert.Equal(72000m, settled.Data.VatAmount);
@@ -497,10 +514,10 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         var retried = await orders.SettleAsync(factoryOwnerId, first.Id,
             new() { AgreedPricePerKg = 12000, VatTreatment = "TAXABLE", VatPercentage = 10,
                 InvoiceNumber = "HD-TEST-001", InvoiceDate = DateOnly.FromDateTime(DateTime.UtcNow),
-                SellerTaxCode = "0314892841", PaymentReference = "SIM-FACTORY-001" }, default);
+                SellerTaxCode = "0314892841", PaymentReference = "SIM-FACTORY-001", PaymentProofUrl = "https://example.invalid/proof.pdf" }, default);
         Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Success, retried.Outcome);
         Assert.Equal(1, await db.PlatformTransactions.CountAsync(x => x.SourceType == "BATCH_ORDER" && x.SourceId == first.Id));
-        Assert.Equal("PAID", (await orders.GetAsync(factoryOwnerId, first.Id, default)).Data!.Status);
+        Assert.Equal("PAYMENT_REPORTED", (await orders.GetAsync(factoryOwnerId, first.Id, default)).Data!.Status);
 
         var detail = await Batches(db).DetailAsync(ownerId, depotId, first.Id);
         Assert.Equal("COMPLETED", detail.Batch.Status);
@@ -532,6 +549,19 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         var notices = await db.Notifications.Where(x => x.UserId == ownerId && x.BatchId == first.Id).ToListAsync();
         Assert.Equal(6, notices.Count); Assert.All(notices, x => { Assert.Equal(depotId, x.DepotId); Assert.Equal("FACTORY", x.Category); });
 
+        await Assert.ThrowsAsync<DepotConflictException>(() => Batches(db).ConfirmPaymentAsync(ownerId, depotId, first.Id, 1, "SIM-FACTORY-001"));
+        Assert.Equal("PAYMENT_REPORTED", (await orders.GetAsync(factoryOwnerId, first.Id, default)).Data!.Status);
+        await Batches(db).ConfirmPaymentAsync(ownerId, depotId, first.Id, settled.Data.NetPayableAmount, "SIM-FACTORY-001");
+        await Batches(db).ConfirmPaymentAsync(ownerId, depotId, first.Id, settled.Data.NetPayableAmount, "SIM-FACTORY-001");
+        Assert.Equal("PAID", (await orders.GetAsync(factoryOwnerId, first.Id, default)).Data!.Status);
+        Assert.NotNull((await Batches(db).DetailAsync(ownerId, depotId, first.Id)).Settlement!.PaymentConfirmedAt);
+        var notifications = new Retrack.API.Services.Factory.FactoryNotificationService(db);
+        var factoryNotices = await notifications.ListAsync(factoryOwnerId, 1, 20, false, default);
+        var paymentNotice = Assert.Single(factoryNotices.Items, x => x.BatchId == first.Id && x.Title == "Vựa đã xác nhận nhận tiền");
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => notifications.ListAsync(ownerId, 1, 20, false, default));
+        await notifications.MarkReadAsync(factoryOwnerId, paymentNotice.Id, true, default);
+        Assert.True((await notifications.ListAsync(factoryOwnerId, 1, 20, false, default)).Items.Single(x => x.Id == paymentNotice.Id).IsRead);
+
         var followUp = Input(40); followUp.TargetFactoryId = factory.Id;
         Assert.Equal("TRANSPORT_READY", (await Batches(db).CreateAsync(ownerId, depotId, followUp)).Status);
         var nextBatch = await db.InventoryBatches.Include(x => x.TransportJob).SingleAsync(x => x.Id == followUp.OperationId);
@@ -540,9 +570,15 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Success, (await qc.WeighAsync(factoryOwnerId, nextBatch.Id, new() { GrossWeightKg = 45, TareWeightKg = 5, TicketNumber = "VE-TEST-002" }, default)).Outcome);
         Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Success, (await qc.QualityAsync(factoryOwnerId, nextBatch.Id, new() { Accept = true, PurityPercent = 95, Grade = "A" }, default)).Outcome);
         await db.SystemConfigs.Where(x => x.ConfigKey == "PLATFORM_FEE_PERCENTAGE").ExecuteUpdateAsync(x => x.SetProperty(p => p.ConfigValue, "7.00"));
-        var secondSettlement = await orders.SettleAsync(factoryOwnerId, nextBatch.Id, new() { AgreedPricePerKg = 12000, VatTreatment = "TAXABLE", VatPercentage = 10, InvoiceNumber = "HD-TEST-002", InvoiceDate = DateOnly.FromDateTime(DateTime.UtcNow), SellerTaxCode = "0314892841", PaymentReference = "SIM-FACTORY-002" }, default);
+        var secondSettlement = await orders.SettleAsync(factoryOwnerId, nextBatch.Id, new() { AgreedPricePerKg = 12000, VatTreatment = "TAXABLE", VatPercentage = 10, InvoiceNumber = "HD-TEST-002", InvoiceDate = DateOnly.FromDateTime(DateTime.UtcNow), SellerTaxCode = "0314892841" }, default);
+        Assert.Equal("SETTLEMENT_RECORDED", secondSettlement.Data!.Status);
         Assert.Equal(5m, secondSettlement.Data!.FeePercentage); // Lô đã tạo trước khi config đổi sang 7%.
         Assert.Equal(5m, (await db.PlatformTransactions.SingleAsync(x => x.SourceId == first.Id)).FeePercentage);
+        Assert.Equal("SETTLEMENT_RECORDED", (await orders.GetAsync(factoryOwnerId, nextBatch.Id, default)).Data!.Status);
+        var reported = await orders.ReportPaymentAsync(factoryOwnerId, nextBatch.Id,
+            new() { PaymentReference = "ACTUAL-TRANSFER-002", PaymentProofUrl = "https://example.invalid/proof.pdf" }, default);
+        Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Success, reported.Outcome);
+        Assert.Equal("PAYMENT_REPORTED", reported.Data!.Status);
         }
         finally
         {
@@ -1084,12 +1120,30 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         await Assert.ThrowsAsync<ArgumentException>(() => depotService.RequestTerminationAsync(ownerId, depotId, factory.Id, new("ngắn"), default));
         await Assert.ThrowsAsync<ArgumentException>(() => depotService.RequestTerminationAsync(ownerId, depotId, factory.Id, new(new string('x', 2001)), default));
         Assert.Equal("PENDING_FACTORY", (await depotService.RequestTerminationAsync(ownerId, depotId, factory.Id, new("Chủ vựa đề nghị kết thúc hợp đồng."), default)).TerminationStatus);
+        var noticeService = new Retrack.API.Services.Factory.FactoryNotificationService(db);
+        var terminationNotices = await noticeService.ListAsync(factoryOwnerId, 1, 20, false, default);
+        var terminationNotice = Assert.Single(terminationNotices.Items, x => x.Title == "Vựa đề nghị chấm dứt hợp đồng");
+        Assert.Equal(depotId, terminationNotice.DepotId);
+        Assert.Equal("PARTNERS", terminationNotice.TargetType);
+        var unreadBefore = await noticeService.UnreadCountAsync(factoryOwnerId, default);
+        await noticeService.MarkReadAsync(factoryOwnerId, terminationNotice.Id, true, default);
+        Assert.Equal(unreadBefore - 1, await noticeService.UnreadCountAsync(factoryOwnerId, default));
+        await noticeService.MarkReadAsync(factoryOwnerId, terminationNotice.Id, false, default);
+        Assert.Equal(unreadBefore, await noticeService.UnreadCountAsync(factoryOwnerId, default));
+        Assert.Equal(1, terminationNotices.Items.Count(x => x.Title == "Vựa đề nghị chấm dứt hợp đồng"));
         await Assert.ThrowsAsync<DepotConflictException>(() => depotService.RequestTerminationAsync(ownerId, depotId, factory.Id, new("Không được tạo đề nghị trùng lặp."), default));
+        Assert.Equal(1, await db.Notifications.CountAsync(x => x.UserId == factoryOwnerId && x.Title == "Vựa đề nghị chấm dứt hợp đồng"));
         await Assert.ThrowsAsync<DepotConflictException>(() => depotService.DecideTerminationAsync(ownerId, depotId, factory.Id, new("ACCEPT"), default));
         Assert.Equal("REJECTED", (await factoryService.DecideTerminationAsync(factoryOwnerId, depotId, new() { Decision = "REJECT" }, default)).Data!.TerminationStatus);
         await db.Entry(partner).ReloadAsync(); Assert.Equal("ACTIVE", partner.ContractStatus);
         Assert.Equal("PENDING_FACTORY", (await depotService.RequestTerminationAsync(ownerId, depotId, factory.Id, new("Đề nghị kết thúc lần hai hợp lệ."), default)).TerminationStatus);
         Assert.Equal("TERMINATED", (await factoryService.DecideTerminationAsync(factoryOwnerId, depotId, new() { Decision = "ACCEPT" }, default)).Data!.TerminationStatus);
+        var contractNotices = await db.Notifications.AsNoTracking().Where(x => x.UserId == factoryOwnerId).ToListAsync();
+        Assert.Single(contractNotices, x => x.Title == "Vựa đã từ chối hợp đồng");
+        Assert.Single(contractNotices, x => x.Title == "Vựa đã ký hợp đồng");
+        Assert.Equal(2, contractNotices.Count(x => x.Title == "Vựa đề nghị chấm dứt hợp đồng"));
+        Assert.Equal(await noticeService.UnreadCountAsync(factoryOwnerId, default), await noticeService.ReadAllAsync(factoryOwnerId, default));
+        Assert.Equal(0, await noticeService.UnreadCountAsync(factoryOwnerId, default));
         db.ChangeTracker.Clear();
         var saved = await db.FactoryDepotPartnerships.AsNoTracking().SingleAsync(x => x.Id == partner.Id);
         Assert.Equal("TERMINATED", saved.ContractStatus); Assert.NotNull(saved.TerminatedAt); Assert.Equal("Đề nghị kết thúc lần hai hợp lệ.", saved.TerminationReason);
@@ -1123,7 +1177,7 @@ public sealed class InventoryBatchTests : IAsyncLifetime
             db.PlatformTransactions.Add(new PlatformTransaction { SourceType = "BATCH_ORDER", SourceId = batch.Id, PayerId = factoryOwnerId, TransactionAmount = 1, FeeAmount = 1 });
             await db.SaveChangesAsync();
             await Assert.ThrowsAsync<DbUpdateException>(() => new Retrack.API.Services.Factory.FactoryOrderService(db).SettleAsync(factoryOwnerId, batch.Id,
-                new() { AgreedPricePerKg = 1000, VatTreatment = "TAXABLE", VatPercentage = 10, InvoiceNumber = "HD-ROLLBACK", InvoiceDate = DateOnly.FromDateTime(DateTime.UtcNow), SellerTaxCode = "0314892841", PaymentReference = "ROLLBACK" }, default));
+                new() { AgreedPricePerKg = 1000, VatTreatment = "TAXABLE", VatPercentage = 10, InvoiceNumber = "HD-ROLLBACK", InvoiceDate = DateOnly.FromDateTime(DateTime.UtcNow), SellerTaxCode = "0314892841", PaymentReference = "ROLLBACK", PaymentProofUrl = "https://example.invalid/proof.pdf" }, default));
         }
         await using var verify = Open();
         var saved = await verify.InventoryBatches.Include(x => x.QualityCheck).SingleAsync(x => x.Id == batchId);

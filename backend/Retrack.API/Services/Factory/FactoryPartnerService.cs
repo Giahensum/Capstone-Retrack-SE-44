@@ -156,6 +156,9 @@ public class FactoryPartnerService(AppDbContext db) : FactoryServiceBase(db), IF
         partner.ContractExpiresAt = now.AddMonths(request.ValidMonths);
         partner.Status = "PENDING";
         partner.UpdatedAt = now;
+        await NotifyDepotAsync(depotId, "Nhà máy đã gửi hợp đồng điện tử",
+            $"{factory.Name} đã ký hợp đồng {partner.ContractCode} và gửi chủ vựa xem xét. Mở Nhà máy đối tác để phản hồi.",
+            targetType: "PARTNERS", ct: ct);
         await Db.SaveChangesAsync(ct);
         if (tx != null) await tx.CommitAsync(ct);
         return ServiceResult<PartnerStatusResponse>.Success(data: new PartnerStatusResponse
@@ -187,6 +190,9 @@ public class FactoryPartnerService(AppDbContext db) : FactoryServiceBase(db), IF
         partner.TerminationReason = reason;
         partner.TerminatedAt = null;
         partner.UpdatedAt = DateTime.UtcNow;
+        await NotifyDepotAsync(depotId, "Nhà máy đề nghị chấm dứt hợp đồng",
+            $"Hợp đồng {partner.ContractCode ?? partner.Id.ToString()} có đề nghị chấm dứt từ nhà máy. Mở Nhà máy đối tác để xem lý do và phản hồi.",
+            targetType: "PARTNERS", ct: ct);
         await Db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
         return ServiceResult<PartnerStatusResponse>.Success(data: StatusView(partner), message: "Đã gửi đề nghị chấm dứt cho chủ vựa xác nhận.");
@@ -206,6 +212,10 @@ public class FactoryPartnerService(AppDbContext db) : FactoryServiceBase(db), IF
         if (decision == "ACCEPT" && await HasOpenOrders(factory.Id, depotId, ct))
             return ServiceResult<PartnerStatusResponse>.Conflict("Cần hoàn tất các lô đang xử lý trước khi chấp thuận chấm dứt.");
         ApplyTerminationDecision(partner, decision);
+        await NotifyDepotAsync(depotId,
+            decision == "ACCEPT" ? "Nhà máy đã chấp thuận chấm dứt hợp đồng" : "Nhà máy đã từ chối chấm dứt hợp đồng",
+            $"Hợp đồng {partner.ContractCode ?? partner.Id.ToString()} đã được nhà máy {(decision == "ACCEPT" ? "chấp thuận chấm dứt" : "từ chối đề nghị chấm dứt")}. Mở Nhà máy đối tác để xem chi tiết.",
+            targetType: "PARTNERS", ct: ct);
         await Db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
         return ServiceResult<PartnerStatusResponse>.Success(data: StatusView(partner), message: decision == "ACCEPT" ? "Hợp đồng đã chấm dứt." : "Đã từ chối đề nghị chấm dứt.");
@@ -249,7 +259,7 @@ public class FactoryPartnerService(AppDbContext db) : FactoryServiceBase(db), IF
         await using var tx = Db.Database.IsRelational() ? await Db.Database.BeginTransactionAsync(ct) : null;
         var batch = await Db.InventoryBatches.SingleOrDefaultAsync(x => x.Id == orderId && x.TargetFactoryId == factory.Id, ct);
         if (batch is null) return ServiceResult<PartnerRatingResponse>.NotFound("Không tìm thấy đơn hàng.");
-        if (batch.Status is not ("PAID" or "COMPLETED")) return ServiceResult<PartnerRatingResponse>.Conflict("Chỉ đánh giá sau khi đã quyết toán.");
+        if (batch.Status != "PAID") return ServiceResult<PartnerRatingResponse>.Conflict("Chỉ đánh giá sau khi vựa xác nhận đã nhận tiền.");
         var review = await Db.FactoryDepotReviews.SingleOrDefaultAsync(x => x.BatchId == batch.Id && x.FactoryId == factory.Id, ct);
         if (review is null)
         {

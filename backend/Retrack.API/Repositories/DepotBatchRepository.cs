@@ -26,7 +26,7 @@ public sealed class DepotBatchRepository(AppDbContext db) : IDepotBatchRepositor
                 b.PlatformFeeAmount, b.NetAmount, b.VatTreatment, b.VatPercentage, b.VatAmount,
                 b.InvoiceTotalAmount, b.PaymentReference, b.SettledAt.Value,
                 b.QualityCheck == null ? null : b.QualityCheck.PaymentProofUrl,
-                b.VatTreatment == null ? null : b.PriceIncludesVat, b.FeePolicy)))
+                b.VatTreatment == null ? null : b.PriceIncludesVat, b.FeePolicy, b.DepotPaymentConfirmedAt)))
         .SingleOrDefaultAsync();
     public async Task<PagedResult<DepotBatchDto>> ListAsync(Guid depotId, DepotQuery query)
     {
@@ -78,4 +78,22 @@ public sealed class DepotBatchRepository(AppDbContext db) : IDepotBatchRepositor
         return batch;
     }
     public Task<bool> HasTransportAsync(Guid batchId) => db.TransportJobs.AnyAsync(t => t.BatchId == batchId);
+    public async Task QueuePaymentConfirmedNoticeAsync(InventoryBatch batch)
+    {
+        if (batch.TargetFactoryId is not Guid factoryId) return;
+        await QueueFactoryBatchNoticeAsync(factoryId, batch, "Vựa đã xác nhận nhận tiền",
+            $"Lô {batch.Code ?? batch.Id.ToString()} đã được vựa đối chiếu và xác nhận nhận đủ tiền.");
+    }
+    public async Task QueueFactoryBatchNoticeAsync(Guid factoryId, InventoryBatch batch, string title, string message, string targetType = "BATCH")
+    {
+        var ownerId = await db.Factories.AsNoTracking().Where(x => x.Id == factoryId)
+            .Select(x => (Guid?)x.OwnerId).SingleOrDefaultAsync();
+        if (ownerId is null) return;
+        db.Notifications.Add(new Notification
+        {
+            UserId = ownerId.Value, BatchId = batch.Id, Category = "FACTORY",
+            TargetType = targetType, TargetId = batch.Id,
+            Title = title, Message = message
+        });
+    }
 }

@@ -1,4 +1,4 @@
-import { useDepotQuery, number, money, batchLabels } from '../depotApi';
+import { useDepotQuery, useDepotMutation, number, money, batchLabels } from '../depotApi';
 import { Dialog, QueryState } from './DepotUI';
 import { materialLabel } from '../materialLabels';
 import { factoryProofPath, proofExtension } from '../proofDownload';
@@ -44,6 +44,8 @@ function Proof({ title, url }) {
 }
 export default function BatchDetailModal({ id, onClose }) {
   const query = useDepotQuery(`batches/${id}`);
+  const confirmPayment = useDepotMutation('patch', `batches/${id}/confirm-payment`);
+  const [confirming, setConfirming] = useState(false);
   const d = query.data, b = d?.batch, q = d?.quality, s = d?.settlement;
   const transportLabels = { PENDING: 'Chờ phân công', ASSIGNED: 'Đã phân công', ACCEPTED: 'Tài xế đã nhận chuyến', PICKED_UP: 'Đã lấy hàng', IN_TRANSIT: 'Đang vận chuyển', ON_THE_WAY: 'Đang vận chuyển', DELIVERED: 'Đã giao' };
   return <Dialog title={`Chi tiết lô ${b?.code ?? ''}`} onClose={onClose} wide><QueryState query={query}>{d && <div className="space-y-4">
@@ -64,8 +66,19 @@ export default function BatchDetailModal({ id, onClose }) {
       ["Thuế suất VAT", percent(s?.vatPercentage)], ["Tiền VAT theo hóa đơn", cash(s?.vatAmount)],
       ["Tổng tiền theo hóa đơn", cash(s?.invoiceTotalAmount)], [s?.feePolicy === "BUYER_SEPARATE_V1" ? "Phí do Factory trả riêng" : "Phí khấu trừ — lô cũ", cash(s?.feeAmount)],
       ["Tiền thanh toán theo quyết toán, gồm VAT đã khai", cash(s?.netAmount)],
-      ["Tham chiếu thanh toán", s?.paymentReference], ["Ngày quyết toán", time(s?.settledAt)], ["Số hóa đơn", q?.invoiceNumber]]}/>
-    <p className="text-sm text-d-on-surface-variant">Số liệu do nhà máy ghi nhận; chưa phải xác nhận nhận tiền từ phía chủ kho.</p>
+      ["Tham chiếu thanh toán", s?.paymentReference], ["Ngày quyết toán", time(s?.settledAt)], ["Vựa xác nhận nhận tiền", time(s?.paymentConfirmedAt)], ["Số hóa đơn", q?.invoiceNumber]]}/>
+    {b.status === 'COMPLETED' && s?.paymentProofUrl && <section className="rounded-2xl border border-d-border-subtle bg-white p-4 space-y-3">
+      <h3 className="font-semibold text-d-primary">Xác nhận tiền chuyển khoản</h3>
+      <p className="text-sm text-d-on-surface-variant">Đối chiếu tiền thực nhận trong tài khoản ngân hàng, số tiền {cash(s.netAmount)} và mã {s.paymentReference} trước khi xác nhận.</p>
+      <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={confirming} onChange={(e) => setConfirming(e.target.checked)} />Tôi đã kiểm tra tài khoản và nhận đủ số tiền trên.</label>
+      <button type="button" disabled={!confirming || confirmPayment.isPending} className="rounded-xl bg-d-primary px-4 py-2 text-white disabled:opacity-40"
+        onClick={() => confirmPayment.mutate({ body: { amount: s.netAmount, paymentReference: s.paymentReference } })}>
+        {confirmPayment.isPending ? 'Đang xác nhận…' : 'Xác nhận đã nhận tiền'}
+      </button>
+      {confirmPayment.isError && <p role="alert" className="text-d-error text-sm">{depotError(confirmPayment.error)}</p>}
+      {confirmPayment.isSuccess && <p role="status" className="text-d-primary text-sm">Đã xác nhận nhận tiền.</p>}
+    </section>}
+    {b.status !== 'PAID' && <p className="text-sm text-d-on-surface-variant">Số liệu do nhà máy ghi nhận; vựa chưa xác nhận nhận tiền.</p>}
     <Proof title="Hóa đơn nhà máy" url={q?.invoiceFileUrl}/><Proof title="Chứng từ thanh toán" url={s?.paymentProofUrl}/>
     <BatchCostPanel id={id} quantity={b.weightKg} />
     <DriverEventsPanel id={id} />

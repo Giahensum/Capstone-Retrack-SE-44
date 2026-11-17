@@ -22,11 +22,22 @@ export const adminApi = {
   // Billing: fee config (7.8), revenue (7.9), transactions (7.10), invoices (7.11, 7.12)
   getFeeConfig: () => api.get('/admin/billing/fee-config').then((r) => r.data.data),
   updateFeeConfig: (dto) => api.put('/admin/billing/fee-config', dto).then((r) => r.data.data),
+  getPaymentAccount: () => api.get('/admin/billing/payment-account').then((r) => r.data.data),
+  updatePaymentAccount: (dto) => api.put('/admin/billing/payment-account', dto).then((r) => r.data.data),
   getRevenue: (params) => api.get('/admin/billing/revenue', { params }).then((r) => r.data.data),
   getTransactions: (params) => api.get('/admin/billing/transactions', { params }).then((r) => r.data.data),
   generateInvoices: (dto) => api.post('/admin/billing/invoices/generate', dto).then((r) => r.data.data),
   getInvoices: (params) => api.get('/admin/billing/invoices', { params }).then((r) => r.data.data),
   markInvoicePaid: (id) => api.patch(`/admin/billing/invoices/${id}/mark-paid`).then((r) => r.data.data),
+  downloadInvoiceProof: async (path) => {
+    const response = await api.get(path.replace(/^\/api/, ''), { responseType: 'blob' });
+    const url = URL.createObjectURL(response.data);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'chung-tu-phi-nen-tang';
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  },
   remindInvoice: (id) => api.post(`/admin/billing/invoices/${id}/remind`).then((r) => r.data.data),
 
   // Audit logs (UC-7.6)

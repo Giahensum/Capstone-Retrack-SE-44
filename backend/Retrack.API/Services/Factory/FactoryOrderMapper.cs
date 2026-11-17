@@ -24,7 +24,8 @@ public static class FactoryOrderMapper
         "RECEIVED" => "RECEIVED",
         "WEIGHED" => "WEIGHED",
         "VERIFIED" => "VERIFIED",
-        "PAID" or "COMPLETED" => "PAID",
+        "PAID" => "PAID",
+        "COMPLETED" => string.IsNullOrWhiteSpace(batch.QualityCheck?.PaymentProofUrl) ? "SETTLEMENT_RECORDED" : "PAYMENT_REPORTED",
         "REJECTED" or "CANCELLED" => "REJECTED",
         _ => batch.Status
     };
@@ -68,6 +69,8 @@ public static class FactoryOrderMapper
             BuyerTotalAmount = qc?.NetAmount + qc?.PlatformFeeAmount,
             NetPayableAmount = qc?.NetAmount,
             PaymentReference = batch.PaymentReference,
+            PaymentProofUrl = qc?.PaymentProofUrl,
+            DepotPaymentConfirmedAt = batch.DepotPaymentConfirmedAt,
             CreatedAt = batch.CreatedAt,
             Transport = transport == null ? null : new OrderTransportResponse
             {

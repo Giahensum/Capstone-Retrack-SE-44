@@ -9,5 +9,6 @@ public interface IFactoryOrderService
     Task<ServiceResult<OrderResponse>> GetAsync(Guid userId, Guid id, CancellationToken ct);
     Task<ServiceResult<OrderReceivedResponse>> ReceiveAsync(Guid userId, Guid id, CancellationToken ct);
     Task<ServiceResult<OrderSettlementResponse>> SettleAsync(Guid userId, Guid id, SettlementRequest request, CancellationToken ct);
+    Task<ServiceResult<OrderResponse>> ReportPaymentAsync(Guid userId, Guid id, BatchPaymentProofRequest request, CancellationToken ct);
     Task<ServiceResult<InvoiceUpdatedResponse>> InvoiceAsync(Guid userId, Guid id, InvoiceRequest request, CancellationToken ct);
 }

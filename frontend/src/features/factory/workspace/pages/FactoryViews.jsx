@@ -36,7 +36,7 @@ export function Dashboard({ navigate }) {
   const weight = dashboard?.periodPurchasedKg ?? 0;
   const spend = dashboard?.periodNetPayment ?? 0;
   const fees = dashboard?.periodFeeAmount ?? 0;
-  const feePercentage = state.profile?.platformFeePercentage ?? 1;
+  const feePercentage = state.profile?.platformFeePercentage ?? 5;
   const pending = (dashboard?.priorityOrders || []).map(mapOrder).filter((o) => ["DELIVERED", "RECEIVED", "WEIGHED"].includes(o.status));
   const ready = (dashboard?.priorityOrders || []).map(mapOrder).filter((o) => o.status === "VERIFIED");
   const volume = (dashboard?.materialVolumes || []).map((item) => ({ material: item.materialType, kg: item.weightKg }));
@@ -217,19 +217,20 @@ export function Dashboard({ navigate }) {
     </>
   );
 }
-export function Marketplace({ navigate }) {
+export function Marketplace({ navigate, directOnly = false }) {
   const { act } = useFactory();
   const [filters, setFilters] = useState({
     search: "",
     material: "",
     min: "",
     max: "",
-    direct: false,
+    direct: directOnly,
   });
   const [selected, setSelected] = useState(null);
   const [reason, setReason] = useState("");
   const [rejecting, setRejecting] = useState(false);
   const [page, setPage] = useState(1);
+  useEffect(() => { if (directOnly) { setPage(1); setFilters((current) => ({ ...current, direct: true })); } }, [directOnly]);
   const set = (key, value) => { setPage(1); setFilters((f) => ({ ...f, [key]: value })); };
   const { data, isPending, error } = useFactoryPage("marketplace", {
     page, search: filters.search, material: filters.material,

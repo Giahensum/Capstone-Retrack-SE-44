@@ -208,6 +208,8 @@ namespace Retrack.API.Models
         [Column("net_amount")] public decimal? NetAmount { get; set; }
         [Column("payment_reference")] public string? PaymentReference { get; set; }
         [Column("settled_at")] public DateTime? SettledAt { get; set; }
+        [Column("depot_payment_confirmed_at")] public DateTime? DepotPaymentConfirmedAt { get; set; }
+        [Column("depot_payment_confirmed_by")] public Guid? DepotPaymentConfirmedBy { get; set; }
 
         // Navigation
         [ForeignKey("DepotId")]

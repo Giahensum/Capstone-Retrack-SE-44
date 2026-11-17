@@ -267,6 +267,8 @@ CREATE TABLE IF NOT EXISTS inventory_batches (
     net_amount          DECIMAL(18, 2),
     payment_reference   VARCHAR(200),
     settled_at          TIMESTAMPTZ,
+    depot_payment_confirmed_at TIMESTAMPTZ,
+    depot_payment_confirmed_by UUID REFERENCES users(id),
     code                VARCHAR(40),
     image_urls          TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
     -- MARKETPLACE, PENDING_APPROVAL, TRANSPORT_READY, COMPLETED
@@ -280,6 +282,8 @@ ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS vat_percentage DECIMAL(5,
 ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS vat_amount DECIMAL(18, 2);
 ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS invoice_total_amount DECIMAL(18, 2);
 ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS price_includes_vat BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS depot_payment_confirmed_at TIMESTAMPTZ;
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS depot_payment_confirmed_by UUID REFERENCES users(id);
 CREATE SEQUENCE IF NOT EXISTS depot_batch_number START WITH 1 INCREMENT BY 1 NO MINVALUE NO MAXVALUE NO CYCLE;
 CREATE UNIQUE INDEX IF NOT EXISTS ix_inventory_batches_code ON inventory_batches(code);
 
@@ -947,6 +951,26 @@ BEGIN
     END IF;
 END $$;
 -- RETRACK_BUYER_FEES_V1_END
+
+-- Bổ sung thông báo cho đề nghị chấm dứt đang chờ Factory từ dữ liệu trước khi có nút chuông.
+-- Chạy lại an toàn: chỉ tạo khi chưa có thông báo của đúng lần đề nghị hiện tại.
+INSERT INTO notifications (id, user_id, depot_id, category, target_type, target_id, title, message, is_read, created_at)
+SELECT gen_random_uuid(), f.owner_id, p.depot_id, 'FACTORY', 'PARTNERS', p.depot_id,
+       'Vựa đề nghị chấm dứt hợp đồng',
+       'Hợp đồng ' || COALESCE(p.contract_code, p.id::text) || ' có đề nghị chấm dứt từ chủ vựa. Mở Vựa đối tác để xem lý do và phản hồi.',
+       FALSE, NOW()
+FROM factory_depot_partnerships p
+JOIN factories f ON f.id = p.factory_id
+JOIN depots d ON d.id = p.depot_id
+WHERE p.termination_status = 'PENDING_FACTORY'
+  AND p.termination_requested_by = d.owner_id
+  AND p.termination_requested_at IS NOT NULL
+  AND NOT EXISTS (
+      SELECT 1 FROM notifications n
+      WHERE n.user_id = f.owner_id AND n.depot_id = p.depot_id
+        AND n.target_type = 'PARTNERS' AND n.title = 'Vựa đề nghị chấm dứt hợp đồng'
+        AND n.created_at >= p.termination_requested_at
+  );
 
 -- RETRACK_SCHEMA_END
 

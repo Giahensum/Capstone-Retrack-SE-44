@@ -26,6 +26,10 @@ public class FactoryOrderController(IFactoryOrderService service) : FactoryContr
     public async Task<IActionResult> Settle(Guid id, SettlementRequest request, CancellationToken ct)
         => this.ToActionResult(await service.SettleAsync(CurrentUserId, id, request, ct));
 
+    [HttpPost("{id:guid}/payment-proof")]
+    public async Task<IActionResult> ReportPayment(Guid id, BatchPaymentProofRequest request, CancellationToken ct)
+        => this.ToActionResult(await service.ReportPaymentAsync(CurrentUserId, id, request, ct));
+
     [HttpPut("{id:guid}/invoice")]
     public async Task<IActionResult> Invoice(Guid id, InvoiceRequest request, CancellationToken ct)
         => this.ToActionResult(await service.InvoiceAsync(CurrentUserId, id, request, ct));

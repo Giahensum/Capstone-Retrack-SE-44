@@ -119,7 +119,7 @@ public sealed class BuyerFeeWorkflowTests : IAsyncLifetime
         var configured = policy == PlatformFees.BuyerSeparate ? "7.00" : "5.00";
         await db.SystemConfigs.Where(x => x.ConfigKey == "PLATFORM_FEE_PERCENTAGE").ExecuteUpdateAsync(x => x.SetProperty(p => p.ConfigValue, configured));
         await db.SaveChangesAsync();
-        var request = new Retrack.API.DTOs.Factory.SettlementRequest { AgreedPricePerKg = 1000, PaymentReference = "FIXTURE-CK",
+        var request = new Retrack.API.DTOs.Factory.SettlementRequest { AgreedPricePerKg = 1000, PaymentReference = "FIXTURE-CK", PaymentProofUrl = "https://example.invalid/proof.pdf",
             VatTreatment = "TAXABLE", VatPercentage = 10, InvoiceNumber = "FIXTURE-HD", SellerTaxCode = "TEST",
             InvoiceDate = DateOnly.FromDateTime(DateTime.UtcNow) };
         async Task<Retrack.API.DTOs.Factory.OrderSettlementResponse> Settle()
@@ -149,8 +149,12 @@ public sealed class BuyerFeeWorkflowTests : IAsyncLifetime
             new AuditLogRepository(saved), new PlatformInvoiceRepository(saved), new NotificationService(saved), saved);
         var now = DateTime.UtcNow.AddHours(7);
         var invoices = await adminService.GenerateMonthlyInvoicesAsync(now.Year, now.Month, depot.OwnerId);
-        var invoice = Assert.Single(invoices);
-        Assert.Equal(chargedOwnerId, invoice.PayerId); Assert.Equal(500, invoice.TotalFeeAmount);
+        if (policy == PlatformFees.BuyerSeparate)
+        {
+            var invoice = Assert.Single(invoices);
+            Assert.Equal(chargedOwnerId, invoice.PayerId); Assert.Equal(500, invoice.TotalFeeAmount);
+        }
+        else Assert.Empty(invoices); // Lô cũ đã khấu trừ phí, không phát hành hóa đơn thu lần hai.
         Assert.Empty(await adminService.GenerateMonthlyInvoicesAsync(now.Year, now.Month, depot.OwnerId));
     }
 
