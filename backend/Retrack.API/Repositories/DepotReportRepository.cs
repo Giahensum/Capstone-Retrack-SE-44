@@ -29,7 +29,7 @@ public sealed partial class DepotReportRepository(AppDbContext db) : IDepotRepor
             ((b.Status == "COMPLETED" && b.SettlementWorkflowVersion == 0) || b.Status == "PAID") && b.NetAmount != null)
             .Select(b => new { Date = b.SettledAt!.Value, Amount = b.NetAmount!.Value });
         // Giữ dữ liệu QC cũ chưa có SettledAt, không cộng trùng lô đã quyết toán theo contract mới.
-        var legacy = db.BatchQualityChecks.AsNoTracking().Where(q => q.Batch.DepotId == depotId && q.Batch.SettledAt == null && q.IsAccepted &&
+        var legacy = db.BatchQualityChecks.AsNoTracking().Where(q => q.Batch.DepotId == depotId && q.Batch.SettlementWorkflowVersion == 0 && q.Batch.SettledAt == null && q.IsAccepted &&
             q.PaymentProofUrl != null && q.CreatedAt >= start && q.CreatedAt < end)
             .Select(q => new { Date = q.CreatedAt, Amount = q.NetAmount });
         var revenue = await settled.Concat(legacy).GroupBy(q => q.Date.AddHours(7).Date)

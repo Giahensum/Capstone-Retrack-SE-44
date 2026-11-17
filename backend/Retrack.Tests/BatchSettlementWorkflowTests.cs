@@ -90,6 +90,13 @@ public sealed class BatchSettlementWorkflowTests : IAsyncLifetime
             Assert.Equal("Success", (await factory.ReportPaymentAsync(f.FactoryOwner, f.Batch, Proof(f.FactoryOwner), default)).Outcome.ToString());
             Assert.Empty(await db.PlatformTransactions.ToListAsync());
             Assert.Null((await db.InventoryBatches.SingleAsync()).SettledAt);
+            var dashboard = (await new FactoryDashboardService(db).GetAsync(f.FactoryOwner, default)).Data!;
+            Assert.Equal(1, dashboard.PendingSettlementCount);
+            Assert.Contains(dashboard.PriorityOrders, x => x.Id == f.Batch);
+            var reports = new DepotReportRepository(db);
+            var start = DateTime.UtcNow.AddDays(-1); var end = DateTime.UtcNow.AddDays(1);
+            Assert.Empty((await reports.DailyAmountsAsync(f.Depot, start, end)).Revenue);
+            Assert.Equal(0, (await reports.CostChannelsAsync(f.Depot, start, end)).Single(x => x.Channel == "FACTORY").TransactionCount);
             var row = await db.InventoryBatches.SingleAsync();
             Assert.True(await new DepotPartnershipRepository(db).HasOpenOrdersAsync(f.Depot, row.TargetFactoryId!.Value, default));
         }
@@ -99,6 +106,11 @@ public sealed class BatchSettlementWorkflowTests : IAsyncLifetime
         var saved = await check.InventoryBatches.SingleAsync();
         Assert.Equal("PAID", saved.Status); Assert.NotNull(saved.SettledAt);
         Assert.Equal(saved.DepotPaymentConfirmedAt, saved.SettledAt);
+        var finalReports = new DepotReportRepository(check);
+        var finalStart = DateTime.UtcNow.AddDays(-1); var finalEnd = DateTime.UtcNow.AddDays(1);
+        Assert.Equal(10000m, (await finalReports.DailyAmountsAsync(f.Depot, finalStart, finalEnd)).Revenue.Sum(x => x.Amount));
+        Assert.Equal(1, (await finalReports.CostChannelsAsync(f.Depot, finalStart, finalEnd)).Single(x => x.Channel == "FACTORY").TransactionCount);
+        Assert.Equal(0, (await new FactoryDashboardService(check).GetAsync(f.FactoryOwner, default)).Data!.PendingSettlementCount);
         var fee = Assert.Single(await check.PlatformTransactions.ToListAsync());
         Assert.Equal(500m, fee.FeeAmount); Assert.Equal(f.FactoryOwner, fee.PayerId);
         Assert.Equal(4, await check.BatchWorkflowEvents.CountAsync());
