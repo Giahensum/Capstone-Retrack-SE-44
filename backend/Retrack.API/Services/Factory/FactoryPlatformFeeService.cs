@@ -41,10 +41,10 @@ public sealed class FactoryPlatformFeeService(AppDbContext db, FactoryAttachment
         await RequireFactory(userId, ct);
         var rows = Db.PlatformInvoices.AsNoTracking().Where(i => i.PayerId == userId);
         var count = await rows.CountAsync(ct);
-        var items = await rows.OrderByDescending(i => i.PeriodYear).ThenByDescending(i => i.PeriodMonth).ThenBy(i => i.Id)
+        var items = await rows.OrderByDescending(i => i.PeriodYear).ThenByDescending(i => i.PeriodMonth).ThenByDescending(i => i.Revision).ThenBy(i => i.Id)
             .Skip((page - 1) * pageSize).Take(pageSize)
             .Select(i => new FeeInvoiceDto(i.Id, new DateOnly(i.PeriodYear, i.PeriodMonth, 1), i.TotalFeeAmount,
-                i.Status == "PENDING" ? "UNPAID" : i.Status, i.PaymentProofUrl, i.SubmittedAt)).ToListAsync(ct);
+                i.Status == "PENDING" ? "UNPAID" : i.Status, i.PaymentProofUrl, i.SubmittedAt, i.Revision, i.AdjustmentOfId)).ToListAsync(ct);
         return new() { Items = items, TotalCount = count, Page = page, PageSize = pageSize };
     }
 
