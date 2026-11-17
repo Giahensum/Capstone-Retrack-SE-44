@@ -1,0 +1,5 @@
+# Chỉ dùng khi bật profile "tls" (có tên miền trỏ về IP VPS). Caddy tự xin và gia hạn chứng chỉ Let's Encrypt.
+{$DOMAIN} {
+	encode gzip
+	reverse_proxy api:8080
+}
