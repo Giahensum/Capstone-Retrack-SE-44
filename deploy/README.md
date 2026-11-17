@@ -94,9 +94,68 @@ ssh root@IP "cd /opt/retrack && docker compose --env-file .env.production -f doc
   `docker compose ... exec -T db psql -U retrack -d retrack < file.sql`. Muốn dựng lại từ đầu: `docker compose ... down -v` (**xoá dữ liệu**) rồi chạy lại CD.
 - **Khôi phục DB** từ bản sao lưu: `docker compose ... exec -T db pg_restore -U retrack -d retrack --clean --if-exists < backups/pre-<giờ>.dump`.
 - **Quay về bản cũ thủ công:** `IMAGE=ghcr.io/<owner>/retrack-api:<sha-cũ> bash /opt/retrack/deploy-remote.sh` (tag sha nằm ở tab Packages của repo).
-- **Bật HTTPS:** trỏ tên miền về IP VPS, đặt `DOMAIN=ten-mien.com` và `API_BIND=127.0.0.1` trong `.env.production`, rồi chạy lại CD; Caddy sẽ tự xin chứng chỉ.
+- **Bật HTTPS (giống FITLY, không cần mua tên miền):** xem mục 6 bên dưới.
 - **Dịch vụ AI phân loại rác** (`AI_Garbage_Classification`) chưa được triển khai; API dùng `AI_SERVICE_URL` (mặc định `http://127.0.0.1:5005`), nên tính năng AI của Seller sẽ lỗi cho tới khi bạn chạy dịch vụ đó và cập nhật biến này.
 - **Quét hồ sơ Depot:** `VERIFICATION_SCANNER_MODE=Disabled` ở production nghĩa là API từ chối nộp hồ sơ mới (xem `backend/Retrack.API/.env.example`); cần ClamAV nếu muốn mở.
+
+## 6. Chuyển sang HTTPS (sslip.io, như FITLY)
+
+Let's Encrypt chỉ cấp chứng chỉ cho **tên miền**, không cấp cho IP trần. Nếu chưa có tên miền riêng, dùng sslip.io: `api.<IP-viết-bằng-dấu-chấm>.sslip.io` tự trỏ về đúng IP đó, ví dụ `api.160.191.242.187.sslip.io`. Caddy (profile `tls`) sẽ tự xin và gia hạn chứng chỉ; API chỉ nghe loopback, chỉ Caddy mở cổng 80/443.
+
+1. Mở cổng **80 và 443** trong firewall của trang quản lý VPS (cổng 80 bắt buộc để Let's Encrypt xác minh).
+2. Trên VPS, bật HTTPS (tự lấy IP công khai, đặt `DOMAIN` và `API_BIND=127.0.0.1` trong `.env.production`):
+   ```bash
+   bash /opt/retrack/server-setup.sh --enable-https
+   ```
+   (Hoặc sửa tay hai dòng đó trong `/opt/retrack/.env.production`; có tên miền riêng thì đặt `DOMAIN=ten-mien.com`.)
+3. Áp dụng ngay, không cần chạy lại GitHub Actions (dùng image đang có sẵn trên VPS):
+   ```bash
+   cd /opt/retrack && IMAGE=$(grep '^API_IMAGE=' .env.production | cut -d= -f2-) SKIP_PULL=1 bash deploy-remote.sh
+   ```
+   Script sao lưu DB, bật Caddy cùng API. Chờ khoảng 1 phút lần đầu để xin chứng chỉ.
+4. Kiểm tra: `curl https://api.<IP>.sslip.io/health/live` phải ra `{"status":"ok"}`.
+
+Sau khi chuyển:
+- **Webhook PayOS** (đăng ký tại my.payos.vn): `https://api.<IP>.sslip.io/api/payos/webhook`.
+- Cổng `8080` từ ngoài **không còn vào được**; mọi nơi gọi API (frontend, `vercel.json`, mobile) phải dùng địa chỉ `https://api.<IP>.sslip.io`.
+- Caddy cần cổng 80 mở mãi để gia hạn chứng chỉ (khoảng 60 ngày một lần).
+- sslip.io là dịch vụ miễn phí dùng chung và có giới hạn số chứng chỉ; dùng lâu dài nên mua tên miền riêng.
+
+## 7. Ký điện tử hợp đồng bằng DocuSign (sandbox)
+
+Tính năng: hợp đồng hợp tác Nhà máy – Vựa (sau khi Nhà máy đề nghị, trạng thái `PENDING_DEPOT`) được hai bên ký ngay trong hệ thống qua DocuSign sandbox; ký đủ thì hợp đồng `ACTIVE`. Chỉ để minh hoạ đồ án, không có giá trị pháp lý. Nút "Ký chấp thuận" cũ của chủ vựa vẫn dùng được.
+
+**Thứ tự bắt buộc: chạy SQL thêm cột TRƯỚC khi deploy bản mã mới** (mã mới đọc 5 cột mới của bảng `factory_depot_partnerships`, thiếu cột là mọi truy vấn bảng này lỗi). Trên VPS:
+```bash
+cd /opt/retrack && docker compose --env-file .env.production -f docker-compose.prod.yml exec -T db psql -U retrack -d retrack -v ON_ERROR_STOP=1 -c "ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS esign_envelope_id VARCHAR(64), ADD COLUMN IF NOT EXISTS esign_status VARCHAR(30), ADD COLUMN IF NOT EXISTS esign_terms_hash VARCHAR(64), ADD COLUMN IF NOT EXISTS esign_sent_at TIMESTAMPTZ, ADD COLUMN IF NOT EXISTS esign_completed_at TIMESTAMPTZ;"
+```
+(DB dựng mới từ `db/bootstrap/retrack-system.sql` đã có sẵn các cột này.)
+
+**Cấu hình** trong `/opt/retrack/.env.production` (không commit, không gửi vào chat):
+
+| Biến | Lấy ở đâu |
+|---|---|
+| `DOCUSIGN_INTEGRATION_KEY` | Admin → Apps and Keys → app → Integration Key |
+| `DOCUSIGN_USER_ID` | Apps and Keys → My Account Information → User ID |
+| `DOCUSIGN_ACCOUNT_ID` | Apps and Keys → API Account ID |
+| `DOCUSIGN_BASE_URI` | `https://demo.docusign.net` (sandbox) |
+| `DOCUSIGN_OAUTH_HOST` | `account-d.docusign.com` (sandbox) |
+| `DOCUSIGN_PRIVATE_KEY_BASE64` | File khóa RSA đã lưu, mã hoá base64 thành một dòng (xem dưới) |
+| `DOCUSIGN_WEBHOOK_URL` | (tuỳ chọn) `https://api.<IP>.sslip.io/api/esign/docusign/webhook` |
+
+Mã hoá khóa RSA thành một dòng (PowerShell trên máy bạn), rồi dán vào `.env.production` trên VPS:
+```powershell
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("docusign_private.key"))
+```
+Ứng dụng DocuSign phải được cấp quyền (consent) một lần cho tài khoản (đường dẫn `https://account-d.docusign.com/oauth/auth?response_type=code&scope=signature%20impersonation&client_id=<Integration Key>&redirect_uri=<Redirect URI đã khai trong app>`).
+
+`FRONTEND_URL` phải là địa chỉ frontend thật đang dùng (DocuSign đưa người ký quay về đó sau khi ký): nhà máy về `<FRONTEND_URL>/factory/`, chủ vựa về `<FRONTEND_URL>/depot/partners`.
+
+Áp dụng cấu hình mới (tạo lại container API với biến mới):
+```bash
+cd /opt/retrack && IMAGE=$(grep '^API_IMAGE=' .env.production | cut -d= -f2-) SKIP_PULL=1 bash deploy-remote.sh
+```
+Webhook là tuỳ chọn: không có thì dùng nút "Cập nhật trạng thái" hoặc tự cập nhật khi người ký quay lại hệ thống.
 
 ## Giới hạn đã biết
 

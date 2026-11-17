@@ -16,6 +16,7 @@ import { materials, money, number, today } from "../data/factoryState";
 import { mapOrder } from "../data/factoryApi";
 import { useFactoryDashboard, useFactoryPage, useFactoryPrices } from "../data/useFactoryData";
 import ContractDocument from "../../../../components/ui/ContractDocument";
+import EsignPanel, { useEsignReturn } from "../../../esign/EsignPanel";
 
 const MaterialSelect = ({ value, onChange, all = false }) => (
   <select value={value} onChange={onChange}>
@@ -627,7 +628,8 @@ export function Partners({ navigate }) {
   const [contractView, setContractView] = useState(null);
   const [termination, setTermination] = useState(null);
   const [page, setPage] = useState(1);
-  const { data, isPending, error } = useFactoryPage("partners", { page, partnerStatus: filter });
+  const { data, isPending, error, refetch } = useFactoryPage("partners", { page, partnerStatus: filter });
+  useEsignReturn(() => refetch());
   const depots = data?.items || [];
   return (
     <>
@@ -743,6 +745,7 @@ export function Partners({ navigate }) {
       {contractView && (
         <Modal title={`Xem hợp đồng • ${contractView.contractCode || contractView.name}`} onClose={() => setContractView(null)}>
           <ContractDocument contract={contractView} depotName={contractView.name} />
+          {["PENDING_DEPOT", "ACTIVE"].includes(contractView.contractStatus) && <EsignPanel partnershipId={contractView.partnershipId} contractStatus={contractView.contractStatus} onChanged={() => refetch()} />}
           <div className="form-actions"><Button secondary onClick={() => window.print()}>In / Lưu PDF</Button><Button onClick={() => setContractView(null)}>Đóng</Button></div>
         </Modal>
       )}
