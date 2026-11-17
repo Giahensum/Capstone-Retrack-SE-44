@@ -75,6 +75,8 @@ public sealed class DepotPartnershipService(IDepotService scope, IDepotPartnersh
         partner.TerminationReason = reason;
         partner.TerminatedAt = null;
         partner.UpdatedAt = DateTime.UtcNow;
+        await repository.QueueFactoryNoticeAsync(partner, "Vựa đề nghị chấm dứt hợp đồng",
+            $"Hợp đồng {partner.ContractCode ?? partner.Id.ToString()} có đề nghị chấm dứt từ chủ vựa. Mở Vựa đối tác để xem lý do và phản hồi.", ct);
         await repository.SaveAsync(ct);
         await tx.CommitAsync();
         return View(partner);

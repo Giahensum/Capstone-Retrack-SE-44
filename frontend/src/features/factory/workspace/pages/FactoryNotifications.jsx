@@ -24,13 +24,14 @@ function useNoticeActions() {
 }
 
 function Notice({ notice, onOpen, onRead, busy }) {
+  const target = notice.targetType === "PARTNERS" && notice.depotId ? "partners" : notice.batchId ? "orders" : null;
   return <article className={`factory-notice ${notice.isRead ? "" : "unread"}`}>
     <div className="factory-notice-head"><strong>{notice.title}</strong>{!notice.isRead && <span>Chưa đọc</span>}</div>
     <p>{notice.message}</p>
     <small>{time(notice.createdAt)}</small>
     <div className="factory-notice-actions">
       <button type="button" disabled={busy} onClick={() => onRead(notice)}>{notice.isRead ? "Đánh dấu chưa đọc" : "Đánh dấu đã đọc"}</button>
-      {notice.batchId && <button type="button" disabled={busy} onClick={() => onOpen(notice)}>Xem lô hàng</button>}
+      {target && <button type="button" disabled={busy} onClick={() => onOpen(notice)}>{target === "partners" ? "Xem vựa đối tác" : "Xem lô hàng"}</button>}
     </div>
   </article>;
 }
@@ -56,12 +57,13 @@ export function FactoryNotificationBell({ navigate }) {
     catch (error) { notify(error.message, true); }
   };
   const show = async (notice) => {
-    if (!notice.batchId) return;
+    const isPartner = notice.targetType === "PARTNERS" && notice.depotId;
+    if (!isPartner && !notice.batchId) return;
     if (!notice.isRead) {
       try { await action.mutateAsync({ id: notice.id, isRead: true }); }
       catch (error) { notify(error.message, true); return; }
     }
-    setOpen(false); navigate("orders", notice.batchId);
+    setOpen(false); navigate(isPartner ? "partners" : "orders", isPartner ? null : notice.batchId);
   };
   return <div className="factory-notification-box" ref={box}>
     <button ref={trigger} type="button" className="factory-bell" aria-label={count.isError ? "Thông báo: chưa tải được số chưa đọc" : `Mở thông báo, ${count.data ?? 0} chưa đọc`}
@@ -103,7 +105,7 @@ export default function FactoryNotifications({ navigate }) {
       {notices.isPending && <p role="status">Đang tải thông báo…</p>}
       {notices.isError && <p role="alert">{notices.error.message} <Button secondary onClick={() => notices.refetch()}>Thử lại</Button></p>}
       {notices.data?.items.map((notice) => <Notice key={notice.id} notice={notice} busy={action.isPending}
-        onOpen={async (item) => { if (!item.isRead && !await run({ id: item.id, isRead: true })) return; navigate("orders", item.batchId); }}
+        onOpen={async (item) => { if (!item.isRead && !await run({ id: item.id, isRead: true })) return; navigate(item.targetType === "PARTNERS" ? "partners" : "orders", item.batchId); }}
         onRead={(item) => void run({ id: item.id, isRead: !item.isRead })} />)}
       {notices.data?.totalCount === 0 && <p role="status">Chưa có thông báo phù hợp.</p>}
       {notices.data && <Pagination page={page} totalCount={notices.data.totalCount} totalPages={notices.data.totalPages} onChange={setPage} />}

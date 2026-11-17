@@ -24,7 +24,7 @@ public sealed class FactoryNotificationService(AppDbContext db)
             .Skip(skip).Take(pageSize)
             .Select(x => new FactoryNotificationResponse(x.Id, x.Title, x.Message ?? "", x.Category,
                 x.BatchId ?? db.TransportJobs.Where(job => job.Id == x.TransportJobId).Select(job => (Guid?)job.BatchId).FirstOrDefault(),
-                x.IsRead, x.CreatedAt)).ToListAsync(ct);
+                x.DepotId, x.TargetType, x.IsRead, x.CreatedAt)).ToListAsync(ct);
         return new PageResponse<FactoryNotificationResponse> { Items = items, TotalCount = total, Page = page,
             PageSize = pageSize, TotalPages = (int)Math.Ceiling((double)total / pageSize) };
     }
