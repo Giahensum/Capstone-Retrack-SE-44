@@ -239,6 +239,8 @@ app.UseCors("AllowFrontend");
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter();
+// Health check cho Docker/CD: ShortCircuit để bỏ qua HTTPS redirect, CORS, auth (cổng 8080 chỉ nghe HTTP).
+app.MapGet("/health/live", () => Results.Ok(new { status = "ok" })).ShortCircuit();
 app.MapControllers();
 
 // ===== DB-FIRST: app KHÔNG tự migrate; schema/seed nằm ở db/bootstrap/retrack-system.sql =====
