@@ -88,4 +88,3 @@ export default function BatchDetailModal({ id, onClose }) {
     <DriverEventsPanel id={id} />
   </div>}</QueryState></Dialog>;
 }
-
