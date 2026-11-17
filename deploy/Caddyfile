@@ -1,5 +1,9 @@
 # Chỉ dùng khi bật profile "tls" (có tên miền trỏ về IP VPS). Caddy tự xin và gia hạn chứng chỉ Let's Encrypt.
 {$DOMAIN} {
+	# Log truy cập ra stdout: xem webhook PayOS có tới không bằng `docker compose ... --profile tls logs caddy | grep payos`
+	log {
+		output stdout
+	}
 	encode gzip
 	reverse_proxy api:8080
 }

@@ -26,7 +26,8 @@ const tabs = [
 function Workspace() {
   const { state, user, logout, loading, retry } = useFactory();
   const navigateRoute = useNavigate();
-  const [tab, setTab] = useState("dashboard");
+  // DocuSign đưa người dùng quay lại với ?esign=return: mở thẳng tab đối tác để thấy kết quả ký.
+  const [tab, setTab] = useState(() => (new URLSearchParams(window.location.search).get("esign") === "return" ? "partners" : "dashboard"));
   const [focusId, setFocusId] = useState(null);
   function navigate(next, orderId = null) {
     setFocusId(orderId);

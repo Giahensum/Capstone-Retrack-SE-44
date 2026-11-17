@@ -224,6 +224,12 @@ ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS contract_version
 ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS contract_terms TEXT;
 ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS contract_terms_hash VARCHAR(64);
 ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS contract_status VARCHAR(30);
+-- Ký điện tử hợp đồng bằng DocuSign (sandbox)
+ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS esign_envelope_id VARCHAR(64);
+ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS esign_status VARCHAR(30);
+ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS esign_terms_hash VARCHAR(64);
+ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS esign_sent_at TIMESTAMPTZ;
+ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS esign_completed_at TIMESTAMPTZ;
 ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS factory_signed_by UUID REFERENCES users(id);
 ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS factory_signed_at TIMESTAMPTZ;
 ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS depot_signed_by UUID REFERENCES users(id);

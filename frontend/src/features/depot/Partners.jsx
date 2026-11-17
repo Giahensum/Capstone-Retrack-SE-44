@@ -6,6 +6,7 @@ import { MaterialIcon } from './components/DepotIcon';
 import { materialLabel } from './materialLabels';
 import CreateBatchModal from './components/CreateBatchModal';
 import ContractDocument from '../../components/ui/ContractDocument';
+import EsignPanel, { useEsignReturn } from '../esign/EsignPanel';
 
 const labels = { APPROVED: 'Đang hợp tác', PENDING: 'Chưa hợp tác', DECLINED: 'Không hợp tác', BLOCKED: 'Đã chặn' };
 const contractLabels = { PENDING_DEPOT: 'Chờ chủ vựa ký', ACTIVE: 'Đang hiệu lực', REJECTED: 'Đã từ chối', TERMINATED: 'Đã chấm dứt' };
@@ -34,6 +35,7 @@ export default function Partners() {
     nearestFirst: hasCoordinates && nearestFirst }, activeTab === 'list');
   const demands = useDepotQuery('partners/demands', { page, search }, activeTab === 'demand');
   const requests = useDepotQuery('partnerships', { page });
+  useEsignReturn(() => requests.refetch());
   const pendingContracts = requests.data?.items?.filter((item) => item.contractStatus === 'PENDING_DEPOT') || [];
   const update = useDepotMutation('put', (id) => `partnerships/${id}/status`, () => setDecision(null));
   const decideContract = useDepotMutation('post', (id) => `partnerships/${id}/contract/decision`, () => setContractDecision(null));
@@ -51,6 +53,7 @@ export default function Partners() {
       </Dialog>}
       {contractDecision && <Dialog title={`Hợp đồng ${contractDecision.contractCode || ''}`} onClose={() => setContractDecision(null)} busy={decideContract.isPending}>
         <ContractDocument contract={contractDecision} factoryName={contractDecision.factoryName} depotName={profile.data?.name || profile.data?.depotName} />
+        {['PENDING_DEPOT', 'ACTIVE'].includes(contractDecision.contractStatus) && <EsignPanel partnershipId={contractDecision.id} contractStatus={contractDecision.contractStatus} onChanged={() => requests.refetch()} />}
         {contractDecision.contractStatus === 'PENDING_DEPOT' && <><label className="mt-4 flex items-start gap-2 text-sm"><input type="checkbox" checked={contractDecision.confirmed || false} onChange={(e) => setContractDecision({ ...contractDecision, confirmed: e.target.checked })} />Tôi đã đọc, đồng ý nội dung và xác nhận ký điện tử với tư cách chủ vựa.</label><MutationError mutation={decideContract} /></>}
         <div className="mt-5 flex flex-wrap justify-end gap-3"><button className="border border-d-primary text-d-primary px-4 py-2 rounded-full" type="button" onClick={() => window.print()}>In / Lưu PDF</button><button onClick={() => setContractDecision(null)} disabled={decideContract.isPending}>Đóng</button>
           {contractDecision.contractStatus === 'PENDING_DEPOT' && <><button className="border border-d-error text-d-error px-4 py-2 rounded-full" disabled={decideContract.isPending} onClick={() => decideContract.mutate({ id: contractDecision.factoryId, body: { decision: 'REJECT', confirmElectronicSignature: false } })}>Từ chối</button>
