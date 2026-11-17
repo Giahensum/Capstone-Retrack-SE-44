@@ -228,6 +228,22 @@ public sealed partial class ContractEsignService(
         sb.Append($"<td style=\"width:50%;vertical-align:top\"><b>ĐẠI DIỆN BÊN A</b><br/>{E(p.Factory.Owner?.FullName)}<br/><br/><br/><span style=\"color:#ffffff;font-size:1px\">{FactoryAnchor}</span></td>");
         sb.Append($"<td style=\"width:50%;vertical-align:top\"><b>ĐẠI DIỆN BÊN B</b><br/>{E(p.Depot.Owner?.FullName)}<br/><br/><br/><span style=\"color:#ffffff;font-size:1px\">{DepotAnchor}</span></td>");
         sb.Append("</tr></table></body></html>");
+        return AsciiOnly(sb.ToString());
+    }
+
+    /// <summary>
+    /// DocuSign đổi HTML sang PDF mà không hiểu chắc bảng mã của chuỗi nguồn: ký tự ngoài Latin-1 (ạ, ệ, ồ, ợ, ế...) bị thay bằng "?".
+    /// Đổi mọi ký tự không phải ASCII thành mã số HTML (&amp;#7907;) để nội dung luôn đúng bất kể bảng mã; phông Times New Roman / Arial
+    /// của DocuSign có đủ glyph tiếng Việt nên hiển thị đúng.
+    /// </summary>
+    private static string AsciiOnly(string html)
+    {
+        var sb = new StringBuilder(html.Length + 512);
+        foreach (var rune in html.EnumerateRunes())
+        {
+            if (rune.Value < 128) sb.Append((char)rune.Value);
+            else sb.Append("&#").Append(rune.Value).Append(';');
+        }
         return sb.ToString();
     }
 
