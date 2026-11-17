@@ -103,6 +103,12 @@ namespace Retrack.API.Models
         [Column("termination_requested_at")] public DateTime? TerminationRequestedAt { get; set; }
         [Column("termination_reason"), MaxLength(2000)] public string? TerminationReason { get; set; }
         [Column("terminated_at")] public DateTime? TerminatedAt { get; set; }
+        // Ký điện tử DocuSign (sandbox): mã envelope, trạng thái ký, mã băm nội dung lúc gửi để biết envelope còn đúng bản hợp đồng hiện tại không.
+        [Column("esign_envelope_id"), MaxLength(64)] public string? EsignEnvelopeId { get; set; }
+        [Column("esign_status"), MaxLength(30)] public string? EsignStatus { get; set; }
+        [Column("esign_terms_hash"), MaxLength(64)] public string? EsignTermsHash { get; set; }
+        [Column("esign_sent_at")] public DateTime? EsignSentAt { get; set; }
+        [Column("esign_completed_at")] public DateTime? EsignCompletedAt { get; set; }
         // BLOCKED cũ không xác định bên chặn: giữ nguyên để đối chiếu, không tự mở.
         [NotMapped] public bool IsBlocked => Status == "BLOCKED" || BlockedByDepot || BlockedByFactory;
         [NotMapped] public string EffectiveStatus => IsBlocked ? "BLOCKED" : Status;
