@@ -1,0 +1,120 @@
+name: Backend CD (Azure VM)
+
+# Build image -> đẩy lên GHCR -> SSH vào Azure VM để chạy bản mới.
+# Không áp dụng SQL/migration: schema vẫn do nhóm chạy tay (db/bootstrap/retrack-system.sql).
+# Chạy khi push vào main (hoặc chạy tay). Nên bật branch protection để main chỉ nhận PR đã qua Backend CI.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-cd.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: backend-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tên image (GHCR bắt buộc chữ thường)
+        id: meta
+        run: |
+          IMAGE="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/retrack-api"
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Build (kiểm tra biên dịch)
+        run: |
+          dotnet restore backend/Retrack.sln
+          dotnet build backend/Retrack.sln --no-restore -c Release
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build và đẩy image
+        uses: docker/build-push-action@v6
+        with:
+          context: backend/Retrack.API
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.image }}:${{ github.sha }}
+            ${{ steps.meta.outputs.image }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production   # tạo Environment "production" trên GitHub để bật duyệt tay nếu muốn
+    steps:
+      - name: Triển khai lên Azure VM
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IMAGE_TAG: ${{ needs.build.outputs.image }}:${{ github.sha }}
+        with:
+          host: ${{ secrets.AZURE_VM_HOST }}
+          username: ${{ secrets.AZURE_VM_USER }}
+          key: ${{ secrets.AZURE_VM_SSH_KEY }}
+          envs: GHCR_USER,GHCR_TOKEN,IMAGE_TAG
+          script_stop: true
+          script: |
+            set -e
+            ENV_FILE=/opt/retrack/api.env   # chứa secret thật, chỉ nằm trên VM
+            test -f "$ENV_FILE" || { echo "Thiếu $ENV_FILE"; exit 1; }
+
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+            docker pull "$IMAGE_TAG"
+
+            PREV=$(docker inspect --format '{{.Config.Image}}' retrack-api 2>/dev/null || true)
+            docker rm -f retrack-api 2>/dev/null || true
+
+            run_api() {
+              docker run -d --name retrack-api --restart unless-stopped \
+                -p 8080:8080 --env-file "$ENV_FILE" \
+                -v /opt/retrack/uploads:/app/uploads "$1"
+            }
+            healthy() {
+              for i in $(seq 1 20); do
+                curl -fsS http://localhost:8080/health/live >/dev/null && return 0
+                sleep 3
+              done
+              return 1
+            }
+
+            run_api "$IMAGE_TAG"
+            if healthy; then
+              echo "Triển khai thành công: $IMAGE_TAG"
+              docker logout ghcr.io
+              docker image prune -f >/dev/null
+            else
+              echo "Health check lỗi, quay về bản trước: ${PREV:-<none>}"
+              docker logs --tail 50 retrack-api || true
+              docker rm -f retrack-api || true
+              if [ -n "$PREV" ]; then run_api "$PREV"; fi
+              docker logout ghcr.io
+              exit 1
+            fi
