@@ -81,15 +81,19 @@ public sealed class DepotBatchRepository(AppDbContext db) : IDepotBatchRepositor
     public async Task QueuePaymentConfirmedNoticeAsync(InventoryBatch batch)
     {
         if (batch.TargetFactoryId is not Guid factoryId) return;
+        await QueueFactoryBatchNoticeAsync(factoryId, batch, "Vựa đã xác nhận nhận tiền",
+            $"Lô {batch.Code ?? batch.Id.ToString()} đã được vựa đối chiếu và xác nhận nhận đủ tiền.");
+    }
+    public async Task QueueFactoryBatchNoticeAsync(Guid factoryId, InventoryBatch batch, string title, string message, string targetType = "BATCH")
+    {
         var ownerId = await db.Factories.AsNoTracking().Where(x => x.Id == factoryId)
             .Select(x => (Guid?)x.OwnerId).SingleOrDefaultAsync();
         if (ownerId is null) return;
         db.Notifications.Add(new Notification
         {
             UserId = ownerId.Value, BatchId = batch.Id, Category = "FACTORY",
-            TargetType = "BATCH", TargetId = batch.Id,
-            Title = "Vựa đã xác nhận nhận tiền",
-            Message = $"Lô {batch.Code ?? batch.Id.ToString()} đã được vựa đối chiếu và xác nhận nhận đủ tiền."
+            TargetType = targetType, TargetId = batch.Id,
+            Title = title, Message = message
         });
     }
 }

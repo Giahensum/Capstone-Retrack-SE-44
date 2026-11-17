@@ -440,6 +440,9 @@ public class AdminServiceTests
         Assert.NotNull(result.PaidAt);
         Assert.Equal("Nhà máy", result.PayerName);
         Assert.Contains(await db.AuditLogs.ToListAsync(), a => a.Action == "MARK_PAID");
+        Assert.Single(await db.Notifications.Where(x => x.UserId == payer.Id && x.TargetType == "FEES").ToListAsync());
+        await service.MarkInvoicePaidAsync(invoice.Id, Guid.NewGuid());
+        Assert.Single(await db.Notifications.Where(x => x.UserId == payer.Id && x.TargetType == "FEES").ToListAsync());
     }
 
     [Fact]
