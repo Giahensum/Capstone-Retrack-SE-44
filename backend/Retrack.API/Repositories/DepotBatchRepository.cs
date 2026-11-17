@@ -22,11 +22,12 @@ public sealed class DepotBatchRepository(AppDbContext db) : IDepotBatchRepositor
                 b.QualityCheck.PurityPercent, b.QualityCheck.MoisturePercent, b.QualityCheck.ContaminationPercent,
                 b.QualityCheck.QualityNote, b.QualityCheck.Resolution, b.QualityCheck.TicketNumber,
                 b.QualityCheck.TicketImageUrl, b.QualityCheck.InvoiceNumber, b.QualityCheck.InvoiceFileUrl),
-            b.SettledAt == null ? null : new DepotBatchSettlementDto(b.AgreedPricePerKg, b.GrossAmount,
+            b.SettledAt == null && b.SettlementProposedAt == null ? null : new DepotBatchSettlementDto(b.AgreedPricePerKg, b.GrossAmount,
                 b.PlatformFeeAmount, b.NetAmount, b.VatTreatment, b.VatPercentage, b.VatAmount,
-                b.InvoiceTotalAmount, b.PaymentReference, b.SettledAt.Value,
+                b.InvoiceTotalAmount, b.PaymentReference, (b.SettledAt ?? b.SettlementProposedAt)!.Value,
                 b.QualityCheck == null ? null : b.QualityCheck.PaymentProofUrl,
-                b.VatTreatment == null ? null : b.PriceIncludesVat, b.FeePolicy, b.DepotPaymentConfirmedAt)))
+                b.VatTreatment == null ? null : b.PriceIncludesVat, b.FeePolicy, b.DepotPaymentConfirmedAt),
+            new BatchWorkflowDto(b.SettlementWorkflowVersion, b.SettlementRevision, b.SettlementProposedAt, b.SettlementApprovedAt, b.SettlementDecisionReason)))
         .SingleOrDefaultAsync();
     public async Task<PagedResult<DepotBatchDto>> ListAsync(Guid depotId, DepotQuery query)
     {
@@ -78,6 +79,13 @@ public sealed class DepotBatchRepository(AppDbContext db) : IDepotBatchRepositor
         return batch;
     }
     public Task<bool> HasTransportAsync(Guid batchId) => db.TransportJobs.AnyAsync(t => t.BatchId == batchId);
+    public Task<PlatformTransaction?> FindFeeAsync(Guid batchId) => db.PlatformTransactions.SingleOrDefaultAsync(x => x.SourceType == "BATCH_ORDER" && x.SourceId == batchId);
+    public Task<Guid?> FactoryOwnerAsync(Guid factoryId) => db.Factories.Where(x => x.Id == factoryId).Select(x => (Guid?)x.OwnerId).SingleOrDefaultAsync();
+    public void AddFee(PlatformTransaction transaction) => db.PlatformTransactions.Add(transaction);
+    public void AddWorkflowEvent(BatchWorkflowEvent entry) => db.BatchWorkflowEvents.Add(entry);
+    public Task<PagedResult<BatchWorkflowEventDto>> WorkflowEventsAsync(Guid batchId, DepotQuery query) => DepotRepositoryPage.ReadAsync(
+        db.BatchWorkflowEvents.AsNoTracking().Where(x => x.BatchId == batchId).OrderByDescending(x => x.CreatedAt).ThenBy(x => x.Id)
+            .Select(x => new BatchWorkflowEventDto(x.Id, x.Action, x.FromStatus, x.ToStatus, x.Revision, x.Note, x.CreatedAt, x.PricePerKg, x.NetAmount)), query);
     public async Task QueuePaymentConfirmedNoticeAsync(InventoryBatch batch)
     {
         if (batch.TargetFactoryId is not Guid factoryId) return;

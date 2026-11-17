@@ -26,7 +26,7 @@ public sealed partial class DepotReportRepository(AppDbContext db) : IDepotRepor
     public async Task<(List<DepotDailyAmount> Revenue, List<DepotDailyAmount> Costs)> DailyAmountsAsync(Guid depotId, DateTime start, DateTime end)
     {
         var settled = db.InventoryBatches.AsNoTracking().Where(b => b.DepotId == depotId && b.SettledAt >= start && b.SettledAt < end &&
-            (b.Status == "COMPLETED" || b.Status == "PAID") && b.NetAmount != null)
+            ((b.Status == "COMPLETED" && b.SettlementWorkflowVersion == 0) || b.Status == "PAID") && b.NetAmount != null)
             .Select(b => new { Date = b.SettledAt!.Value, Amount = b.NetAmount!.Value });
         // Giữ dữ liệu QC cũ chưa có SettledAt, không cộng trùng lô đã quyết toán theo contract mới.
         var legacy = db.BatchQualityChecks.AsNoTracking().Where(q => q.Batch.DepotId == depotId && q.Batch.SettledAt == null && q.IsAccepted &&
@@ -43,7 +43,7 @@ public sealed partial class DepotReportRepository(AppDbContext db) : IDepotRepor
     }
     public async Task<DepotDashboardCounts> DashboardCountsAsync(Guid depotId, DateTime day) => new(
         await db.PickupRequests.CountAsync(p => p.TargetDepotId == depotId && p.CreatedAt >= day),
-        await db.InventoryBatches.CountAsync(b => b.DepotId == depotId && b.Status != "COMPLETED" && b.Status != "CANCELLED" && b.Status != "REJECTED" && b.Status != "PAID"),
+        await db.InventoryBatches.CountAsync(b => b.DepotId == depotId && (b.Status != "COMPLETED" || b.SettlementWorkflowVersion > 0) && b.Status != "CANCELLED" && b.Status != "REJECTED" && b.Status != "PAID"),
         await db.PickupRequests.CountAsync(p => p.TargetDepotId == depotId && p.Status == "AWAITING_PAYMENT"),
         await db.InventoryBatches.CountAsync(b => b.DepotId == depotId && b.Status == "REJECTED" && b.QualityCheck != null));
     private sealed class StaffRow

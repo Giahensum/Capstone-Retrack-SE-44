@@ -38,7 +38,7 @@ const modes = {
   settlements: {
     title: "Quyết toán thu mua",
     text: "Chốt đơn giá sau KCS, đối chiếu phí theo chính sách của lô và ghi nhận thanh toán cho vựa.",
-    states: ["VERIFIED", "SETTLEMENT_RECORDED", "PAYMENT_REPORTED", "PAID"],
+    states: ["VERIFIED", "SETTLEMENT_PENDING", "SETTLEMENT_DISPUTED", "SETTLEMENT_ACCEPTED", "SETTLEMENT_RECORDED", "PAYMENT_REPORTED", "PAID"],
   },
 };
 export function Operations({ mode, focusId, navigate }) {
@@ -250,12 +250,12 @@ export function Operations({ mode, focusId, navigate }) {
                     Kiểm tra & Chốt KCS
                   </Button>
                 )}
-                {order.status === "VERIFIED" && (
+                {["VERIFIED", "SETTLEMENT_DISPUTED"].includes(order.status) && (
                   <Button onClick={() => setAction("settle")}>
-                    Thỏa thuận giá & Quyết toán
+                    {order.settlementWorkflowVersion ? "Gửi đề xuất giá cho vựa" : "Thỏa thuận giá & Quyết toán"}
                   </Button>
                 )}
-                {order.status === "SETTLEMENT_RECORDED" && (
+                {["SETTLEMENT_RECORDED", "SETTLEMENT_ACCEPTED"].includes(order.status) && (
                   <Button onClick={() => setAction("payment-proof")}>Xác nhận đã chuyển tiền</Button>
                 )}
                 {order.status === "PAID" && !order.rating && (
@@ -288,8 +288,10 @@ export function Operations({ mode, focusId, navigate }) {
               </p>
             </Card>
           </div>
-          {order.payment && (
-            <Card title="Bảng kê đã quyết toán">
+          {order.settlementDecisionReason && <p className="info-box">Vựa phản hồi: {order.settlementDecisionReason}</p>}
+      {order.status === "SETTLEMENT_PENDING" && <p className="info-box">Đã gửi đề xuất. Chờ vựa đồng ý giá trước khi chuyển khoản.</p>}
+      {order.payment && (
+            <Card title={order.settlementWorkflowVersion && !order.payment.confirmedAt ? "Đề xuất và đối chiếu tiền" : "Bảng kê đã quyết toán"}>
               <Financial values={order.payment} net={order.weight.net} />
               <p className="muted">
                 Mã tham chiếu: {order.payment.reference} ·{" "}
@@ -299,7 +301,7 @@ export function Operations({ mode, focusId, navigate }) {
               {order.payment.proofUrl && <button type="button" className="text-link" onClick={() => void downloadFactoryAttachment(order.payment.proofUrl, "chung-tu-chuyen-khoan")}>Tải chứng từ chuyển khoản</button>}
             </Card>
           )}
-          {["VERIFIED", "SETTLEMENT_RECORDED", "PAYMENT_REPORTED", "PAID"].includes(order.status) && (
+          {["VERIFIED", "SETTLEMENT_PENDING", "SETTLEMENT_DISPUTED", "SETTLEMENT_ACCEPTED", "SETTLEMENT_RECORDED", "PAYMENT_REPORTED", "PAID"].includes(order.status) && (
             <Card title="Hóa đơn đính kèm">
               <Attachment
                 key={order.id}
@@ -644,7 +646,7 @@ function SettlementForm({ order, close }) {
         if (await act(
             "SETTLE",
             { id: order.id, price, priceIncludesVat, vatTreatment, vatPercentage, invoiceNumber, invoiceDate, sellerTaxCode, vatLegalBasis },
-            "Đã chốt quyết toán. Bước tiếp theo: xác nhận đã chuyển tiền và gửi chứng từ.",
+            order.settlementWorkflowVersion ? "Đã gửi đề xuất; chờ vựa xác nhận giá." : "Đã chốt quyết toán. Bước tiếp theo: xác nhận đã chuyển tiền và gửi chứng từ.",
           )) close();
       }}
     >
@@ -706,14 +708,14 @@ function SettlementForm({ order, close }) {
           checked={confirmed}
           onChange={(e) => setConfirmed(e.target.checked)}
         />
-        Tôi xác nhận giá và số tiền quyết toán đã thống nhất với vựa.
+        {order.settlementWorkflowVersion ? "Tôi đã kiểm tra đơn giá, khối lượng và VAT; gửi đề xuất để vựa xác nhận." : "Tôi xác nhận giá và số tiền quyết toán đã thống nhất với vựa."}
       </label>
       <div className="form-actions">
         <Button secondary onClick={close}>
           Hủy
         </Button>
         <Button type="submit" disabled={!preview || !confirmed}>
-          Chốt quyết toán
+          {order.settlementWorkflowVersion ? "Gửi đề xuất giá" : "Chốt quyết toán"}
         </Button>
       </div>
     </form>

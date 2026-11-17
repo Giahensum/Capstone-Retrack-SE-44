@@ -7,6 +7,7 @@ import api from '@/lib/axios';
 import { depotError } from '../DepotContext';
 import BatchCostPanel from './BatchCostPanel';
 import DriverEventsPanel from './DriverEventsPanel';
+import BatchSettlementPanel from './BatchSettlementPanel';
 const missing = 'Chưa cập nhật';
 const kg = (v) => v == null ? missing : `${number(v)} kg`;
 const percent = (v) => v == null ? missing : `${number(v)}%`;
@@ -67,6 +68,7 @@ export default function BatchDetailModal({ id, onClose }) {
       ["Tổng tiền theo hóa đơn", cash(s?.invoiceTotalAmount)], [s?.feePolicy === "BUYER_SEPARATE_V1" ? "Phí do Factory trả riêng" : "Phí khấu trừ — lô cũ", cash(s?.feeAmount)],
       ["Tiền thanh toán theo quyết toán, gồm VAT đã khai", cash(s?.netAmount)],
       ["Tham chiếu thanh toán", s?.paymentReference], ["Ngày quyết toán", time(s?.settledAt)], ["Vựa xác nhận nhận tiền", time(s?.paymentConfirmedAt)], ["Số hóa đơn", q?.invoiceNumber]]}/>
+    <BatchSettlementPanel key={`${id}-${d.workflow?.revision ?? 0}`} detail={d} id={id} />
     {b.status === 'COMPLETED' && s?.paymentProofUrl && <section className="rounded-2xl border border-d-border-subtle bg-white p-4 space-y-3">
       <h3 className="font-semibold text-d-primary">Xác nhận tiền chuyển khoản</h3>
       <p className="text-sm text-d-on-surface-variant">Đối chiếu tiền thực nhận trong tài khoản ngân hàng, số tiền {cash(s.netAmount)} và mã {s.paymentReference} trước khi xác nhận.</p>

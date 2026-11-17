@@ -129,6 +129,9 @@ export function mapOrder(order) {
   return {
     id: order.id,
     batchId: order.batchCode || order.batchId,
+    settlementWorkflowVersion: order.settlementWorkflowVersion || 0,
+    settlementRevision: order.settlementRevision || 0,
+    settlementDecisionReason: order.settlementDecisionReason || "",
     feePolicy: order.feePolicy || "LEGACY_SELLER_DEDUCTION_V1",
     feePercentage: order.platformFeePercentage,
     depotId: order.depotId,
@@ -159,7 +162,7 @@ export function mapOrder(order) {
       note: verification.qualityNote || order.rejectionReason || "",
       resolution: verification.qualityNote?.startsWith("RENEGOTIATE:") ? "RENEGOTIATE" : "RETURN",
     } : null,
-    payment: order.settledAt ? {
+    payment: order.settledAt || order.settlementProposedAt ? {
       price: order.agreedPrice,
       total: order.totalAmount || net * order.agreedPrice,
       vatTreatment: order.vatTreatment || "NOT_APPLICABLE",
@@ -175,7 +178,7 @@ export function mapOrder(order) {
       reference: order.paymentReference || "",
       proofUrl: order.paymentProofUrl || "",
       confirmedAt: order.depotPaymentConfirmedAt || null,
-      at: order.settledAt,
+      at: order.settledAt || order.settlementProposedAt,
     } : null,
     invoice: invoice?.invoiceFileUrl ? {
       name: invoice.invoiceNumber || "Hóa đơn",

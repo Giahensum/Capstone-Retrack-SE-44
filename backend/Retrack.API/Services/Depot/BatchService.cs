@@ -13,7 +13,7 @@ public sealed class BatchService(IDepotBatchRepository batches, IDepotUnitOfWork
         await scope.RequireOwnerAsync(ownerId, depotId);
         return await batches.DetailAsync(depotId, batchId) ?? throw new KeyNotFoundException("Không tìm thấy lô trong kho đang quản lý.");
     }
-    private static readonly string[] States = ["DRAFT", "LISTED", "MARKETPLACE", "PENDING_APPROVAL", "PENDING_FACTORY", "TRANSPORT_READY", "ACCEPTED", "READY_FOR_PICKUP", "IN_PROGRESS", "IN_TRANSIT", "DELIVERED", "RECEIVED", "WEIGHED", "VERIFIED", "COMPLETED", "PAID", "REJECTED", "CANCELLED"];
+    private static readonly string[] States = ["DRAFT", "LISTED", "MARKETPLACE", "PENDING_APPROVAL", "PENDING_FACTORY", "TRANSPORT_READY", "ACCEPTED", "READY_FOR_PICKUP", "IN_PROGRESS", "IN_TRANSIT", "DELIVERED", "RECEIVED", "WEIGHED", "VERIFIED", "SETTLEMENT_PENDING", "SETTLEMENT_DISPUTED", "SETTLEMENT_ACCEPTED", "COMPLETED", "PAID", "REJECTED", "CANCELLED"];
 
     public async Task<PagedResult<DepotBatchDto>> ListAsync(Guid ownerId, Guid depotId, DepotQuery query)
     {
@@ -106,6 +106,7 @@ public sealed class BatchService(IDepotBatchRepository batches, IDepotUnitOfWork
             DirectOfferFactoryId = !isApproved && dto.TargetFactoryId.HasValue ? dto.TargetFactoryId : null,
             Status = status, ImageUrls = imageUrls.ToArray(),
             FeePolicy = Retrack.API.Services.Shared.PlatformFees.BuyerSeparate,
+            SettlementWorkflowVersion = 1,
             FeePercentageSnapshot = Retrack.API.Services.Shared.PlatformFees.Rate(await batches.FeeConfigurationAsync())
         };
         batches.AddBatch(batch);
@@ -147,25 +148,7 @@ public sealed class BatchService(IDepotBatchRepository batches, IDepotUnitOfWork
 
     public async Task ConfirmPaymentAsync(Guid ownerId, Guid depotId, Guid batchId, decimal amount, string paymentReference)
     {
-        await scope.RequireOwnerAsync(ownerId, depotId);
-        await using var tx = await work.BeginAsync();
-        await batches.LockDepotAsync(depotId);
-        var batch = await batches.LockBatchAsync(batchId) ?? throw new KeyNotFoundException("Không tìm thấy lô.");
-        if (batch.DepotId != depotId) throw new DepotForbiddenException();
-        if (batch.Status is not ("COMPLETED" or "PAID") || batch.SettledAt is null ||
-            string.IsNullOrWhiteSpace(batch.QualityCheck?.PaymentProofUrl))
-            throw new DepotConflictException("Lô chưa có quyết toán và chứng từ chuyển khoản để xác nhận.");
-        if (amount <= 0 || amount != batch.NetAmount ||
-            !string.Equals(paymentReference?.Trim(), batch.PaymentReference, StringComparison.Ordinal))
-            throw new DepotConflictException("Số tiền hoặc mã tham chiếu chưa khớp với quyết toán của lô.");
-        if (batch.Status == "PAID") return;
-        batch.Status = "PAID";
-        batch.DepotPaymentConfirmedAt = DateTime.UtcNow;
-        batch.DepotPaymentConfirmedBy = ownerId;
-        batch.UpdatedAt = DateTime.UtcNow;
-        await batches.QueuePaymentConfirmedNoticeAsync(batch);
-        await work.SaveAsync();
-        await tx.CommitAsync();
+        await new BatchSettlementService(batches, work, scope).ConfirmPaymentAsync(ownerId, depotId, batchId, amount, paymentReference);
     }
 
     private static DepotBatchDto Map(InventoryBatch b) => new(b.Id, b.DepotId, b.MaterialType,

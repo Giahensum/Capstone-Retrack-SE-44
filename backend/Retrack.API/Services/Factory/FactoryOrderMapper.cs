@@ -71,6 +71,11 @@ public static class FactoryOrderMapper
             PaymentReference = batch.PaymentReference,
             PaymentProofUrl = qc?.PaymentProofUrl,
             DepotPaymentConfirmedAt = batch.DepotPaymentConfirmedAt,
+            SettlementWorkflowVersion = batch.SettlementWorkflowVersion,
+            SettlementRevision = batch.SettlementRevision,
+            SettlementProposedAt = batch.SettlementProposedAt,
+            SettlementApprovedAt = batch.SettlementApprovedAt,
+            SettlementDecisionReason = batch.SettlementDecisionReason,
             CreatedAt = batch.CreatedAt,
             Transport = transport == null ? null : new OrderTransportResponse
             {
