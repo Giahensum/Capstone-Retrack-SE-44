@@ -164,6 +164,9 @@ namespace Retrack.API.Models
         [Column("direct_offer_factory_id")]
         public Guid? DirectOfferFactoryId { get; set; }
 
+        [Column("source_demand_id")]
+        public Guid? SourceDemandId { get; set; }
+
         [Required]
         [Column("material_type")]
         [MaxLength(100)]

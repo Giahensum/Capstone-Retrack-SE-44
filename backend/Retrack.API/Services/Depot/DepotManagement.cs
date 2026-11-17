@@ -38,6 +38,8 @@ public sealed partial class DepotService
     public async Task<PagedResult<DemandDto>> GetDemandsAsync(Guid ownerId, Guid depotId, DepotQuery query)
     {
         await RequireOwnerAsync(ownerId, depotId);
-        return await owners.DemandsAsync(depotId, query, DateTime.UtcNow);
+        var result = await owners.DemandsAsync(depotId, query, DateTime.UtcNow);
+        result.Items = result.Items.Select(d => d with { MaterialType = Retrack.API.Services.Shared.MaterialCatalog.Normalize(d.MaterialType) }).ToList();
+        return result;
     }
 }

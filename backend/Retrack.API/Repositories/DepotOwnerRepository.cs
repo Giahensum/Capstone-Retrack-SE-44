@@ -30,7 +30,9 @@ public sealed class DepotOwnerRepository(AppDbContext db) : IDepotOwnerRepositor
     }
     public async Task<PagedResult<FactoryPartnerDto>> FactoriesAsync(Guid depotId, FactorySearchQuery query)
     {
+        var now = DateTime.UtcNow;
         var source = db.Factories.AsNoTracking().Where(f => f.Owner != null && f.Owner.IsActive);
+        if (query.FactoryId.HasValue) source = source.Where(f => f.Id == query.FactoryId.Value);
         if (!string.IsNullOrWhiteSpace(query.Search)) source = source.Where(f => EF.Functions.ILike(f.Name, $"%{query.Search}%"));
         if (!string.IsNullOrWhiteSpace(query.MaterialType))
         {
@@ -74,7 +76,13 @@ public sealed class DepotOwnerRepository(AppDbContext db) : IDepotOwnerRepositor
             x.Factory.Name, x.Factory.Address, x.Factory.Rating,
             db.FactoryDepotPartnerships.Where(p => p.DepotId == depotId && p.FactoryId == x.Factory.Id)
                 .Select(p => p.Status == "BLOCKED" || p.BlockedByDepot || p.BlockedByFactory ? "BLOCKED" : p.Status).FirstOrDefault(),
-            x.Factory.AcceptedMaterialsCsv, x.DistanceKm)), query);
+            x.Factory.AcceptedMaterialsCsv, x.DistanceKm,
+            db.FactoryDepotPartnerships.Any(p => p.DepotId == depotId && p.FactoryId == x.Factory.Id &&
+                p.Status == "APPROVED" && !p.BlockedByDepot && !p.BlockedByFactory &&
+                ((p.ContractStatus == null || p.ContractStatus == "") && (p.ContractCode == null || p.ContractCode == "") &&
+                    p.ContractEffectiveAt == null && p.ContractExpiresAt == null ||
+                 p.ContractStatus == "ACTIVE" && (p.ContractEffectiveAt == null || p.ContractEffectiveAt <= now) &&
+                    (p.ContractExpiresAt == null || p.ContractExpiresAt > now))))), query);
     }
     public async Task<PagedResult<DemandDto>> DemandsAsync(Guid depotId, DepotQuery query, DateTime now)
     {
