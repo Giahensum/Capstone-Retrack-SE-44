@@ -75,6 +75,15 @@ test('Giá cần kho đồng ý, Factory gửi chứng từ, kho xác nhận nh�
     await page.reload(); await page.getByRole('row').filter({ hasText: batch.code }).getByTitle('Chi tiết lô hàng').click();
     await expect(page.getByRole('dialog')).toContainText('Kho xác nhận nhận đủ tiền');
     await page.screenshot({ path: test.info().outputPath('depot-da-nhan-tien.png'), fullPage: true });
+    await page.setViewportSize({ width: 390, height: 844 });
+    const mobileDialog = page.getByRole('dialog');
+    await expect(mobileDialog).toBeVisible();
+    const bounds = await mobileDialog.boundingBox();
+    expect(bounds.x).toBeGreaterThanOrEqual(0);
+    expect(bounds.x + bounds.width).toBeLessThanOrEqual(391);
+    expect(bounds.height).toBeLessThanOrEqual(844);
+    await page.getByRole('heading', { name: 'Lịch sử xác nhận của hai bên' }).scrollIntoViewIfNeeded();
+    await page.screenshot({ path: test.info().outputPath('depot-lich-su-mobile.png'), fullPage: true });
     await factoryDetail(); await expect(factory.getByText('Vựa đã xác nhận nhận tiền', { exact: true }).filter({ visible: true }).first()).toBeVisible();
     expect(errors).toEqual([]);
   } finally { await context.close(); }
