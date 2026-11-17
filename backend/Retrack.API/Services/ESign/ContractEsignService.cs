@@ -1,5 +1,7 @@
 using System.Net;
+using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Retrack.API.Data;
@@ -51,6 +53,7 @@ public sealed partial class ContractEsignService(
         if (p.IsBlocked) throw new DepotConflictException("Quan hệ đang bị chặn; chưa thể ký hợp đồng.");
         if (p.ContractStatus != "PENDING_DEPOT" || string.IsNullOrWhiteSpace(p.ContractTerms))
             throw new DepotConflictException("Không có hợp đồng đang chờ ký.");
+        RequireUnexpired(p);
 
         await EnsureEnvelopeAsync(p, ct);
         // Đồng bộ trước: nếu bên này đã ký rồi thì không mở lại trang ký.
@@ -90,6 +93,7 @@ public sealed partial class ContractEsignService(
         if (p is null || !docusign.IsConfigured) return;
         try { await SyncAsync(p, ct); }
         catch (DocuSignException ex) { logger.LogWarning("Webhook DocuSign: chưa đồng bộ được envelope {EnvelopeId}: {Message}", envelopeId, ex.Message); }
+        catch (DepotConflictException) { logger.LogInformation("Bỏ qua kết quả ký đã cũ hoặc hợp đồng không còn được phép kích hoạt: {EnvelopeId}", envelopeId); }
     }
 
     // ------------------------------------------------------------------ nội bộ
@@ -141,31 +145,54 @@ public sealed partial class ContractEsignService(
     /// <summary>Tạo envelope cho đúng nội dung hợp đồng hiện tại; đề nghị lại (nội dung đổi) hoặc envelope đã bị từ chối thì tạo envelope mới.</summary>
     private async Task EnsureEnvelopeAsync(FactoryDepotPartnership p, CancellationToken ct)
     {
-        if (!string.IsNullOrEmpty(p.EsignEnvelopeId) && p.EsignTermsHash == p.ContractTermsHash && p.EsignStatus is not ("DECLINED" or "VOIDED")) return;
+        var documentHash = DocumentHash(p);
+        if (!string.IsNullOrEmpty(p.EsignEnvelopeId) && p.EsignTermsHash == documentHash && p.EsignStatus is not ("DECLINED" or "VOIDED")) return;
+        var previousEnvelope = p.EsignEnvelopeId;
+        var previousHash = p.EsignTermsHash;
         var factory = SignerOf(p, true);
         var depot = SignerOf(p, false);
         if (string.Equals(factory.Email, depot.Email, StringComparison.OrdinalIgnoreCase))
             throw new DepotConflictException("Nhà máy và vựa đang dùng cùng một email; DocuSign cần hai người ký khác nhau.");
         var subject = $"Ký hợp đồng hợp tác {p.ContractCode}";
         var envelopeId = await docusign.CreateEnvelopeAsync(subject, p.ContractCode ?? "hop-dong", BuildHtml(p), [factory, depot], ct);
+        // Gọi nhà cung cấp ngoài transaction; chỉ lưu nếu đúng phiên bản đã gửi vẫn còn hiện hành.
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        await db.Depots.FromSqlInterpolated($"SELECT * FROM depots WHERE id = {p.DepotId} FOR UPDATE").LoadAsync(ct);
+        await db.Entry(p).ReloadAsync(ct);
+        if (p.ContractStatus != "PENDING_DEPOT" || p.EsignEnvelopeId != previousEnvelope ||
+            p.EsignTermsHash != previousHash || DocumentHash(p) != documentHash)
+            throw new DepotConflictException("Hợp đồng hoặc phiên ký đã thay đổi. Hãy tải lại và kiểm tra nội dung trước khi ký.");
+        if (p.IsBlocked) throw new DepotConflictException("Quan hệ đang bị chặn; chưa thể ký hợp đồng.");
+        RequireUnexpired(p);
         p.EsignEnvelopeId = envelopeId.ToLowerInvariant();
-        p.EsignTermsHash = p.ContractTermsHash;
+        p.EsignTermsHash = documentHash;
         p.EsignStatus = "SENT";
         p.EsignSentAt = DateTime.UtcNow;
         p.EsignCompletedAt = null;
         p.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
     }
 
     /// <summary>Đọc DocuSign rồi ghi vào hợp đồng; khóa dòng vựa như các thao tác hợp đồng khác để không đua với nút chấp thuận cũ.</summary>
     private async Task SyncAsync(FactoryDepotPartnership p, CancellationToken ct)
     {
         if (string.IsNullOrEmpty(p.EsignEnvelopeId)) return;
-        var envelope = await docusign.GetEnvelopeAsync(p.EsignEnvelopeId, ct);
+        var envelopeId = p.EsignEnvelopeId;
+        var esignHash = p.EsignTermsHash;
+        var termsHash = p.ContractTermsHash;
+        var version = p.ContractVersion;
+        var documentHash = DocumentHash(p);
+        if (p.ContractStatus == "PENDING_DEPOT" && esignHash != documentHash)
+            throw new DepotConflictException("Phiên ký chưa gắn với phiên bản hợp đồng hiện tại. Hãy mở lại trang ký để tạo phiên mới.");
+        var envelope = await docusign.GetEnvelopeAsync(envelopeId, ct);
 
         await using var tx = await db.Database.BeginTransactionAsync(ct);
         await db.Depots.FromSqlInterpolated($"SELECT * FROM depots WHERE id = {p.DepotId} FOR UPDATE").LoadAsync(ct);
         await db.Entry(p).ReloadAsync(ct);
+        if (p.EsignEnvelopeId != envelopeId || p.EsignTermsHash != esignHash || p.ContractTermsHash != termsHash ||
+            p.ContractVersion != version || DocumentHash(p) != documentHash)
+            throw new DepotConflictException("Kết quả ký thuộc phiên bản hợp đồng cũ. Hãy tải lại để xem đề nghị hiện tại.");
 
         var now = DateTime.UtcNow;
         var factoryDone = envelope.Signers.FirstOrDefault(s => s.RecipientId == "1");
@@ -175,6 +202,8 @@ public sealed partial class ContractEsignService(
 
         if (p.ContractStatus == "PENDING_DEPOT")
         {
+            if (p.IsBlocked) throw new DepotConflictException("Quan hệ đang bị chặn; chưa thể kích hoạt hợp đồng.");
+            RequireUnexpired(p);
             if (factorySigned) { p.FactorySignedBy = p.Factory.OwnerId; p.FactorySignedAt = factoryDone!.SignedAt ?? p.FactorySignedAt ?? now; }
             if (envelope.Status == "completed" || (factorySigned && depotSigned))
             {
@@ -208,6 +237,20 @@ public sealed partial class ContractEsignService(
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
     }
+
+    private static void RequireUnexpired(FactoryDepotPartnership p)
+    {
+        if (p.ContractExpiresAt.HasValue && p.ContractExpiresAt.Value <= DateTime.UtcNow)
+            throw new DepotConflictException("Đề nghị hợp đồng đã hết hạn. Nhà máy cần gửi lại đề nghị mới trước khi ký.");
+    }
+
+    // Cùng điều khoản nhưng khác lần gia hạn/ngày hết hạn phải có bộ chữ ký mới.
+    private static string DocumentHash(FactoryDepotPartnership p) => Convert.ToHexString(SHA256.HashData(
+        JsonSerializer.SerializeToUtf8Bytes(new
+        {
+            p.Id, p.FactoryId, p.DepotId, p.ContractCode, p.ContractVersion,
+            p.ContractTermsHash, p.ContractTerms, p.ContractExpiresAt
+        }))).ToLowerInvariant();
 
     private static string BuildHtml(FactoryDepotPartnership p)
     {
