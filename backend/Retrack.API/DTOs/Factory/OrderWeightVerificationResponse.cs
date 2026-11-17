@@ -12,4 +12,5 @@ public sealed record OrderWeightVerificationResponse
     public required string? Grade { get; init; }
     public required string? QualityNote { get; init; }
     public required string? Note { get; init; }
+    public string? Resolution { get; init; }
 }

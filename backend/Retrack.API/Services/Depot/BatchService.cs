@@ -13,7 +13,7 @@ public sealed class BatchService(IDepotBatchRepository batches, IDepotUnitOfWork
         await scope.RequireOwnerAsync(ownerId, depotId);
         return await batches.DetailAsync(depotId, batchId) ?? throw new KeyNotFoundException("Không tìm thấy lô trong kho đang quản lý.");
     }
-    private static readonly string[] States = ["DRAFT", "LISTED", "MARKETPLACE", "PENDING_APPROVAL", "PENDING_FACTORY", "TRANSPORT_READY", "ACCEPTED", "READY_FOR_PICKUP", "IN_PROGRESS", "IN_TRANSIT", "DELIVERED", "RECEIVED", "WEIGHED", "VERIFIED", "SETTLEMENT_PENDING", "SETTLEMENT_DISPUTED", "SETTLEMENT_ACCEPTED", "COMPLETED", "PAID", "REJECTED", "CANCELLED"];
+    private static readonly string[] States = ["DRAFT", "LISTED", "MARKETPLACE", "PENDING_APPROVAL", "PENDING_FACTORY", "TRANSPORT_READY", "ACCEPTED", "READY_FOR_PICKUP", "IN_PROGRESS", "IN_TRANSIT", "DELIVERED", "RECEIVED", "WEIGHED", "VERIFIED", "SETTLEMENT_PENDING", "SETTLEMENT_DISPUTED", "SETTLEMENT_ACCEPTED", "COMPLETED", "PAID", "REJECTED", "NEGOTIATING", "RETURN_REQUESTED", "RETURNING", "RETURNED", "CANCELLED"];
 
     public async Task<PagedResult<DepotBatchDto>> ListAsync(Guid ownerId, Guid depotId, DepotQuery query)
     {

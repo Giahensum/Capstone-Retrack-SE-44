@@ -40,6 +40,7 @@ public sealed record OrderResponse
     public DateTime? SettlementProposedAt { get; init; }
     public DateTime? SettlementApprovedAt { get; init; }
     public string? SettlementDecisionReason { get; init; }
+    public Retrack.API.DTOs.Depot.BatchReturnDto? Return { get; init; }
     public required DateTime CreatedAt { get; init; }
     public required OrderTransportResponse? Transport { get; init; }
     public required OrderWeightVerificationResponse? WeightVerification { get; init; }

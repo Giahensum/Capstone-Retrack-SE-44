@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useDepotMutation, useDepotQuery, money, batchLabels } from '../depotApi';
 import { buttonClass, inputClass, MutationError, QueryState, Pager } from './DepotUI';
 
-const actions = { PRICE_PROPOSED: 'Nhà máy gửi đề xuất giá', PRICE_ACCEPTED: 'Kho đồng ý giá', PRICE_DISPUTED: 'Kho yêu cầu điều chỉnh', PAYMENT_REPORTED: 'Nhà máy báo đã chuyển tiền', PAYMENT_CONFIRMED: 'Kho xác nhận nhận đủ tiền' };
+const actions = { PRICE_PROPOSED: 'Nhà máy gửi đề xuất giá', PRICE_ACCEPTED: 'Kho đồng ý giá', PRICE_DISPUTED: 'Kho yêu cầu điều chỉnh', PAYMENT_REPORTED: 'Nhà máy báo đã chuyển tiền', PAYMENT_CONFIRMED: 'Kho xác nhận nhận đủ tiền', QC_ACCEPTED: 'KCS đạt', QC_REJECTED: 'KCS không đạt', QC_RESOLUTION: 'Chọn hướng xử lý KCS', RETURN_HANDED_OVER: 'Nhà máy bàn giao trả', RETURN_RECEIVED: 'Kho nhận đủ lô trả' };
 export default function BatchSettlementPanel({ detail, id }) {
   const { batch, workflow, settlement } = detail;
   const [checked, setChecked] = useState(false), [reason, setReason] = useState(''), [page, setPage] = useState(1);
@@ -20,7 +20,7 @@ export default function BatchSettlementPanel({ detail, id }) {
       <p className="font-semibold">Số tiền nhà máy sẽ chuyển cho kho: {money(settlement.netAmount)}</p>
       <p className="text-sm">Đối chiếu khối lượng thực cân, KCS, đơn giá và VAT ở bảng phía trên. Phí bên Factory trả riêng không trừ vào số tiền này.</p>
       <label className="block text-sm">Lý do / nội dung đề nghị điều chỉnh<textarea maxLength={2000} className={inputClass} value={reason} disabled={decision.isPending} onChange={e => setReason(e.target.value)} /></label>
-      <label className="flex gap-2 text-sm"><input type="checkbox" checked={checked} disabled={decision.isPending} onChange={e => setChecked(e.target.checked)} />Tôi đồng ý khối lượng, đơn giá và số tiền của phiên bản này.</label>
+      <label className="flex gap-2 text-sm"><input type="checkbox" checked={checked} disabled={decision.isPending} onChange={e => setChecked(e.target.checked)} />{detail.quality?.isAccepted === false ? "Tôi đồng ý bán lô theo hiện trạng KCS không đạt, với khối lượng, đơn giá và số tiền của phiên bản này." : "Tôi đồng ý khối lượng, đơn giá và số tiền của phiên bản này."}</label>
       <div className="flex flex-wrap gap-3">
         <button type="button" className={buttonClass} disabled={!checked || decision.isPending} onClick={() => decide(true)}>Đồng ý giá và số tiền</button>
         <button type="button" className="rounded-full border border-d-border-subtle px-4 py-2 text-d-primary disabled:opacity-40" disabled={!reason.trim() || decision.isPending} onClick={() => decide(false)}>Yêu cầu điều chỉnh giá</button>

@@ -983,6 +983,21 @@ ALTER TABLE batch_workflow_events ADD COLUMN IF NOT EXISTS price_per_kg NUMERIC(
 ALTER TABLE batch_workflow_events ADD COLUMN IF NOT EXISTS net_amount NUMERIC(18,2);
 CREATE INDEX IF NOT EXISTS ix_batch_workflow_events_batch_created ON batch_workflow_events(batch_id,created_at DESC,id);
 
+-- RETRACK_BATCH_QUALITY_RESOLUTION_V1_BEGIN
+-- Chỉ trả lại nguồn tồn khi kho xác nhận nhận đủ lô, không tự hoàn từ QC từ chối.
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS return_handed_over_at TIMESTAMPTZ;
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS return_handover_proof_url TEXT;
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS return_handover_reference VARCHAR(200);
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS return_handover_note VARCHAR(2000);
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS return_received_at TIMESTAMPTZ;
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS return_received_by UUID;
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS return_receipt_reference VARCHAR(200);
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS return_receipt_note VARCHAR(2000);
+ALTER TABLE inventory_batches DROP CONSTRAINT IF EXISTS ck_batch_return_receipt;
+ALTER TABLE inventory_batches ADD CONSTRAINT ck_batch_return_receipt CHECK
+    (return_received_at IS NULL OR (return_handed_over_at IS NOT NULL AND return_handover_proof_url IS NOT NULL AND return_received_by IS NOT NULL AND return_receipt_reference IS NOT NULL));
+-- RETRACK_BATCH_QUALITY_RESOLUTION_V1_END
+
 -- RETRACK_SCHEMA_END
 
 -- RETRACK_SEED_BEGIN

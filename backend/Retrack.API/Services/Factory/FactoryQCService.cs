@@ -79,7 +79,7 @@ public class FactoryQCService(AppDbContext db, IConfiguration configuration, Fac
             return ServiceResult<QualityResponse>.Conflict("Cần hoàn tất cân trước khi chốt KCS.");
         if (request.Accept && request.PurityPercent < factory.MinimumPurityPercent)
             return ServiceResult<QualityResponse>.Invalid($"Độ tinh khiết thấp hơn ngưỡng nhà máy ({factory.MinimumPurityPercent}%).");
-        if (!request.Accept && (string.IsNullOrWhiteSpace(request.Note) || string.IsNullOrWhiteSpace(request.Resolution)))
+        if (!request.Accept && (string.IsNullOrWhiteSpace(request.Note) || request.Resolution is not ("RETURN" or "RENEGOTIATE")))
             return ServiceResult<QualityResponse>.Invalid("Từ chối cần lý do và hướng xử lý.");
         var qc = batch.QualityCheck;
         qc.PurityPercent = request.PurityPercent;
@@ -89,9 +89,13 @@ public class FactoryQCService(AppDbContext db, IConfiguration configuration, Fac
         qc.Resolution = request.Accept ? null : request.Resolution;
         qc.QualityNote = request.Accept ? request.Note?.Trim() : $"{request.Resolution}: {request.Note?.Trim()}";
         qc.IsAccepted = request.Accept;
-        batch.Status = request.Accept ? "VERIFIED" : "REJECTED";
+        var from = batch.Status;
+        batch.Status = request.Accept ? "VERIFIED" : batch.SettlementWorkflowVersion > 0
+            ? request.Resolution == "RENEGOTIATE" ? "NEGOTIATING" : "RETURN_REQUESTED" : "REJECTED";
         batch.FactoryDecidedAt = DateTime.UtcNow;
         batch.RejectionReason = request.Accept ? null : request.Note?.Trim();
+        if (batch.SettlementWorkflowVersion > 0)
+            Db.BatchWorkflowEvents.Add(Retrack.API.Services.Depot.BatchSettlementService.Event(batch, userId, request.Accept ? "QC_ACCEPTED" : "QC_REJECTED", from, request.Note));
         await NotifyDepotAsync(batch.DepotId, request.Accept ? "Lô hàng đã đạt KCS" : "Nhà máy từ chối sau KCS",
             request.Accept ? $"{factory.Name} đã chấp nhận KCS lô {batch.Code ?? batch.Id.ToString()}." : $"Lô {batch.Code ?? batch.Id.ToString()}: {request.Note?.Trim()}. Hướng xử lý: {request.Resolution}. Hàng chưa được tính là đã trả về kho.", batch.Id, ct: ct);
         await Db.SaveChangesAsync(ct);

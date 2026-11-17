@@ -91,6 +91,10 @@ export function useFactoryPrices() {
   });
 }
 
+export function useFactoryWorkflowHistory(id,page) {
+  return useQuery({queryKey:["factory","workflow",id,page],queryFn:()=>request(`/api/factory/orders/${encodeURIComponent(id)}/workflow-events?page=${page}&pageSize=20`),enabled:Boolean(id)});
+}
+
 export function useFactoryOrder(id) {
   return useQuery({
     queryKey: ["factory", "order", id],

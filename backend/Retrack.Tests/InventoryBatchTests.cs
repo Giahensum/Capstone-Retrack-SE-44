@@ -574,7 +574,7 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         Assert.Equal(720000m, platformTransaction.TransactionAmount);
         Assert.Equal(5m, platformTransaction.FeePercentage);
         var history = await db.BatchWorkflowEvents.Where(x => x.BatchId == first.Id).OrderBy(x => x.CreatedAt).Select(x => x.Action).ToListAsync();
-        Assert.Equal(new[] { "PRICE_PROPOSED", "PRICE_ACCEPTED", "PAYMENT_REPORTED", "PAYMENT_CONFIRMED" }, history);
+        Assert.Equal(new[] { "QC_ACCEPTED", "PRICE_PROPOSED", "PRICE_ACCEPTED", "PAYMENT_REPORTED", "PAYMENT_CONFIRMED" }, history);
         db.ChangeTracker.Clear();
         var paidDetail = await Batches(db).DetailAsync(ownerId, depotId, first.Id);
         Assert.Equal("PAID", paidDetail.Batch.Status);
