@@ -20,7 +20,7 @@ Mặc định file có `SET LOCAL retrack.seed_demo = 'on';` để nạp:
 
 | Nhóm | Dữ liệu |
 |---|---|
-| Tài khoản | 26 tài khoản, đủ 6 role; Chủ kho demo Ngô Sỹ Giá. Giữ các email chính admin/seller/depot/employee/driver/factory@retrack.vn và Factory2/3 |
+| Tài khoản | 32 tài khoản: 1 Admin, 1 Depot Owner, 8 Employee, 2 Driver, 4 Factory, 16 Seller; Chủ kho demo Ngô Sỹ Giá. Giữ các email chính admin/seller/depot/employee/driver/factory@retrack.vn và Factory2/3 |
 | Kho/nhà máy | 5 kho, 4 nhà máy, 15 liên kết nhân sự; địa chỉ mô phỏng Đà Nẵng |
 | Thu gom | 65 đơn nhiều trạng thái, gồm 13 đơn Employee `e0000000-0929-*` và 36 đơn điều phối `ed250000-*` |
 | Điều phối | 6 nhân viên, 6 Seller, 6 vùng và ca demo khoảng 20 giờ; đơn hẹn ngày sau chưa được giao từ hôm nay |
