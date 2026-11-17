@@ -148,11 +148,18 @@ public class FactoryPartnerService(AppDbContext db) : FactoryServiceBase(db), IF
             Db.AuditLogs.Add(new AuditLog { UserId = userId, Action = "RENEW_CONTRACT", EntityName = "FactoryDepotPartnership", EntityId = partner.Id,
                 OldData = JsonSerializer.Serialize(new { partner.ContractCode, partner.ContractVersion, partner.ContractTerms, partner.ContractTermsHash,
                     partner.ContractStatus, partner.ContractEffectiveAt, partner.ContractExpiresAt, partner.FactorySignedBy, partner.FactorySignedAt,
-                    partner.DepotSignedBy, partner.DepotSignedAt, partner.TerminationStatus, partner.TerminationReason, partner.TerminatedAt }),
+                    partner.DepotSignedBy, partner.DepotSignedAt, partner.TerminationStatus, partner.TerminationReason, partner.TerminatedAt,
+                    partner.EsignEnvelopeId, partner.EsignTermsHash, partner.EsignStatus, partner.EsignSentAt, partner.EsignCompletedAt }),
                 NewData = JsonSerializer.Serialize(new { ContractVersion = partner.ContractVersion + 1, Terms = terms, request.ValidMonths }) });
         var version = partner.ContractVersion + 1;
         partner.ContractCode ??= $"HDHT-{now:yyyy}-{partner.Id.ToString("N")[..8].ToUpperInvariant()}";
         partner.ContractVersion = version;
+        // Không tái dùng chữ ký/envelope của lần hợp tác trước, kể cả điều khoản không đổi.
+        partner.EsignEnvelopeId = null;
+        partner.EsignTermsHash = null;
+        partner.EsignStatus = null;
+        partner.EsignSentAt = null;
+        partner.EsignCompletedAt = null;
         partner.ContractTerms = terms;
         partner.ContractTermsHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(terms))).ToLowerInvariant();
         partner.ContractStatus = "PENDING_DEPOT";
