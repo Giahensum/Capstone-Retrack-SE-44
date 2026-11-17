@@ -9,6 +9,7 @@ import ContractDocument from '../../components/ui/ContractDocument';
 
 const labels = { APPROVED: 'Đang hợp tác', PENDING: 'Chưa hợp tác', DECLINED: 'Không hợp tác', BLOCKED: 'Đã chặn' };
 const contractLabels = { PENDING_DEPOT: 'Chờ chủ vựa ký', ACTIVE: 'Đang hiệu lực', REJECTED: 'Đã từ chối', TERMINATED: 'Đã chấm dứt' };
+const contractExpired = (p) => p?.contractStatus === 'ACTIVE' && p.contractExpiresAt && new Date(p.contractExpiresAt) <= new Date();
 
 export default function Partners() {
   const { depotId } = useDepot();
@@ -42,7 +43,7 @@ export default function Partners() {
 
   return (
     <div className="flex flex-col p-4 md:p-6 w-full max-w-7xl mx-auto min-h-full gap-6 bg-d-surface">
-      <CreateBatchModal isOpen={!!createFor} onClose={() => setCreateFor(null)} initialMaterial={createFor?.materialType} initialFactoryId={createFor?.factoryId} />
+      <CreateBatchModal isOpen={!!createFor} onClose={() => setCreateFor(null)} initialMaterial={createFor?.materialType} initialFactoryId={createFor?.factoryId} initialDemand={createFor?.id ? createFor : null} />
       {decision && <Dialog title={decision.status === 'BLOCKED' ? 'Chặn giao dịch với nhà máy' : 'Bỏ chặn phía kho'} onClose={() => setDecision(null)} busy={update.isPending}>
         <p className="mb-4">{decision.status === 'BLOCKED' ? 'Chặn' : 'Bỏ chặn phía kho đối với'} <strong>{decision.factoryName}</strong>? {decision.status === 'UNBLOCKED' && 'Nếu nhà máy cũng đang chặn, quan hệ vẫn bị chặn.'}</p>
         <MutationError mutation={update} />
@@ -55,7 +56,7 @@ export default function Partners() {
         <div className="mt-5 flex flex-wrap justify-end gap-3"><button className="border border-d-primary text-d-primary px-4 py-2 rounded-full" type="button" onClick={() => window.print()}>In / Lưu PDF</button><button onClick={() => setContractDecision(null)} disabled={decideContract.isPending}>Đóng</button>
           {contractDecision.contractStatus === 'PENDING_DEPOT' && <><button className="border border-d-error text-d-error px-4 py-2 rounded-full" disabled={decideContract.isPending} onClick={() => decideContract.mutate({ id: contractDecision.factoryId, body: { decision: 'REJECT', confirmElectronicSignature: false } })}>Từ chối</button>
           <button className="bg-d-primary text-white px-4 py-2 rounded-full" disabled={decideContract.isPending || !contractDecision.confirmed} onClick={() => decideContract.mutate({ id: contractDecision.factoryId, body: { decision: 'ACCEPT', confirmElectronicSignature: true } })}>{decideContract.isPending ? 'Đang lưu…' : 'Ký chấp thuận'}</button></>}
-          {contractDecision.contractStatus === 'ACTIVE' && !['PENDING_DEPOT', 'PENDING_FACTORY'].includes(contractDecision.terminationStatus) && <button className="border border-d-error text-d-error px-4 py-2 rounded-full" onClick={() => setTermination({ ...contractDecision, mode: 'request', reason: '' })}>Đề nghị chấm dứt</button>}
+          {contractDecision.contractStatus === 'ACTIVE' && !contractExpired(contractDecision) && !['PENDING_DEPOT', 'PENDING_FACTORY'].includes(contractDecision.terminationStatus) && <button className="border border-d-error text-d-error px-4 py-2 rounded-full" onClick={() => setTermination({ ...contractDecision, mode: 'request', reason: '' })}>Đề nghị chấm dứt</button>}
           {contractDecision.terminationStatus === 'PENDING_DEPOT' && <button className="bg-d-error text-white px-4 py-2 rounded-full" onClick={() => setTermination({ ...contractDecision, mode: 'decision' })}>Xử lý đề nghị chấm dứt</button>}</div>
       </Dialog>}
       {termination && <Dialog title={termination.mode === 'request' ? 'Đề nghị chấm dứt hợp đồng' : 'Xử lý đề nghị chấm dứt'} onClose={() => setTermination(null)} busy={requestTermination.isPending || decideTermination.isPending}>
@@ -132,7 +133,7 @@ export default function Partners() {
                 </div>
                 <p className="font-d-label-sm text-d-label-sm text-d-secondary uppercase tracking-wider mb-2">Đang hợp tác</p>
                 <div className="flex items-end gap-3">
-                  <h3 className="font-d-headline-xl text-d-headline-xl text-d-secondary">{query.data?.items.filter((f) => f.partnershipStatus === 'APPROVED').length ?? 0}</h3>
+                  <h3 className="font-d-headline-xl text-d-headline-xl text-d-secondary">{query.data?.items.filter((f) => f.partnershipStatus === 'APPROVED' && f.canDirectDelivery).length ?? 0}</h3>
                   <span className="font-d-body-sm text-d-body-sm text-d-secondary opacity-80 mb-2 font-medium">trong trang này</span>
                 </div>
               </div>
@@ -225,13 +226,13 @@ export default function Partners() {
                             </div>
                           </td>
                           <td className="py-4 px-6">
-                            {f.partnershipStatus === 'APPROVED' ? (
+                            {f.partnershipStatus === 'APPROVED' && f.canDirectDelivery ? (
                               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-d-surface-accent text-d-secondary font-d-label-sm text-d-label-sm">
                                 <span className="w-1.5 h-1.5 rounded-full bg-d-secondary"></span> Đang hợp tác
                               </span>
                             ) : (
                               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-d-surface-container-high text-d-on-surface-variant font-d-label-sm text-d-label-sm border border-d-border-subtle">
-                                <MaterialIcon name="hourglass_empty" className="text-[14px]" /> {labels[f.partnershipStatus] ?? 'Chưa hợp tác'}
+                                <MaterialIcon name="hourglass_empty" className="text-[14px]" /> {f.partnershipStatus === 'APPROVED' ? 'Chờ gia hạn / duyệt lại' : labels[f.partnershipStatus] ?? 'Chưa hợp tác'}
                               </span>
                             )}
                           </td>
@@ -258,7 +259,7 @@ export default function Partners() {
           </>
         ) : activeTab === 'requests' ? (
           <QueryState query={requests}><div className="bg-white rounded-[20px] border border-d-border-subtle overflow-x-auto"><table className="w-full min-w-[650px] text-left"><thead><tr className="border-b border-d-border-subtle"><th className="p-4">Nhà máy</th><th className="p-4">Liên hệ</th><th className="p-4">Ngày gửi</th><th className="p-4">Trạng thái</th><th className="p-4">Thao tác</th></tr></thead><tbody>
-            {requests.data?.items.map((p) => <tr key={p.id} className="border-b border-d-border-subtle"><td className="p-4">{p.factoryName}</td><td className="p-4">{p.contactPhone || 'Chưa cập nhật'}</td><td className="p-4">{date(p.createdAt)}</td><td className="p-4">{labels[p.status] ?? p.status}{p.contractStatus && <span className="block text-sm text-d-primary">Hợp đồng: {contractLabels[p.contractStatus] || p.contractStatus}</span>}{p.blockedByFactory && <span className="block text-sm text-d-on-surface-variant">Nhà máy đã chặn</span>}{p.legacyBlocked && <span className="block text-sm text-d-on-surface-variant">Trạng thái chặn cũ cần đối chiếu</span>}</td><td className="p-4"><div className="flex flex-col items-start gap-2">{p.contractTerms && <button className="text-d-primary underline" onClick={() => setContractDecision(p)}>{p.contractStatus === 'PENDING_DEPOT' ? 'Xem và ký hợp đồng' : 'Xem hợp đồng'}</button>}{p.blockedByDepot ? <button className="text-d-primary underline" onClick={() => setDecision({ factoryId: p.factoryId, factoryName: p.factoryName, status: 'UNBLOCKED' })}>Bỏ chặn phía kho</button> : !p.blockedByFactory && !p.legacyBlocked ? <button className="text-d-error underline" onClick={() => setDecision({ factoryId: p.factoryId, factoryName: p.factoryName, status: 'BLOCKED' })}>Chặn</button> : <span className="text-sm text-d-on-surface-variant">—</span>}</div></td></tr>)}
+            {requests.data?.items.map((p) => <tr key={p.id} className="border-b border-d-border-subtle"><td className="p-4">{p.factoryName}</td><td className="p-4">{p.contactPhone || 'Chưa cập nhật'}</td><td className="p-4">{date(p.createdAt)}</td><td className="p-4">{contractExpired(p) && p.status === 'APPROVED' ? 'Chờ gia hạn / duyệt lại' : labels[p.status] ?? p.status}{p.contractStatus && <span className="block text-sm text-d-primary">Hợp đồng: {contractExpired(p) ? 'Đã hết hạn' : contractLabels[p.contractStatus] || p.contractStatus}</span>}{p.blockedByFactory && <span className="block text-sm text-d-on-surface-variant">Nhà máy đã chặn</span>}{p.legacyBlocked && <span className="block text-sm text-d-on-surface-variant">Trạng thái chặn cũ cần đối chiếu</span>}</td><td className="p-4"><div className="flex flex-col items-start gap-2">{p.contractTerms && <button className="text-d-primary underline" onClick={() => setContractDecision(p)}>{p.contractStatus === 'PENDING_DEPOT' ? 'Xem và ký hợp đồng' : 'Xem hợp đồng'}</button>}{p.blockedByDepot ? <button className="text-d-primary underline" onClick={() => setDecision({ factoryId: p.factoryId, factoryName: p.factoryName, status: 'UNBLOCKED' })}>Bỏ chặn phía kho</button> : !p.blockedByFactory && !p.legacyBlocked ? <button className="text-d-error underline" onClick={() => setDecision({ factoryId: p.factoryId, factoryName: p.factoryName, status: 'BLOCKED' })}>Chặn</button> : <span className="text-sm text-d-on-surface-variant">—</span>}</div></td></tr>)}
             {!requests.data?.items.length && <tr><td colSpan="5" className="p-6 text-center">Chưa có yêu cầu hợp tác.</td></tr>}
           </tbody></table><Pager page={page} setPage={setPage} total={requests.data?.totalCount} /></div></QueryState>
         ) : (
@@ -321,7 +322,7 @@ export default function Partners() {
 
                       {d.isBlocked && <p className="mb-3 text-sm text-d-error" role="status">Quan hệ với nhà máy đang bị chặn; chưa thể tạo lô.</p>}
                       <button disabled={d.isBlocked} title={d.isBlocked ? 'Quan hệ đang bị chặn' : 'Tạo lô cho nhu cầu này'}
-                        onClick={() => setCreateFor({ materialType: d.materialType, factoryId: d.factoryId })} className={`${urgent ?
+                        onClick={() => setCreateFor(d)} className={`${urgent ?
                         "w-full bg-d-on-surface text-d-surface py-3 rounded-full font-d-body-md text-d-body-md font-bold hover:bg-d-secondary transition-colors flex justify-center items-center gap-2 group-hover:bg-d-primary" :
                         "w-full bg-transparent border border-d-on-surface text-d-on-surface py-3 rounded-full font-d-body-md text-d-body-md font-bold hover:bg-d-surface-container transition-colors flex justify-center items-center gap-2 group-hover:bg-d-surface-variant"
                       } disabled:cursor-not-allowed disabled:opacity-50`}>

@@ -37,7 +37,7 @@ public sealed class BatchService(IDepotBatchRepository batches, IDepotUnitOfWork
         if (existing != null)
         {
             if (existing.DepotId != depotId || Retrack.API.Services.Shared.MaterialCatalog.Normalize(existing.MaterialType) != dto.MaterialType ||
-                existing.DeclaredWeightKg != dto.WeightKg || (existing.TargetFactoryId ?? existing.DirectOfferFactoryId) != dto.TargetFactoryId || existing.Description != dto.Description)
+                existing.DeclaredWeightKg != dto.WeightKg || (existing.TargetFactoryId ?? existing.DirectOfferFactoryId) != dto.TargetFactoryId || existing.Description != dto.Description || existing.SourceDemandId != dto.SourceDemandId)
                 throw new DepotConflictException("Mã thao tác đã được dùng cho một lô khác.");
             return Map(existing);
         }
@@ -47,6 +47,16 @@ public sealed class BatchService(IDepotBatchRepository batches, IDepotUnitOfWork
         var status = "LISTED";
         Retrack.API.Models.Factory? factory = null;
         var isApproved = false;
+        if (dto.SourceDemandId is Guid demandId)
+        {
+            var demand = await batches.FindDemandAsync(demandId);
+            if (demand is null || !demand.IsActive || demand.Deadline <= DateTime.UtcNow)
+                throw new DepotConflictException("Nhu cầu thu mua đã hết hạn, ngừng nhận hoặc không còn tồn tại. Vui lòng tải lại danh sách.");
+            if (dto.TargetFactoryId != demand.FactoryId || Retrack.API.Services.Shared.MaterialCatalog.Normalize(demand.MaterialType) != dto.MaterialType)
+                throw new DepotConflictException("Lô theo nhu cầu phải giữ đúng nhà máy và loại vật liệu đã đăng.");
+            if (dto.WeightKg > demand.RequiredWeightKg)
+                throw new DepotConflictException("Khối lượng lô vượt nhu cầu thu mua đã đăng. Hãy trao đổi với nhà máy trước khi tạo lô khác.");
+        }
         if (dto.TargetFactoryId.HasValue)
         {
             factory = await batches.FindActiveFactoryAsync(dto.TargetFactoryId.Value)
@@ -59,7 +69,7 @@ public sealed class BatchService(IDepotBatchRepository batches, IDepotUnitOfWork
                 throw new DepotConflictException("Khối lượng lô vượt mức nhà máy hiện có thể tiếp nhận.");
             var partner = await batches.FindPartnerAsync(depotId, dto.TargetFactoryId.Value);
             if (partner?.Status == "BLOCKED" || partner?.BlockedByDepot == true || partner?.BlockedByFactory == true) throw new DepotConflictException("Quan hệ đang bị chặn, không thể tạo lô mới cho nhà máy.");
-            isApproved = partner?.Status == "APPROVED";
+            isApproved = Retrack.API.Services.Shared.PartnershipPolicy.AllowsDirectDelivery(partner, DateTime.UtcNow);
             status = isApproved ? "TRANSPORT_READY" : "PENDING_APPROVAL";
             if (partner == null) batches.AddPartner(new FactoryDepotPartnership { DepotId = depotId, FactoryId = factory.Id, Status = "PENDING" });
         }
@@ -101,7 +111,7 @@ public sealed class BatchService(IDepotBatchRepository batches, IDepotUnitOfWork
         var code = $"LO-{DateTime.UtcNow.AddHours(7):yyMM}-{sequence:D3}";
         var batch = new InventoryBatch {
             Id = dto.OperationId, Code = code, DepotId = depotId, MaterialType = dto.MaterialType,
-            DeclaredWeightKg = dto.WeightKg, Description = dto.Description,
+            DeclaredWeightKg = dto.WeightKg, Description = dto.Description, SourceDemandId = dto.SourceDemandId,
             TargetFactoryId = isApproved ? dto.TargetFactoryId : null,
             DirectOfferFactoryId = !isApproved && dto.TargetFactoryId.HasValue ? dto.TargetFactoryId : null,
             Status = status, ImageUrls = imageUrls.ToArray(),
@@ -170,5 +180,5 @@ public sealed class BatchService(IDepotBatchRepository batches, IDepotUnitOfWork
 
     private static DepotBatchDto Map(InventoryBatch b) => new(b.Id, b.DepotId, b.MaterialType,
         b.DeclaredWeightKg, b.Description, b.Status, b.TargetFactoryId ?? b.DirectOfferFactoryId,
-        b.TargetFactory?.Name ?? b.DirectOfferFactory?.Name, b.CreatedAt, b.Code, b.ImageUrls);
+        b.TargetFactory?.Name ?? b.DirectOfferFactory?.Name, b.CreatedAt, b.Code, b.ImageUrls, b.SourceDemandId);
 }

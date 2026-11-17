@@ -11,6 +11,7 @@ public interface IDepotBatchRepository
     Task LockDepotAsync(Guid depotId);
     Task<InventoryBatch?> FindOperationAsync(Guid id);
     Task<Factory?> FindActiveFactoryAsync(Guid id);
+    Task<FactoryDemand?> FindDemandAsync(Guid id);
     Task<FactoryDepotPartnership?> FindPartnerAsync(Guid depotId, Guid factoryId);
     void AddPartner(FactoryDepotPartnership partner);
     Task<long> NextNumberAsync();

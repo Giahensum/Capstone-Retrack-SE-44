@@ -966,6 +966,16 @@ WHERE p.termination_status = 'PENDING_FACTORY'
         AND n.created_at >= p.termination_requested_at
   );
 
+-- RETRACK_DEMAND_ORIGIN_V1: giữ nguồn nhu cầu, không đổi giá hoặc trạng thái lô cũ.
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS source_demand_id UUID;
+DO $demand_origin$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'inventory_batches'::regclass AND conname = 'fk_batch_source_demand') THEN
+        ALTER TABLE inventory_batches ADD CONSTRAINT fk_batch_source_demand FOREIGN KEY (source_demand_id) REFERENCES factory_demands(id);
+    END IF;
+END $demand_origin$;
+CREATE INDEX IF NOT EXISTS ix_batches_source_demand ON inventory_batches(source_demand_id) WHERE source_demand_id IS NOT NULL;
+
 -- RETRACK_SCHEMA_END
 
 -- RETRACK_SEED_BEGIN
