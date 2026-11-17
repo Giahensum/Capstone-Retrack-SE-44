@@ -428,7 +428,7 @@ public sealed partial class StockReceiptTests : IAsyncLifetime
         var next = await Batches(db).CreateAsync(owner, depot, new() { OperationId = Guid.NewGuid(), MaterialType = "IRON", WeightKg = 60 });
         Assert.Equal(900, (await Stock(db).BatchCostsAsync(owner, depot, next.Id)).CostOfGoods);
         var batch = await db.InventoryBatches.SingleAsync(x => x.Id == first.Id);
-        batch.Status = "COMPLETED"; batch.SettledAt = DateTime.UtcNow; batch.GrossAmount = 800; batch.NetAmount = 800; await db.SaveChangesAsync();
+        batch.Status = "PAID"; batch.SettledAt = DateTime.UtcNow; batch.GrossAmount = 800; batch.NetAmount = 800; await db.SaveChangesAsync();
         var report = await Reports(db).CostReportAsync(owner, depot, new());
         Assert.Equal(600, report.KnownCostOfGoods); Assert.Equal(0, report.IncompleteCount); Assert.Equal(200, report.PretaxDifference);
         await Assert.ThrowsAsync<ArgumentException>(() => Stock(db).AddAdjustmentAsync(owner, depot, receipt.Id, new(Guid.NewGuid(), line.Id, "ADDITIONAL_COST", -2000, "Không được âm vốn")));

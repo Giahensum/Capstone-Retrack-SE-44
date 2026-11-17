@@ -403,7 +403,7 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Conflict,
             (await partnerService.RequestTerminationAsync(factoryOwnerId, depotId, new() { Reason = "Hai bên thống nhất dừng hợp tác." }, default)).Outcome);
         foreach (var open in await db.InventoryBatches.Where(x => x.DepotId == depotId && x.TargetFactoryId == factory.Id).ToListAsync())
-            open.Status = "COMPLETED";
+            open.Status = "PAID";
         await db.SaveChangesAsync();
         Assert.Equal("PENDING_DEPOT", (await partnerService.RequestTerminationAsync(factoryOwnerId, depotId,
             new() { Reason = "Hai bên thống nhất dừng hợp tác." }, default)).Data!.TerminationStatus);
