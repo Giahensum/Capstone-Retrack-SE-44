@@ -22,6 +22,13 @@ namespace Retrack.API.Models
         [Column("period_month")]
         public int PeriodMonth { get; set; }
 
+        // Bản gốc là 0; bản bổ sung giữ nguyên hóa đơn đã khóa/chuyển tiền.
+        [Column("revision")]
+        public int Revision { get; set; }
+
+        [Column("adjustment_of_id")]
+        public Guid? AdjustmentOfId { get; set; }
+
         [Required]
         [Column("total_fee_amount")]
         public decimal TotalFeeAmount { get; set; }

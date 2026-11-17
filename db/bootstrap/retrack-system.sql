@@ -442,6 +442,33 @@ CREATE TABLE IF NOT EXISTS platform_invoices (
 ALTER TABLE platform_invoices ADD COLUMN IF NOT EXISTS payment_proof_url TEXT;
 ALTER TABLE platform_invoices ADD COLUMN IF NOT EXISTS submitted_at TIMESTAMPTZ;
 
+-- RETRACK_CLOSED_PERIOD_BILLING_V1: giữ bản gốc, phát hành bổ sung khi có phí đối soát muộn.
+ALTER TABLE platform_invoices ADD COLUMN IF NOT EXISTS revision INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE platform_invoices ADD COLUMN IF NOT EXISTS adjustment_of_id UUID REFERENCES platform_invoices(id);
+ALTER TABLE platform_invoices DROP CONSTRAINT IF EXISTS uq_platform_invoice_period;
+-- Index do EF đời cũ có thể có tên khác; chỉ bỏ index 3 cột của đúng bảng/schema đang nâng.
+DO $$ DECLARE old_index REGCLASS; BEGIN
+    FOR old_index IN
+        SELECT i.indexrelid::regclass FROM pg_index i
+        WHERE i.indrelid = 'platform_invoices'::regclass AND i.indisunique
+          AND i.indnatts = 3 AND i.indpred IS NULL AND i.indexprs IS NULL
+          AND NOT EXISTS (SELECT 1 FROM pg_constraint c WHERE c.conindid = i.indexrelid)
+          AND (SELECT array_agg(a.attname::text ORDER BY a.attname)
+               FROM unnest(i.indkey) AS k(attnum)
+               JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.attnum)
+              = ARRAY['payer_id', 'period_month', 'period_year']::text[]
+    LOOP EXECUTE format('DROP INDEX %s', old_index); END LOOP;
+END $$;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_platform_invoice_revision
+    ON platform_invoices(payer_id, period_year, period_month, revision);
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'platform_invoices'::regclass AND conname = 'ck_platform_invoice_revision') THEN
+        ALTER TABLE platform_invoices ADD CONSTRAINT ck_platform_invoice_revision CHECK
+            ((revision = 0 AND adjustment_of_id IS NULL) OR (revision > 0 AND adjustment_of_id IS NOT NULL));
+    END IF;
+END $$;
+-- RETRACK_CLOSED_PERIOD_BILLING_V1_END
+
 -- ==========================================
 -- FUNCTIONS & TRIGGERS (updated_at tự động)
 -- ==========================================

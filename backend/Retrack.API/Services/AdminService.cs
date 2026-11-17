@@ -59,6 +59,7 @@ namespace Retrack.API.Services
         private readonly IPlatformInvoiceRepository _invoiceRepo;
         private readonly INotificationService _notificationService;
         private readonly AppDbContext _db;
+        private readonly TimeProvider _clock;
 
         public AdminService(
             IUserRepository userRepo,
@@ -66,7 +67,7 @@ namespace Retrack.API.Services
             IAuditLogRepository auditRepo,
             IPlatformInvoiceRepository invoiceRepo,
             INotificationService notificationService,
-            AppDbContext db)
+            AppDbContext db, TimeProvider? clock = null)
         {
             _userRepo = userRepo;
             _priceRepo = priceRepo;
@@ -74,6 +75,7 @@ namespace Retrack.API.Services
             _invoiceRepo = invoiceRepo;
             _notificationService = notificationService;
             _db = db;
+            _clock = clock ?? TimeProvider.System;
         }
 
         // ── Dashboard ──────────────────────────────────────────────────
@@ -499,10 +501,7 @@ namespace Retrack.API.Services
         // ── Platform Invoices ──────────────────────────────────────────
         public async Task<List<PlatformInvoiceDto>> GenerateMonthlyInvoicesAsync(int year, int month, Guid actorId)
         {
-            if (year is < 1900 or > 9998 || month is < 1 or > 12) throw new ArgumentException("Kỳ hóa đơn không hợp lệ.");
-            var localMonth = new DateTime(year, month, 1, 0, 0, 0, DateTimeKind.Utc);
-            var periodStart = localMonth.AddHours(-7);
-            var periodEnd = localMonth.AddMonths(1).AddHours(-7);
+            var (periodStart, periodEnd) = Shared.BillingPeriod.ClosedMonth(year, month, _clock.GetUtcNow());
             await using var transaction = _db.Database.IsRelational() ? await _db.Database.BeginTransactionAsync() : null;
 
             var transactions = await _db.PlatformTransactions
@@ -515,30 +514,61 @@ namespace Retrack.API.Services
             var totalsByPayer = transactions
                 .Where(t => payerIds.ContainsKey((t.SourceType, t.SourceId)))
                 .GroupBy(t => payerIds[(t.SourceType, t.SourceId)])
-                .Select(g => new { PayerId = g.Key, Total = g.Sum(t => t.FeeAmount) });
+                .ToDictionary(g => g.Key, g => g.Sum(t => t.FeeAmount));
+            var invoicedPayers = await _db.PlatformInvoices.Where(i => i.PeriodYear == year && i.PeriodMonth == month)
+                .Select(i => i.PayerId).Distinct().ToListAsync();
 
             var created = new List<PlatformInvoiceDto>();
-            foreach (var group in totalsByPayer.OrderBy(g => g.PayerId))
+            foreach (var payerId in totalsByPayer.Keys.Union(invoicedPayers).Order())
             {
                 // Tuần tự hóa việc phát hành theo người trả phí giữa các yêu cầu đồng thời.
                 if (_db.Database.IsRelational())
-                    await _db.Users.FromSqlInterpolated($"SELECT * FROM users WHERE id = {group.PayerId} FOR UPDATE").LoadAsync();
-                var existing = await _invoiceRepo.GetByPayerAndPeriodAsync(group.PayerId, year, month);
-                if (existing != null) continue; // already invoiced this period
-
-                var invoice = new PlatformInvoice
+                    await _db.Users.FromSqlInterpolated($"SELECT * FROM users WHERE id = {payerId} FOR UPDATE").LoadAsync();
+                var periodInvoices = _db.Database.IsRelational()
+                    ? await _db.PlatformInvoices.FromSqlInterpolated($"SELECT * FROM platform_invoices WHERE payer_id = {payerId} AND period_year = {year} AND period_month = {month} FOR UPDATE").ToListAsync()
+                    : await _db.PlatformInvoices.Where(i => i.PayerId == payerId && i.PeriodYear == year && i.PeriodMonth == month).ToListAsync();
+                if (_db.Database.IsRelational())
+                    foreach (var saved in periodInvoices) await _db.Entry(saved).ReloadAsync();
+                var total = totalsByPayer.GetValueOrDefault(payerId);
+                var difference = total - periodInvoices.Sum(i => i.TotalFeeAmount);
+                if (difference < 0)
                 {
-                    PayerId = group.PayerId,
-                    PeriodYear = year,
-                    PeriodMonth = month,
-                    TotalFeeAmount = group.Total,
-                    Status = "PENDING"
-                };
-                await _invoiceRepo.CreateAsync(invoice);
+                    var payerName = await _db.Users.Where(u => u.Id == payerId).Select(u => u.FullName).SingleAsync();
+                    throw new Depot.DepotConflictException($"Phí kỳ {month}/{year} của {payerName} thấp hơn tổng hóa đơn đã phát hành. Cần đối soát/ghi điều chỉnh giảm riêng; hệ thống không tự sửa hóa đơn đã khóa.");
+                }
+                if (difference == 0) continue;
 
-                await _notificationService.SendInvoiceAsync(group.PayerId,
-                    $"Hóa đơn phí nền tảng tháng {month}/{year}",
-                    $"Bạn có hóa đơn phí nền tảng {group.Total:N0}đ cho tháng {month}/{year}. Vui lòng thanh toán.");
+                var invoice = periodInvoices.Where(i => i.Status == "PENDING" && i.SubmittedAt == null && string.IsNullOrWhiteSpace(i.PaymentProofUrl))
+                    .OrderByDescending(i => i.Revision).FirstOrDefault();
+                if (invoice != null)
+                {
+                    var oldAmount = invoice.TotalFeeAmount;
+                    invoice.TotalFeeAmount += difference;
+                    await _invoiceRepo.UpdateAsync(invoice);
+                    await LogAsync(actorId, "RECONCILE", "PlatformInvoice", invoice.Id,
+                        new { TotalFeeAmount = oldAmount }, new { invoice.TotalFeeAmount, year, month });
+                }
+                else
+                {
+                    var original = periodInvoices.SingleOrDefault(i => i.Revision == 0);
+                    invoice = new PlatformInvoice
+                    {
+                        PayerId = payerId,
+                        PeriodYear = year,
+                        PeriodMonth = month,
+                        Revision = original == null ? 0 : periodInvoices.Max(i => i.Revision) + 1,
+                        AdjustmentOfId = original?.Id,
+                        TotalFeeAmount = difference,
+                        Status = "PENDING"
+                    };
+                    await _invoiceRepo.CreateAsync(invoice);
+                    await LogAsync(actorId, invoice.Revision == 0 ? "ISSUE" : "SUPPLEMENT", "PlatformInvoice", invoice.Id,
+                        null, new { invoice.TotalFeeAmount, invoice.Revision, invoice.AdjustmentOfId, year, month });
+                }
+
+                await _notificationService.SendInvoiceAsync(payerId,
+                    $"Đối soát hóa đơn phí nền tảng tháng {month}/{year}",
+                    $"{(invoice.Revision == 0 ? "Hóa đơn gốc" : $"Hóa đơn bổ sung lần {invoice.Revision}")} kỳ {month}/{year}: {invoice.TotalFeeAmount:N0}đ. Vui lòng kiểm tra hóa đơn trước khi thanh toán; hóa đơn đã gửi chứng từ/đã thanh toán được giữ nguyên.");
 
                 created.Add(await MapInvoiceAsync(invoice));
             }
@@ -599,6 +629,8 @@ namespace Retrack.API.Services
             PayerName = i.Payer?.FullName ?? string.Empty,
             PeriodYear = i.PeriodYear,
             PeriodMonth = i.PeriodMonth,
+            Revision = i.Revision,
+            AdjustmentOfId = i.AdjustmentOfId,
             TotalFeeAmount = i.TotalFeeAmount,
             Status = i.Status,
             PaidAt = i.PaidAt,
