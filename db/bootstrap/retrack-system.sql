@@ -966,6 +966,23 @@ WHERE p.termination_status = 'PENDING_FACTORY'
         AND n.created_at >= p.termination_requested_at
   );
 
+-- RETRACK_BATCH_SETTLEMENT_APPROVAL_V1: lô cũ giữ phiên bản 0, lô tạo từ API mới là 1.
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS settlement_workflow_version INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS settlement_revision INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS settlement_proposed_at TIMESTAMPTZ;
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS settlement_approved_at TIMESTAMPTZ;
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS settlement_approved_by UUID REFERENCES users(id);
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS settlement_decision_reason VARCHAR(2000);
+CREATE TABLE IF NOT EXISTS batch_workflow_events (
+ id UUID PRIMARY KEY, batch_id UUID NOT NULL REFERENCES inventory_batches(id) ON DELETE RESTRICT,
+ actor_id UUID NOT NULL REFERENCES users(id), action VARCHAR(50) NOT NULL,
+ from_status VARCHAR(50) NOT NULL, to_status VARCHAR(50) NOT NULL, revision INTEGER NOT NULL DEFAULT 0,
+ note VARCHAR(2000), snapshot_json TEXT NOT NULL DEFAULT '{}', created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+ALTER TABLE batch_workflow_events ADD COLUMN IF NOT EXISTS price_per_kg NUMERIC(18,2);
+ALTER TABLE batch_workflow_events ADD COLUMN IF NOT EXISTS net_amount NUMERIC(18,2);
+CREATE INDEX IF NOT EXISTS ix_batch_workflow_events_batch_created ON batch_workflow_events(batch_id,created_at DESC,id);
+
 -- RETRACK_SCHEMA_END
 
 -- RETRACK_SEED_BEGIN

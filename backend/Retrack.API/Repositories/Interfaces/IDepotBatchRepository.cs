@@ -19,6 +19,11 @@ public interface IDepotBatchRepository
     Task AddTransportAsync(TransportJob job, Guid depotId);
     Task<InventoryBatch?> LockBatchAsync(Guid id);
     Task<bool> HasTransportAsync(Guid batchId);
+    Task<PlatformTransaction?> FindFeeAsync(Guid batchId);
+    Task<Guid?> FactoryOwnerAsync(Guid factoryId);
+    void AddFee(PlatformTransaction transaction);
+    void AddWorkflowEvent(BatchWorkflowEvent entry);
+    Task<PagedResult<BatchWorkflowEventDto>> WorkflowEventsAsync(Guid batchId, DepotQuery query);
     Task QueuePaymentConfirmedNoticeAsync(InventoryBatch batch);
     Task QueueFactoryBatchNoticeAsync(Guid factoryId, InventoryBatch batch, string title, string message, string targetType = "BATCH");
 }

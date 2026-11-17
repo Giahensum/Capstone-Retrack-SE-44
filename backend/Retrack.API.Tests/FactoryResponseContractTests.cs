@@ -59,7 +59,13 @@ public class FactoryResponseContractTests
             "vatTreatment", "vatPercentage", "vatAmount", "invoiceTotalAmount",
             "priceIncludesVat", "invoiceDate", "sellerTaxCode", "vatLegalBasis",
             "receivedAt", "decidedAt", "rejectionReason", "settledAt", "feeAmount", "netPayableAmount",
-            "paymentReference", "paymentProofUrl", "depotPaymentConfirmedAt", "platformFeePercentage", "feePolicy", "buyerTotalAmount", "createdAt", "transport", "weightVerification", "weightTicket", "invoice");
+            "paymentReference", "paymentProofUrl", "depotPaymentConfirmedAt", "settlementWorkflowVersion", "settlementRevision",
+            "settlementProposedAt", "settlementApprovedAt", "settlementDecisionReason", "platformFeePercentage", "feePolicy", "buyerTotalAmount", "createdAt", "transport", "weightVerification", "weightTicket", "invoice");
+        Assert.Equal(0, json.GetProperty("settlementWorkflowVersion").GetInt32());
+        Assert.Equal(0, json.GetProperty("settlementRevision").GetInt32());
+        Assert.Equal(JsonValueKind.Null, json.GetProperty("settlementProposedAt").ValueKind);
+        Assert.Equal(JsonValueKind.Null, json.GetProperty("settlementApprovedAt").ValueKind);
+        Assert.Equal(JsonValueKind.Null, json.GetProperty("settlementDecisionReason").ValueKind);
         Assert.Equal(JsonValueKind.Null, json.GetProperty("transport").ValueKind);
         Assert.Equal(JsonValueKind.Null, json.GetProperty("invoice").ValueKind);
         var verification = json.GetProperty("weightVerification");

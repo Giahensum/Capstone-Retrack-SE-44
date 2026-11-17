@@ -24,8 +24,8 @@ public class FactoryDashboardService(AppDbContext db) : FactoryServiceBase(db), 
             _ => monthStart
         };
         var batches = Db.InventoryBatches.AsNoTracking().Where(x => x.TargetFactoryId == factory.Id && x.Status != "MARKETPLACE" && x.Status != "DRAFT");
-        var settled = batches.Where(x => (x.Status == "COMPLETED" || x.Status == "PAID") && x.SettledAt >= periodStart);
-        var settledStatuses = batches.Where(x => x.Status == "COMPLETED" || x.Status == "PAID");
+        var settled = batches.Where(x => ((x.Status == "COMPLETED" && x.SettlementWorkflowVersion == 0) || x.Status == "PAID") && x.SettledAt >= periodStart);
+        var settledStatuses = batches.Where(x => (x.Status == "COMPLETED" && x.SettlementWorkflowVersion == 0) || x.Status == "PAID");
         var summary = await batches.GroupBy(_ => 1)
             .Select(g => new
             {
@@ -35,17 +35,17 @@ public class FactoryDashboardService(AppDbContext db) : FactoryServiceBase(db), 
                     ((x.Status == "ACCEPTED" || x.Status == "TRANSPORT_READY" || x.Status == "READY_FOR_PICKUP") &&
                      x.TransportJob != null && x.TransportJob.Status == "DELIVERED")),
                 PendingSettlementCount = g.Count(x => x.Status == "VERIFIED"),
-                MonthlyPurchasedKg = g.Sum(x => (x.Status == "COMPLETED" || x.Status == "PAID") && x.SettledAt >= monthStart
+                MonthlyPurchasedKg = g.Sum(x => ((x.Status == "COMPLETED" && x.SettlementWorkflowVersion == 0) || x.Status == "PAID") && x.SettledAt >= monthStart
                     ? x.ActualWeightKg ?? 0 : 0),
-                MonthlyNetPayment = g.Sum(x => (x.Status == "COMPLETED" || x.Status == "PAID") && x.SettledAt >= monthStart
+                MonthlyNetPayment = g.Sum(x => ((x.Status == "COMPLETED" && x.SettlementWorkflowVersion == 0) || x.Status == "PAID") && x.SettledAt >= monthStart
                     ? x.NetAmount ?? 0 : 0),
-                PeriodPurchasedKg = g.Sum(x => (x.Status == "COMPLETED" || x.Status == "PAID") && x.SettledAt >= periodStart
+                PeriodPurchasedKg = g.Sum(x => ((x.Status == "COMPLETED" && x.SettlementWorkflowVersion == 0) || x.Status == "PAID") && x.SettledAt >= periodStart
                     ? x.ActualWeightKg ?? 0 : 0),
-                PeriodGrossAmount = g.Sum(x => (x.Status == "COMPLETED" || x.Status == "PAID") && x.SettledAt >= periodStart
+                PeriodGrossAmount = g.Sum(x => ((x.Status == "COMPLETED" && x.SettlementWorkflowVersion == 0) || x.Status == "PAID") && x.SettledAt >= periodStart
                     ? x.GrossAmount ?? 0 : 0),
-                PeriodNetPayment = g.Sum(x => (x.Status == "COMPLETED" || x.Status == "PAID") && x.SettledAt >= periodStart
+                PeriodNetPayment = g.Sum(x => ((x.Status == "COMPLETED" && x.SettlementWorkflowVersion == 0) || x.Status == "PAID") && x.SettledAt >= periodStart
                     ? x.NetAmount ?? 0 : 0),
-                PeriodFeeAmount = g.Sum(x => (x.Status == "COMPLETED" || x.Status == "PAID") && x.SettledAt >= periodStart
+                PeriodFeeAmount = g.Sum(x => ((x.Status == "COMPLETED" && x.SettlementWorkflowVersion == 0) || x.Status == "PAID") && x.SettledAt >= periodStart
                     ? x.PlatformFeeAmount ?? 0 : 0)
             })
             .SingleOrDefaultAsync(ct);

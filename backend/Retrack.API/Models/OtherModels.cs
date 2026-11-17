@@ -204,6 +204,12 @@ namespace Retrack.API.Models
         [Column("settled_at")] public DateTime? SettledAt { get; set; }
         [Column("depot_payment_confirmed_at")] public DateTime? DepotPaymentConfirmedAt { get; set; }
         [Column("depot_payment_confirmed_by")] public Guid? DepotPaymentConfirmedBy { get; set; }
+        [Column("settlement_workflow_version")] public int SettlementWorkflowVersion { get; set; }
+        [Column("settlement_revision")] public int SettlementRevision { get; set; }
+        [Column("settlement_proposed_at")] public DateTime? SettlementProposedAt { get; set; }
+        [Column("settlement_approved_at")] public DateTime? SettlementApprovedAt { get; set; }
+        [Column("settlement_approved_by")] public Guid? SettlementApprovedBy { get; set; }
+        [Column("settlement_decision_reason"), MaxLength(2000)] public string? SettlementDecisionReason { get; set; }
 
         // Navigation
         [ForeignKey("DepotId")]

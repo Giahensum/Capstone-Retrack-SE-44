@@ -25,6 +25,7 @@ namespace Retrack.API.Data
         public DbSet<FactoryDemand> FactoryDemands { get; set; }
         public DbSet<FactoryDepotPartnership> FactoryDepotPartnerships { get; set; }
         public DbSet<InventoryBatch> InventoryBatches { get; set; }
+        public DbSet<BatchWorkflowEvent> BatchWorkflowEvents { get; set; }
         public DbSet<TransportJob> TransportJobs { get; set; }
         public DbSet<DriverDeliveryEvent> DriverDeliveryEvents { get; set; }
         public DbSet<BatchQualityCheck> BatchQualityChecks { get; set; }
@@ -57,6 +58,8 @@ namespace Retrack.API.Data
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
+            modelBuilder.Entity<BatchWorkflowEvent>().HasIndex(x => new { x.BatchId, x.CreatedAt });
+            modelBuilder.Entity<BatchWorkflowEvent>().HasOne(x => x.Batch).WithMany().HasForeignKey(x => x.BatchId).OnDelete(DeleteBehavior.Restrict);
             base.OnModelCreating(modelBuilder);
             modelBuilder.Entity<DepotBuyingPrice>().HasKey(x => new { x.DepotId, x.MaterialType });
             modelBuilder.Entity<DepotBuyingPrice>().HasOne(x => x.Depot).WithMany().HasForeignKey(x => x.DepotId).OnDelete(DeleteBehavior.Cascade);
