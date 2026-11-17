@@ -24,6 +24,7 @@ export const labels = {
   SETTLEMENT_DISPUTED: "Vựa yêu cầu điều chỉnh giá",
   SETTLEMENT_ACCEPTED: "Vựa đồng ý, chờ chuyển tiền",
   REJECTED: "Từ chối nhận",
+  NEGOTIATING: "KCS không đạt, đang thương lượng", RETURN_REQUESTED: "Chờ bàn giao trả", RETURNING: "Đã bàn giao trả, chờ kho nhận", RETURNED: "Kho đã nhận đủ lô trả",
   SETTLEMENT_RECORDED: "Đã quyết toán, chờ chuyển tiền",
   PAYMENT_REPORTED: "Đã báo chuyển khoản, chờ vựa xác nhận",
   PAID: "Vựa đã xác nhận nhận tiền",

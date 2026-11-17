@@ -43,9 +43,9 @@ public sealed partial class DepotReportRepository(AppDbContext db) : IDepotRepor
     }
     public async Task<DepotDashboardCounts> DashboardCountsAsync(Guid depotId, DateTime day) => new(
         await db.PickupRequests.CountAsync(p => p.TargetDepotId == depotId && p.CreatedAt >= day),
-        await db.InventoryBatches.CountAsync(b => b.DepotId == depotId && (b.Status != "COMPLETED" || b.SettlementWorkflowVersion > 0) && b.Status != "CANCELLED" && b.Status != "REJECTED" && b.Status != "PAID"),
+        await db.InventoryBatches.CountAsync(b => b.DepotId == depotId && (b.Status != "COMPLETED" || b.SettlementWorkflowVersion > 0) && b.Status != "CANCELLED" && b.Status != "RETURNED" && b.Status != "REJECTED" && b.Status != "PAID"),
         await db.PickupRequests.CountAsync(p => p.TargetDepotId == depotId && p.Status == "AWAITING_PAYMENT"),
-        await db.InventoryBatches.CountAsync(b => b.DepotId == depotId && b.Status == "REJECTED" && b.QualityCheck != null));
+        await db.InventoryBatches.CountAsync(b => b.DepotId == depotId && (b.Status == "REJECTED" || b.Status == "NEGOTIATING" || b.Status == "RETURN_REQUESTED" || b.Status == "RETURNING") && b.QualityCheck != null));
     private sealed class StaffRow
     {
         public Guid Id { get; set; } public string FullName { get; set; } = ""; public string Role { get; set; } = "";

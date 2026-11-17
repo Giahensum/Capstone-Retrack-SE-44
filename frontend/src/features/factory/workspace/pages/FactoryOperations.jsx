@@ -1,3 +1,4 @@
+import { FactoryWorkflowHistory, QualityResolutionForm, ReturnHandoverForm, ReturnSummary } from "./FactoryQualityResolution";
 import { useState } from "react";
 import {
   Attachment,
@@ -33,12 +34,12 @@ const modes = {
   qc: {
     title: "Trạm cân & Kiểm soát chất lượng",
     text: "Xác nhận nhận hàng → Cân Gross/Tare → Kiểm tra chất lượng → Nghiệm thu.",
-    states: ["DELIVERED", "RECEIVED", "WEIGHED", "VERIFIED", "REJECTED"],
+    states: ["DELIVERED", "RECEIVED", "WEIGHED", "VERIFIED", "REJECTED", "NEGOTIATING", "RETURN_REQUESTED", "RETURNING", "RETURNED"],
   },
   settlements: {
     title: "Quyết toán thu mua",
     text: "Chốt đơn giá sau KCS, đối chiếu phí theo chính sách của lô và ghi nhận thanh toán cho vựa.",
-    states: ["VERIFIED", "SETTLEMENT_PENDING", "SETTLEMENT_DISPUTED", "SETTLEMENT_ACCEPTED", "SETTLEMENT_RECORDED", "PAYMENT_REPORTED", "PAID"],
+    states: ["VERIFIED", "NEGOTIATING", "SETTLEMENT_PENDING", "SETTLEMENT_DISPUTED", "SETTLEMENT_ACCEPTED", "SETTLEMENT_RECORDED", "PAYMENT_REPORTED", "PAID"],
   },
 };
 export function Operations({ mode, focusId, navigate }) {
@@ -215,18 +216,21 @@ export function Operations({ mode, focusId, navigate }) {
                     Tạp chất {order.qc.contamination}%
                   </p>
                   {order.qc.note && <p>{order.qc.note}</p>}
-                  {order.status === "REJECTED" && (
+                  {order.qc.decision === "reject" && (
                     <p className="text-danger">
                       Hướng xử lý:{" "}
                       {order.qc.resolution === "RETURN"
                         ? "Trả hàng về vựa"
                         : "Liên hệ vựa để thỏa thuận lại"}
-                      . Đơn không đủ điều kiện quyết toán.
+                      . KCS không đạt vẫn được giữ trong lịch sử; chỉ mua theo hiện trạng nếu hai bên đồng ý giá mới.
                     </p>
                   )}
                 </div>
               )}
+              <ReturnSummary order={order}/>
               <div className="actions">
+                {order.qc?.decision === "reject" && ["REJECTED","NEGOTIATING","RETURN_REQUESTED","SETTLEMENT_DISPUTED"].includes(order.status) && <Button secondary onClick={()=>setAction("resolution")}>Chọn hướng xử lý KCS</Button>}
+                {order.status === "RETURN_REQUESTED" && <Button onClick={()=>setAction("return-handover")}>Xác nhận bàn giao trả</Button>}
                 {order.status === "DELIVERED" && (
                   <Button
                     onClick={() =>
@@ -250,7 +254,7 @@ export function Operations({ mode, focusId, navigate }) {
                     Kiểm tra & Chốt KCS
                   </Button>
                 )}
-                {["VERIFIED", "SETTLEMENT_DISPUTED"].includes(order.status) && (
+                {["VERIFIED", "NEGOTIATING", "SETTLEMENT_DISPUTED"].includes(order.status) && (
                   <Button onClick={() => setAction("settle")}>
                     {order.settlementWorkflowVersion ? "Gửi đề xuất giá cho vựa" : "Thỏa thuận giá & Quyết toán"}
                   </Button>
@@ -272,20 +276,8 @@ export function Operations({ mode, focusId, navigate }) {
               )}
             </Card>
             <Card title="Lịch sử xử lý">
-              <ol className="timeline">
-                {order.history.map((h, i) => (
-                  <li key={i}>
-                    <span className="timeline-dot" />
-                    <div>
-                      <strong>{labels[h.status]}</strong>
-                      <small>{new Date(h.at).toLocaleString("vi-VN")}</small>
-                    </div>
-                  </li>
-                ))}
-              </ol>
-              <p className="muted">
-                Theo dõi các mốc xử lý; không theo dõi GPS liên tục.
-              </p>
+              <FactoryWorkflowHistory key={order.id} order={order}/>
+
             </Card>
           </div>
           {order.settlementDecisionReason && <p className="info-box">Vựa phản hồi: {order.settlementDecisionReason}</p>}
@@ -334,6 +326,8 @@ export function Operations({ mode, focusId, navigate }) {
         <Modal
           title={
             {
+              resolution: `Hướng xử lý KCS • ${order.id}`,
+              "return-handover": `Bàn giao trả lô • ${order.id}`,
               weigh: `Phiếu cân • ${order.id}`,
               qc: `Kiểm tra chất lượng • ${order.id}`,
               settle: `Quyết toán • ${order.id}`,
@@ -343,6 +337,8 @@ export function Operations({ mode, focusId, navigate }) {
           }
           onClose={() => setAction(null)}
         >
+          {action === "resolution" && <QualityResolutionForm key={order.id} order={order} close={()=>setAction(null)}/>}
+          {action === "return-handover" && <ReturnHandoverForm key={order.id} order={order} close={()=>setAction(null)}/>}
           {action === "weigh" && (
             <WeighForm
               key={order.id}
@@ -651,7 +647,7 @@ function SettlementForm({ order, close }) {
       }}
     >
       <div className="info-box">
-        KCS đạt · Grade {order.qc.grade}. Chốt giá và tiền phải trả cho vựa. Sau bước này, Factory xác nhận chuyển tiền và gửi chứng từ riêng.
+        {order.qc.decision === "reject" ? "Mua theo hiện trạng KCS không đạt" : "KCS đạt"} · Grade {order.qc.grade}. Chốt giá và tiền phải trả cho vựa. Sau bước này, Factory xác nhận chuyển tiền và gửi chứng từ riêng.
       </div>
       <Field
         label={`Đơn giá đã thỏa thuận sau KCS (đ/kg${priceIncludesVat ? ", đã gồm VAT" : ", chưa VAT"})`}
