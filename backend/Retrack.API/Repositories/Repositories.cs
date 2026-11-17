@@ -152,7 +152,7 @@ namespace Retrack.API.Repositories
             => await _db.PlatformInvoices.Include(i => i.Payer).FirstOrDefaultAsync(i => i.Id == id);
 
         public async Task<PlatformInvoice?> GetByPayerAndPeriodAsync(Guid payerId, int year, int month)
-            => await _db.PlatformInvoices.FirstOrDefaultAsync(i => i.PayerId == payerId && i.PeriodYear == year && i.PeriodMonth == month);
+            => await _db.PlatformInvoices.FirstOrDefaultAsync(i => i.PayerId == payerId && i.PeriodYear == year && i.PeriodMonth == month && i.Revision == 0);
 
         public async Task<(List<PlatformInvoice> Items, int Total)> SearchAsync(string? status, int page, int pageSize)
         {
@@ -162,7 +162,7 @@ namespace Retrack.API.Repositories
 
             var total = await query.CountAsync();
             var items = await query
-                .OrderByDescending(i => i.PeriodYear).ThenByDescending(i => i.PeriodMonth)
+                .OrderByDescending(i => i.PeriodYear).ThenByDescending(i => i.PeriodMonth).ThenByDescending(i => i.Revision).ThenBy(i => i.Id)
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
                 .ToListAsync();

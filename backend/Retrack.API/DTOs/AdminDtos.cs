@@ -146,6 +146,8 @@ namespace Retrack.API.DTOs
         public string PayerName { get; set; } = string.Empty;
         public int PeriodYear { get; set; }
         public int PeriodMonth { get; set; }
+        public int Revision { get; set; }
+        public Guid? AdjustmentOfId { get; set; }
         public decimal TotalFeeAmount { get; set; }
         public string Status { get; set; } = string.Empty;
         public DateTime? PaidAt { get; set; }

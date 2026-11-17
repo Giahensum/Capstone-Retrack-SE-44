@@ -185,7 +185,7 @@ namespace Retrack.API.Data
                 .HasForeignKey(f => f.OwnerId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            // PlatformInvoice -> User (payer) - restrict delete, one invoice per payer per period
+            // Mỗi kỳ có một bản gốc và các hóa đơn bổ sung, không sửa bản đã thanh toán.
             modelBuilder.Entity<PlatformInvoice>()
                 .HasOne(i => i.Payer)
                 .WithMany()
@@ -193,7 +193,10 @@ namespace Retrack.API.Data
                 .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<PlatformInvoice>()
-                .HasIndex(i => new { i.PayerId, i.PeriodYear, i.PeriodMonth }).IsUnique();
+                .HasIndex(i => new { i.PayerId, i.PeriodYear, i.PeriodMonth, i.Revision }).IsUnique();
+            modelBuilder.Entity<PlatformInvoice>()
+                .HasOne<PlatformInvoice>().WithMany().HasForeignKey(i => i.AdjustmentOfId)
+                .OnDelete(DeleteBehavior.Restrict);
 
             // AuditLog -> User (nullable, keep log if user is deleted)
             modelBuilder.Entity<AuditLog>()
