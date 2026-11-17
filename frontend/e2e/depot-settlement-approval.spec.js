@@ -13,6 +13,7 @@ test('Giá cần kho đồng ý, Factory gửi chứng từ, kho xác nhận nh�
   test.skip(process.env.E2E_TRANSPORT_FIXTURE !== 'true' || !process.env.E2E_DEPOT_ID || !process.env.E2E_FACTORY_EMAIL,
     'Cần actor riêng và fixture vận chuyển trong DB test. Không phải nghiệm thu Driver thiết bị.');
   test.setTimeout(150000);
+  page.setDefaultTimeout(15000);
   await login(page, 'DEPOT'); await page.goto('/depot/batches');
   await page.getByLabel('Kho đang quản lý').selectOption(process.env.E2E_DEPOT_ID);
   await page.getByRole('button', { name: 'Tạo lô xuất hàng mới' }).click();
@@ -23,6 +24,7 @@ test('Giá cần kho đồng ý, Factory gửi chứng từ, kho xác nhận nh�
   await page.getByRole('button', { name: 'Tạo lô xuất hàng', exact: true }).click();
   const response = await created; expect(response.status()).toBe(200); const batch = (await response.json()).data;
   const context = await browser.newContext(); const factory = await context.newPage();
+  factory.setDefaultTimeout(15000);
   const errors = []; for (const p of [page, factory]) p.on('pageerror', e => errors.push(e.message));
   try {
     await login(factory, 'FACTORY');
@@ -56,7 +58,12 @@ test('Giá cần kho đồng ý, Factory gửi chứng từ, kho xác nhận nh�
     await page.getByLabel('Tôi đồng ý khối lượng, đơn giá và số tiền của phiên bản này.').check();
     await page.getByRole('button', { name: 'Đồng ý giá và số tiền', exact: true }).click();
     await expect(page.getByRole('dialog')).toContainText('Đã đồng ý giá, chờ chuyển tiền');
-    await factory.reload();
+    async function factoryDetail() {
+      await factory.reload();
+      await factory.getByRole('button', { name: /Quyết toán/ }).first().click();
+      await factory.getByRole('row').filter({ hasText: batch.code }).getByRole('button', { name: /Chi tiết/ }).click();
+    }
+    await factoryDetail();
     await factory.getByRole('button', { name: 'Xác nhận đã chuyển tiền', exact: true }).click();
     const proof = factory.getByRole('dialog');
     await proof.getByLabel('Mã tham chiếu chuyển khoản').fill('CK-APPROVAL-' + batch.code);
@@ -68,7 +75,16 @@ test('Giá cần kho đồng ý, Factory gửi chứng từ, kho xác nhận nh�
     await page.reload(); await page.getByRole('row').filter({ hasText: batch.code }).getByTitle('Chi tiết lô hàng').click();
     await expect(page.getByRole('dialog')).toContainText('Kho xác nhận nhận đủ tiền');
     await page.screenshot({ path: test.info().outputPath('depot-da-nhan-tien.png'), fullPage: true });
-    await factory.reload(); await expect(factory.getByText('Vựa đã xác nhận nhận tiền', { exact: true }).first()).toBeVisible();
+    await page.setViewportSize({ width: 390, height: 844 });
+    const mobileDialog = page.getByRole('dialog');
+    await expect(mobileDialog).toBeVisible();
+    const bounds = await mobileDialog.boundingBox();
+    expect(bounds.x).toBeGreaterThanOrEqual(0);
+    expect(bounds.x + bounds.width).toBeLessThanOrEqual(391);
+    expect(bounds.height).toBeLessThanOrEqual(844);
+    await page.getByRole('heading', { name: 'Lịch sử xác nhận của hai bên' }).scrollIntoViewIfNeeded();
+    await page.screenshot({ path: test.info().outputPath('depot-lich-su-mobile.png'), fullPage: true });
+    await factoryDetail(); await expect(factory.getByText('Vựa đã xác nhận nhận tiền', { exact: true }).filter({ visible: true }).first()).toBeVisible();
     expect(errors).toEqual([]);
   } finally { await context.close(); }
 });
