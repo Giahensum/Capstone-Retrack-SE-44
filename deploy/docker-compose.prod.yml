@@ -1,0 +1,100 @@
+# =====================================================================
+# RETRACK — TRIỂN KHAI PRODUCTION (1 VPS, Docker): chỉ Backend (.NET API) + PostgreSQL. KHÔNG có frontend.
+#   - Postgres chỉ nằm trong mạng nội bộ Docker (không mở cổng ra Internet).
+#   - API nghe cổng 8080 trong container; mặc định mở ra máy chủ ở ${API_BIND}:${API_PORT} (xem .env.production).
+#   - Có tên miền: bật profile "tls" để Caddy tự xin chứng chỉ HTTPS, rồi đặt API_BIND=127.0.0.1.
+# Chạy (CD gọi deploy-remote.sh, hoặc chạy tay):
+#   docker compose --env-file .env.production -f docker-compose.prod.yml up -d
+#   docker compose --env-file .env.production -f docker-compose.prod.yml --profile tls up -d     # kèm Caddy
+# Cấu hình: .env.production (do server-setup.sh sinh ra, KHÔNG commit, KHÔNG nằm trong Git).
+# =====================================================================
+name: retrack
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-retrack}
+      POSTGRES_USER: ${POSTGRES_USER:-retrack}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?đặt POSTGRES_PASSWORD trong .env.production}
+      TZ: Asia/Ho_Chi_Minh
+    # VPS 2 GB RAM: giữ Postgres nhỏ để chừa chỗ cho API.
+    command: ["postgres", "-c", "shared_buffers=128MB", "-c", "effective_cache_size=384MB", "-c", "max_connections=60", "-c", "work_mem=4MB"]
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      # Chỉ chạy khi volume pg_data còn TRỐNG (lần dựng đầu): schema + seed. deploy-remote.sh sinh file này từ db/retrack-system.sql.
+      - ./initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      # -h 127.0.0.1 (TCP): máy chủ tạm lúc khởi tạo lần đầu chỉ nghe socket, nên không bị báo "sẵn sàng" quá sớm trước khi chạy xong file SQL.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    mem_limit: 600m
+
+  api:
+    image: ${API_IMAGE:?đặt API_IMAGE (CD tự ghi) trong .env.production}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__DefaultConnection: "Host=db;Port=5432;Database=${POSTGRES_DB:-retrack};Username=${POSTGRES_USER:-retrack};Password=${POSTGRES_PASSWORD}"
+      Jwt__Key: ${JWT_KEY:?đặt JWT_KEY (>= 32 ký tự) trong .env.production}
+      Jwt__Issuer: ${JWT_ISSUER:-ReTrack}
+      Jwt__Audience: ${JWT_AUDIENCE:-ReTrackUsers}
+      Frontend__Url: ${FRONTEND_URL:-http://localhost:5173}
+      Database__Initialize: "false"
+      Google__ClientId: ${GOOGLE_CLIENT_ID:-}
+      Google__ClientSecret: ${GOOGLE_CLIENT_SECRET:-}
+      Cloudinary__CloudName: ${CLOUDINARY_CLOUD_NAME:-}
+      Cloudinary__ApiKey: ${CLOUDINARY_API_KEY:-}
+      Cloudinary__ApiSecret: ${CLOUDINARY_API_SECRET:-}
+      PayOS__ClientId: ${PAYOS_CLIENT_ID:-}
+      PayOS__ApiKey: ${PAYOS_API_KEY:-}
+      PayOS__ChecksumKey: ${PAYOS_CHECKSUM_KEY:-}
+      PayOS__ReturnUrl: ${PAYOS_RETURN_URL:-http://localhost:5173/depot/payments/fees?payos=return}
+      PayOS__CancelUrl: ${PAYOS_CANCEL_URL:-http://localhost:5173/depot/payments/fees?payos=cancel}
+      PayOS__PollSeconds: ${PAYOS_POLL_SECONDS:-15}
+      AiService__Url: ${AI_SERVICE_URL:-http://127.0.0.1:5005}
+      # Ký điện tử hợp đồng (DocuSign sandbox); để trống thì tính năng tắt
+      DocuSign__IntegrationKey: ${DOCUSIGN_INTEGRATION_KEY:-}
+      DocuSign__UserId: ${DOCUSIGN_USER_ID:-}
+      DocuSign__AccountId: ${DOCUSIGN_ACCOUNT_ID:-}
+      DocuSign__BaseUri: ${DOCUSIGN_BASE_URI:-https://demo.docusign.net}
+      DocuSign__OAuthHost: ${DOCUSIGN_OAUTH_HOST:-account-d.docusign.com}
+      DocuSign__PrivateKeyBase64: ${DOCUSIGN_PRIVATE_KEY_BASE64:-}
+      DocuSign__WebhookUrl: ${DOCUSIGN_WEBHOOK_URL:-}
+      VerificationScanner__Mode: ${VERIFICATION_SCANNER_MODE:-Disabled}
+      VerificationStorage__Provider: ${VERIFICATION_STORAGE_PROVIDER:-Database}
+    ports:
+      - "${API_BIND:-0.0.0.0}:${API_PORT:-8080}:8080"
+    volumes:
+      - uploads:/app/uploads
+    mem_limit: 700m
+
+  caddy:
+    profiles: ["tls"]
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on: [api]
+    environment:
+      # Không dùng ":?" ở đây: compose nội suy biến của MỌI service, kể cả service thuộc profile đang tắt — bắt buộc sẽ làm hỏng cả lần deploy không có tên miền.
+      # deploy-remote.sh chỉ bật profile tls khi DOMAIN có giá trị.
+      DOMAIN: ${DOMAIN:-}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    mem_limit: 128m
+
+volumes:
+  pg_data:
+  uploads:
+  caddy_data:
+  caddy_config:

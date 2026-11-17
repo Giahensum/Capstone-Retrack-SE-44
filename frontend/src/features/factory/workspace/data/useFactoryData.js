@@ -30,6 +30,7 @@ function mapBatch(batch) {
 function mapPartner(partner) {
   return {
     id: partner.depotId,
+    partnershipId: partner.id,
     name: partner.name,
     address: partner.address || "",
     phone: partner.contactPhone || "",

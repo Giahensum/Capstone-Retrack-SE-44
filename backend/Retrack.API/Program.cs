@@ -162,6 +162,10 @@ builder.Services.Configure<Retrack.API.Services.Depot.PayOsOptions>(builder.Conf
 builder.Services.AddHttpClient<Retrack.API.Services.Depot.IPayOsClient, Retrack.API.Services.Depot.PayOsClient>(c => c.Timeout = TimeSpan.FromSeconds(20));
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IDepotPayOsService, Retrack.API.Services.Depot.DepotPayOsService>();
 builder.Services.AddHostedService<Retrack.API.Services.Depot.PayOsReconciliationWorker>();
+// Ký điện tử hợp đồng bằng DocuSign sandbox (cấu hình qua DocuSign__* trong .env / biến môi trường; để trống thì tắt tính năng)
+builder.Services.Configure<Retrack.API.Services.ESign.DocuSignOptions>(builder.Configuration.GetSection("DocuSign"));
+builder.Services.AddHttpClient<Retrack.API.Services.ESign.IDocuSignClient, Retrack.API.Services.ESign.DocuSignClient>(c => c.Timeout = TimeSpan.FromSeconds(30));
+builder.Services.AddScoped<Retrack.API.Services.ESign.IContractEsignService, Retrack.API.Services.ESign.ContractEsignService>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.INotificationService, Retrack.API.Services.Shared.NotificationService>();
 builder.Services.AddScoped<Retrack.API.Services.Driver.DriverJobService>();
 builder.Services.AddScoped<Retrack.API.Services.Driver.DriverReportingService>();
@@ -241,6 +245,8 @@ app.UseCors("AllowFrontend");
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter();
+// Health check cho Docker/CD: ShortCircuit để bỏ qua HTTPS redirect, CORS, auth (cổng 8080 chỉ nghe HTTP).
+app.MapGet("/health/live", () => Results.Ok(new { status = "ok" })).ShortCircuit();
 app.MapControllers();
 
 // ===== DB-FIRST: app KHÔNG tự migrate; schema/seed nằm ở db/bootstrap/retrack-system.sql =====
