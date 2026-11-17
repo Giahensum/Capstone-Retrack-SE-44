@@ -46,6 +46,9 @@ public sealed class InventoryBatchTests : IAsyncLifetime
             (n.BatchId != null && batchIds.Contains(n.BatchId.Value))).ExecuteDeleteAsync();
         await db.TransportJobs.Where(t => t.Batch.DepotId == depotId).ExecuteDeleteAsync();
         await db.BatchWorkflowEvents.Where(e => batchIds.Contains(e.BatchId)).ExecuteDeleteAsync();
+        // Schema DB-first không có ON DELETE CASCADE: phải xóa phiếu QC trước khi xóa lô.
+        await db.BatchQualityChecks.Where(q => batchIds.Contains(q.BatchId)).ExecuteDeleteAsync();
+        await db.FactoryDepotReviews.Where(r => batchIds.Contains(r.BatchId)).ExecuteDeleteAsync();
         await db.InventoryBatches.Where(b => b.DepotId == depotId).ExecuteDeleteAsync();
         await db.FactoryDepotPartnerships.Where(p => p.DepotId == depotId).ExecuteDeleteAsync();
         await db.FactoryDemands.Where(d => d.Factory.OwnerId == factoryOwnerId).ExecuteDeleteAsync();

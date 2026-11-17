@@ -1,0 +1,5 @@
+# Script chạy trên Linux (VPS) phải luôn là LF, kể cả khi checkout trên Windows — CRLF làm bash báo lỗi "\r: command not found".
+*.sh text eol=lf
+deploy/Caddyfile text eol=lf
+deploy/*.yml text eol=lf
+deploy/.env.production.example text eol=lf
