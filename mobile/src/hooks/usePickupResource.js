@@ -3,7 +3,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { errorMessage } from "../api/client";
 
 // Screen-scoped data: abort on blur/unmount and ignore an older refresh response.
-export default function usePickupResource(loader) {
+export default function usePickupResource(loader, pollInterval = 0) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -36,9 +36,16 @@ export default function usePickupResource(loader) {
   );
   useFocusEffect(
     useCallback(() => {
-      void load();
-      return () => pending.current?.abort();
-    }, [load]),
+      let active = true;
+      let timer;
+      // Chờ request hoàn tất trước lần kế tiếp để mạng chậm không bị hủy liên tục.
+      const refresh = async (silent = false) => {
+        await load(silent);
+        if (active && pollInterval > 0) timer = setTimeout(() => { void refresh(true); }, pollInterval);
+      };
+      void refresh();
+      return () => { active = false; clearTimeout(timer); pending.current?.abort(); };
+    }, [load, pollInterval]),
   );
   return { data, setData, loading, refreshing, error, reload: load };
 }

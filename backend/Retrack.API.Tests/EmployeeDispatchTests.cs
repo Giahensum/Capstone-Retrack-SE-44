@@ -16,7 +16,7 @@ public sealed class EmployeeDispatchTests : IAsyncLifetime
     private readonly Depot depot = new() { Owner = NewUser("DEPOT_OWNER"), VerificationStatus = "APPROVED" };
     private EmployeeCollectionArea area = null!, nearby = null!;
     private EmployeeDispatchShift a = null!, b = null!;
-    private EmployeeDispatchService Service => new(db);
+    private EmployeeDispatchService Service => StaffTestServices.Dispatch(db);
     private static User NewUser(string role) => new() { Email = $"{Guid.NewGuid():N}@test.local", Role = role, FullName = role };
     public async Task InitializeAsync()
     {
@@ -81,14 +81,14 @@ public sealed class EmployeeDispatchTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task OutsideAllAreasWaitsInsteadOfAssigningNearestEmployee()
+    public async Task ChosenDepotAssignsOutsideAllAreasToNearestOwnArea()
     {
         var id = await Pickup();
         (await db.PickupRequests.FindAsync(id))!.Latitude = 16.3m;
         await db.SaveChangesAsync();
         await Service.DispatchAsync(default);
-        Assert.Null((await Read(id)).AcceptedCollectorId);
-        Assert.Single(await db.Notifications.ToListAsync());
+        Assert.Equal(second.Id, (await Read(id)).AcceptedCollectorId);
+        Assert.Equal(depot.Id, (await Read(id)).TargetDepotId);
     }
     [Fact]
     public async Task FullTransfersUnstartedButKeepsCargoAndHistory()
@@ -99,6 +99,38 @@ public sealed class EmployeeDispatchTests : IAsyncLifetime
         Assert.Equal(second.Id,(await Read(id)).AcceptedCollectorId);
         Assert.Equal(first.Id,(await Read(started)).AcceptedCollectorId);
         Assert.Equal(first.Id,(await db.EmployeeDispatchEvents.SingleAsync()).FromEmployeeId);
+    }
+
+    [Fact]
+    public async Task NearbyEmployeeOfAnotherDepotCannotReceiveTransferredOrder()
+    {
+        var otherEmployee = NewUser("DEPOT_EMPLOYEE");
+        var otherDepot = new Depot { Owner = NewUser("DEPOT_OWNER"), VerificationStatus = "APPROVED" };
+        db.DepotStaffs.Add(new DepotStaff { User = otherEmployee, Depot = otherDepot, StaffType = otherEmployee.Role });
+        var otherArea = new EmployeeCollectionArea { DepotId = otherDepot.Id, Name = "Vùng trùng tọa độ", Latitude = area.Latitude, Longitude = area.Longitude };
+        db.EmployeeCollectionAreas.Add(otherArea);
+        db.EmployeeDispatchShifts.Add(Shift(otherEmployee, otherArea));
+        b.Availability = "STOPPED";
+        await db.SaveChangesAsync();
+        var id = await Pickup("SCHEDULED", first.Id);
+        await Service.ChangeAvailabilityAsync(first.Id, a.Id, new("STOPPED", "Xe hỏng cần dừng ca hôm nay"), default);
+        await Service.DispatchAsync(default);
+        Assert.Null((await Read(id)).AcceptedCollectorId);
+        Assert.Equal(depot.Id, (await Read(id)).TargetDepotId);
+        Assert.DoesNotContain(await db.EmployeeDispatchEvents.ToListAsync(), e => e.ToEmployeeId == otherEmployee.Id);
+    }
+
+    [Fact]
+    public async Task NewNearbyOrderJoinsEmployeeWhoAlreadyHasCheckedInOrder()
+    {
+        var active = await Pickup("IN_PROGRESS", first.Id);
+        var newId = await Pickup();
+        (await db.PickupRequests.FindAsync(newId))!.Longitude = 108.225m;
+        await db.SaveChangesAsync();
+        await Service.DispatchAsync(default);
+        Assert.Equal(first.Id, (await Read(active)).AcceptedCollectorId);
+        Assert.Equal(first.Id, (await Read(newId)).AcceptedCollectorId);
+        Assert.Equal("SCHEDULED", (await Read(newId)).Status);
     }
     [Fact]
     public async Task AllUnavailableQueuesAndNotifiesOwnerOnce()

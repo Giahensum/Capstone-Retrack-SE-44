@@ -1,0 +1,72 @@
+using Microsoft.EntityFrameworkCore;
+using Retrack.API.Data;
+using Retrack.API.DTOs;
+using Retrack.API.DTOs.Employee;
+using Retrack.API.Models;
+using Retrack.API.Services.Employee;
+using Retrack.API.Repositories.Interfaces;
+
+namespace Retrack.API.Repositories;
+
+public sealed class EmployeeReportingRepository(AppDbContext db) : IEmployeeReportingRepository
+{
+    public static readonly string[] HistoryStates = ["SCHEDULED", "IN_PROGRESS", "WEIGHED", "SELLER_CONFIRMED", "AWAITING_PAYMENT", "PAYMENT_SENT", "DONE", "CANCELLED"];
+    private IQueryable<DepotStaff> Staff(Guid id) => db.DepotStaffs.AsNoTracking().Where(s => s.UserId == id
+        && s.IsActive && s.StaffType == "DEPOT_EMPLOYEE" && s.User.IsActive && s.User.Role == "DEPOT_EMPLOYEE" && s.Depot.Owner.IsActive);
+    public Task<bool> HasActiveStaffAsync(Guid id, CancellationToken ct) => Staff(id).AnyAsync(ct);
+    private IQueryable<PickupRequest> Own(Guid id) => db.PickupRequests.AsNoTracking().Where(p => p.AcceptedCollectorId == id
+        && Staff(id).Any(s => s.DepotId == p.TargetDepotId));
+
+    public async Task<EmployeeDashboardDto> DashboardAsync(Guid id, DateTime today, CancellationToken ct)
+    {
+
+        var own = Own(id);
+        // Pool hiện dùng kho chính (liên kết đầu tiên); bộ đếm đơn chờ phải cùng phạm vi.
+        var poolDepotId = await Staff(id).OrderBy(s => s.Id).Select(s => s.DepotId).FirstAsync(ct);
+        var active = await own.Where(p => p.Status == "SCHEDULED" || p.Status == "IN_PROGRESS" || p.Status == "SELLER_CONFIRMED")
+            .OrderBy(p => p.Status == "SELLER_CONFIRMED" ? 0 : 1).ThenBy(p => p.PreferredDatetime == null)
+            .ThenBy(p => p.PreferredDatetime).ThenBy(p => p.Id)
+            .Select(p => new ActivePickupSummaryDto(p.Id, p.Seller.FullName, p.Seller.Phone, p.Address, p.Status, p.PreferredDatetime)).FirstOrDefaultAsync(ct);
+        var automatic = await db.EmployeeCollectionAreas.AnyAsync(a => a.DepotId == poolDepotId, ct);
+        return new(automatic ? await own.CountAsync(p => p.Status == "SCHEDULED", ct) : await db.PickupRequests.CountAsync(p => p.Status == "PENDING" && p.AcceptedCollectorId == null
+                && p.TargetDepotId == poolDepotId, ct), active,
+            await own.CountAsync(p => p.Status == "DONE" && p.UpdatedAt >= today && p.UpdatedAt < today.AddDays(1), ct),
+            await own.CountAsync(p => p.Status == "DONE", ct),
+            await own.CountAsync(p => p.Status == "IN_PROGRESS", ct),
+            await own.CountAsync(p => p.Status == "WEIGHED", ct),
+            await own.CountAsync(p => p.Status == "SELLER_CONFIRMED", ct),
+            await own.CountAsync(p => p.Status == "AWAITING_PAYMENT" || p.Status == "PAYMENT_SENT", ct),
+            await db.Notifications.CountAsync(n => n.UserId == id && !n.IsRead, ct));
+    }
+    public async Task<PagedResult<EmployeeHistoryRow>> HistoryAsync(Guid id, int page, int size, string? status, CancellationToken ct)
+    {
+
+        var query = Own(id).Where(p => HistoryStates.Contains(p.Status));
+        if (status != null) query = query.Where(p => p.Status == status);
+        return new() { Page = page, PageSize = size, TotalCount = await query.CountAsync(ct),
+            Items = await query.OrderByDescending(p => p.UpdatedAt).ThenBy(p => p.Id).Skip((page - 1) * size).Take(size)
+                .Select(p => new EmployeeHistoryRow(p.Id, p.Seller.FullName, p.Address, p.Status, p.UpdatedAt, p.GrossAmount)).ToListAsync(ct) };
+    }
+    public async Task<EmployeeStatsDto> StatsAsync(Guid id, DateTime start, CancellationToken ct)
+    {
+
+        var all = Own(id).Where(p => p.Status == "DONE");
+        var month = all.Where(p => p.UpdatedAt >= start && p.UpdatedAt < start.AddHours(7).AddMonths(1).AddHours(-7));
+        async Task<EmployeeTotals> Total(IQueryable<PickupRequest> query) => new(await query.CountAsync(ct),
+            await db.PickupRequestItems.Where(i => query.Any(p => p.Id == i.PickupRequestId)).SumAsync(i => (decimal?)i.WeightKg, ct) ?? 0,
+            await query.SumAsync(p => (decimal?)p.GrossAmount, ct) ?? 0);
+        return new(await Total(all), await Total(month), "Asia/Ho_Chi_Minh", "updated_at của đơn DONE");
+    }
+    public async Task<EmployeeNotificationPage> NotificationsAsync(Guid id, int page, int size, CancellationToken ct)
+    {
+
+        var query = db.Notifications.AsNoTracking().Where(n => n.UserId == id);
+        return new(await query.OrderByDescending(n => n.CreatedAt).ThenBy(n => n.Id).Skip((page - 1) * size).Take(size)
+            .Select(n => new EmployeeNotificationDto(n.Id, n.Title, n.Message, n.IsRead, n.CreatedAt, n.PickupRequestId)).ToListAsync(ct),
+            await query.CountAsync(ct), await query.CountAsync(n => !n.IsRead, ct), page, size);
+    }
+    public Task<int> MarkReadAsync(Guid userId, Guid notificationId, CancellationToken ct) =>
+        db.Notifications.Where(n => n.Id == notificationId && n.UserId == userId)
+            .ExecuteUpdateAsync(set => set.SetProperty(n => n.IsRead, true), ct);
+}
+
