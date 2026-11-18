@@ -164,6 +164,9 @@ namespace Retrack.API.Models
         [Column("direct_offer_factory_id")]
         public Guid? DirectOfferFactoryId { get; set; }
 
+        [Column("source_demand_id")]
+        public Guid? SourceDemandId { get; set; }
+
         [Required]
         [Column("material_type")]
         [MaxLength(100)]
@@ -210,6 +213,20 @@ namespace Retrack.API.Models
         [Column("settled_at")] public DateTime? SettledAt { get; set; }
         [Column("depot_payment_confirmed_at")] public DateTime? DepotPaymentConfirmedAt { get; set; }
         [Column("depot_payment_confirmed_by")] public Guid? DepotPaymentConfirmedBy { get; set; }
+        [Column("settlement_workflow_version")] public int SettlementWorkflowVersion { get; set; }
+        [Column("settlement_revision")] public int SettlementRevision { get; set; }
+        [Column("settlement_proposed_at")] public DateTime? SettlementProposedAt { get; set; }
+        [Column("settlement_approved_at")] public DateTime? SettlementApprovedAt { get; set; }
+        [Column("settlement_approved_by")] public Guid? SettlementApprovedBy { get; set; }
+        [Column("settlement_decision_reason"), MaxLength(2000)] public string? SettlementDecisionReason { get; set; }
+        [Column("return_handed_over_at")] public DateTime? ReturnHandedOverAt { get; set; }
+        [Column("return_handover_proof_url")] public string? ReturnHandoverProofUrl { get; set; }
+        [Column("return_handover_reference"), MaxLength(200)] public string? ReturnHandoverReference { get; set; }
+        [Column("return_handover_note"), MaxLength(2000)] public string? ReturnHandoverNote { get; set; }
+        [Column("return_received_at")] public DateTime? ReturnReceivedAt { get; set; }
+        [Column("return_received_by")] public Guid? ReturnReceivedBy { get; set; }
+        [Column("return_receipt_reference"), MaxLength(200)] public string? ReturnReceiptReference { get; set; }
+        [Column("return_receipt_note"), MaxLength(2000)] public string? ReturnReceiptNote { get; set; }
 
         // Navigation
         [ForeignKey("DepotId")]

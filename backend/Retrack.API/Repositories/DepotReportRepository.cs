@@ -26,10 +26,10 @@ public sealed partial class DepotReportRepository(AppDbContext db) : IDepotRepor
     public async Task<(List<DepotDailyAmount> Revenue, List<DepotDailyAmount> Costs)> DailyAmountsAsync(Guid depotId, DateTime start, DateTime end)
     {
         var settled = db.InventoryBatches.AsNoTracking().Where(b => b.DepotId == depotId && b.SettledAt >= start && b.SettledAt < end &&
-            (b.Status == "COMPLETED" || b.Status == "PAID") && b.NetAmount != null)
+            ((b.Status == "COMPLETED" && b.SettlementWorkflowVersion == 0) || b.Status == "PAID") && b.NetAmount != null)
             .Select(b => new { Date = b.SettledAt!.Value, Amount = b.NetAmount!.Value });
         // Giữ dữ liệu QC cũ chưa có SettledAt, không cộng trùng lô đã quyết toán theo contract mới.
-        var legacy = db.BatchQualityChecks.AsNoTracking().Where(q => q.Batch.DepotId == depotId && q.Batch.SettledAt == null && q.IsAccepted &&
+        var legacy = db.BatchQualityChecks.AsNoTracking().Where(q => q.Batch.DepotId == depotId && q.Batch.SettlementWorkflowVersion == 0 && q.Batch.SettledAt == null && q.IsAccepted &&
             q.PaymentProofUrl != null && q.CreatedAt >= start && q.CreatedAt < end)
             .Select(q => new { Date = q.CreatedAt, Amount = q.NetAmount });
         var revenue = await settled.Concat(legacy).GroupBy(q => q.Date.AddHours(7).Date)
@@ -43,9 +43,9 @@ public sealed partial class DepotReportRepository(AppDbContext db) : IDepotRepor
     }
     public async Task<DepotDashboardCounts> DashboardCountsAsync(Guid depotId, DateTime day) => new(
         await db.PickupRequests.CountAsync(p => p.TargetDepotId == depotId && p.CreatedAt >= day),
-        await db.InventoryBatches.CountAsync(b => b.DepotId == depotId && b.Status != "COMPLETED" && b.Status != "CANCELLED" && b.Status != "REJECTED" && b.Status != "PAID"),
+        await db.InventoryBatches.CountAsync(b => b.DepotId == depotId && (b.Status != "COMPLETED" || b.SettlementWorkflowVersion > 0) && b.Status != "CANCELLED" && b.Status != "RETURNED" && b.Status != "REJECTED" && b.Status != "PAID"),
         await db.PickupRequests.CountAsync(p => p.TargetDepotId == depotId && p.Status == "AWAITING_PAYMENT"),
-        await db.InventoryBatches.CountAsync(b => b.DepotId == depotId && b.Status == "REJECTED" && b.QualityCheck != null));
+        await db.InventoryBatches.CountAsync(b => b.DepotId == depotId && (b.Status == "REJECTED" || b.Status == "NEGOTIATING" || b.Status == "RETURN_REQUESTED" || b.Status == "RETURNING") && b.QualityCheck != null));
     private sealed class StaffRow
     {
         public Guid Id { get; set; } public string FullName { get; set; } = ""; public string Role { get; set; } = "";
@@ -105,8 +105,8 @@ public sealed partial class DepotReportRepository(AppDbContext db) : IDepotRepor
     public async Task<PagedResult<FeeInvoiceDto>> InvoicesAsync(Guid ownerId, DepotQuery query)
     {
         return await DepotRepositoryPage.ReadAsync(db.PlatformInvoices.AsNoTracking().Where(i => i.PayerId == ownerId)
-            .OrderByDescending(i => i.PeriodYear).ThenByDescending(i => i.PeriodMonth).ThenBy(i => i.Id)
+            .OrderByDescending(i => i.PeriodYear).ThenByDescending(i => i.PeriodMonth).ThenByDescending(i => i.Revision).ThenBy(i => i.Id)
             .Select(i => new FeeInvoiceDto(i.Id, new DateOnly(i.PeriodYear, i.PeriodMonth, 1), i.TotalFeeAmount,
-                i.Status == "PENDING" ? "UNPAID" : i.Status, i.PaymentProofUrl, i.SubmittedAt)), query);
+                i.Status == "PENDING" ? "UNPAID" : i.Status, i.PaymentProofUrl, i.SubmittedAt, i.Revision, i.AdjustmentOfId)), query);
     }
 }

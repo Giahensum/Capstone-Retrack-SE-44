@@ -19,7 +19,7 @@ public sealed partial class StockReceiptTests
             OperationId = Guid.NewGuid(), MaterialType = "IRON", WeightKg = 100
         });
         var entity = await db.InventoryBatches.SingleAsync(x => x.Id == batch.Id);
-        entity.Status = "COMPLETED";
+        entity.Status = "PAID";
         entity.SettledAt = DateTime.UtcNow;
         entity.GrossAmount = 10000000;
         entity.PlatformFeeAmount = 500000;

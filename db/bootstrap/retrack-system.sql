@@ -448,6 +448,33 @@ CREATE TABLE IF NOT EXISTS platform_invoices (
 ALTER TABLE platform_invoices ADD COLUMN IF NOT EXISTS payment_proof_url TEXT;
 ALTER TABLE platform_invoices ADD COLUMN IF NOT EXISTS submitted_at TIMESTAMPTZ;
 
+-- RETRACK_CLOSED_PERIOD_BILLING_V1: giữ bản gốc, phát hành bổ sung khi có phí đối soát muộn.
+ALTER TABLE platform_invoices ADD COLUMN IF NOT EXISTS revision INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE platform_invoices ADD COLUMN IF NOT EXISTS adjustment_of_id UUID REFERENCES platform_invoices(id);
+ALTER TABLE platform_invoices DROP CONSTRAINT IF EXISTS uq_platform_invoice_period;
+-- Index do EF đời cũ có thể có tên khác; chỉ bỏ index 3 cột của đúng bảng/schema đang nâng.
+DO $$ DECLARE old_index REGCLASS; BEGIN
+    FOR old_index IN
+        SELECT i.indexrelid::regclass FROM pg_index i
+        WHERE i.indrelid = 'platform_invoices'::regclass AND i.indisunique
+          AND i.indnatts = 3 AND i.indpred IS NULL AND i.indexprs IS NULL
+          AND NOT EXISTS (SELECT 1 FROM pg_constraint c WHERE c.conindid = i.indexrelid)
+          AND (SELECT array_agg(a.attname::text ORDER BY a.attname)
+               FROM unnest(i.indkey) AS k(attnum)
+               JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.attnum)
+              = ARRAY['payer_id', 'period_month', 'period_year']::text[]
+    LOOP EXECUTE format('DROP INDEX %s', old_index); END LOOP;
+END $$;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_platform_invoice_revision
+    ON platform_invoices(payer_id, period_year, period_month, revision);
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'platform_invoices'::regclass AND conname = 'ck_platform_invoice_revision') THEN
+        ALTER TABLE platform_invoices ADD CONSTRAINT ck_platform_invoice_revision CHECK
+            ((revision = 0 AND adjustment_of_id IS NULL) OR (revision > 0 AND adjustment_of_id IS NOT NULL));
+    END IF;
+END $$;
+-- RETRACK_CLOSED_PERIOD_BILLING_V1_END
+
 -- ==========================================
 -- FUNCTIONS & TRIGGERS (updated_at tự động)
 -- ==========================================
@@ -971,6 +998,49 @@ WHERE p.termination_status = 'PENDING_FACTORY'
         AND n.target_type = 'PARTNERS' AND n.title = 'Vựa đề nghị chấm dứt hợp đồng'
         AND n.created_at >= p.termination_requested_at
   );
+
+-- RETRACK_BATCH_SETTLEMENT_APPROVAL_V1: lô cũ giữ phiên bản 0, lô tạo từ API mới là 1.
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS settlement_workflow_version INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS settlement_revision INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS settlement_proposed_at TIMESTAMPTZ;
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS settlement_approved_at TIMESTAMPTZ;
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS settlement_approved_by UUID REFERENCES users(id);
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS settlement_decision_reason VARCHAR(2000);
+CREATE TABLE IF NOT EXISTS batch_workflow_events (
+ id UUID PRIMARY KEY, batch_id UUID NOT NULL REFERENCES inventory_batches(id) ON DELETE RESTRICT,
+ actor_id UUID NOT NULL REFERENCES users(id), action VARCHAR(50) NOT NULL,
+ from_status VARCHAR(50) NOT NULL, to_status VARCHAR(50) NOT NULL, revision INTEGER NOT NULL DEFAULT 0,
+ note VARCHAR(2000), snapshot_json TEXT NOT NULL DEFAULT '{}', created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+ALTER TABLE batch_workflow_events ADD COLUMN IF NOT EXISTS price_per_kg NUMERIC(18,2);
+ALTER TABLE batch_workflow_events ADD COLUMN IF NOT EXISTS net_amount NUMERIC(18,2);
+CREATE INDEX IF NOT EXISTS ix_batch_workflow_events_batch_created ON batch_workflow_events(batch_id,created_at DESC,id);
+-- RETRACK_BATCH_SETTLEMENT_APPROVAL_V1_END
+-- RETRACK_DEMAND_ORIGIN_V1: giữ nguồn nhu cầu, không đổi giá hoặc trạng thái lô cũ.
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS source_demand_id UUID;
+DO $demand_origin$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'inventory_batches'::regclass AND conname = 'fk_batch_source_demand') THEN
+        ALTER TABLE inventory_batches ADD CONSTRAINT fk_batch_source_demand FOREIGN KEY (source_demand_id) REFERENCES factory_demands(id);
+    END IF;
+END $demand_origin$;
+CREATE INDEX IF NOT EXISTS ix_batches_source_demand ON inventory_batches(source_demand_id) WHERE source_demand_id IS NOT NULL;
+-- RETRACK_DEMAND_ORIGIN_V1_END
+
+-- RETRACK_BATCH_QUALITY_RESOLUTION_V1_BEGIN
+-- Chỉ trả lại nguồn tồn khi kho xác nhận nhận đủ lô, không tự hoàn từ QC từ chối.
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS return_handed_over_at TIMESTAMPTZ;
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS return_handover_proof_url TEXT;
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS return_handover_reference VARCHAR(200);
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS return_handover_note VARCHAR(2000);
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS return_received_at TIMESTAMPTZ;
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS return_received_by UUID;
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS return_receipt_reference VARCHAR(200);
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS return_receipt_note VARCHAR(2000);
+ALTER TABLE inventory_batches DROP CONSTRAINT IF EXISTS ck_batch_return_receipt;
+ALTER TABLE inventory_batches ADD CONSTRAINT ck_batch_return_receipt CHECK
+    (return_received_at IS NULL OR (return_handed_over_at IS NOT NULL AND return_handover_proof_url IS NOT NULL AND return_received_by IS NOT NULL AND return_receipt_reference IS NOT NULL));
+-- RETRACK_BATCH_QUALITY_RESOLUTION_V1_END
 
 -- RETRACK_SCHEMA_END
 

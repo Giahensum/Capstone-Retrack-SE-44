@@ -16,10 +16,10 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
         IQueryable<InventoryBatch> source = FactoryOrderQueries.ForFactory(Db, factory.Id);
         var status = query.DisplayStatus ?? (query.Status == BatchStatus.IN_PROGRESS ? "IN_TRANSIT" : query.Status?.ToString());
         if (query.Stage == "qc")
-            source = source.Where(x => x.Status == "RECEIVED" || x.Status == "WEIGHED" || x.Status == "VERIFIED" || x.Status == "REJECTED" ||
+            source = source.Where(x => x.Status == "RECEIVED" || x.Status == "WEIGHED" || x.Status == "VERIFIED" || x.Status == "REJECTED" || x.Status == "NEGOTIATING" || x.Status == "RETURN_REQUESTED" || x.Status == "RETURNING" || x.Status == "RETURNED" ||
                 x.Status == "DELIVERED" || ((x.Status == "ACCEPTED" || x.Status == "TRANSPORT_READY" || x.Status == "READY_FOR_PICKUP" || x.Status == "IN_PROGRESS" || x.Status == "IN_TRANSIT") && x.TransportJob != null && x.TransportJob.Status == "DELIVERED"));
         else if (query.Stage == "settlements")
-            source = source.Where(x => x.Status == "VERIFIED" || x.Status == "COMPLETED" || x.Status == "PAID");
+            source = source.Where(x => x.Status == "VERIFIED" || x.Status == "NEGOTIATING" || x.Status == "SETTLEMENT_PENDING" || x.Status == "SETTLEMENT_ACCEPTED" || x.Status == "SETTLEMENT_DISPUTED" || x.Status == "COMPLETED" || x.Status == "PAID");
         if (!string.IsNullOrWhiteSpace(query.Search))
         {
             var search = query.Search.Trim();
@@ -40,7 +40,7 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
             "PAYMENT_REPORTED" => source.Where(x => x.Status == "COMPLETED" && x.QualityCheck != null && x.QualityCheck.PaymentProofUrl != null),
             "SETTLEMENT_RECORDED" => source.Where(x => x.Status == "COMPLETED" && (x.QualityCheck == null || x.QualityCheck.PaymentProofUrl == null)),
             "REJECTED" => source.Where(x => x.Status == "REJECTED" || x.Status == "CANCELLED"),
-            "RECEIVED" or "WEIGHED" or "VERIFIED" => source.Where(x => x.Status == status),
+            "RECEIVED" or "WEIGHED" or "VERIFIED" or "NEGOTIATING" or "RETURN_REQUESTED" or "RETURNING" or "RETURNED" or "SETTLEMENT_PENDING" or "SETTLEMENT_ACCEPTED" or "SETTLEMENT_DISPUTED" => source.Where(x => x.Status == status),
             _ => source
         };
         var total = await source.CountAsync(ct);
@@ -122,6 +122,20 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
         await using var transaction = await Db.Database.BeginTransactionAsync(ct);
         var batch = await LockOrderAsync(id, factory.Id, ct);
         if (batch is null) return ServiceResult<OrderSettlementResponse>.NotFound("Không tìm thấy đơn hàng.");
+        if (batch.Status is "RETURN_REQUESTED" or "RETURNING" or "RETURNED")
+            return ServiceResult<OrderSettlementResponse>.Conflict("Lô đang trả hoặc đã nhận trả; không đề xuất quyết toán.");
+        if (batch.SettlementWorkflowVersion > 0 && batch.SettlementProposedAt != null &&
+            batch.Status is "SETTLEMENT_PENDING" or "SETTLEMENT_ACCEPTED" or "COMPLETED" or "PAID")
+        {
+            var q = batch.QualityCheck;
+            var same = q != null && batch.AgreedPricePerKg == request.AgreedPricePerKg && batch.VatTreatment == request.VatTreatment.Trim().ToUpperInvariant()
+                && batch.VatPercentage == request.VatPercentage && batch.PriceIncludesVat == request.PriceIncludesVat
+                && q.InvoiceNumber == request.InvoiceNumber?.Trim() && q.InvoiceDate == request.InvoiceDate
+                && q.SellerTaxCode == request.SellerTaxCode?.Trim() && q.VatLegalBasis == request.VatLegalBasis?.Trim()
+                && string.IsNullOrWhiteSpace(request.PaymentReference) && string.IsNullOrWhiteSpace(request.PaymentProofUrl);
+            if (!same) return ServiceResult<OrderSettlementResponse>.Conflict("Đề xuất đang chờ phản hồi hoặc đã được đồng ý; không được sửa giá âm thầm.");
+            return ServiceResult<OrderSettlementResponse>.Success(data: SettlementResponse(batch), message: "Trả lại đề xuất đã lưu.");
+        }
         if (batch.Status is "PAID" or "COMPLETED")
         {
             var existing = await Db.PlatformTransactions.AsNoTracking()
@@ -146,8 +160,10 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
             }, message: "Đơn hàng đã được quyết toán; trả lại kết quả đã lưu.");
         }
         var qc = batch.QualityCheck;
-        if (batch.Status != "VERIFIED" || qc?.IsAccepted != true)
+        if ((batch.Status != "VERIFIED" || qc?.IsAccepted != true) && !(batch.SettlementWorkflowVersion > 0 && (batch.Status is "SETTLEMENT_DISPUTED" or "NEGOTIATING") && qc != null))
             return ServiceResult<OrderSettlementResponse>.Conflict("Chỉ quyết toán lô đã được KCS chấp nhận.");
+        if (batch.SettlementWorkflowVersion > 0 && (!string.IsNullOrWhiteSpace(request.PaymentReference) || !string.IsNullOrWhiteSpace(request.PaymentProofUrl)))
+            return ServiceResult<OrderSettlementResponse>.Invalid("Gửi đề xuất giá trước; chỉ chuyển tiền sau khi vựa đồng ý.");
         if (request.AgreedPricePerKg <= 0) return ServiceResult<OrderSettlementResponse>.Invalid("Đơn giá phải lớn hơn 0.");
         if (!string.IsNullOrWhiteSpace(request.PaymentProofUrl) &&
             (string.IsNullOrWhiteSpace(request.PaymentReference) ||
@@ -185,6 +201,8 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
         var invoiceTotal = request.PriceIncludesVat ? quotedTotal :
             total + decimal.Round(total * request.VatPercentage / 100m, 0, MidpointRounding.AwayFromZero);
         var vat = invoiceTotal - total;
+        if (invoiceTotal > 1_000_000_000_000m)
+            return ServiceResult<OrderSettlementResponse>.Invalid("Tổng giá trị lô tối đa 1.000 tỷ đồng. Hãy kiểm tra lại đơn giá và khối lượng.");
         var money = PlatformFees.Settlement(total, invoiceTotal, feePercent, batch.FeePolicy);
         var fee = money.Fee;
         qc.AgreedPricePerKg = request.AgreedPricePerKg;
@@ -213,6 +231,17 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
         batch.NetAmount = money.SellerReceives;
         batch.QualityCheck = qc;
         batch.PaymentReference = request.PaymentReference?.Trim();
+        if (batch.SettlementWorkflowVersion > 0)
+        {
+            var from = batch.Status;
+            batch.Status = "SETTLEMENT_PENDING"; batch.SettlementRevision++;
+            batch.SettlementProposedAt = DateTime.UtcNow; batch.SettlementApprovedAt = null; batch.SettlementApprovedBy = null;
+            batch.SettlementDecisionReason = null; batch.SettledAt = null; batch.UpdatedAt = DateTime.UtcNow;
+            Db.BatchWorkflowEvents.Add(Retrack.API.Services.Depot.BatchSettlementService.Event(batch, userId, "PRICE_PROPOSED", from, "Nhà máy gửi đề xuất giá và cách khai VAT."));
+            await NotifyDepotAsync(batch.DepotId, "Nhà máy đề xuất giá sau KCS", $"Lô {batch.Code}: đề xuất phiên bản {batch.SettlementRevision}, số tiền {batch.NetAmount:N0}đ. Vui lòng xem chi tiết để đồng ý hoặc yêu cầu điều chỉnh.", batch.Id, ct: ct);
+            await Db.SaveChangesAsync(ct); await transaction.CommitAsync(ct);
+            return ServiceResult<OrderSettlementResponse>.Success(data: SettlementResponse(batch), message: "Đã gửi đề xuất; chờ vựa đồng ý giá.");
+        }
         batch.SettledAt = DateTime.UtcNow;
         batch.Status = "COMPLETED";
         await NotifyDepotAsync(batch.DepotId,
@@ -257,12 +286,20 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
         await using var tx = await Db.Database.BeginTransactionAsync(ct);
         var batch = await LockOrderAsync(id, factory.Id, ct);
         if (batch is null) return ServiceResult<OrderResponse>.NotFound("Không tìm thấy đơn hàng.");
-        if (batch.Status != "COMPLETED" || batch.QualityCheck is null || batch.SettledAt is null)
+        if (batch.QualityCheck != null && batch.Status is "COMPLETED" or "PAID" &&
+            batch.PaymentReference == request.PaymentReference.Trim() && batch.QualityCheck.PaymentProofUrl == request.PaymentProofUrl.Trim())
+            return ServiceResult<OrderResponse>.Success(data: FactoryOrderMapper.Map(await FactoryOrderQueries.ForFactory(Db, factory.Id).SingleAsync(x => x.Id == id, ct)), message: "Chứng từ đã được lưu.");
+        if ((batch.Status != "COMPLETED" && batch.Status != "SETTLEMENT_ACCEPTED") || batch.QualityCheck is null ||
+            (batch.SettlementWorkflowVersion == 0 && batch.SettledAt is null) ||
+            (batch.SettlementWorkflowVersion > 0 && batch.SettlementApprovedAt == null))
             return ServiceResult<OrderResponse>.Conflict("Chỉ bổ sung chứng từ cho lô đã quyết toán và đang chờ vựa xác nhận.");
         if (!string.IsNullOrWhiteSpace(batch.QualityCheck.PaymentProofUrl))
             return ServiceResult<OrderResponse>.Conflict("Lô đã có chứng từ; liên hệ vựa để đối chiếu trước khi thay đổi.");
+        var previousStatus = batch.Status;
         batch.PaymentReference = request.PaymentReference.Trim();
         batch.QualityCheck.PaymentProofUrl = request.PaymentProofUrl.Trim();
+        batch.Status = "COMPLETED";
+        if (batch.SettlementWorkflowVersion > 0) Db.BatchWorkflowEvents.Add(Retrack.API.Services.Depot.BatchSettlementService.Event(batch, userId, "PAYMENT_REPORTED", previousStatus, "Nhà máy báo đã chuyển tiền và gửi chứng từ."));
         batch.UpdatedAt = DateTime.UtcNow;
         await NotifyDepotAsync(batch.DepotId, "Nhà máy bổ sung chứng từ chuyển khoản", $"Lô {batch.Code ?? batch.Id.ToString()} đã có chứng từ chuyển khoản. Vui lòng đối chiếu tài khoản trước khi xác nhận nhận tiền.", batch.Id, ct: ct);
         await Db.SaveChangesAsync(ct);
@@ -277,12 +314,15 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
         await using var tx = Db.Database.IsRelational() ? await Db.Database.BeginTransactionAsync(ct) : null;
         var batch = await LockOrderAsync(id, factory.Id, ct);
         if (batch is null) return ServiceResult<InvoiceUpdatedResponse>.NotFound("Không tìm thấy đơn hàng.");
-        if (batch.QualityCheck is null || batch.Status is not ("VERIFIED" or "COMPLETED" or "PAID"))
+        if (batch.QualityCheck is null || batch.Status is not ("VERIFIED" or "NEGOTIATING" or "COMPLETED" or "PAID" or "SETTLEMENT_PENDING" or "SETTLEMENT_ACCEPTED" or "SETTLEMENT_DISPUTED"))
             return ServiceResult<InvoiceUpdatedResponse>.Conflict("Chỉ đính kèm hóa đơn sau khi chốt KCS.");
         if (string.IsNullOrWhiteSpace(request.InvoiceFileUrl))
             return ServiceResult<InvoiceUpdatedResponse>.Invalid("Chọn tệp hóa đơn trước khi lưu.");
         if (attachments is not null && request.InvoiceFileUrl != batch.QualityCheck.InvoiceFileUrl && !attachments.IsOwnedUrl(request.InvoiceFileUrl, userId))
             return ServiceResult<InvoiceUpdatedResponse>.Invalid("Hóa đơn phải được tải lên qua chức năng đính kèm của nhà máy.");
+        if (batch.SettlementWorkflowVersion > 0 && batch.SettlementApprovedAt != null &&
+            !string.IsNullOrWhiteSpace(batch.QualityCheck.InvoiceFileUrl) && request.InvoiceFileUrl.Trim() != batch.QualityCheck.InvoiceFileUrl)
+            return ServiceResult<InvoiceUpdatedResponse>.Conflict("Hóa đơn đã được vựa đối chiếu khi đồng ý giá; không được thay tệp sau đó.");
         // Sau quyết toán, giữ số hóa đơn đã được đối soát; tên tệp tải lên không được ghi đè.
         var invoiceNumber = batch.QualityCheck.InvoiceNumber ?? request.InvoiceNumber?.Trim();
         var changed = batch.QualityCheck.InvoiceNumber != invoiceNumber || batch.QualityCheck.InvoiceFileUrl != request.InvoiceFileUrl.Trim();
@@ -299,4 +339,14 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
             Status = batch.QualityCheck.InvoiceStatus
         }, message: "Đã đính kèm hóa đơn.");
     }
+    private static OrderSettlementResponse SettlementResponse(InventoryBatch batch) => new()
+    {
+        Id = batch.Id, Status = FactoryOrderMapper.Status(batch), TotalAmount = batch.GrossAmount ?? 0, PriceIncludesVat = batch.PriceIncludesVat,
+        VatTreatment = batch.VatTreatment ?? "NOT_APPLICABLE", VatPercentage = batch.VatPercentage ?? 0,
+        VatAmount = batch.VatAmount ?? 0, InvoiceTotalAmount = batch.InvoiceTotalAmount ?? 0, FeeAmount = batch.PlatformFeeAmount ?? 0,
+        NetPayableAmount = batch.NetAmount ?? 0, PaymentReference = batch.PaymentReference, SettledAt = batch.SettledAt,
+        FeePercentage = batch.QualityCheck?.PlatformFeePercentage ?? 0, FeePolicy = batch.FeePolicy,
+        BuyerTotalAmount = (batch.NetAmount ?? 0) + (batch.PlatformFeeAmount ?? 0)
+    };
+
 }

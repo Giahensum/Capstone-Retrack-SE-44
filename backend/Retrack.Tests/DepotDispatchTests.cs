@@ -36,6 +36,31 @@ public sealed class DepotDispatchTests : IAsyncLifetime
     }
     private DispatchShiftInput Input() => new(area, employee, DateTimeOffset.FromUnixTimeSeconds(DateTimeOffset.UtcNow.AddHours(-1).ToUnixTimeSeconds()), DateTimeOffset.FromUnixTimeSeconds(DateTimeOffset.UtcNow.AddHours(2).ToUnixTimeSeconds()), "motorcycle", 100, 10, Guid.NewGuid());
     [Fact]
+    public async Task Exception_filter_only_returns_due_unassigned_orders_with_queue_reason()
+    {
+        await using var db = Open();
+        var future = Guid.NewGuid();
+        db.PickupRequests.Add(new() { Id = future, TargetDepotId = depot, SellerId = seller, Address = "Đơn ngày mai", Status = "PENDING", PreferredDatetime = DateTime.UtcNow.AddDays(2) });
+        db.EmployeeDispatchQueues.AddRange(new EmployeeDispatchQueue { PickupId = pickup, Reason = "Không còn nhân viên nhận đơn" }, new EmployeeDispatchQueue { PickupId = future, Reason = "Không còn nhân viên nhận đơn" });
+        await db.SaveChangesAsync();
+        var rows = await Service(db).PickupsAsync(owner, depot, new() { Status = "EXCEPTIONS", PageSize = 1 });
+        Assert.Equal(1, rows.TotalCount); Assert.Equal(pickup, Assert.Single(rows.Items).Id);
+        Assert.Single((await Service(db).PickupsAsync(owner, depot, new() { Status = "UPCOMING" })).Items);
+        await Assert.ThrowsAsync<DepotForbiddenException>(() => Service(db).PickupsAsync(other, depot, new() { Status = "EXCEPTIONS" }));
+    }
+    [Fact]
+    public async Task Candidate_shifts_respect_pickup_appointment_and_do_not_read_another_depot()
+    {
+        await using var db = Open(); var service = Service(db);
+        await service.CreateShiftAsync(owner, depot, Input());
+        var row = await db.PickupRequests.SingleAsync(x => x.Id == pickup);
+        row.PreferredDatetime = DateTime.UtcNow.AddHours(4); await db.SaveChangesAsync();
+        Assert.Empty((await service.ShiftsAsync(owner, depot, new(), true, pickupId: pickup)).Items);
+        row.PreferredDatetime = DateTime.UtcNow.AddMinutes(30); await db.SaveChangesAsync();
+        Assert.Single((await service.ShiftsAsync(owner, depot, new(), true, pickupId: pickup)).Items);
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => service.ShiftsAsync(other, foreign, new(), true, pickupId: pickup));
+    }
+    [Fact]
     public async Task Setup_and_lists_are_scoped_paginated_and_shift_creation_is_retry_safe()
     {
         await using var db = Open(); var service = Service(db);

@@ -13,16 +13,23 @@ public sealed class DepotDispatchService(IDepotDispatchRepository repository, ID
     { if (query.Page < 1 || query.PageSize is < 1 or > 100 || query.Search?.Length > 255) throw new ArgumentException("Phân trang hoặc từ khóa không hợp lệ."); }
     public async Task<PagedResult<DispatchAreaDto>> AreasAsync(Guid owner, Guid depot, DepotQuery query)
     { await scope.RequireOwnerAsync(owner, depot); Page(query); return await repository.AreasAsync(depot, query); }
-    public async Task<PagedResult<DispatchShiftDto>> ShiftsAsync(Guid owner, Guid depot, DepotQuery query, bool availableOnly = false, Guid? excludeEmployeeId = null)
+    public async Task<PagedResult<DispatchShiftDto>> ShiftsAsync(Guid owner, Guid depot, DepotQuery query, bool availableOnly = false, Guid? excludeEmployeeId = null, Guid? pickupId = null)
     {
         await scope.RequireOwnerAsync(owner, depot); Page(query);
         if (query.Status is not (null or "" or "CURRENT" or "UPCOMING" or "ENDED")) throw new ArgumentException("Bộ lọc ca không hợp lệ.");
-        return await repository.ShiftsAsync(depot, query, DateTime.UtcNow, availableOnly, excludeEmployeeId);
+        DateTime? preferred = null;
+        if (pickupId.HasValue)
+        {
+            if (!availableOnly) throw new ArgumentException("Chỉ chọn đơn khi tìm ca có khả năng nhận.");
+            var pickup = await repository.DetailAsync(depot, pickupId.Value) ?? throw new KeyNotFoundException("Không tìm thấy đơn trong kho.");
+            preferred = pickup.PreferredDatetime;
+        }
+        return await repository.ShiftsAsync(depot, query, DateTime.UtcNow, availableOnly, excludeEmployeeId, preferred);
     }
     public async Task<PagedResult<DispatchPickupDto>> PickupsAsync(Guid owner, Guid depot, DepotQuery query)
     {
         await scope.RequireOwnerAsync(owner, depot); Page(query);
-        if (query.Status is not (null or "" or "PENDING" or "SCHEDULED")) throw new ArgumentException("Chỉ liệt kê đơn chờ hoặc đã phân công chưa thu gom.");
+        if (query.Status is not (null or "" or "PENDING" or "SCHEDULED" or "EXCEPTIONS" or "TODAY" or "UPCOMING")) throw new ArgumentException("Bộ lọc điều phối không hợp lệ.");
         return await repository.PickupsAsync(depot, query);
     }
     public async Task<DispatchSummaryDto> SummaryAsync(Guid owner, Guid depot)

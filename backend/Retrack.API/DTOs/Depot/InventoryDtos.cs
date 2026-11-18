@@ -13,8 +13,9 @@ public sealed class CreateDepotBatchDto
     [Required, StringLength(100)] public string MaterialType { get; set; } = string.Empty;
     public decimal WeightKg { get; set; }
     public Guid? TargetFactoryId { get; set; }
+    public Guid? SourceDemandId { get; set; }
     public string? Description { get; set; }
 }
 public record DepotBatchDto(Guid Id, Guid DepotId, string MaterialType, decimal WeightKg,
     string? Description, string Status, Guid? TargetFactoryId, string? FactoryName, DateTime CreatedAt, string? Code = null,
-    string[]? ImageUrls = null);
+    string[]? ImageUrls = null, Guid? SourceDemandId = null);
