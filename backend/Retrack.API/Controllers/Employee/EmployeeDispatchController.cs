@@ -1,8 +1,6 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using Retrack.API.Data;
 using Retrack.API.DTOs;
 using Retrack.API.Models;
 using Retrack.API.Services.Depot;

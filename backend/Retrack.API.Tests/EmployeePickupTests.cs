@@ -40,11 +40,13 @@ public sealed class EmployeePickupTests : IAsyncLifetime
     }
 
     public async Task DisposeAsync() { await db.DisposeAsync(); await connection.DisposeAsync(); }
-    private EmployeePickupController Controller(User? user = null, INotificationService? notifications = null) => new(db, notifications ?? new NotificationService(db))
+    private EmployeePickupController Controller(User? user = null, INotificationService? notifications = null)
     {
-        ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(
-            new ClaimsIdentity(new[] { new Claim(ClaimTypes.NameIdentifier, (user ?? employee).Id.ToString()), new Claim(ClaimTypes.Role, (user ?? employee).Role) }, "test")) } }
-    };
+        var controller = StaffTestServices.Pickup(db, notifications ?? new NotificationService(db));
+        controller.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(
+            new ClaimsIdentity(new[] { new Claim(ClaimTypes.NameIdentifier, (user ?? employee).Id.ToString()), new Claim(ClaimTypes.Role, (user ?? employee).Role) }, "test")) } };
+        return controller;
+    }
     private PickupRequest Add(string status = "PENDING", User? collector = null, Depot? target = null, DateTime? preferred = null)
     {
         var pickup = new PickupRequest { Seller = seller, TargetDepot = target ?? depot, AcceptedCollector = collector,

@@ -12,6 +12,7 @@ export default function DashboardScreen({ navigation }) {
   const user = useAuthStore((state) => state.user);
   const { data, loading, refreshing, error, reload } = usePickupResource(
     pickupApi.getDashboard,
+    5000,
   );
   return (
     <Screen

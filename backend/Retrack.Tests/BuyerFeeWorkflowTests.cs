@@ -76,7 +76,7 @@ public sealed class BuyerFeeWorkflowTests : IAsyncLifetime
         db.PickupCheckIns.Add(new PickupCheckIn { PickupRequest = pickup, Employee = employee, ImageUrl = pickup.CheckinImageUrl });
         await db.SystemConfigs.Where(x => x.ConfigKey == "PLATFORM_FEE_PERCENTAGE").ExecuteUpdateAsync(x => x.SetProperty(p => p.ConfigValue, "7.00"));
         await db.SaveChangesAsync();
-        var collection = new EmployeeCollectionService(db, null!);
+        var collection = new EmployeeCollectionService(new EmployeeCollectionRepository(db), new StaffUnitOfWork(db), null!);
         var draft = await collection.SaveAsync(employee.Id, pickup.Id, new SaveClassificationRequest(0,
             [new ClassificationItemInput("PET", 10, 1000)]), default);
         Assert.Equal(receives, draft.NetAmount); Assert.Equal(500, draft.PlatformFeeAmount);

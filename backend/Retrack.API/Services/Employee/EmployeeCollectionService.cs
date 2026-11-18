@@ -1,5 +1,4 @@
-using Microsoft.EntityFrameworkCore;
-using Retrack.API.Data;
+using Retrack.API.Repositories.Interfaces;
 using Retrack.API.DTOs.Employee;
 using Retrack.API.Models;
 using Retrack.API.Models.Enums;
@@ -17,21 +16,15 @@ public interface IEmployeeCollectionService
     Task<EmployeeCollectionDto> TransitionAsync(Guid userId, Guid pickupId, string action, int revision, CancellationToken ct);
 }
 
-public sealed partial class EmployeeCollectionService(AppDbContext db, ICloudinaryService images) : IEmployeeCollectionService
+public sealed partial class EmployeeCollectionService(IEmployeeCollectionRepository repository, IStaffUnitOfWork work, ICloudinaryService images) : IEmployeeCollectionService
 {
-    private IQueryable<DepotStaff> Staff(Guid userId) => db.DepotStaffs.Where(s => s.UserId == userId
-        && s.IsActive && s.StaffType == "DEPOT_EMPLOYEE" && s.User.IsActive && s.User.Role == "DEPOT_EMPLOYEE"
-        && s.Depot.Owner.IsActive);
-
     private async Task<PickupRequest> OwnAsync(Guid userId, Guid pickupId, bool locked, CancellationToken ct)
     {
-        if (!await Staff(userId).AnyAsync(ct)) throw new DepotForbiddenException();
-        var query = locked && db.Database.IsNpgsql()
-            ? db.PickupRequests.FromSqlInterpolated($"SELECT * FROM pickup_requests WHERE id = {pickupId} FOR UPDATE")
-            : db.PickupRequests.Where(p => p.Id == pickupId);
-        var pickup = await query.SingleOrDefaultAsync(ct) ?? throw new KeyNotFoundException("Không tìm thấy đơn thu gom.");
-        if (locked) await db.Entry(pickup).ReloadAsync(ct);
-        if (pickup.AcceptedCollectorId != userId || !await Staff(userId).AnyAsync(s => s.DepotId == pickup.TargetDepotId, ct))
+        if (!await repository.HasActiveStaffAsync(userId, null, ct)) throw new DepotForbiddenException();
+        var pickup = await repository.FindPickupAsync(pickupId, locked, ct)
+            ?? throw new KeyNotFoundException("Không tìm thấy đơn thu gom.");
+        if (pickup.AcceptedCollectorId != userId || pickup.TargetDepotId == null
+            || !await repository.HasActiveStaffAsync(userId, pickup.TargetDepotId, ct))
             throw new KeyNotFoundException("Đơn không thuộc nhân viên hoặc kho của bạn.");
         return pickup;
     }
@@ -39,7 +32,7 @@ public sealed partial class EmployeeCollectionService(AppDbContext db, ICloudina
     public async Task<EmployeeCollectionDto> GetAsync(Guid userId, Guid pickupId, CancellationToken ct)
     {
         // Đọc cùng một snapshot với các thao tác ghi trên đơn.
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        await using var transaction = await work.BeginAsync(ct);
         var pickup = await OwnAsync(userId, pickupId, true, ct);
         var result = await Snapshot(pickup, ct);
         await transaction.CommitAsync(ct);
@@ -48,9 +41,9 @@ public sealed partial class EmployeeCollectionService(AppDbContext db, ICloudina
 
     public async Task<EmployeeCollectionDto> CheckInAsync(Guid userId, Guid pickupId, EmployeeCheckInRequest input, CancellationToken ct)
     {
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        await using var transaction = await work.BeginAsync(ct);
         var pickup = await OwnAsync(userId, pickupId, true, ct);
-        var evidence = await db.PickupCheckIns.FindAsync([pickupId], ct);
+        var evidence = await repository.FindCheckInAsync(pickupId, ct);
         // Retry sau khi mất phản hồi không tạo thêm ảnh/thông báo hay thay bằng chứng cũ.
         if (evidence != null)
         {
@@ -71,7 +64,7 @@ public sealed partial class EmployeeCollectionService(AppDbContext db, ICloudina
         if (!jpeg && !png) throw new ArgumentException("Chỉ chấp nhận nội dung ảnh JPEG hoặc PNG.");
         await using var upload = file.OpenReadStream();
         var url = await images.UploadImageAsync(upload, $"checkin-{pickupId:N}.{(jpeg ? "jpg" : "png")}");
-        db.PickupCheckIns.Add(new PickupCheckIn
+        repository.AddCheckIn(new PickupCheckIn
         {
             PickupRequestId = pickupId, EmployeeId = userId, Latitude = input.Latitude,
             Longitude = input.Longitude, AccuracyMeters = input.AccuracyMeters,
@@ -81,9 +74,9 @@ public sealed partial class EmployeeCollectionService(AppDbContext db, ICloudina
         pickup.CheckinImageUrl = url;
         pickup.Status = "IN_PROGRESS";
         pickup.UpdatedAt = DateTime.UtcNow;
-        db.Notifications.Add(Notification.ForPickup(pickup.SellerId, pickup.Id, "Nhân viên đã đến địa điểm",
+        repository.AddNotification(Notification.ForPickup(pickup.SellerId, pickup.Id, "Nhân viên đã đến địa điểm",
             "Nhân viên đã check-in và bắt đầu phân loại, cân phế liệu."));
-        await db.SaveChangesAsync(ct);
+        await work.SaveAsync(ct);
         var result = await Snapshot(pickup, ct);
         await transaction.CommitAsync(ct);
         return result;
@@ -93,12 +86,12 @@ public sealed partial class EmployeeCollectionService(AppDbContext db, ICloudina
     {
         if (input.ExpectedRevision < 0) throw new ArgumentException("Phiên bản dữ liệu không hợp lệ.");
         var items = CollectionValidation.Items(input.Items);
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        await using var transaction = await work.BeginAsync(ct);
         var pickup = await OwnAsync(userId, pickupId, true, ct);
-        var evidence = await db.PickupCheckIns.FindAsync([pickupId], ct);
+        var evidence = await repository.FindCheckInAsync(pickupId, ct);
         if (pickup.Status != "IN_PROGRESS" || evidence == null || string.IsNullOrWhiteSpace(pickup.CheckinImageUrl))
             throw new DepotConflictException("Đơn phải được check-in và chưa gửi kết quả cân mới có thể chỉnh sửa.");
-        var previous = await db.PickupRequestItems.Where(i => i.PickupRequestId == pickupId).ToListAsync(ct);
+        var previous = await repository.ItemsAsync(pickupId, ct);
         if (input.ExpectedRevision != evidence.Revision)
         {
             var same = previous.OrderBy(i => i.MaterialType, StringComparer.Ordinal)
@@ -111,14 +104,13 @@ public sealed partial class EmployeeCollectionService(AppDbContext db, ICloudina
             }
             throw new DepotConflictException("Kết quả cân đã thay đổi trên phiên khác. Hãy tải lại trước khi lưu.");
         }
-        db.PickupRequestItems.RemoveRange(previous);
-        db.PickupRequestItems.AddRange(items.Select(i => new PickupRequestItem { PickupRequestId = pickupId,
+        repository.ReplaceItems(previous, items.Select(i => new PickupRequestItem { PickupRequestId = pickupId,
             MaterialType = i.MaterialType, WeightKg = i.WeightKg, PricePerKg = i.PricePerKg,
             SubTotal = CollectionValidation.SubTotal(i.WeightKg, i.PricePerKg) }));
         evidence.Revision++;
         pickup.UpdatedAt = DateTime.UtcNow;
         // Chỉ lưu bản nháp; chưa chốt tiền, phí, trạng thái WEIGHED hoặc tồn kho.
-        await db.SaveChangesAsync(ct);
+        await work.SaveAsync(ct);
         var result = await Snapshot(pickup, ct);
         await transaction.CommitAsync(ct);
         return result;
@@ -126,10 +118,8 @@ public sealed partial class EmployeeCollectionService(AppDbContext db, ICloudina
 
     private async Task<EmployeeCollectionDto> Snapshot(PickupRequest pickup, CancellationToken ct)
     {
-        var checkIn = await db.PickupCheckIns.AsNoTracking().SingleOrDefaultAsync(c => c.PickupRequestId == pickup.Id, ct);
-        var items = await db.PickupRequestItems.AsNoTracking().Where(i => i.PickupRequestId == pickup.Id)
-            .OrderBy(i => i.MaterialType).ThenBy(i => i.Id)
-            .Select(i => new ClassificationItemDto(i.Id, i.MaterialType, i.WeightKg, i.PricePerKg, i.SubTotal)).ToListAsync(ct);
+        var checkIn = await repository.ReadCheckInAsync(pickup.Id, ct);
+        var items = await repository.ReadItemsAsync(pickup.Id, ct);
         var money = Retrack.API.Services.Shared.PlatformFees.Pickup(items.Sum(i => i.SubTotal), pickup.PlatformFeePercentage, pickup.FeePolicy);
         return new(pickup.Id, pickup.Status, pickup.Address, pickup.Latitude, pickup.Longitude,
             checkIn == null ? null : new(checkIn.ImageUrl, checkIn.Latitude, checkIn.Longitude,
@@ -141,14 +131,13 @@ public sealed partial class EmployeeCollectionService(AppDbContext db, ICloudina
 
     public async Task<IReadOnlyList<MaterialReferenceDto>> MaterialsAsync(Guid userId, CancellationToken ct)
     {
-        if (!await Staff(userId).AnyAsync(ct)) throw new DepotForbiddenException();
+        if (!await repository.HasActiveStaffAsync(userId, null, ct)) throw new DepotForbiddenException();
         var now = DateTime.UtcNow;
         var labels = new[] { "Nhựa PET", "Nhựa HDPE", "Nhựa PVC", "Giấy", "Giấy carton", "Nhôm", "Sắt", "Thép", "Đồng", "Rác thải điện tử", "Khác" };
         var result = new List<MaterialReferenceDto>();
         foreach (var (type, index) in Enum.GetValues<MaterialType>().Select((type, index) => (type, index)))
         {
-            var latest = await db.MarketPrices.AsNoTracking().Where(p => p.MaterialType == type && p.EffectiveDate <= now && p.PricePerKg > 0)
-                .OrderByDescending(p => p.EffectiveDate).ThenByDescending(p => p.CreatedAt).ThenBy(p => p.Id).FirstOrDefaultAsync(ct);
+            var latest = await repository.LatestPriceAsync(type, now, ct);
             result.Add(new(type.ToString(), labels[index], latest?.PricePerKg, latest?.EffectiveDate, latest?.Source));
         }
         return result;

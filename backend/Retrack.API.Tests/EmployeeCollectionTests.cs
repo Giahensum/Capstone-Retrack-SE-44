@@ -20,7 +20,7 @@ public sealed partial class EmployeeCollectionTests : IAsyncLifetime
     private readonly User employee = UserFor("DEPOT_EMPLOYEE"), seller = UserFor("SELLER"), colleague = UserFor("DEPOT_EMPLOYEE");
     private readonly Depot depot = new() { Owner = UserFor("DEPOT_OWNER"), Name = "Kho kiểm thử" };
     private PickupRequest pickup = null!;
-    private EmployeeCollectionService Service => new(db, images);
+    private EmployeeCollectionService Service => StaffTestServices.Collection(db, images);
     private static User UserFor(string role) => new() { Role = role, Email = $"{Guid.NewGuid():N}@test.local", FullName = role };
     public async Task InitializeAsync()
     {
