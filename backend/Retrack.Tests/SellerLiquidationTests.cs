@@ -125,7 +125,7 @@ public sealed class SellerLiquidationTests : IAsyncLifetime
                 case "fraction": x.StartingPrice = 10_000_000.5m; break;
                 case "order": x.BiddingStart = x.BiddingEnd.AddMinutes(1); break;
                 case "past": x.SurveyStart = clock.Now.AddDays(-1); break;
-                case "short": x.BiddingEnd = x.BiddingStart.AddMinutes(5); x.CollectionDeadline = x.BiddingEnd.AddDays(1); break;
+                case "short": x.BiddingEnd = x.BiddingStart.AddSeconds(30); x.CollectionDeadline = x.BiddingEnd.AddDays(1); break;
                 case "collect": x.CollectionDeadline = x.BiddingEnd.AddMinutes(5); break;
                 case "deposit0": x.DepositPercent = 0; break;
                 case "deposit51": x.DepositPercent = 51; break;
