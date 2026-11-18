@@ -222,7 +222,13 @@ builder.Services.AddSwaggerGen(c =>
     });
     // Resolve duplicate action conflicts (e.g. same route registered twice)
     c.ResolveConflictingActions(apiDescriptions => apiDescriptions.First());
-    c.CustomOperationIds(e => $"{e.ActionDescriptor.RouteValues["controller"]}_{e.ActionDescriptor.RouteValues["action"]}_{e.HttpMethod}");
+    c.CustomOperationIds(e =>
+    {
+        // Minimal API (ví dụ /health/live) không có route value controller/action.
+        e.ActionDescriptor.RouteValues.TryGetValue("controller", out var controller);
+        e.ActionDescriptor.RouteValues.TryGetValue("action", out var action);
+        return $"{controller ?? "Minimal"}_{action ?? e.RelativePath?.Replace('/', '_')}_{e.HttpMethod}";
+    });
 });
 
 // ===== BUILD =====
