@@ -25,6 +25,6 @@ public record StaffHistoryDto(Guid Id, string Type, string Status, decimal Weigh
 public record StaffPerformanceSummaryDto(int StaffCount, int CompletedCount, decimal WeightKg, decimal PurchaseAmount, List<StaffPerformanceDto> TopStaff);
 public record FeeEntryDto(Guid Id, Guid SourceId, decimal FeeAmount, DateTime Date);
 public record FeeSummaryDto(decimal AccruedAmount, decimal UnpaidInvoiceAmount, decimal SubmittedInvoiceAmount);
-public record FeeInvoiceDto(Guid Id, DateOnly PeriodStart, decimal Amount, string Status, string? PaymentProofUrl, DateTime? SubmittedAt, int Revision = 0, Guid? AdjustmentOfId = null);
+public record FeeInvoiceDto(Guid Id, DateOnly PeriodStart, decimal Amount, string Status, string? PaymentProofUrl, DateTime? SubmittedAt, int Revision = 0, Guid? AdjustmentOfId = null, long? PayOsOrderCode = null);
 
 public record PayOsLinkDto(string CheckoutUrl, long OrderCode);

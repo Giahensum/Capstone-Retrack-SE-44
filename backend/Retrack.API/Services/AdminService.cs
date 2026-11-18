@@ -538,7 +538,7 @@ namespace Retrack.API.Services
                 }
                 if (difference == 0) continue;
 
-                var invoice = periodInvoices.Where(i => i.Status == "PENDING" && i.SubmittedAt == null && string.IsNullOrWhiteSpace(i.PaymentProofUrl))
+                var invoice = periodInvoices.Where(i => i.Status == "PENDING" && i.SubmittedAt == null && string.IsNullOrWhiteSpace(i.PaymentProofUrl) && i.PayosOrderCode == null)
                     .OrderByDescending(i => i.Revision).FirstOrDefault();
                 if (invoice != null)
                 {

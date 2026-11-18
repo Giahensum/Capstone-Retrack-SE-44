@@ -11,6 +11,12 @@ public sealed class DepotPayOsService(IDepotUnitOfWork work, IDepotReportReposit
     public async Task<PayOsLinkDto> CreateLinkAsync(Guid ownerId, Guid depotId, Guid invoiceId)
     {
         await scope.RequireOwnerAsync(ownerId, depotId);
+        return await CreateLinkForPayerAsync(ownerId, invoiceId, PayOsRedirect.Depot);
+    }
+
+    /// <summary>Dùng chung cho mọi bên nộp phí (chủ kho, Factory): người gọi phải kiểm tra vai trò/quyền trước; hàm này luôn kiểm tra hóa đơn thuộc đúng người nộp.</summary>
+    public async Task<PayOsLinkDto> CreateLinkForPayerAsync(Guid ownerId, Guid invoiceId, PayOsRedirect redirect)
+    {
         if (!payos.IsConfigured) throw new DepotConflictException("PayOS chưa sẵn sàng. Bạn có thể chuyển khoản và gửi chứng từ để Admin đối soát.");
         await using var tx = await work.BeginAsync();
         var invoice = await reports.LockInvoiceAsync(invoiceId) ?? throw new KeyNotFoundException("Không tìm thấy hóa đơn.");
@@ -28,20 +34,25 @@ public sealed class DepotPayOsService(IDepotUnitOfWork work, IDepotReportReposit
                 Apply(invoice, current); await work.SaveAsync(); await tx.CommitAsync();
                 throw new DepotConflictException("Hóa đơn đã được thanh toán.");
             }
-            if (current.Status is "PENDING" or "PROCESSING") return new(invoice.PaymentProofUrl!, old);
+            if ((current.Status is "PENDING" or "PROCESSING") && !string.IsNullOrEmpty(invoice.PayosCheckoutUrl)) return new(invoice.PayosCheckoutUrl!, old);
         }
 
         var orderCode = NewOrderCode();
-        var link = await payos.CreatePaymentLinkAsync(orderCode, (long)invoice.TotalFeeAmount, $"RETRACK {invoice.PeriodMonth:00}/{invoice.PeriodYear}");
-        // DB hiện có không có cột PayOS: lưu link + mã đơn vào payment_proof_url (hóa đơn vẫn PENDING).
-        invoice.PaymentProofUrl = WithOrderCode(link.CheckoutUrl, orderCode);
+        var link = await payos.CreatePaymentLinkAsync(orderCode, (long)invoice.TotalFeeAmount, $"RETRACK {invoice.PeriodMonth:00}/{invoice.PeriodYear}", redirect);
+        // Lưu mã đơn/link vào cột riêng; payment_proof_url chỉ dành cho chứng từ chuyển khoản. Hóa đơn vẫn PENDING.
+        invoice.PayosOrderCode = orderCode; invoice.PayosLinkId = link.PaymentLinkId; invoice.PayosCheckoutUrl = link.CheckoutUrl;
         await work.SaveAsync(); await tx.CommitAsync();
-        return new(invoice.PaymentProofUrl, orderCode);
+        return new(link.CheckoutUrl, orderCode);
     }
 
     public async Task<string> SyncAsync(Guid ownerId, Guid depotId, Guid invoiceId)
     {
         await scope.RequireOwnerAsync(ownerId, depotId);
+        return await SyncForPayerAsync(ownerId, invoiceId);
+    }
+
+    public async Task<string> SyncForPayerAsync(Guid ownerId, Guid invoiceId)
+    {
         await using var tx = await work.BeginAsync();
         var invoice = await reports.LockInvoiceAsync(invoiceId) ?? throw new KeyNotFoundException("Không tìm thấy hóa đơn.");
         if (invoice.PayerId != ownerId) throw new DepotForbiddenException();
@@ -102,15 +113,8 @@ public sealed class DepotPayOsService(IDepotUnitOfWork work, IDepotReportReposit
         invoice.SubmittedAt ??= invoice.PaidAt;
     }
 
-    public static string WithOrderCode(string checkoutUrl, long orderCode) => $"{checkoutUrl}{(checkoutUrl.Contains('?') ? '&' : '?')}orderCode={orderCode}";
-
-    /// <summary>Mã đơn PayOS nằm cuối payment_proof_url của hóa đơn PENDING; chứng từ do người dùng gửi không có dạng này.</summary>
-    public static long? OrderCodeOf(Models.PlatformInvoice invoice)
-    {
-        var url = invoice.PaymentProofUrl;
-        var at = url?.LastIndexOf("orderCode=", StringComparison.Ordinal) ?? -1;
-        return at >= 0 && long.TryParse(url![(at + 10)..], out var code) ? code : null;
-    }
+    /// <summary>Mã đơn PayOS của hóa đơn (cột payos_order_code); null nếu chưa tạo link.</summary>
+    public static long? OrderCodeOf(Models.PlatformInvoice invoice) => invoice.PayosOrderCode;
 
     // orderCode PayOS là số nguyên dương <= 2^53-1; chỉ mục UNIQUE trong DB chặn trùng.
     private static long NewOrderCode() => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() * 1000 + Random.Shared.Next(0, 1000);

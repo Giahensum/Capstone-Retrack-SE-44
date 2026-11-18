@@ -34,6 +34,14 @@ public sealed class FactoryPlatformFeeController(FactoryPlatformFeeService servi
         return Ok(ApiResponse<string>.Ok("Đã gửi chứng từ, chờ Admin đối soát."));
     }
 
+    [HttpPost("invoices/{id:guid}/payos-link")]
+    public async Task<IActionResult> PayOsLink(Guid id, CancellationToken ct) =>
+        Ok(ApiResponse<PayOsLinkDto>.Ok(await service.PayOsLinkAsync(CurrentUserId, id, ct)));
+
+    [HttpPost("invoices/{id:guid}/payos-sync")]
+    public async Task<IActionResult> PayOsSync(Guid id, CancellationToken ct) =>
+        Ok(ApiResponse<string>.Ok(await service.PayOsSyncAsync(CurrentUserId, id, ct)));
+
     private static void ValidatePage(int page, int pageSize)
     {
         if (page < 1 || pageSize is < 1 or > 100) throw new ArgumentException("Trang hoặc kích thước trang không hợp lệ.");
