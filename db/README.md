@@ -20,10 +20,10 @@ Mặc định file có `SET LOCAL retrack.seed_demo = 'on';` để nạp:
 
 | Nhóm | Dữ liệu |
 |---|---|
-| Tài khoản | 26 tài khoản, đủ 6 role; Chủ kho demo Ngô Sỹ Giá. Giữ các email chính admin/seller/depot/employee/driver/factory@retrack.vn và Factory2/3 |
-| Kho/nhà máy | 5 kho, 4 nhà máy, 15 liên kết nhân sự; địa chỉ mô phỏng Đà Nẵng |
-| Thu gom | 65 đơn nhiều trạng thái, gồm 13 đơn Employee `e0000000-0929-*` và 36 đơn điều phối `ed250000-*` |
-| Điều phối | 6 nhân viên, 6 Seller, 6 vùng và ca demo khoảng 20 giờ; đơn hẹn ngày sau chưa được giao từ hôm nay |
+| Tài khoản | Giữ tài khoản các role khác; 6 Employee dispatch hoạt động, 12 Seller dispatch. Hai Employee cũ được đổi email và khóa để bảo toàn tham chiếu lịch sử |
+| Kho/nhà máy | Giữ bộ kho/nhà máy liên role; thêm hai kho điều phối riêng tại Đà Nẵng |
+| Thu gom | Giữ đơn lịch sử liên role; thay bộ Employee tự nhận và bộ điều phối cũ bằng 12 đơn tại 12 tọa độ khác nhau |
+| Điều phối | Employee dispatch01–03 thuộc Kho Thu Mua An Phú, dispatch04–06 thuộc Kho Phế Liệu Hòa Bình; 6 vùng và ca khoảng 20 giờ. Đơn hẹn ngày sau chưa được giao hôm nay |
 | Vận chuyển | 12 chuyến, gồm 3 lô `DRV-DEMO-01/02/03` và 3 lô `DRV-DN-LOCAL-01/02/03`, giữ UUID cũ để mobile tiếp tục test |
 | Tồn/chi phí | Phiếu sắt+ghế cùng chi phí; thêm 900 kg PET nguồn demo cho hai bộ lô Driver, giá vốn chưa xác định |
 | Liên role | Hợp tác, nhu cầu, lô xuất/cân/KCS, thanh toán/phí/hóa đơn, thông báo, bảng giá và lô thanh lý |
@@ -32,6 +32,9 @@ Mặc định file có `SET LOCAL retrack.seed_demo = 'on';` để nạp:
 - Lô Driver tại chỗ dùng điểm `X7P4+XF9 Ngũ Hành Sơn, Đà Nẵng`. Kho và nhà máy cùng tọa độ chỉ để thử camera/giao nhận tại chỗ, không dùng đánh giá thuật toán tuyến đường.
 - Dữ liệu chỉ mô phỏng, không phải yêu cầu thu gom/giao hàng/thanh toán thật. Nguồn Driver chưa khai giá vốn không được coi vốn bằng 0 để báo lãi.
 - Ca demo hết giờ sau khoảng 20 giờ. Hôm khác Owner tạo ca mới ở Điều phối thu gom; chạy lại file không bật ca STOPPED/FULL hoặc kéo dài ca đã dùng.
+- Hướng dẫn tài khoản, địa điểm, chuyển đơn trong cùng kho và tạo đơn bất chợt: [Kịch bản điều phối Employee](../docs/EMPLOYEE_DISPATCH_DEMO.md).
+- `employee.dispatch07@retrack.test` và `employee.dispatch08@retrack.test` là hai hồ sơ lịch sử **bị khóa**, không dùng đăng nhập. Không xóa vật lý vì các đơn cân/thanh toán cũ còn tham chiếu ID. Bộ mới không tạo email `employee@retrack.vn`, `employee2@retrack.vn` hoặc `dispatch.v2.*`.
+- DB đã seed phiên bản trước không tự mất fixture cũ khi pull code. Bộ mới dùng UUID riêng để không ghi đè lịch sử; nếu cần demo sạch, dựng một **database test mới** rồi trỏ backend vào đó, giữ DB cũ để đối chiếu.
 
 ## Chỉ lấy schema
 

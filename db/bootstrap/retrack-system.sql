@@ -949,6 +949,12 @@ END $$;
 DO $retrack_seed$
 BEGIN
 IF current_setting('retrack.seed_demo', true) = 'on' THEN
+-- Hai bản ghi giữ FK của lịch sử/cân/thanh toán chung; không còn là tài khoản test đăng nhập.
+UPDATE users SET email='employee.dispatch07@retrack.test', is_active=FALSE
+WHERE id='00000000-0000-0000-0000-000000000004' AND email='employee@retrack.vn' AND role='DEPOT_EMPLOYEE';
+UPDATE users SET email='employee.dispatch08@retrack.test', is_active=FALSE
+WHERE id='00000000-0000-0000-0000-00000000000c' AND email='employee2@retrack.vn' AND role='DEPOT_EMPLOYEE';
+
 -- Dữ liệu demo dùng cục bộ/phát triển, không dùng production.
 -- Schema đã được dựng ở phần trên; seed chạy trong cùng transaction khi tùy chọn đang bật.
 -- Có thể chạy lại; các UUID fixture đã có sẽ được giữ nguyên.
@@ -963,7 +969,7 @@ VALUES
     ('00000000-0000-0000-0000-000000000001', 'admin@retrack.vn',    '$2a$11$eNEiPwGZnOqVlHiSydDe4exEtVDa5h2t8vR.VBK/tTAv/W1mHBOwW', 'ADMIN',          'Quản trị viên ReTrack', '0900000001', TRUE, NOW(), NOW()),
     ('00000000-0000-0000-0000-000000000002', 'seller@retrack.vn',   '$2a$11$J/edu1SVelH8SrExp6JGNuuWmaRMULzpLjFhA.1/WcMzB2.O8Hsom', 'SELLER',         'Nguyễn Thị Lan',        '0911111111', TRUE, NOW(), NOW()),
     ('00000000-0000-0000-0000-000000000003', 'depot@retrack.vn',    '$2a$11$i0GJ0.h60xsCKWZ8XvYkJ.guY1aYe9ykxcsg22/KvM4PZ7kXr6Sce', 'DEPOT_OWNER',    'Ngô Sỹ Giá',             '0922222222', TRUE, NOW(), NOW()),
-    ('00000000-0000-0000-0000-000000000004', 'employee@retrack.vn', '$2a$11$7cergszHVwtBQKDOOIM.POdnPLveC9s7edhE2hY6/rStLyg.889hm', 'DEPOT_EMPLOYEE', 'Lê Minh Tuấn',           '0933333333', TRUE, NOW(), NOW()),
+    ('00000000-0000-0000-0000-000000000004', 'employee.dispatch07@retrack.test', '$2a$11$7cergszHVwtBQKDOOIM.POdnPLveC9s7edhE2hY6/rStLyg.889hm', 'DEPOT_EMPLOYEE', 'Lê Minh Tuấn',           '0933333333', FALSE, NOW(), NOW()),
     ('00000000-0000-0000-0000-000000000005', 'driver@retrack.vn',   '$2a$11$d7vd3QQIgwwE8U/3VvpwGuThZU0vhoxsA2jrzvkQ5qkL3KiWgx3UG', 'DRIVER',         'Phạm Văn Hùng',          '0944444444', TRUE, NOW(), NOW()),
     ('00000000-0000-0000-0000-000000000006', 'factory@retrack.vn',  '$2a$11$mIHozvQGf7pIuXnWk4j03OKdxo7q27HVkx3LzqUu3cm2rrhjNCzmG', 'FACTORY',        'Eco Plastics Vietnam',   '0955555551', TRUE, NOW(), NOW()),
     ('00000000-0000-0000-0000-000000000007', 'factory2@retrack.vn', '$2a$11$mIHozvQGf7pIuXnWk4j03OKdxo7q27HVkx3LzqUu3cm2rrhjNCzmG', 'FACTORY',        'Công Ty Kim Loại Phú Lợi','0955555552', TRUE, NOW(), NOW()),
@@ -971,7 +977,7 @@ VALUES
     ('00000000-0000-0000-0000-000000000009', 'seller2@retrack.vn',  '$2a$11$J/edu1SVelH8SrExp6JGNuuWmaRMULzpLjFhA.1/WcMzB2.O8Hsom', 'SELLER',         'Trần Thị Hương',        '0911111112', TRUE, NOW(), NOW()),
     ('00000000-0000-0000-0000-00000000000a', 'seller3@retrack.vn',  '$2a$11$J/edu1SVelH8SrExp6JGNuuWmaRMULzpLjFhA.1/WcMzB2.O8Hsom', 'SELLER',         'Phạm Minh Khoa',        '0911111113', TRUE, NOW(), NOW()),
     ('00000000-0000-0000-0000-00000000000b', 'seller4@retrack.vn',  '$2a$11$J/edu1SVelH8SrExp6JGNuuWmaRMULzpLjFhA.1/WcMzB2.O8Hsom', 'SELLER',         'Lê Thanh Mai',          '0911111114', TRUE, NOW(), NOW()),
-    ('00000000-0000-0000-0000-00000000000c', 'employee2@retrack.vn','$2a$11$7cergszHVwtBQKDOOIM.POdnPLveC9s7edhE2hY6/rStLyg.889hm', 'DEPOT_EMPLOYEE', 'Nguyễn Quốc Bảo',       '0933333334', TRUE, NOW(), NOW()),
+    ('00000000-0000-0000-0000-00000000000c', 'employee.dispatch08@retrack.test','$2a$11$7cergszHVwtBQKDOOIM.POdnPLveC9s7edhE2hY6/rStLyg.889hm', 'DEPOT_EMPLOYEE', 'Nguyễn Quốc Bảo',       '0933333334', FALSE, NOW(), NOW()),
     ('00000000-0000-0000-0000-00000000000d', 'driver2@retrack.vn',  '$2a$11$d7vd3QQIgwwE8U/3VvpwGuThZU0vhoxsA2jrzvkQ5qkL3KiWgx3UG', 'DRIVER',         'Trần Văn Hải',          '0944444445', TRUE, NOW(), NOW())
 ON CONFLICT DO NOTHING;
 
@@ -984,7 +990,7 @@ BEGIN
             ('00000000-0000-0000-0000-000000000001'::uuid, 'admin@retrack.vn', 'ADMIN'),
             ('00000000-0000-0000-0000-000000000002'::uuid, 'seller@retrack.vn', 'SELLER'),
             ('00000000-0000-0000-0000-000000000003'::uuid, 'depot@retrack.vn', 'DEPOT_OWNER'),
-            ('00000000-0000-0000-0000-000000000004'::uuid, 'employee@retrack.vn', 'DEPOT_EMPLOYEE'),
+            ('00000000-0000-0000-0000-000000000004'::uuid, 'employee.dispatch07@retrack.test', 'DEPOT_EMPLOYEE'),
             ('00000000-0000-0000-0000-000000000005'::uuid, 'driver@retrack.vn', 'DRIVER'),
             ('00000000-0000-0000-0000-000000000006'::uuid, 'factory@retrack.vn', 'FACTORY'),
             ('00000000-0000-0000-0000-000000000007'::uuid, 'factory2@retrack.vn', 'FACTORY'),
@@ -992,7 +998,7 @@ BEGIN
             ('00000000-0000-0000-0000-000000000009'::uuid, 'seller2@retrack.vn', 'SELLER'),
             ('00000000-0000-0000-0000-00000000000a'::uuid, 'seller3@retrack.vn', 'SELLER'),
             ('00000000-0000-0000-0000-00000000000b'::uuid, 'seller4@retrack.vn', 'SELLER'),
-            ('00000000-0000-0000-0000-00000000000c'::uuid, 'employee2@retrack.vn', 'DEPOT_EMPLOYEE'),
+            ('00000000-0000-0000-0000-00000000000c'::uuid, 'employee.dispatch08@retrack.test', 'DEPOT_EMPLOYEE'),
             ('00000000-0000-0000-0000-00000000000d'::uuid, 'driver2@retrack.vn', 'DRIVER')
         ) AS expected(id, email, role)
         LEFT JOIN users u ON u.id = expected.id AND u.email = expected.email AND u.role = expected.role
@@ -1412,113 +1418,8 @@ ON CONFLICT DO NOTHING;
 END IF;
 END;
 $retrack_seed$;
--- RETRACK_EMPLOYEE_POOL_SEED_BEGIN
-DO $retrack_employee_pool_seed$
-DECLARE
-    employee_email text := 'employee@retrack.vn';
-    seller_email text := 'seller@retrack.vn';
-    employee_id uuid;
-    seller_id uuid;
-    depot_id uuid;
-BEGIN
-    IF current_setting('retrack.seed_demo', true) IS DISTINCT FROM 'on' THEN RETURN; END IF;
-    SELECT u.id, s.depot_id INTO employee_id, depot_id
-    FROM users u JOIN depot_staffs s ON s.user_id = u.id
-    WHERE u.email = employee_email AND u.role = 'DEPOT_EMPLOYEE'
-      AND u.is_active AND s.is_active AND s.staff_type = 'DEPOT_EMPLOYEE'
-    ORDER BY s.id LIMIT 1;
-    SELECT u.id INTO seller_id FROM users u
-    WHERE u.email = seller_email AND u.role = 'SELLER' AND u.is_active;
-    IF employee_id IS NULL OR depot_id IS NULL OR seller_id IS NULL THEN
-        RAISE EXCEPTION 'Active demo employee, depot membership or seller is missing; no rows inserted.';
-    END IF;
+-- Bộ đơn tự nhận cũ đã ngừng seed; giữ lịch sử trên DB đã dùng.
 
-    INSERT INTO pickup_requests (
-        id, seller_id, target_depot_id, accepted_collector_id,
-        description, address, latitude, longitude, preferred_datetime,
-        status, gross_amount, platform_fee_percentage, platform_fee_amount, net_amount,
-        created_at, updated_at)
-    SELECT v.id::uuid, seller_id, depot_id,
-        CASE WHEN v.status = 'PENDING' THEN NULL ELSE employee_id END,
-        '[DEMO-PICKUP-POOL-20260929] ' || v.description,
-        v.address, v.latitude, v.longitude, v.preferred_datetime,
-        v.status, 0, 5, 0, 0, CURRENT_TIMESTAMP - interval '2 days', v.updated_at
-    FROM (VALUES
-        -- NHÓM A — 3 ĐƠN CHỜ CŨ (giữ nguyên địa chỉ và UUID).
-        ('e0000000-0929-4000-8000-000000000001',
-         'Giấy carton và chai nhựa. Đơn giả lập để thử nhận đơn, không đến thu gom thực tế.',
-         'Chợ Hàn, 119 Trần Phú, Đà Nẵng',
-         16.0683600::numeric, 108.2244300::numeric,
-         CURRENT_TIMESTAMP + interval '2 hours', 'PENDING', CURRENT_TIMESTAMP),
-        ('e0000000-0929-4000-8000-000000000002',
-         'Lon nhôm và giấy báo. Đơn giả lập để thử bản đồ và chỉ đường.',
-         'Bảo tàng Điêu khắc Chăm, 2 đường 2 Tháng 9, Đà Nẵng',
-         16.0602000::numeric, 108.2231700::numeric,
-         CURRENT_TIMESTAMP + interval '4 hours', 'PENDING', CURRENT_TIMESTAMP),
-        ('e0000000-0929-4000-8000-000000000003',
-         'Sắt vụn. Đơn giả lập chưa hẹn giờ, phải nằm cuối danh sách đơn chờ.',
-         'Chợ Cồn, 290 Hùng Vương, Đà Nẵng',
-         16.0681700::numeric, 108.2145300::numeric,
-         NULL::timestamptz, 'PENDING', CURRENT_TIMESTAMP),
-        -- NHÓM B — 1 ĐƠN ĐÃ NHẬN + 2 ĐƠN HOÀN TẤT để test Dashboard.
-        ('e0000000-0929-4000-8000-000000000004',
-         'Đơn giả lập đã nhận để thử nút Xem chi tiết trên Dashboard. Chưa có cân hoặc thanh toán.',
-         'Bảo tàng Điêu khắc Chăm, 2 đường 2 Tháng 9, Đà Nẵng',
-         16.0602000::numeric, 108.2231700::numeric,
-         CURRENT_TIMESTAMP + interval '1 hour', 'SCHEDULED', CURRENT_TIMESTAMP),
-        ('e0000000-0929-4000-8000-000000000005',
-         'Lịch sử giả lập hoàn tất hôm nay UTC, chỉ phục vụ thống kê Dashboard; không phải giao dịch tài chính.',
-         'Chợ Hàn, 119 Trần Phú, Đà Nẵng',
-         16.0683600::numeric, 108.2244300::numeric,
-         NULL::timestamptz, 'DONE', CURRENT_TIMESTAMP),
-        ('e0000000-0929-4000-8000-000000000006',
-         'Lịch sử giả lập hoàn tất hôm qua UTC, chỉ phục vụ thống kê Dashboard; không phải giao dịch tài chính.',
-         'Chợ Cồn, 290 Hùng Vương, Đà Nẵng',
-         16.0681700::numeric, 108.2145300::numeric,
-         NULL::timestamptz, 'DONE',
-         (date_trunc('day', CURRENT_TIMESTAMP AT TIME ZONE 'UTC') - interval '12 hours') AT TIME ZONE 'UTC'),
-        -- NHÓM C — 6 ĐƠN CHỜ MỚI để test tuyến đường ô tô/xe máy.
-        ('e0000000-0929-4000-8000-000000000007',
-         '[TUYEN-01] Bà Nà Hills - ưu tiên test ô tô: đã ghi nhận tuyến ít km hơn nhưng chậm hơn tuyến nhanh nhất; cân bằng chọn tuyến ngắn trong ngưỡng 15%. Đơn giả lập, không đến thu gom thực tế.',
-         'Khu du lịch Bà Nà Hills, thôn An Sơn, Đà Nẵng',
-         16.0259108::numeric, 108.0322546::numeric,
-         CURRENT_TIMESTAMP + interval '30 minutes', 'PENDING', CURRENT_TIMESTAMP),
-        ('e0000000-0929-4000-8000-000000000008',
-         '[TUYEN-02] Đại học Bách khoa - test nhiều tuyến ô tô/xe máy về phía tây bắc; cùng quãng đường có thể khác thời gian theo phương tiện. Đơn giả lập, không đến thu gom thực tế.',
-         'Trung tâm Học liệu và Truyền thông - Đại học Bách khoa, 54 Nguyễn Lương Bằng, Đà Nẵng',
-         16.0746638::numeric, 108.1506880::numeric,
-         CURRENT_TIMESTAMP + interval '45 minutes', 'PENDING', CURRENT_TIMESTAMP),
-        ('e0000000-0929-4000-8000-000000000009',
-         '[TUYEN-03] Trung tâm Hành chính - test nhiều phương án đến khu vực phía bắc sông Hàn. Các tiêu chí có thể cùng chọn một tuyến. Đơn giả lập, không đến thu gom thực tế.',
-         'Trung tâm Hành chính thành phố Đà Nẵng, 24 Trần Phú, Đà Nẵng',
-         16.0770864::numeric, 108.2231701::numeric,
-         CURRENT_TIMESTAMP + interval '60 minutes', 'PENDING', CURRENT_TIMESTAMP),
-        ('e0000000-0929-4000-8000-000000000010',
-         '[TUYEN-04] Bệnh viện Đà Nẵng - test nhiều tuyến nội thành và thay đổi thời gian ước tính khi đổi phương tiện. Đơn giả lập, không đến thu gom thực tế.',
-         'Bệnh viện Đà Nẵng, 124 Hải Phòng, Đà Nẵng',
-         16.0721056::numeric, 108.2156940::numeric,
-         CURRENT_TIMESTAMP + interval '75 minutes', 'PENDING', CURRENT_TIMESTAMP),
-        ('e0000000-0929-4000-8000-000000000011',
-         '[TUYEN-05] Chợ Túy Loan - test nhiều tuyến về phía tây; so sánh số km và thời gian ô tô/xe máy. Đơn giả lập, không đến thu gom thực tế.',
-         'Chợ Túy Loan, Đà Nẵng',
-         15.9903511::numeric, 108.1409952::numeric,
-         CURRENT_TIMESTAMP + interval '90 minutes', 'PENDING', CURRENT_TIMESTAMP),
-        ('e0000000-0929-4000-8000-000000000012',
-         '[TUYEN-06] Đại học Đông Á - test nhiều tuyến ngắn hơn và thay đổi hình tuyến theo phương tiện. Đơn giả lập, không đến thu gom thực tế.',
-         'Đại học Đông Á, 33 Xô Viết Nghệ Tĩnh, Đà Nẵng',
-         16.0321559::numeric, 108.2213119::numeric,
-         CURRENT_TIMESTAMP + interval '105 minutes', 'PENDING', CURRENT_TIMESTAMP),
-        -- NHÓM D — ĐƠN TẠI CHỖ, chưa nhận/chưa check-in/chưa có kết quả cân.
-        ('e0000000-0929-4000-8000-000000000013',
-         '[CHECKIN-LOCAL-01] Test tại chỗ: nhận đơn, chụp ảnh camera + GPS, phân loại, cân và định giá. Đơn giả lập do người test tạo, không phát sinh giao dịch thực tế.',
-         'X7P4+XF9 Ngũ Hành Sơn, Đà Nẵng',
-         15.9874125::numeric, 108.256234375::numeric,
-         CURRENT_TIMESTAMP + interval '5 minutes', 'PENDING', CURRENT_TIMESTAMP)
-    ) AS v(id, description, address, latitude, longitude, preferred_datetime, status, updated_at)
-    ON CONFLICT (id) DO NOTHING;
-END
-$retrack_employee_pool_seed$;
--- RETRACK_EMPLOYEE_POOL_SEED_END
 
 -- RETRACK_DISPATCH_DEMO_SEED_BEGIN
 DO $retrack_dispatch_demo_seed$
@@ -1527,45 +1428,53 @@ DECLARE
     owner_id uuid;
     employee_source users%ROWTYPE;
     seller_source users%ROWTYPE;
-    depot_id uuid := 'ef200000-0000-4000-8000-000000000001';
+    depot_id uuid := 'ef400000-0000-4000-8000-000000000001';
     area_id uuid; employee_id uuid; seller_id uuid; pickup_id uuid; shift_id uuid;
     point record; seller_point record; i integer; j integer;
+    employee_names text[] := ARRAY['Trần Minh Quân','Lê Văn Hòa','Nguyễn Đức Thành','Phạm Quốc Huy','Võ Thanh Tùng','Đặng Minh Hải'];
+    seller_names text[] := ARRAY['Nguyễn Thị Mai','Trần Văn Sơn','Lê Thu Hà','Phạm Ngọc Anh','Võ Thị Hương','Đặng Quốc Bảo','Hoàng Thanh Bình','Bùi Thị Loan','Đỗ Minh Khang','Ngô Thị Thảo','Hồ Văn Phúc','Dương Hải Yến'];
+    descriptions text[] := ARRAY['Tôi có hai bao chai nhựa đã rửa sạch, nhờ gọi trước khi tới.', 'Cửa hàng có thùng carton đã gấp gọn sau đợt nhập hàng.', 'Gia đình cần bán giấy báo và sách cũ, đã buộc thành từng bó.', 'Có lon nhôm và chai nước, tôi đã phân loại riêng.', 'Cần thu gom bìa carton và túi giấy ở cửa hàng.', 'Nhà có quạt hỏng và vài thanh sắt, nhờ đến xem rồi cân.', 'Văn phòng có giấy in cũ, vui lòng liên hệ trước khi lấy.', 'Tôi có chai nhựa và can nhựa rỗng, để sẵn ở tầng trệt.', 'Nhờ thu gom thùng giấy đóng đồ và lon nước ngọt.', 'Có một ít đồng dây điện và đồ nhôm cũ cần bán.', 'Cửa hàng dọn kho có giấy bìa và chai nhựa.', 'Gia đình có sách cũ và giấy vụn đã đóng bao.'];
     shift_start timestamptz := CURRENT_TIMESTAMP;
     shift_end timestamptz := CURRENT_TIMESTAMP + interval '20 hours';
 BEGIN
     IF current_setting('retrack.seed_demo', true) IS DISTINCT FROM 'on' THEN RETURN; END IF;
-    SELECT * INTO employee_source FROM users WHERE email = 'employee@retrack.vn' AND role = 'DEPOT_EMPLOYEE' AND is_active;
+    SELECT * INTO employee_source FROM users WHERE email = 'employee.dispatch07@retrack.test' AND role = 'DEPOT_EMPLOYEE';
     SELECT * INTO seller_source FROM users WHERE email = 'seller@retrack.vn' AND role = 'SELLER' AND is_active;
     SELECT d.owner_id INTO owner_id FROM depots d JOIN users u ON u.id = d.owner_id
         WHERE u.is_active AND u.role = 'DEPOT_OWNER' ORDER BY d.id LIMIT 1;
     IF employee_source.id IS NULL OR seller_source.id IS NULL OR owner_id IS NULL THEN
-        RAISE EXCEPTION 'Cần employee@retrack.vn, seller@retrack.vn và Owner đang hoạt động. Chưa seed gì.';
+        RAISE EXCEPTION 'Cần employee.dispatch07@retrack.test, seller@retrack.vn và Owner đang hoạt động. Chưa seed gì.';
     END IF;
-    INSERT INTO depots(id, owner_id, name, address, latitude, longitude, rating, verification_status, created_at)
-    VALUES(depot_id, owner_id, '[DEMO-DISPATCH-V2] Kho điều phối Đà Nẵng',
-        'X7P4+XF9 Ngũ Hành Sơn, Đà Nẵng — kho mô phỏng', 15.9874125, 108.2562344, 0, 'APPROVED', CURRENT_TIMESTAMP)
-    ON CONFLICT(id) DO NOTHING;
+    FOR j IN 1..2 LOOP
+        depot_id := ('ef400000-0000-4000-8000-' || lpad(j::text,12,'0'))::uuid;
+        INSERT INTO depots(id,owner_id,name,address,latitude,longitude,rating,verification_status,created_at)
+        VALUES(depot_id,owner_id,CASE WHEN j=1 THEN 'Kho Thu Mua An Phú' ELSE 'Kho Phế Liệu Hòa Bình' END,
+            CASE WHEN j=1 THEN 'Khu vực Chợ Hàn, Đà Nẵng' ELSE 'Khu vực Chợ Cồn, Đà Nẵng' END,
+            CASE WHEN j=1 THEN 16.06836 ELSE 16.06817 END, CASE WHEN j=1 THEN 108.22443 ELSE 108.21453 END,
+            0,'APPROVED',CURRENT_TIMESTAMP) ON CONFLICT(id) DO NOTHING;
+    END LOOP;
     i := 0;
     FOR point IN SELECT * FROM (VALUES
-        ('Ngũ Hành Sơn', 'X7P4+XF9 Ngũ Hành Sơn, Đà Nẵng', 15.9874125,108.2562344),
-        ('Hải Châu — Chợ Hàn', 'Chợ Hàn, 119 Trần Phú, Đà Nẵng',16.0683600,108.2244300),
-        ('Hải Châu — Bảo tàng Chăm', 'Bảo tàng Điêu khắc Chăm, 2 đường 2 Tháng 9, Đà Nẵng',16.0602000,108.2231700),
-        ('Thanh Khê — Chợ Cồn', 'Chợ Cồn, 290 Hùng Vương, Đà Nẵng',16.0681700,108.2145300),
-        ('Hải Châu — Trung tâm Hành chính', 'Trung tâm Hành chính thành phố Đà Nẵng, 24 Trần Phú, Đà Nẵng',16.0770864,108.2231701),
-        ('Liên Chiểu — Đại học Bách khoa', 'Trung tâm Học liệu và Truyền thông, 54 Nguyễn Lương Bằng, Đà Nẵng',16.0746638,108.1506880)
-    ) AS v(name,address,lat,lng)
+        ('Trần Phú',16.06836,108.22443),
+        ('Hùng Vương',16.06817,108.21453),
+        ('Nguyễn Lương Bằng',16.0746638,108.1506880),
+        ('Bờ Tây sông Hàn',16.06836,108.22443),
+        ('Hải Phòng',16.06817,108.21453),
+        ('Ngũ Hành Sơn',15.9874125,108.2562344)
+    ) AS v(name,lat,lng)
     LOOP
         i := i + 1;
-        area_id := ('ef210000-0000-4000-8000-' || lpad(i::text,12,'0'))::uuid;
-        employee_id := ('ef220000-0000-4000-8000-' || lpad(i::text,12,'0'))::uuid;
-        seller_id := ('ef230000-0000-4000-8000-' || lpad(i::text,12,'0'))::uuid;
+        depot_id := CASE WHEN i<=3 THEN 'ef400000-0000-4000-8000-000000000001'::uuid ELSE 'ef400000-0000-4000-8000-000000000002'::uuid END;
+        area_id := ('ef410000-0000-4000-8000-' || lpad(i::text,12,'0'))::uuid;
+        employee_id := ('ef420000-0000-4000-8000-' || lpad(i::text,12,'0'))::uuid;
+        seller_id := ('ef430000-0000-4000-8000-' || lpad(i::text,12,'0'))::uuid;
         -- UUID cố định/unique email: xung đột với dữ liệu ngoài fixture làm transaction dừng.
         INSERT INTO users(id,email,password_hash,role,full_name,phone,is_active,created_at,updated_at)
-        VALUES(employee_id,'employee.dispatch.v2.' || lpad(i::text,2,'0') || '@retrack.test',employee_source.password_hash,
-            'DEPOT_EMPLOYEE','Nhân viên điều phối demo ' || i,'090990000' || i,true,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+        VALUES(employee_id,'employee.dispatch' || lpad(i::text,2,'0') || '@retrack.test',employee_source.password_hash,
+            'DEPOT_EMPLOYEE',employee_names[i],'090990000' || i,true,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
         ON CONFLICT(id) DO NOTHING;
         INSERT INTO depot_staffs(id,depot_id,user_id,staff_type,is_active)
-        VALUES(('ef240000-0000-4000-8000-' || lpad(i::text,12,'0'))::uuid,depot_id,employee_id,'DEPOT_EMPLOYEE',true)
+        VALUES(('ef440000-0000-4000-8000-' || lpad(i::text,12,'0'))::uuid,depot_id,employee_id,'DEPOT_EMPLOYEE',true)
         ON CONFLICT(id) DO NOTHING;
         INSERT INTO employee_collection_areas(id,depot_id,name,latitude,longitude,radius_meters,is_active)
         VALUES(area_id,depot_id,point.name,point.lat,point.lng,2500,true) ON CONFLICT(id) DO NOTHING;
@@ -1580,7 +1489,7 @@ BEGIN
                 CASE WHEN i % 2 = 0 THEN 500 ELSE 100 END,30,CURRENT_TIMESTAMP);
         END IF;
     END LOOP;
-    -- 12 địa điểm riêng; mỗi Seller có 3 tình huống lịch hẹn, không dồn mọi Seller về tâm vùng.
+    -- 12 Seller / 12 đơn / 12 địa chỉ riêng. Không lặp địa điểm để tạo thêm số lượng.
     -- Tọa độ kế thừa bộ địa điểm dự án; hai điểm bổ sung đối chiếu Mapcarta/OSM:
     -- https://mapcarta.com/W404714309 ; https://mapcarta.com/W675604354
     -- Điểm công cộng chỉ dùng mô phỏng, không phải yêu cầu thu gom thực tế.
@@ -1601,27 +1510,23 @@ BEGIN
     ) AS v(address,lat,lng)
     LOOP
         i := i + 1;
-        seller_id := ('ef230000-0000-4000-8000-' || lpad(i::text,12,'0'))::uuid;
+        seller_id := ('ef430000-0000-4000-8000-' || lpad(i::text,12,'0'))::uuid;
         INSERT INTO users(id,email,password_hash,role,full_name,phone,is_active,created_at,updated_at)
-        VALUES(seller_id,'seller.dispatch.v2.' || lpad(i::text,2,'0') || '@retrack.test',seller_source.password_hash,
-            'SELLER','Seller địa điểm demo ' || i,'090980' || lpad(i::text,4,'0'),true,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+        VALUES(seller_id,'seller.dispatch' || lpad(i::text,2,'0') || '@retrack.test',seller_source.password_hash,
+            'SELLER',seller_names[i],'090980' || lpad(i::text,4,'0'),true,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
         ON CONFLICT(id) DO NOTHING;
-        FOR j IN 1..3 LOOP
-            pickup_id := ('ef250000-0000-4000-8000-' || lpad(((i-1)*3+j)::text,12,'0'))::uuid;
-            INSERT INTO pickup_requests(id,seller_id,target_depot_id,description,address,latitude,longitude,preferred_datetime,
-                status,gross_amount,platform_fee_percentage,platform_fee_amount,net_amount,created_at,updated_at)
-            VALUES(pickup_id,seller_id,depot_id,
-                '[DEMO-DISPATCH-V2] Điểm ' || i || ' / lịch ' || j ||
-                CASE WHEN i >= 10 THEN ' [NGOAI-VUNG] Chờ Owner xử lý; không tự giao người gần nhất.' ELSE ' [TRONG-VUNG]' END ||
-                ' Chai nhựa, giấy carton; chưa cân. Không thu gom thực tế.',
-                seller_point.address,seller_point.lat,seller_point.lng,
-                CASE WHEN j = 1 THEN NULL WHEN j = 2 THEN CURRENT_TIMESTAMP + interval '1 hour'
-                     ELSE CURRENT_TIMESTAMP + interval '2 days' END,
-                'PENDING',0,5,0,0,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
-            ON CONFLICT(id) DO NOTHING;
-        END LOOP;
+        depot_id := CASE WHEN i IN (1,2,3,5,8,12) THEN 'ef400000-0000-4000-8000-000000000001'::uuid
+                         ELSE 'ef400000-0000-4000-8000-000000000002'::uuid END;
+        pickup_id := ('ef350000-0000-4000-8000-' || lpad(i::text,12,'0'))::uuid;
+        INSERT INTO pickup_requests(id,seller_id,target_depot_id,description,address,latitude,longitude,preferred_datetime,
+            status,gross_amount,platform_fee_percentage,platform_fee_amount,net_amount,created_at,updated_at)
+        VALUES(pickup_id,seller_id,depot_id,descriptions[i],seller_point.address,seller_point.lat,seller_point.lng,
+            CASE WHEN i IN (10,11) THEN CURRENT_TIMESTAMP + interval '2 days'
+                 WHEN i=7 THEN CURRENT_TIMESTAMP + interval '1 hour' ELSE NULL END,
+            'PENDING',0,5,0,0,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+        ON CONFLICT(id) DO NOTHING;
     END LOOP;
-    RAISE NOTICE 'Fixture V2: 36 đơn, 12 Seller/địa điểm, 6 Employee. Điểm 10–12 ngoài vùng; đơn ngày kia chưa phân công. Không reset fixture cũ.';
+    RAISE NOTICE 'Đã chuẩn bị 12 đơn tại 12 địa chỉ, 6 nhân viên chia 2 kho. Tài khoản dispatch01–06. Không reset lịch sử.';
 END $retrack_dispatch_demo_seed$;
 -- RETRACK_DISPATCH_DEMO_SEED_END
 
