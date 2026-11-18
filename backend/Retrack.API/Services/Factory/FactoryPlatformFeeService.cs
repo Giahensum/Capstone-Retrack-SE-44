@@ -9,7 +9,7 @@ namespace Retrack.API.Services.Factory;
 
 public sealed record FactoryFeeEntry(Guid Id, string? BatchCode, decimal FeeAmount, DateTime Date);
 
-public sealed class FactoryPlatformFeeService(AppDbContext db, FactoryAttachmentService attachments) : FactoryServiceBase(db)
+public sealed class FactoryPlatformFeeService(AppDbContext db, FactoryAttachmentService attachments, Retrack.API.Services.Interfaces.IDepotPayOsService payos) : FactoryServiceBase(db)
 {
     private async Task RequireFactory(Guid userId, CancellationToken ct) => _ = await CurrentFactory(userId, ct);
 
@@ -44,7 +44,7 @@ public sealed class FactoryPlatformFeeService(AppDbContext db, FactoryAttachment
         var items = await rows.OrderByDescending(i => i.PeriodYear).ThenByDescending(i => i.PeriodMonth).ThenByDescending(i => i.Revision).ThenBy(i => i.Id)
             .Skip((page - 1) * pageSize).Take(pageSize)
             .Select(i => new FeeInvoiceDto(i.Id, new DateOnly(i.PeriodYear, i.PeriodMonth, 1), i.TotalFeeAmount,
-                i.Status == "PENDING" ? "UNPAID" : i.Status, i.PaymentProofUrl, i.SubmittedAt, i.Revision, i.AdjustmentOfId)).ToListAsync(ct);
+                i.Status == "PENDING" ? "UNPAID" : i.Status, i.PaymentProofUrl, i.SubmittedAt, i.Revision, i.AdjustmentOfId, i.PayosOrderCode)).ToListAsync(ct);
         return new() { Items = items, TotalCount = count, Page = page, PageSize = pageSize };
     }
 
@@ -65,6 +65,19 @@ public sealed class FactoryPlatformFeeService(AppDbContext db, FactoryAttachment
         invoice.Status = "SUBMITTED";
         await Db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
+    }
+
+    /// <summary>Tạo link thanh toán PayOS cho hóa đơn phí của Factory. Hóa đơn chỉ thành PAID khi PayOS xác nhận (webhook ký hoặc truy vấn trực tiếp).</summary>
+    public async Task<PayOsLinkDto> PayOsLinkAsync(Guid userId, Guid id, CancellationToken ct)
+    {
+        await RequireFactory(userId, ct);
+        return await payos.CreateLinkForPayerAsync(userId, id, PayOsRedirect.Factory);
+    }
+
+    public async Task<string> PayOsSyncAsync(Guid userId, Guid id, CancellationToken ct)
+    {
+        await RequireFactory(userId, ct);
+        return await payos.SyncForPayerAsync(userId, id);
     }
 
     private async Task<Retrack.API.Models.PlatformInvoice> LockInvoice(Guid id, CancellationToken ct) =>

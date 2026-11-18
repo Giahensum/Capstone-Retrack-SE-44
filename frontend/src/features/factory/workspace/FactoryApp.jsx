@@ -31,7 +31,12 @@ function Workspace() {
   const { state, user, logout, loading, retry } = useFactory();
   const navigateRoute = useNavigate();
   // DocuSign đưa người dùng quay lại với ?esign=return: mở thẳng tab đối tác để thấy kết quả ký.
-  const [tab, setTab] = useState(() => (new URLSearchParams(window.location.search).get("esign") === "return" ? "partners" : "dashboard"));
+  const [tab, setTab] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    // PayOS đưa người nộp phí quay lại với ?payos=return|cancel: mở thẳng tab Phí nền tảng.
+    if (params.get("payos")) return "platform-fees";
+    return params.get("esign") === "return" ? "partners" : "dashboard";
+  });
   const [focusId, setFocusId] = useState(null);
   function navigate(next, orderId = null) {
     setFocusId(orderId);

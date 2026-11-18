@@ -448,6 +448,18 @@ CREATE TABLE IF NOT EXISTS platform_invoices (
 ALTER TABLE platform_invoices ADD COLUMN IF NOT EXISTS payment_proof_url TEXT;
 ALTER TABLE platform_invoices ADD COLUMN IF NOT EXISTS submitted_at TIMESTAMPTZ;
 
+-- RETRACK_PAYOS_COLUMNS_V1: mã đơn/link PayOS có cột riêng, không còn nhét vào payment_proof_url.
+ALTER TABLE platform_invoices ADD COLUMN IF NOT EXISTS payos_order_code BIGINT;
+ALTER TABLE platform_invoices ADD COLUMN IF NOT EXISTS payos_link_id TEXT;
+ALTER TABLE platform_invoices ADD COLUMN IF NOT EXISTS payos_checkout_url TEXT;
+-- Chuyển dữ liệu cũ: hóa đơn PENDING có link dạng ...?orderCode=<số> được tách sang cột mới (chạy lại không đổi gì).
+UPDATE platform_invoices
+   SET payos_order_code   = substring(payment_proof_url from '[?&#]orderCode=([0-9]+)$')::BIGINT,
+       payos_checkout_url = regexp_replace(payment_proof_url, '[?&#]orderCode=[0-9]+$', ''),
+       payment_proof_url  = NULL
+ WHERE status = 'PENDING' AND payos_order_code IS NULL AND payment_proof_url ~ '[?&#]orderCode=[0-9]+$';
+CREATE UNIQUE INDEX IF NOT EXISTS ux_platform_invoices_payos_order ON platform_invoices (payos_order_code) WHERE payos_order_code IS NOT NULL;
+
 -- RETRACK_CLOSED_PERIOD_BILLING_V1: giữ bản gốc, phát hành bổ sung khi có phí đối soát muộn.
 ALTER TABLE platform_invoices ADD COLUMN IF NOT EXISTS revision INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE platform_invoices ADD COLUMN IF NOT EXISTS adjustment_of_id UUID REFERENCES platform_invoices(id);

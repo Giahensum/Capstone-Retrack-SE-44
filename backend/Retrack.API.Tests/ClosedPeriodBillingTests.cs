@@ -54,11 +54,13 @@ public sealed class ClosedPeriodBillingTests
     [InlineData("PAID",null)]
     [InlineData("SUBMITTED","https://example.invalid/proof.png")]
     [InlineData("PENDING","https://pay.example.invalid/checkout#orderCode=123")]
+    [InlineData("PENDING","payos-column")]
     public async Task LateFeeCreatesPayableSupplementWithoutChangingLockedInvoice(string state,string? proof)
     {
         await using var db=Db();var payer=Payer(db);Fee(db,payer,50);await db.SaveChangesAsync();
         var service=Service(db);var initial=Assert.Single(await service.GenerateMonthlyInvoicesAsync(2026,1,Guid.NewGuid()));
         var original=await db.PlatformInvoices.SingleAsync();original.Status=state;original.PaymentProofUrl=proof;
+        if(proof=="payos-column"){original.PaymentProofUrl=null;original.PayosOrderCode=1700000000777;original.PayosCheckoutUrl="https://pay.example.invalid/checkout";proof=null;}
         original.PaidAt=state=="PAID"?DateTime.UtcNow:null;await db.SaveChangesAsync();
         Fee(db,payer,100);await db.SaveChangesAsync();
         var supplement=Assert.Single(await service.GenerateMonthlyInvoicesAsync(2026,1,Guid.NewGuid()));

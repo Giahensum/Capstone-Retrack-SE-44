@@ -22,11 +22,11 @@ function SimulatePayment({invoice,onClose}){
   <div className="mt-4 flex flex-wrap gap-3"><button disabled={save.isPending} className={buttonClass} onClick={()=>save.mutate({})}>{save.isPending?'Đang giả lập…':'Mô phỏng thanh toán thành công'}</button><button disabled={save.isPending} className={buttonClass} type="button" onClick={onClose}>Đóng</button></div>
  </Dialog>;
 }
-const orderCodeOf=(url)=>{try{return new URL(url).searchParams.get('orderCode');}catch{return null;}};
+const orderCodeOf=(invoice)=>invoice?.payOsOrderCode==null?null:String(invoice.payOsOrderCode);
 function PayOsReturn({orderCode,invoices}){
  // Sau khi PayOS chuyển hướng về: đối soát trực tiếp với PayOS (không tin tham số trên URL).
  const sync=useDepotMutation('post',(id)=>`reports/invoices/${id}/payos-sync`);
- const target=invoices?.find((i)=>orderCodeOf(i.paymentProofUrl)===orderCode);
+ const target=invoices?.find((i)=>orderCodeOf(i)===orderCode);
  useEffect(()=>{if(target&&target.status==='UNPAID'&&sync.isIdle)sync.mutate({id:target.id});},[target,sync]);
  if(!target)return null;
  if(sync.isPending)return <p role="status" className="rounded-xl border border-d-border-subtle p-3 text-sm">Đang xác nhận thanh toán với PayOS…</p>;
@@ -39,7 +39,7 @@ export default function PlatformFees(){
  const summary=useDepotQuery('reports/fees/summary',period); const query=useDepotQuery(`reports/${tab}`,{...period,page});
  const client=useQueryClient();
  // Có hóa đơn đã tạo link PayOS mà chưa thanh toán: tải lại mỗi 10 giây vì backend tự đối soát với PayOS.
- const waitingPayos=tab==='invoices'&&query.data?.items?.some((i)=>i.status==='UNPAID'&&orderCodeOf(i.paymentProofUrl));
+ const waitingPayos=tab==='invoices'&&query.data?.items?.some((i)=>i.status==='UNPAID'&&orderCodeOf(i));
  useEffect(()=>{if(!waitingPayos)return undefined;const t=setInterval(()=>client.invalidateQueries({queryKey:['depot']}),10000);return ()=>clearInterval(t);},[waitingPayos,client]);
  return <Page title="Phí nền tảng" description="Phí từ đơn thu gom và trạng thái hóa đơn do nền tảng phát hành."><PeriodFilter period={period} setPeriod={(p)=>{setPeriod(p);setPage(1);}} showGroupBy={false}/>
   <p className="text-sm text-d-on-surface-variant">Khoảng ngày chỉ lọc phí của kho đang chọn. Hóa đơn và hai số dư hóa đơn bên dưới hiển thị tất cả kỳ, trên mọi kho của chủ tài khoản.</p>

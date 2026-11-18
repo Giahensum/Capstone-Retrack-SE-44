@@ -15,11 +15,11 @@ public sealed partial class DepotReportRepository(AppDbContext db) : IDepotRepor
         return invoice;
     }
     public Task<List<Guid>> PendingPayosInvoiceIdsAsync(int take) =>
-        db.PlatformInvoices.AsNoTracking().Where(i => i.Status == "PENDING" && i.PaymentProofUrl != null && i.PaymentProofUrl.Contains("orderCode="))
+        db.PlatformInvoices.AsNoTracking().Where(i => i.Status == "PENDING" && i.PayosOrderCode != null)
             .OrderBy(i => i.CreatedAt).ThenBy(i => i.Id).Take(take).Select(i => i.Id).ToListAsync();
     public async Task<PlatformInvoice?> LockInvoiceByPayosOrderAsync(long orderCode)
     {
-        var invoice = await db.PlatformInvoices.FromSqlInterpolated($"SELECT * FROM platform_invoices WHERE payment_proof_url LIKE {"%orderCode=" + orderCode} FOR UPDATE").SingleOrDefaultAsync();
+        var invoice = await db.PlatformInvoices.FromSqlInterpolated($"SELECT * FROM platform_invoices WHERE payos_order_code = {orderCode} FOR UPDATE").SingleOrDefaultAsync();
         if (invoice != null) await db.Entry(invoice).ReloadAsync();
         return invoice;
     }
@@ -107,6 +107,6 @@ public sealed partial class DepotReportRepository(AppDbContext db) : IDepotRepor
         return await DepotRepositoryPage.ReadAsync(db.PlatformInvoices.AsNoTracking().Where(i => i.PayerId == ownerId)
             .OrderByDescending(i => i.PeriodYear).ThenByDescending(i => i.PeriodMonth).ThenByDescending(i => i.Revision).ThenBy(i => i.Id)
             .Select(i => new FeeInvoiceDto(i.Id, new DateOnly(i.PeriodYear, i.PeriodMonth, 1), i.TotalFeeAmount,
-                i.Status == "PENDING" ? "UNPAID" : i.Status, i.PaymentProofUrl, i.SubmittedAt, i.Revision, i.AdjustmentOfId)), query);
+                i.Status == "PENDING" ? "UNPAID" : i.Status, i.PaymentProofUrl, i.SubmittedAt, i.Revision, i.AdjustmentOfId, i.PayosOrderCode)), query);
     }
 }
