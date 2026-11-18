@@ -28,6 +28,17 @@ async function attachmentUrl(attachment) {
   }
 }
 
+export async function uploadFactoryFeeProof(file) {
+  const form = new FormData();
+  form.append("file", file);
+  try {
+    const response = await api.post("/factory/attachments/upload", form, { headers: { "Content-Type": undefined } });
+    return response.data.data.url;
+  } catch (error) {
+    throw new Error(error.response?.data?.message || "Không tải được chứng từ.");
+  }
+}
+
 export async function downloadFactoryAttachment(url, name = "chung-tu") {
   if (!url) return;
   if (!url.startsWith("/api/factory/attachments/")) {
@@ -60,7 +71,7 @@ function mapProfile(profile) {
     phone: profile.contactPhone || profile.user?.phone || "",
     capacity: profile.capacityKgPerMonth || 0,
     purity: profile.minimumPurityPercent || 0,
-    platformFeePercentage: profile.platformFeePercentage ?? 1,
+    platformFeePercentage: profile.platformFeePercentage ?? 5,
     rating: profile.rating ?? 0,
     createdAt: dateOnly(profile.createdAt),
     ownerName: profile.user?.fullName || "",
@@ -98,26 +109,31 @@ export function mapOrder(order) {
   const net = verification?.factoryWeightKg || ticket?.netWeightKg || 0;
   const invoice = order.invoice;
   const transportStatus = order.transport?.status;
-  const apiStatus = order.status === "COMPLETED" ? "PAID" : order.status;
+  const apiStatus = order.status === "COMPLETED" ? "SETTLEMENT_RECORDED" : order.status;
   const status = ["ACCEPTED", "IN_TRANSIT"].includes(apiStatus) && transportStatus === "DELIVERED"
     ? "DELIVERED"
     : ["ACCEPTED", "IN_TRANSIT"].includes(apiStatus) && ["PICKED_UP", "ON_THE_WAY", "IN_PROGRESS"].includes(transportStatus)
       ? "IN_TRANSIT"
       : apiStatus;
   const normalizedStatus = status === "CANCELLED" ? "REJECTED" : status;
-  const statusSteps = normalizedStatus === "PENDING_APPROVAL"
-    ? ["PENDING_APPROVAL"]
-    : normalizedStatus === "REJECTED"
-      ? ["ACCEPTED", "IN_TRANSIT", "DELIVERED", "RECEIVED", "WEIGHED", "REJECTED"]
-      : ["ACCEPTED", "IN_TRANSIT", "DELIVERED", "RECEIVED", "WEIGHED", "VERIFIED", "PAID"];
-  const reached = statusSteps.indexOf(normalizedStatus);
-  const history = statusSteps.slice(0, reached >= 0 ? reached + 1 : 1).map((itemStatus) => ({
-    status: itemStatus,
-    at: itemStatus === "RECEIVED" ? order.receivedAt || order.createdAt : itemStatus === "VERIFIED" || itemStatus === "REJECTED" ? order.decidedAt || order.createdAt : itemStatus === "PAID" ? order.settledAt || order.createdAt : order.createdAt,
-  }));
+  // Chỉ dùng timestamp thực có trong API, không gán giờ tạo lô cho các bước chưa xảy ra.
+  const history = [
+    { label: "Tạo lô", at: order.createdAt },
+    { status: "RECEIVED", at: order.receivedAt },
+    verification?.grade && verification.grade !== "PENDING" ? { status: verification.isVerified ? "VERIFIED" : "REJECTED", at: order.decidedAt } : null,
+    { status: "SETTLEMENT_PENDING", at: order.settlementProposedAt },
+    { status: "SETTLEMENT_ACCEPTED", at: order.settlementApprovedAt },
+    { status: "PAID", at: order.depotPaymentConfirmedAt },
+    { status: "RETURNING", at: order.return?.handedOverAt },
+    { status: "RETURNED", at: order.return?.receivedAt },
+  ].filter(entry => entry?.at).sort((a,b)=>new Date(a.at)-new Date(b.at));
   return {
     id: order.id,
     batchId: order.batchCode || order.batchId,
+    return: order.return || null,
+    settlementWorkflowVersion: order.settlementWorkflowVersion || 0,
+    settlementRevision: order.settlementRevision || 0,
+    settlementDecisionReason: order.settlementDecisionReason || "",
     feePolicy: order.feePolicy || "LEGACY_SELLER_DEDUCTION_V1",
     feePercentage: order.platformFeePercentage,
     depotId: order.depotId,
@@ -146,9 +162,9 @@ export function mapOrder(order) {
       grade: verification.grade,
       decision: verification.isVerified ? "accept" : "reject",
       note: verification.qualityNote || order.rejectionReason || "",
-      resolution: verification.qualityNote?.startsWith("RENEGOTIATE:") ? "RENEGOTIATE" : "RETURN",
+      resolution: verification.resolution === "RENEGOTIATE" || verification.qualityNote?.startsWith("RENEGOTIATE:") ? "RENEGOTIATE" : "RETURN",
     } : null,
-    payment: order.settledAt ? {
+    payment: order.settledAt || order.settlementProposedAt ? {
       price: order.agreedPrice,
       total: order.totalAmount || net * order.agreedPrice,
       vatTreatment: order.vatTreatment || "NOT_APPLICABLE",
@@ -157,12 +173,14 @@ export function mapOrder(order) {
       vat: order.vatAmount || 0,
       invoiceTotal: order.invoiceTotalAmount || order.totalAmount || net * order.agreedPrice,
       fee: order.feeAmount || 0,
-      feePercentage: order.platformFeePercentage ?? 1,
+      feePercentage: order.platformFeePercentage ?? 5,
       payable: order.netPayableAmount || 0,
       feePolicy: order.feePolicy || "LEGACY_SELLER_DEDUCTION_V1",
       buyerTotal: order.buyerTotalAmount ?? ((order.netPayableAmount || 0) + (order.feeAmount || 0)),
       reference: order.paymentReference || "",
-      at: order.settledAt,
+      proofUrl: order.paymentProofUrl || "",
+      confirmedAt: order.depotPaymentConfirmedAt || null,
+      at: order.settledAt || order.settlementProposedAt,
     } : null,
     invoice: invoice?.invoiceFileUrl ? {
       name: invoice.invoiceNumber || "Hóa đơn",
@@ -278,6 +296,16 @@ export async function performFactoryAction(type, payload) {
         sellerTaxCode: payload.sellerTaxCode || null,
         vatLegalBasis: payload.vatLegalBasis || null,
         paymentReference: payload.reference,
+        paymentProofUrl: payload.paymentProofUrl,
+      } });
+    case "QUALITY_RESOLUTION":
+      return request(`/api/factory/orders/${id}/quality-resolution`,{method:"POST",body:{resolution:payload.resolution,note:payload.note}});
+    case "RETURN_HANDOVER":
+      return request(`/api/factory/orders/${id}/return-handover`,{method:"POST",body:{reference:payload.reference,proofUrl:payload.proofUrl,note:payload.note}});
+    case "REPORT_PAYMENT":
+      return request(`/api/factory/orders/${id}/payment-proof`, { method: "POST", body: {
+        paymentReference: payload.reference,
+        paymentProofUrl: payload.paymentProofUrl,
       } });
     case "INVOICE":
       {

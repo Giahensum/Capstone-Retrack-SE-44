@@ -1,0 +1,127 @@
+name: Backend CD (VPS)
+
+# Build image API -> đẩy lên GHCR -> SSH vào VPS (GenCloud) chạy deploy/deploy-remote.sh (Postgres + API bằng Docker Compose).
+# Chỉ triển khai BACKEND + DB, không triển khai frontend.
+# Schema DB chỉ được dựng ở lần đầu (volume trống) từ db/bootstrap/retrack-system.sql; sửa schema sau đó do nhóm chạy tay (quy ước AGENTS.md).
+# Chạy khi push vào main có đụng backend/deploy/db (hoặc chạy tay). Nên bật branch protection để main chỉ nhận PR đã qua Backend CI.
+#
+# Secrets cần tạo (GitHub: Settings > Secrets and variables > Actions), xem deploy/README.md:
+#   VPS_HOST (IP VPS) · VPS_USER (root hoặc user có quyền docker) · VPS_SSH_KEY (private key dành riêng cho CD) · VPS_PORT (tuỳ chọn, mặc định 22)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - "deploy/**"
+      - "db/bootstrap/retrack-system.sql"
+      - ".github/workflows/backend-cd.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: backend-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tên image (GHCR bắt buộc chữ thường)
+        id: meta
+        run: |
+          IMAGE="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/retrack-api"
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Build (kiểm tra biên dịch)
+        run: |
+          dotnet restore backend/Retrack.sln
+          dotnet build backend/Retrack.sln --no-restore -c Release
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build và đẩy image
+        uses: docker/build-push-action@v6
+        with:
+          context: backend/Retrack.API
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.image }}:${{ github.sha }}
+            ${{ steps.meta.outputs.image }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production   # tạo Environment "production" trên GitHub để bật duyệt tay nếu muốn
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Kiểm tra cú pháp script triển khai
+        run: |
+          for f in deploy/*.sh; do bash -n "$f"; done
+          chmod +x deploy/*.sh
+
+      - name: Chép file triển khai lên VPS (compose, script, SQL khởi tạo)
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          source: "deploy/docker-compose.prod.yml,deploy/Caddyfile,deploy/deploy-remote.sh,deploy/server-setup.sh,deploy/.env.production.example"
+          target: /opt/retrack
+          strip_components: 1
+          overwrite: true
+
+      - name: Chép SQL khởi tạo DB
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          source: "db/bootstrap/retrack-system.sql"
+          target: /opt/retrack/db
+          strip_components: 2
+          overwrite: true
+
+      - name: Triển khai (Postgres + API)
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IMAGE: ${{ needs.build.outputs.image }}:${{ github.sha }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          envs: GHCR_USER,GHCR_TOKEN,IMAGE
+          script_stop: true
+          script: |
+            set -e
+            cd /opt/retrack
+            test -f .env.production || { echo "Thiếu /opt/retrack/.env.production — chạy: bash /opt/retrack/server-setup.sh (xem deploy/README.md)"; exit 1; }
+            export GHCR_USER GHCR_TOKEN IMAGE
+            bash ./deploy-remote.sh

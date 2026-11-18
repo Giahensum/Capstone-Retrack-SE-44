@@ -37,6 +37,14 @@ public class AdminBillingController : ControllerBase
         return Ok(ApiResponse<FeeConfigDto>.Ok(result, "Đã cập nhật phí nền tảng."));
     }
 
+    [HttpGet("payment-account")]
+    public async Task<IActionResult> GetPaymentAccount() =>
+        Ok(ApiResponse<PlatformPaymentAccountDto>.Ok(await _adminService.GetPaymentAccountAsync()));
+
+    [HttpPut("payment-account")]
+    public async Task<IActionResult> UpdatePaymentAccount([FromBody] PlatformPaymentAccountDto dto) =>
+        Ok(ApiResponse<PlatformPaymentAccountDto>.Ok(await _adminService.UpdatePaymentAccountAsync(dto, GetUserId()), "Đã lưu tài khoản nhận phí nền tảng."));
+
     /// <summary>Doanh thu nền tảng theo khoảng thời gian (UC-7.9)</summary>
     [HttpGet("revenue")]
     public async Task<IActionResult> GetRevenue([FromQuery] DateTime? from, [FromQuery] DateTime? to, [FromQuery] string groupBy = "day")
@@ -61,7 +69,7 @@ public class AdminBillingController : ControllerBase
     public async Task<IActionResult> GenerateInvoices([FromBody] GenerateInvoiceRequestDto dto)
     {
         var result = await _adminService.GenerateMonthlyInvoicesAsync(dto.Year, dto.Month, GetUserId());
-        return Ok(ApiResponse<List<PlatformInvoiceDto>>.Ok(result, $"Đã tạo {result.Count} hóa đơn."));
+        return Ok(ApiResponse<List<PlatformInvoiceDto>>.Ok(result, $"Đã phát hành/đối soát {result.Count} hóa đơn của tháng đã chốt."));
     }
 
     /// <summary>Danh sách hóa đơn phí, lọc theo trạng thái thanh toán (UC-7.11, UC-7.12)</summary>

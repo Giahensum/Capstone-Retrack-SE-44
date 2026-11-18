@@ -87,8 +87,9 @@ public sealed class DepotPayOsTests
     {
         var f = new Fixture(); var inv = f.Invoice();
         var link = await f.Service.CreateLinkAsync(Owner, Depot, inv.Id);
-        Assert.StartsWith("https://pay.test/checkout?orderCode=", link.CheckoutUrl);
-        Assert.Equal(DepotPayOsService.OrderCodeOf(inv), link.OrderCode); Assert.Equal(link.CheckoutUrl, inv.PaymentProofUrl); Assert.Equal("PENDING", inv.Status);
+        Assert.Equal("https://pay.test/checkout", link.CheckoutUrl);
+        Assert.Equal(DepotPayOsService.OrderCodeOf(inv), link.OrderCode); Assert.Equal(link.CheckoutUrl, inv.PayosCheckoutUrl); Assert.Equal("link-1", inv.PayosLinkId);
+        Assert.Null(inv.PaymentProofUrl); Assert.Equal("PENDING", inv.Status);
         Assert.Equal(150000, f.Payos.CreatedAmount); Assert.Equal("RETRACK 09/2026", f.Payos.CreatedDescription);
     }
 
@@ -98,7 +99,7 @@ public sealed class DepotPayOsTests
         var f = new Fixture(); var inv = f.Invoice(orderCode: 1700000000123, checkout: "https://pay.test/old");
         f.Payos.Remote = new("PENDING", 0, null, null);
         var link = await f.Service.CreateLinkAsync(Owner, Depot, inv.Id);
-        Assert.Equal("https://pay.test/old?orderCode=1700000000123", link.CheckoutUrl); Assert.Equal(0, f.Payos.Creates);
+        Assert.Equal("https://pay.test/old", link.CheckoutUrl); Assert.Equal(0, f.Payos.Creates);
     }
 
     [Fact]
@@ -107,7 +108,7 @@ public sealed class DepotPayOsTests
         var f = new Fixture(); var inv = f.Invoice(orderCode: 1700000000123, checkout: "https://pay.test/old");
         f.Payos.Remote = new("EXPIRED", 0, null, null);
         var link = await f.Service.CreateLinkAsync(Owner, Depot, inv.Id);
-        Assert.StartsWith("https://pay.test/checkout?orderCode=", link.CheckoutUrl); Assert.NotEqual(1700000000123, link.OrderCode);
+        Assert.Equal("https://pay.test/checkout", link.CheckoutUrl); Assert.NotEqual(1700000000123, link.OrderCode);
     }
 
     [Fact]
@@ -124,6 +125,41 @@ public sealed class DepotPayOsTests
         var pending = f.Invoice();
         await Assert.ThrowsAsync<DepotConflictException>(() => f.Service.CreateLinkAsync(Owner, Depot, pending.Id));
         Assert.Equal(0, f.Payos.Creates);
+    }
+
+    [Fact]
+    public async Task Factory_payer_gets_factory_redirect_and_cannot_pay_another_payers_invoice()
+    {
+        var factory = Guid.NewGuid();
+        var f = new Fixture(); var mine = f.Invoice(payer: factory);
+        var link = await f.Service.CreateLinkForPayerAsync(factory, mine.Id, PayOsRedirect.Factory);
+        Assert.Equal("https://pay.test/checkout", link.CheckoutUrl);
+        Assert.Equal(PayOsRedirect.Factory, f.Payos.LastRedirect); Assert.Equal("PENDING", mine.Status);
+        var foreign = f.Invoice(payer: Guid.NewGuid());
+        await Assert.ThrowsAsync<DepotForbiddenException>(() => f.Service.CreateLinkForPayerAsync(factory, foreign.Id, PayOsRedirect.Factory));
+        await Assert.ThrowsAsync<DepotForbiddenException>(() => f.Service.SyncForPayerAsync(factory, foreign.Id));
+    }
+
+    [Fact]
+    public async Task Factory_payment_confirmed_by_signed_webhook_marks_invoice_paid_once()
+    {
+        var factory = Guid.NewGuid();
+        var f = new Fixture(); var inv = f.Invoice(payer: factory, orderCode: 1700000000456);
+        Assert.True(await f.Service.HandleWebhookAsync(f.Webhook(1700000000456, 150000)));
+        Assert.Equal("PAID", inv.Status);
+        f.Saves = 0;
+        Assert.True(await f.Service.HandleWebhookAsync(f.Webhook(1700000000456, 150000)));
+        Assert.Equal(0, f.Saves);
+    }
+
+    [Fact]
+    public void Factory_redirect_urls_use_explicit_values_or_derive_from_the_depot_origin()
+    {
+        var derived = new PayOsOptions { ReturnUrl = "https://app.test/depot/payments/fees?payos=return", CancelUrl = "https://app.test/depot/payments/fees?payos=cancel" };
+        Assert.Equal(("https://app.test/factory?payos=return", "https://app.test/factory?payos=cancel"), derived.Redirects(PayOsRedirect.Factory));
+        Assert.Equal((derived.ReturnUrl, derived.CancelUrl), derived.Redirects(PayOsRedirect.Depot));
+        var explicitUrls = new PayOsOptions { ReturnUrl = "https://a.test/r", CancelUrl = "https://a.test/c", FactoryReturnUrl = "https://f.test/r", FactoryCancelUrl = "https://f.test/c" };
+        Assert.Equal(("https://f.test/r", "https://f.test/c"), explicitUrls.Redirects(PayOsRedirect.Factory));
     }
 
     // ---------- đối soát chủ động ----------
@@ -219,7 +255,7 @@ public sealed class DepotPayOsTests
         public PlatformInvoice Invoice(Guid? payer = null, string status = "PENDING", decimal amount = 150000m, long? orderCode = null, string? checkout = null)
         {
             var invoice = new PlatformInvoice { PayerId = payer ?? Owner, PeriodYear = 2026, PeriodMonth = 9, TotalFeeAmount = amount, Status = status,
-                PaymentProofUrl = orderCode == null ? null : DepotPayOsService.WithOrderCode(checkout ?? "https://pay.test/old", orderCode.Value) };
+                PayosOrderCode = orderCode, PayosCheckoutUrl = orderCode == null ? null : checkout ?? "https://pay.test/old" };
             invoices.Add(invoice);
             return invoice;
         }
@@ -237,7 +273,10 @@ public sealed class DepotPayOsTests
     {
         public bool Configured = true; public int Creates; public long CreatedAmount; public string? CreatedDescription;
         public PayOsPayment Remote = new("PENDING", 0, null, null);
+        public PayOsRedirect LastRedirect;
         public bool IsConfigured => Configured;
+        public Task<PayOsLink> CreatePaymentLinkAsync(long orderCode, long amount, string description, PayOsRedirect redirect, CancellationToken ct = default)
+        { LastRedirect = redirect; return CreatePaymentLinkAsync(orderCode, amount, description, ct); }
         public Task<PayOsLink> CreatePaymentLinkAsync(long orderCode, long amount, string description, CancellationToken ct = default)
         { Creates++; CreatedAmount = amount; CreatedDescription = description; return Task.FromResult(new PayOsLink("https://pay.test/checkout", "link-1")); }
         public Task<PayOsPayment> GetPaymentAsync(long orderCode, CancellationToken ct = default) => Task.FromResult(Remote);

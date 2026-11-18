@@ -25,6 +25,7 @@ namespace Retrack.API.Data
         public DbSet<FactoryDemand> FactoryDemands { get; set; }
         public DbSet<FactoryDepotPartnership> FactoryDepotPartnerships { get; set; }
         public DbSet<InventoryBatch> InventoryBatches { get; set; }
+        public DbSet<BatchWorkflowEvent> BatchWorkflowEvents { get; set; }
         public DbSet<TransportJob> TransportJobs { get; set; }
         public DbSet<DriverDeliveryEvent> DriverDeliveryEvents { get; set; }
         public DbSet<BatchQualityCheck> BatchQualityChecks { get; set; }
@@ -57,6 +58,8 @@ namespace Retrack.API.Data
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
+            modelBuilder.Entity<BatchWorkflowEvent>().HasIndex(x => new { x.BatchId, x.CreatedAt });
+            modelBuilder.Entity<BatchWorkflowEvent>().HasOne(x => x.Batch).WithMany().HasForeignKey(x => x.BatchId).OnDelete(DeleteBehavior.Restrict);
             base.OnModelCreating(modelBuilder);
             modelBuilder.Entity<DepotBuyingPrice>().HasKey(x => new { x.DepotId, x.MaterialType });
             modelBuilder.Entity<DepotBuyingPrice>().HasOne(x => x.Depot).WithMany().HasForeignKey(x => x.DepotId).OnDelete(DeleteBehavior.Cascade);
@@ -185,7 +188,7 @@ namespace Retrack.API.Data
                 .HasForeignKey(f => f.OwnerId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            // PlatformInvoice -> User (payer) - restrict delete, one invoice per payer per period
+            // Mỗi kỳ có một bản gốc và các hóa đơn bổ sung, không sửa bản đã thanh toán.
             modelBuilder.Entity<PlatformInvoice>()
                 .HasOne(i => i.Payer)
                 .WithMany()
@@ -193,7 +196,10 @@ namespace Retrack.API.Data
                 .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<PlatformInvoice>()
-                .HasIndex(i => new { i.PayerId, i.PeriodYear, i.PeriodMonth }).IsUnique();
+                .HasIndex(i => new { i.PayerId, i.PeriodYear, i.PeriodMonth, i.Revision }).IsUnique();
+            modelBuilder.Entity<PlatformInvoice>()
+                .HasOne<PlatformInvoice>().WithMany().HasForeignKey(i => i.AdjustmentOfId)
+                .OnDelete(DeleteBehavior.Restrict);
 
             // AuditLog -> User (nullable, keep log if user is deleted)
             modelBuilder.Entity<AuditLog>()

@@ -21,7 +21,7 @@ public sealed class DepotInventoryRepository(AppDbContext db) : IDepotInventoryR
     }
 
     public Task<List<DepotAllocatedWeight>> AllocatedAsync(Guid depotId) => db.InventoryBatches.AsNoTracking()
-        .Where(b => b.DepotId == depotId && b.Status != "CANCELLED")
+        .Where(b => b.DepotId == depotId && b.Status != "CANCELLED" && b.Status != "RETURNED")
         .GroupBy(b => new { b.MaterialType, b.Status,
             HasLeftDepot = (b.TransportJob != null && (b.TransportJob.Status == "PICKED_UP" || b.TransportJob.Status == "DELIVERED")) ||
                 b.FactoryReceivedAt != null || b.QualityCheck != null })

@@ -17,6 +17,21 @@ namespace Retrack.API.Repositories
             return await _db.Users.FirstOrDefaultAsync(u => u.Email.ToLower() == normalized);
         }
 
+        public async Task<User?> GetByPhoneAsync(string phone)
+        {
+            if (string.IsNullOrWhiteSpace(phone))
+                return null;
+
+            var clean = phone.Trim().Replace(" ", "").Replace("-", "").Replace(".", "");
+            if (clean.StartsWith("+84"))
+                clean = "0" + clean.Substring(3);
+
+            var withPlus84 = "+84" + clean.TrimStart('0');
+
+            return await _db.Users.FirstOrDefaultAsync(u =>
+                u.Phone != null && (u.Phone == clean || u.Phone == withPlus84));
+        }
+
         public async Task<User?> GetByIdAsync(Guid id)
             => await _db.Users.FindAsync(id);
 
@@ -152,7 +167,7 @@ namespace Retrack.API.Repositories
             => await _db.PlatformInvoices.Include(i => i.Payer).FirstOrDefaultAsync(i => i.Id == id);
 
         public async Task<PlatformInvoice?> GetByPayerAndPeriodAsync(Guid payerId, int year, int month)
-            => await _db.PlatformInvoices.FirstOrDefaultAsync(i => i.PayerId == payerId && i.PeriodYear == year && i.PeriodMonth == month);
+            => await _db.PlatformInvoices.FirstOrDefaultAsync(i => i.PayerId == payerId && i.PeriodYear == year && i.PeriodMonth == month && i.Revision == 0);
 
         public async Task<(List<PlatformInvoice> Items, int Total)> SearchAsync(string? status, int page, int pageSize)
         {
@@ -162,7 +177,7 @@ namespace Retrack.API.Repositories
 
             var total = await query.CountAsync();
             var items = await query
-                .OrderByDescending(i => i.PeriodYear).ThenByDescending(i => i.PeriodMonth)
+                .OrderByDescending(i => i.PeriodYear).ThenByDescending(i => i.PeriodMonth).ThenByDescending(i => i.Revision).ThenBy(i => i.Id)
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
                 .ToListAsync();

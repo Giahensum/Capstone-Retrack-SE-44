@@ -47,9 +47,6 @@ namespace Retrack.API.Controllers
             if (string.IsNullOrWhiteSpace(dto.Email) || string.IsNullOrWhiteSpace(dto.Password))
                 return BadRequest(ApiResponse<string>.Fail("Email và mật khẩu không được để trống."));
 
-            if (dto.Password.Length < 6)
-                return BadRequest(ApiResponse<string>.Fail("Mật khẩu phải có ít nhất 6 ký tự."));
-
             try
             {
                 var result = await _authService.RegisterAsync(dto);
@@ -77,6 +74,46 @@ namespace Retrack.API.Controllers
             {
                 return BadRequest(ApiResponse<string>.Fail(ex.Message));
             }
+        }
+
+        /// <summary>Kiểm tra số điện thoại đã tồn tại chưa</summary>
+        [HttpGet("check-phone")]
+        public async Task<IActionResult> CheckPhone([FromQuery] string phone)
+        {
+            if (string.IsNullOrWhiteSpace(phone))
+                return BadRequest(ApiResponse<object>.Fail("Vui lòng cung cấp số điện thoại."));
+
+            var clean = phone.Trim().Replace(" ", "").Replace("-", "").Replace(".", "");
+            if (clean.StartsWith("+84")) clean = "0" + clean.Substring(3);
+
+            var phoneRegex = new System.Text.RegularExpressions.Regex(@"^0(3[2-9]|5[25689]|7[06-9]|8[1-9]|9[0-9])\d{7}$");
+            if (!phoneRegex.IsMatch(clean))
+                return BadRequest(ApiResponse<object>.Fail("Số điện thoại không đúng định dạng di động Việt Nam."));
+
+            var available = await _authService.IsPhoneAvailableAsync(clean);
+            if (!available)
+                return Ok(ApiResponse<object>.Ok(new { available = false, message = "Số điện thoại này đã được đăng ký trong hệ thống." }));
+
+            return Ok(ApiResponse<object>.Ok(new { available = true, message = "Số điện thoại có thể sử dụng." }));
+        }
+
+        /// <summary>Kiểm tra email đã tồn tại chưa</summary>
+        [HttpGet("check-email")]
+        public async Task<IActionResult> CheckEmail([FromQuery] string email)
+        {
+            if (string.IsNullOrWhiteSpace(email))
+                return BadRequest(ApiResponse<object>.Fail("Vui lòng cung cấp địa chỉ email."));
+
+            var clean = email.Trim().ToLowerInvariant();
+            var emailRegex = new System.Text.RegularExpressions.Regex(@"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$");
+            if (!emailRegex.IsMatch(clean))
+                return BadRequest(ApiResponse<object>.Fail("Email không đúng định dạng."));
+
+            var available = await _authService.IsEmailAvailableAsync(clean);
+            if (!available)
+                return Ok(ApiResponse<object>.Ok(new { available = false, message = "Email này đã được sử dụng." }));
+
+            return Ok(ApiResponse<object>.Ok(new { available = true, message = "Email có thể sử dụng." }));
         }
 
         /// <summary>

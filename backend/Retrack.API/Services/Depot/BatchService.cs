@@ -13,7 +13,7 @@ public sealed class BatchService(IDepotBatchRepository batches, IDepotUnitOfWork
         await scope.RequireOwnerAsync(ownerId, depotId);
         return await batches.DetailAsync(depotId, batchId) ?? throw new KeyNotFoundException("Không tìm thấy lô trong kho đang quản lý.");
     }
-    private static readonly string[] States = ["DRAFT", "LISTED", "MARKETPLACE", "PENDING_APPROVAL", "PENDING_FACTORY", "TRANSPORT_READY", "ACCEPTED", "READY_FOR_PICKUP", "IN_PROGRESS", "IN_TRANSIT", "DELIVERED", "RECEIVED", "WEIGHED", "VERIFIED", "COMPLETED", "PAID", "REJECTED", "CANCELLED"];
+    private static readonly string[] States = ["DRAFT", "LISTED", "MARKETPLACE", "PENDING_APPROVAL", "PENDING_FACTORY", "TRANSPORT_READY", "ACCEPTED", "READY_FOR_PICKUP", "IN_PROGRESS", "IN_TRANSIT", "DELIVERED", "RECEIVED", "WEIGHED", "VERIFIED", "SETTLEMENT_PENDING", "SETTLEMENT_DISPUTED", "SETTLEMENT_ACCEPTED", "COMPLETED", "PAID", "REJECTED", "NEGOTIATING", "RETURN_REQUESTED", "RETURNING", "RETURNED", "CANCELLED"];
 
     public async Task<PagedResult<DepotBatchDto>> ListAsync(Guid ownerId, Guid depotId, DepotQuery query)
     {
@@ -37,7 +37,7 @@ public sealed class BatchService(IDepotBatchRepository batches, IDepotUnitOfWork
         if (existing != null)
         {
             if (existing.DepotId != depotId || Retrack.API.Services.Shared.MaterialCatalog.Normalize(existing.MaterialType) != dto.MaterialType ||
-                existing.DeclaredWeightKg != dto.WeightKg || (existing.TargetFactoryId ?? existing.DirectOfferFactoryId) != dto.TargetFactoryId || existing.Description != dto.Description)
+                existing.DeclaredWeightKg != dto.WeightKg || (existing.TargetFactoryId ?? existing.DirectOfferFactoryId) != dto.TargetFactoryId || existing.Description != dto.Description || existing.SourceDemandId != dto.SourceDemandId)
                 throw new DepotConflictException("Mã thao tác đã được dùng cho một lô khác.");
             return Map(existing);
         }
@@ -47,6 +47,16 @@ public sealed class BatchService(IDepotBatchRepository batches, IDepotUnitOfWork
         var status = "LISTED";
         Retrack.API.Models.Factory? factory = null;
         var isApproved = false;
+        if (dto.SourceDemandId is Guid demandId)
+        {
+            var demand = await batches.FindDemandAsync(demandId);
+            if (demand is null || !demand.IsActive || demand.Deadline <= DateTime.UtcNow)
+                throw new DepotConflictException("Nhu cầu thu mua đã hết hạn, ngừng nhận hoặc không còn tồn tại. Vui lòng tải lại danh sách.");
+            if (dto.TargetFactoryId != demand.FactoryId || Retrack.API.Services.Shared.MaterialCatalog.Normalize(demand.MaterialType) != dto.MaterialType)
+                throw new DepotConflictException("Lô theo nhu cầu phải giữ đúng nhà máy và loại vật liệu đã đăng.");
+            if (dto.WeightKg > demand.RequiredWeightKg)
+                throw new DepotConflictException("Khối lượng lô vượt nhu cầu thu mua đã đăng. Hãy trao đổi với nhà máy trước khi tạo lô khác.");
+        }
         if (dto.TargetFactoryId.HasValue)
         {
             factory = await batches.FindActiveFactoryAsync(dto.TargetFactoryId.Value)
@@ -59,7 +69,7 @@ public sealed class BatchService(IDepotBatchRepository batches, IDepotUnitOfWork
                 throw new DepotConflictException("Khối lượng lô vượt mức nhà máy hiện có thể tiếp nhận.");
             var partner = await batches.FindPartnerAsync(depotId, dto.TargetFactoryId.Value);
             if (partner?.Status == "BLOCKED" || partner?.BlockedByDepot == true || partner?.BlockedByFactory == true) throw new DepotConflictException("Quan hệ đang bị chặn, không thể tạo lô mới cho nhà máy.");
-            isApproved = partner?.Status == "APPROVED";
+            isApproved = Retrack.API.Services.Shared.PartnershipPolicy.AllowsDirectDelivery(partner, DateTime.UtcNow);
             status = isApproved ? "TRANSPORT_READY" : "PENDING_APPROVAL";
             if (partner == null) batches.AddPartner(new FactoryDepotPartnership { DepotId = depotId, FactoryId = factory.Id, Status = "PENDING" });
         }
@@ -101,14 +111,21 @@ public sealed class BatchService(IDepotBatchRepository batches, IDepotUnitOfWork
         var code = $"LO-{DateTime.UtcNow.AddHours(7):yyMM}-{sequence:D3}";
         var batch = new InventoryBatch {
             Id = dto.OperationId, Code = code, DepotId = depotId, MaterialType = dto.MaterialType,
-            DeclaredWeightKg = dto.WeightKg, Description = dto.Description,
+            DeclaredWeightKg = dto.WeightKg, Description = dto.Description, SourceDemandId = dto.SourceDemandId,
             TargetFactoryId = isApproved ? dto.TargetFactoryId : null,
             DirectOfferFactoryId = !isApproved && dto.TargetFactoryId.HasValue ? dto.TargetFactoryId : null,
             Status = status, ImageUrls = imageUrls.ToArray(),
             FeePolicy = Retrack.API.Services.Shared.PlatformFees.BuyerSeparate,
+            SettlementWorkflowVersion = 1,
             FeePercentageSnapshot = Retrack.API.Services.Shared.PlatformFees.Rate(await batches.FeeConfigurationAsync())
         };
         batches.AddBatch(batch);
+        if (dto.TargetFactoryId is Guid recipientFactoryId)
+            await batches.QueueFactoryBatchNoticeAsync(recipientFactoryId, batch,
+                isApproved ? "Vựa đã tạo lô giao cho nhà máy" : "Vựa gửi đề nghị nhận lô",
+                isApproved ? $"Lô {code} đã được chủ vựa tạo để giao cho nhà máy. Mở Đơn hàng để theo dõi vận chuyển."
+                    : $"Lô {code} đang chờ nhà máy xem và quyết định nhận hàng. Mở Yêu cầu chỉ định để phản hồi.",
+                isApproved ? "BATCH" : "MARKETPLACE");
         await stockLedger.ReserveCostsAsync(depotId, batch.Id, dto.MaterialType, dto.WeightKg);
         if (status == "TRANSPORT_READY") await batches.AddTransportAsync(new TransportJob { BatchId = batch.Id }, depotId);
         await work.SaveAsync();
@@ -132,11 +149,19 @@ public sealed class BatchService(IDepotBatchRepository batches, IDepotUnitOfWork
             throw new DepotConflictException("Chỉ hủy lô chưa có nhà máy nhận.");
         batch.Status = "CANCELLED";
         batch.UpdatedAt = DateTime.UtcNow;
+        if (batch.DirectOfferFactoryId is Guid recipientFactoryId)
+            await batches.QueueFactoryBatchNoticeAsync(recipientFactoryId, batch, "Vựa đã hủy đề nghị nhận lô",
+                $"Lô {batch.Code ?? batch.Id.ToString()} đã được chủ vựa hủy trước khi nhà máy nhận.", "NONE");
         await work.SaveAsync();
         await tx.CommitAsync();
     }
 
+    public async Task ConfirmPaymentAsync(Guid ownerId, Guid depotId, Guid batchId, decimal amount, string paymentReference)
+    {
+        await new BatchSettlementService(batches, work, scope).ConfirmPaymentAsync(ownerId, depotId, batchId, amount, paymentReference);
+    }
+
     private static DepotBatchDto Map(InventoryBatch b) => new(b.Id, b.DepotId, b.MaterialType,
         b.DeclaredWeightKg, b.Description, b.Status, b.TargetFactoryId ?? b.DirectOfferFactoryId,
-        b.TargetFactory?.Name ?? b.DirectOfferFactory?.Name, b.CreatedAt, b.Code, b.ImageUrls);
+        b.TargetFactory?.Name ?? b.DirectOfferFactory?.Name, b.CreatedAt, b.Code, b.ImageUrls, b.SourceDemandId);
 }

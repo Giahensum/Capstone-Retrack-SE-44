@@ -10,6 +10,8 @@ import {
   Prices,
 } from "./pages/FactoryViews";
 import { Operations } from "./pages/FactoryOperations";
+import FactoryPlatformFees from "./pages/FactoryPlatformFees";
+import FactoryNotifications, { FactoryNotificationBell } from "./pages/FactoryNotifications";
 import "./factory.css";
 
 const tabs = [
@@ -19,6 +21,8 @@ const tabs = [
   ["orders", "Đơn hàng & Vận chuyển", "⇄"],
   ["qc", "Trạm cân & KCS", "⚖"],
   ["settlements", "Quyết toán", "▣"],
+  ["platform-fees", "Phí nền tảng", "₫"],
+  ["notifications", "Thông báo", "♧"],
   ["partners", "Vựa đối tác", "♧"],
   ["prices", "Giá tham khảo", "↗"],
   ["profile", "Hồ sơ nhà máy", "⚙"],
@@ -26,7 +30,13 @@ const tabs = [
 function Workspace() {
   const { state, user, logout, loading, retry } = useFactory();
   const navigateRoute = useNavigate();
-  const [tab, setTab] = useState("dashboard");
+  // DocuSign đưa người dùng quay lại với ?esign=return: mở thẳng tab đối tác để thấy kết quả ký.
+  const [tab, setTab] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    // PayOS đưa người nộp phí quay lại với ?payos=return|cancel: mở thẳng tab Phí nền tảng.
+    if (params.get("payos")) return "platform-fees";
+    return params.get("esign") === "return" ? "partners" : "dashboard";
+  });
   const [focusId, setFocusId] = useState(null);
   function navigate(next, orderId = null) {
     setFocusId(orderId);
@@ -91,7 +101,7 @@ function Workspace() {
             Nhà máy <span>/</span>{" "}
             <strong>{tabs.find((t) => t[0] === tab)?.[1]}</strong>
           </div>
-          <span className="user-chip"><span>{(user?.fullName || "F").slice(0, 2).toUpperCase()}</span>{user?.fullName || user?.email}<button className="logout-button" onClick={() => { logout(); navigateRoute("/login", { replace: true }); }}>Đăng xuất</button></span>
+          <div className="factory-topbar-actions"><FactoryNotificationBell navigate={navigate} /><span className="user-chip"><span>{(user?.fullName || "F").slice(0, 2).toUpperCase()}</span>{user?.fullName || user?.email}<button className="logout-button" onClick={() => { logout(); navigateRoute("/login", { replace: true }); }}>Đăng xuất</button></span></div>
         </header>
         <main className="factory-main">
           <div className="demo-banner">
@@ -100,7 +110,7 @@ function Workspace() {
             <span>Dữ liệu hồ sơ, nhu cầu, lô hàng và quyết toán được tải từ API. Trạng thái vận chuyển do luồng tài xế cập nhật.</span>
           </div>
           {tab === "dashboard" && <Dashboard navigate={navigate} />}
-          {tab === "marketplace" && <Marketplace navigate={navigate} />}
+          {tab === "marketplace" && <Marketplace navigate={navigate} directOnly={Boolean(focusId)} />}
           {tab === "demands" && <Demands />}
           {["orders", "qc", "settlements"].includes(tab) && (
             <Operations
@@ -111,6 +121,8 @@ function Workspace() {
             />
           )}
           {tab === "partners" && <Partners navigate={navigate} />}
+          {tab === "platform-fees" && <FactoryPlatformFees />}
+          {tab === "notifications" && <FactoryNotifications navigate={navigate} />}
           {tab === "profile" && <Profile />}
           {tab === "prices" && <Prices />}
         </main>

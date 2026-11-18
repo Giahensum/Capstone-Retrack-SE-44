@@ -38,7 +38,7 @@ public sealed class FactoryAttachmentService(AppDbContext db, IWebHostEnvironmen
             (role == "FACTORY" && actorId == ownerId) ||
             (role == "DEPOT_OWNER" && await db.InventoryBatches.AsNoTracking().AnyAsync(
                 batch => batch.Depot.OwnerId == actorId && batch.TargetFactory != null && batch.TargetFactory.OwnerId == ownerId &&
-                    batch.QualityCheck != null && (batch.QualityCheck.TicketImageUrl == url || batch.QualityCheck.InvoiceFileUrl == url), ct));
+                    (batch.ReturnHandoverProofUrl == url || (batch.QualityCheck != null && (batch.QualityCheck.TicketImageUrl == url || batch.QualityCheck.InvoiceFileUrl == url || batch.QualityCheck.PaymentProofUrl == url))), ct));
         if (!allowed) throw new UnauthorizedAccessException("Không có quyền đọc tệp này.");
 
         foreach (var (extension, contentType) in new[] { ("pdf", "application/pdf"), ("jpg", "image/jpeg"), ("png", "image/png") })

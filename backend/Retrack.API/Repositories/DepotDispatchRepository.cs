@@ -19,7 +19,7 @@ public sealed class DepotDispatchRepository(AppDbContext db) : IDepotDispatchRep
         if (!string.IsNullOrWhiteSpace(query.Search)) rows = rows.Where(x => x.Name.Contains(query.Search));
         return DepotRepositoryPage.ReadAsync(rows.OrderBy(x => x.Name).ThenBy(x => x.Id).Select(x => new DispatchAreaDto(x.Id, x.Name, x.Latitude, x.Longitude, x.RadiusMeters, x.IsActive, x.DepotId)), query);
     }
-    public Task<PagedResult<DispatchShiftDto>> ShiftsAsync(Guid depot, DepotQuery query, DateTime now, bool availableOnly = false, Guid? excludeEmployeeId = null)
+    public Task<PagedResult<DispatchShiftDto>> ShiftsAsync(Guid depot, DepotQuery query, DateTime now, bool availableOnly = false, Guid? excludeEmployeeId = null, DateTime? preferredDatetime = null)
     {
         var rows = from shift in db.EmployeeDispatchShifts.AsNoTracking()
                    join area in db.EmployeeCollectionAreas on shift.AreaId equals area.Id
@@ -30,6 +30,7 @@ public sealed class DepotDispatchRepository(AppDbContext db) : IDepotDispatchRep
         if (query.Status == "CURRENT" || availableOnly) rows = rows.Where(x => x.shift.StartsAt <= now && x.shift.EndsAt > now);
         if (query.Status == "UPCOMING") rows = rows.Where(x => x.shift.StartsAt > now);
         if (query.Status == "ENDED") rows = rows.Where(x => x.shift.EndsAt <= now);
+        if (availableOnly && preferredDatetime.HasValue) rows = rows.Where(x => preferredDatetime < x.shift.EndsAt);
         if (!string.IsNullOrWhiteSpace(query.Search)) rows = rows.Where(x => x.employee.FullName.Contains(query.Search) || x.area.Name.Contains(query.Search));
         if (availableOnly) rows = rows.Where(x => x.shift.Availability == "AVAILABLE" && x.area.IsActive && x.employee.IsActive && x.employee.Role == "DEPOT_EMPLOYEE" &&
             db.DepotStaffs.Any(s => s.DepotId == depot && s.UserId == x.employee.Id && s.IsActive && s.StaffType == "DEPOT_EMPLOYEE") &&
@@ -47,6 +48,10 @@ public sealed class DepotDispatchRepository(AppDbContext db) : IDepotDispatchRep
         // Filter entity trước projection để truy vấn có thể dịch SQL ổn định.
         var ids = db.PickupRequests.Where(x => x.TargetDepotId == depot);
         ids = query.Status == "SCHEDULED" ? ids.Where(x => x.Status == "SCHEDULED") : ids.Where(x => x.Status == "PENDING");
+        var endDay = DateTime.UtcNow.AddHours(7).Date.AddDays(1).AddHours(-7);
+        if (query.Status is "TODAY" or "EXCEPTIONS") ids = ids.Where(x => x.PreferredDatetime == null || x.PreferredDatetime < endDay);
+        if (query.Status == "UPCOMING") ids = ids.Where(x => x.PreferredDatetime >= endDay);
+        if (query.Status == "EXCEPTIONS") ids = ids.Where(x => x.AcceptedCollectorId == null && db.EmployeeDispatchQueues.Any(q => q.PickupId == x.Id && q.Reason != "ASSIGNED" && q.Reason != "ASSIGNED_MANUAL"));
         if (!string.IsNullOrWhiteSpace(query.Search)) ids = ids.Where(x => x.Address.Contains(query.Search) || x.Seller.FullName.Contains(query.Search));
         return DepotRepositoryPage.ReadAsync(MapPickups(ids.AsNoTracking().OrderBy(x => x.CreatedAt).ThenBy(x => x.Id)), query);
     }

@@ -22,4 +22,4 @@ export const date = (value) => new Date(value).toLocaleDateString('vi-VN');
 export const batchLabels = { DRAFT: 'Nháp', LISTED: 'Đang đăng', MARKETPLACE: 'Đang đăng', PENDING_APPROVAL: 'Chờ nhà máy duyệt',
   TRANSPORT_READY: 'Chờ vận chuyển', ACCEPTED: 'Đã nhận', READY_FOR_PICKUP: 'Chờ lấy hàng', IN_PROGRESS: 'Đang vận chuyển', IN_TRANSIT: 'Đang vận chuyển',
   DELIVERED: 'Đã giao', RECEIVED: 'Nhà máy đã nhận', WEIGHED: 'Đã cân tại nhà máy', PENDING_FACTORY: 'Chờ nhà máy duyệt',
-  VERIFIED: 'Đã QC', COMPLETED: 'Hoàn tất', PAID: 'Đã quyết toán', REJECTED: 'Bị từ chối', CANCELLED: 'Đã hủy' };
+  VERIFIED: 'Đã QC', SETTLEMENT_PENDING: 'Chờ kho đồng ý giá', SETTLEMENT_DISPUTED: 'Kho yêu cầu điều chỉnh giá', SETTLEMENT_ACCEPTED: 'Đã đồng ý giá, chờ chuyển tiền', COMPLETED: 'Chờ xác nhận nhận tiền', PAID: 'Đã nhận tiền', NEGOTIATING: 'KCS không đạt, đang thương lượng', RETURN_REQUESTED: 'Chờ nhà máy bàn giao trả', RETURNING: 'Đang trả về kho', RETURNED: 'Đã nhận đủ lô trả', REJECTED: 'Bị từ chối', CANCELLED: 'Đã hủy' };

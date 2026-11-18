@@ -22,6 +22,13 @@ namespace Retrack.API.Models
         [Column("period_month")]
         public int PeriodMonth { get; set; }
 
+        // Bản gốc là 0; bản bổ sung giữ nguyên hóa đơn đã khóa/chuyển tiền.
+        [Column("revision")]
+        public int Revision { get; set; }
+
+        [Column("adjustment_of_id")]
+        public Guid? AdjustmentOfId { get; set; }
+
         [Required]
         [Column("total_fee_amount")]
         public decimal TotalFeeAmount { get; set; }
@@ -36,6 +43,16 @@ namespace Retrack.API.Models
 
         [Column("payment_proof_url")]
         public string? PaymentProofUrl { get; set; }
+
+        // Thanh toán PayOS: mã đơn (duy nhất), id link và URL thanh toán; tách khỏi chứng từ chuyển khoản.
+        [Column("payos_order_code")]
+        public long? PayosOrderCode { get; set; }
+
+        [Column("payos_link_id")]
+        public string? PayosLinkId { get; set; }
+
+        [Column("payos_checkout_url")]
+        public string? PayosCheckoutUrl { get; set; }
 
         [Column("submitted_at")]
         public DateTime? SubmittedAt { get; set; }

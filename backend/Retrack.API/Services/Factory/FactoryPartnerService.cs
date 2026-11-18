@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using Retrack.API.Data;
 using Retrack.API.DTOs.Factory;
 using Retrack.API.Models;
@@ -44,7 +45,7 @@ public class FactoryPartnerService(AppDbContext db) : FactoryServiceBase(db), IF
                 .Select(group => new PartnerOrderStats(
                     group.Key,
                     group.Count(),
-                    group.Count(batch => batch.Status == "COMPLETED")))
+                    group.Count(batch => batch.Status == "PAID" || (batch.Status == "COMPLETED" && batch.SettlementWorkflowVersion == 0))))
                 .ToDictionaryAsync(x => x.DepotId, ct);
         var items = partnerships.Select(x =>
         {
@@ -100,10 +101,10 @@ public class FactoryPartnerService(AppDbContext db) : FactoryServiceBase(db), IF
         if (status is "APPROVED" or "DECLINED")
         {
             if (partner.IsBlocked) return ServiceResult<PartnerStatusResponse>.Conflict("Quan hệ đang bị chặn; quyết định hợp tác không được mở chặn.");
-            if (status == "DECLINED" && partner.ContractStatus == "ACTIVE")
+            if (status == "DECLINED" && partner.ContractStatus == "ACTIVE" && (!partner.ContractExpiresAt.HasValue || partner.ContractExpiresAt > DateTime.UtcNow))
                 return ServiceResult<PartnerStatusResponse>.Conflict("Hợp đồng đang có hiệu lực; không thể đổi sang không hợp tác mà chưa thanh lý hợp đồng.");
             var inspected = await Db.InventoryBatches.AnyAsync(b => b.DepotId == depotId && b.TargetFactoryId == factory.Id &&
-                b.QualityCheck != null && (b.Status == "VERIFIED" || b.Status == "REJECTED" || b.Status == "COMPLETED" || b.Status == "PAID"), ct);
+                b.QualityCheck != null && (b.QualityCheck.IsAccepted || b.QualityCheck.Grade != "" && b.QualityCheck.Grade != "PENDING"), ct);
             if (!inspected) return ServiceResult<PartnerStatusResponse>.Conflict("Cần hoàn tất kiểm tra chất lượng ít nhất một lô trước khi quyết định hợp tác.");
             partner.Status = status;
         }
@@ -138,13 +139,27 @@ public class FactoryPartnerService(AppDbContext db) : FactoryServiceBase(db), IF
         await Db.Entry(partner).ReloadAsync(ct);
         if (partner.IsBlocked) return ServiceResult<PartnerStatusResponse>.Conflict("Quan hệ đang bị chặn; chưa thể lập hợp đồng.");
         var inspected = await Db.InventoryBatches.AnyAsync(b => b.DepotId == depotId && b.TargetFactoryId == factory.Id &&
-            b.QualityCheck != null && (b.Status == "VERIFIED" || b.Status == "REJECTED" || b.Status == "COMPLETED" || b.Status == "PAID"), ct);
+            b.QualityCheck != null && (b.QualityCheck.IsAccepted || b.QualityCheck.Grade != "" && b.QualityCheck.Grade != "PENDING"), ct);
         if (!inspected) return ServiceResult<PartnerStatusResponse>.Conflict("Cần hoàn tất kiểm tra chất lượng ít nhất một lô trước khi đề nghị hợp đồng.");
-        if (partner.ContractStatus == "ACTIVE") return ServiceResult<PartnerStatusResponse>.Conflict("Hợp đồng đang có hiệu lực; không thể ghi đè nội dung đã ký.");
         var now = DateTime.UtcNow;
+        if (partner.ContractStatus == "ACTIVE" && (!partner.ContractExpiresAt.HasValue || partner.ContractExpiresAt > now))
+            return ServiceResult<PartnerStatusResponse>.Conflict("Hợp đồng đang có hiệu lực; không thể ghi đè nội dung đã ký.");
+        if (partner.ContractVersion > 0)
+            Db.AuditLogs.Add(new AuditLog { UserId = userId, Action = "RENEW_CONTRACT", EntityName = "FactoryDepotPartnership", EntityId = partner.Id,
+                OldData = JsonSerializer.Serialize(new { partner.ContractCode, partner.ContractVersion, partner.ContractTerms, partner.ContractTermsHash,
+                    partner.ContractStatus, partner.ContractEffectiveAt, partner.ContractExpiresAt, partner.FactorySignedBy, partner.FactorySignedAt,
+                    partner.DepotSignedBy, partner.DepotSignedAt, partner.TerminationStatus, partner.TerminationReason, partner.TerminatedAt,
+                    partner.EsignEnvelopeId, partner.EsignTermsHash, partner.EsignStatus, partner.EsignSentAt, partner.EsignCompletedAt }),
+                NewData = JsonSerializer.Serialize(new { ContractVersion = partner.ContractVersion + 1, Terms = terms, request.ValidMonths }) });
         var version = partner.ContractVersion + 1;
         partner.ContractCode ??= $"HDHT-{now:yyyy}-{partner.Id.ToString("N")[..8].ToUpperInvariant()}";
         partner.ContractVersion = version;
+        // Không tái dùng chữ ký/envelope của lần hợp tác trước, kể cả điều khoản không đổi.
+        partner.EsignEnvelopeId = null;
+        partner.EsignTermsHash = null;
+        partner.EsignStatus = null;
+        partner.EsignSentAt = null;
+        partner.EsignCompletedAt = null;
         partner.ContractTerms = terms;
         partner.ContractTermsHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(terms))).ToLowerInvariant();
         partner.ContractStatus = "PENDING_DEPOT";
@@ -154,8 +169,16 @@ public class FactoryPartnerService(AppDbContext db) : FactoryServiceBase(db), IF
         partner.DepotSignedAt = null;
         partner.ContractEffectiveAt = null;
         partner.ContractExpiresAt = now.AddMonths(request.ValidMonths);
+        partner.TerminationStatus = null;
+        partner.TerminationRequestedBy = null;
+        partner.TerminationRequestedAt = null;
+        partner.TerminationReason = null;
+        partner.TerminatedAt = null;
         partner.Status = "PENDING";
         partner.UpdatedAt = now;
+        await NotifyDepotAsync(depotId, "Nhà máy đã gửi hợp đồng điện tử",
+            $"{factory.Name} đã ký hợp đồng {partner.ContractCode} và gửi chủ vựa xem xét. Mở Nhà máy đối tác để phản hồi.",
+            targetType: "PARTNERS", ct: ct);
         await Db.SaveChangesAsync(ct);
         if (tx != null) await tx.CommitAsync(ct);
         return ServiceResult<PartnerStatusResponse>.Success(data: new PartnerStatusResponse
@@ -187,6 +210,9 @@ public class FactoryPartnerService(AppDbContext db) : FactoryServiceBase(db), IF
         partner.TerminationReason = reason;
         partner.TerminatedAt = null;
         partner.UpdatedAt = DateTime.UtcNow;
+        await NotifyDepotAsync(depotId, "Nhà máy đề nghị chấm dứt hợp đồng",
+            $"Hợp đồng {partner.ContractCode ?? partner.Id.ToString()} có đề nghị chấm dứt từ nhà máy. Mở Nhà máy đối tác để xem lý do và phản hồi.",
+            targetType: "PARTNERS", ct: ct);
         await Db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
         return ServiceResult<PartnerStatusResponse>.Success(data: StatusView(partner), message: "Đã gửi đề nghị chấm dứt cho chủ vựa xác nhận.");
@@ -206,6 +232,10 @@ public class FactoryPartnerService(AppDbContext db) : FactoryServiceBase(db), IF
         if (decision == "ACCEPT" && await HasOpenOrders(factory.Id, depotId, ct))
             return ServiceResult<PartnerStatusResponse>.Conflict("Cần hoàn tất các lô đang xử lý trước khi chấp thuận chấm dứt.");
         ApplyTerminationDecision(partner, decision);
+        await NotifyDepotAsync(depotId,
+            decision == "ACCEPT" ? "Nhà máy đã chấp thuận chấm dứt hợp đồng" : "Nhà máy đã từ chối chấm dứt hợp đồng",
+            $"Hợp đồng {partner.ContractCode ?? partner.Id.ToString()} đã được nhà máy {(decision == "ACCEPT" ? "chấp thuận chấm dứt" : "từ chối đề nghị chấm dứt")}. Mở Nhà máy đối tác để xem chi tiết.",
+            targetType: "PARTNERS", ct: ct);
         await Db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
         return ServiceResult<PartnerStatusResponse>.Success(data: StatusView(partner), message: decision == "ACCEPT" ? "Hợp đồng đã chấm dứt." : "Đã từ chối đề nghị chấm dứt.");
@@ -213,7 +243,8 @@ public class FactoryPartnerService(AppDbContext db) : FactoryServiceBase(db), IF
 
     private Task<bool> HasOpenOrders(Guid factoryId, Guid depotId, CancellationToken ct) =>
         Db.InventoryBatches.AnyAsync(x => x.TargetFactoryId == factoryId && x.DepotId == depotId &&
-            x.Status != "COMPLETED" && x.Status != "PAID" && x.Status != "REJECTED" && x.Status != "CANCELLED", ct);
+            (x.Status != "COMPLETED" || x.SettlementWorkflowVersion > 0) && x.Status != "PAID" && x.Status != "CANCELLED" && x.Status != "RETURNED" &&
+            (x.Status != "REJECTED" || x.QualityCheck != null || x.FactoryReceivedAt != null), ct);
 
     private static void ApplyTerminationDecision(FactoryDepotPartnership partner, string decision)
     {
@@ -249,7 +280,7 @@ public class FactoryPartnerService(AppDbContext db) : FactoryServiceBase(db), IF
         await using var tx = Db.Database.IsRelational() ? await Db.Database.BeginTransactionAsync(ct) : null;
         var batch = await Db.InventoryBatches.SingleOrDefaultAsync(x => x.Id == orderId && x.TargetFactoryId == factory.Id, ct);
         if (batch is null) return ServiceResult<PartnerRatingResponse>.NotFound("Không tìm thấy đơn hàng.");
-        if (batch.Status is not ("PAID" or "COMPLETED")) return ServiceResult<PartnerRatingResponse>.Conflict("Chỉ đánh giá sau khi đã quyết toán.");
+        if (batch.Status != "PAID") return ServiceResult<PartnerRatingResponse>.Conflict("Chỉ đánh giá sau khi vựa xác nhận đã nhận tiền.");
         var review = await Db.FactoryDepotReviews.SingleOrDefaultAsync(x => x.BatchId == batch.Id && x.FactoryId == factory.Id, ct);
         if (review is null)
         {

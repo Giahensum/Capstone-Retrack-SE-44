@@ -24,8 +24,14 @@ public sealed class DepotPartnershipService(IDepotService scope, IDepotPartnersh
         await repository.LockDepotAsync(selected, ct);
         var partnership = await repository.FindAsync(selected, factoryId, ct)
             ?? throw new KeyNotFoundException("Không tìm thấy yêu cầu hợp tác.");
-        partnership.BlockedByDepot = status == "BLOCKED";
+        var blocked = status == "BLOCKED";
+        if (partnership.BlockedByDepot == blocked) return new(partnership.Id, partnership.FactoryId, partnership.DepotId, partnership.EffectiveStatus);
+        partnership.BlockedByDepot = blocked;
         partnership.UpdatedAt = DateTime.UtcNow;
+        await repository.QueueFactoryNoticeAsync(partnership,
+            blocked ? "Vựa đã chặn hợp tác" : "Vựa đã bỏ chặn hợp tác",
+            blocked ? "Chủ vựa đã chặn các giao dịch mới. Mở Vựa đối tác để xem trạng thái quan hệ."
+                : "Chủ vựa đã bỏ chặn giao dịch mới. Mở Vựa đối tác để xem trạng thái quan hệ.", ct);
         await repository.SaveAsync(ct);
         await tx.CommitAsync();
         return new(partnership.Id, partnership.FactoryId, partnership.DepotId, partnership.EffectiveStatus);
@@ -46,12 +52,17 @@ public sealed class DepotPartnershipService(IDepotService scope, IDepotPartnersh
         if (partnership.ContractStatus != "PENDING_DEPOT" || string.IsNullOrWhiteSpace(partnership.ContractTermsHash))
             throw new DepotConflictException("Không có hợp đồng đang chờ chủ vựa xác nhận.");
         var now = DateTime.UtcNow;
+        if (decision == "ACCEPT" && partnership.ContractExpiresAt.HasValue && partnership.ContractExpiresAt <= now)
+            throw new DepotConflictException("Đề nghị hợp đồng đã hết hạn. Hãy yêu cầu nhà máy cập nhật và gửi lại trước khi ký.");
         partnership.ContractStatus = decision == "ACCEPT" ? "ACTIVE" : "REJECTED";
         partnership.Status = decision == "ACCEPT" ? "APPROVED" : "DECLINED";
         partnership.DepotSignedBy = decision == "ACCEPT" ? ownerId : null;
         partnership.DepotSignedAt = decision == "ACCEPT" ? now : null;
         partnership.ContractEffectiveAt = decision == "ACCEPT" ? now : null;
         partnership.UpdatedAt = now;
+        await repository.QueueFactoryNoticeAsync(partnership,
+            decision == "ACCEPT" ? "Vựa đã ký hợp đồng" : "Vựa đã từ chối hợp đồng",
+            $"Hợp đồng {partnership.ContractCode ?? partnership.Id.ToString()} đã được chủ vựa {(decision == "ACCEPT" ? "ký xác nhận" : "từ chối")}. Mở Vựa đối tác để xem chi tiết.", ct);
         await repository.SaveAsync(ct);
         await tx.CommitAsync();
         return new(partnership.Id, partnership.FactoryId, partnership.DepotId, partnership.EffectiveStatus,
@@ -75,6 +86,8 @@ public sealed class DepotPartnershipService(IDepotService scope, IDepotPartnersh
         partner.TerminationReason = reason;
         partner.TerminatedAt = null;
         partner.UpdatedAt = DateTime.UtcNow;
+        await repository.QueueFactoryNoticeAsync(partner, "Vựa đề nghị chấm dứt hợp đồng",
+            $"Hợp đồng {partner.ContractCode ?? partner.Id.ToString()} có đề nghị chấm dứt từ chủ vựa. Mở Vựa đối tác để xem lý do và phản hồi.", ct);
         await repository.SaveAsync(ct);
         await tx.CommitAsync();
         return View(partner);
@@ -99,6 +112,9 @@ public sealed class DepotPartnershipService(IDepotService scope, IDepotPartnersh
         }
         else partner.TerminationStatus = "REJECTED";
         partner.UpdatedAt = DateTime.UtcNow;
+        await repository.QueueFactoryNoticeAsync(partner,
+            decision == "ACCEPT" ? "Vựa đã chấp thuận chấm dứt hợp đồng" : "Vựa đã từ chối chấm dứt hợp đồng",
+            $"Hợp đồng {partner.ContractCode ?? partner.Id.ToString()} đã được chủ vựa {(decision == "ACCEPT" ? "chấp thuận chấm dứt" : "từ chối đề nghị chấm dứt")}. Mở Vựa đối tác để xem chi tiết.", ct);
         await repository.SaveAsync(ct);
         await tx.CommitAsync();
         return View(partner);

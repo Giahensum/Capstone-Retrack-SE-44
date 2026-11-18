@@ -64,6 +64,7 @@ export default function LiquidationDetail() {
     queryClient.invalidateQueries({ queryKey: ['seller-liquidation', id] });
     queryClient.invalidateQueries({ queryKey: ['seller-liquidation-bids', id] });
     queryClient.invalidateQueries({ queryKey: ['seller-liquidations'] });
+    queryClient.invalidateQueries({ queryKey: ['seller-stats'] });
   };
   const onError = (err) => toast.error(err?.response?.data?.message || 'Thao tác thất bại. Vui lòng thử lại.');
 

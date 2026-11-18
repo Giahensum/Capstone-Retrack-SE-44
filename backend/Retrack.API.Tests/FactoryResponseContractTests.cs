@@ -23,7 +23,7 @@ public class FactoryResponseContractTests
     [InlineData("TRANSPORT_READY", "DELIVERED", "DELIVERED")]
     [InlineData("PENDING_FACTORY", null, "PENDING_APPROVAL")]
     [InlineData("PENDING_APPROVAL", null, "PENDING_APPROVAL")]
-    [InlineData("COMPLETED", null, "PAID")]
+    [InlineData("COMPLETED", null, "SETTLEMENT_RECORDED")]
     [InlineData("CANCELLED", null, "REJECTED")]
     [InlineData("WEIGHED", null, "WEIGHED")]
     public void OrderMappingPreservesPublicStatuses(string batchStatus, string? transportStatus, string expected)
@@ -59,12 +59,18 @@ public class FactoryResponseContractTests
             "vatTreatment", "vatPercentage", "vatAmount", "invoiceTotalAmount",
             "priceIncludesVat", "invoiceDate", "sellerTaxCode", "vatLegalBasis",
             "receivedAt", "decidedAt", "rejectionReason", "settledAt", "feeAmount", "netPayableAmount",
-            "paymentReference", "platformFeePercentage", "feePolicy", "buyerTotalAmount", "createdAt", "transport", "weightVerification", "weightTicket", "invoice");
+            "paymentReference", "paymentProofUrl", "depotPaymentConfirmedAt", "settlementWorkflowVersion", "settlementRevision",
+            "settlementProposedAt", "settlementApprovedAt", "settlementDecisionReason", "return", "platformFeePercentage", "feePolicy", "buyerTotalAmount", "createdAt", "transport", "weightVerification", "weightTicket", "invoice");
+        Assert.Equal(0, json.GetProperty("settlementWorkflowVersion").GetInt32());
+        Assert.Equal(0, json.GetProperty("settlementRevision").GetInt32());
+        Assert.Equal(JsonValueKind.Null, json.GetProperty("settlementProposedAt").ValueKind);
+        Assert.Equal(JsonValueKind.Null, json.GetProperty("settlementApprovedAt").ValueKind);
+        Assert.Equal(JsonValueKind.Null, json.GetProperty("settlementDecisionReason").ValueKind);
         Assert.Equal(JsonValueKind.Null, json.GetProperty("transport").ValueKind);
         Assert.Equal(JsonValueKind.Null, json.GetProperty("invoice").ValueKind);
         var verification = json.GetProperty("weightVerification");
         AssertFields(verification, "depotWeightKg", "factoryWeightKg", "differencePercentage", "isVerified",
-            "purityPercent", "moisturePercent", "contaminationPercent", "grade", "qualityNote", "note");
+            "purityPercent", "moisturePercent", "contaminationPercent", "grade", "qualityNote", "note", "resolution");
         Assert.Equal(JsonValueKind.Null, verification.GetProperty("grade").ValueKind);
         Assert.Equal("Checked", verification.GetProperty("note").GetString());
         Assert.Equal(95m, verification.GetProperty("factoryWeightKg").GetDecimal());
