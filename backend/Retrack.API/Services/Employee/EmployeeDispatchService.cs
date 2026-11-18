@@ -97,7 +97,8 @@ public sealed class EmployeeDispatchService(IEmployeeDispatchRepository reposito
         var home = pickup.Latitude.HasValue && pickup.Longitude.HasValue
             ? areas.Select(a => new { Area = a, Distance = CollectionValidation.Distance((double)pickup.Latitude,
                 (double)pickup.Longitude, a.Latitude, a.Longitude) })
-                .Where(a => a.Distance <= a.Area.RadiusMeters).OrderBy(a => a.Distance)
+                // Kho được chọn vẫn tiếp nhận ngoài vùng; vùng là ưu tiên điều phối, không phải hàng rào nhận đơn.
+                .Where(a => pickup.TargetDepotId.HasValue || a.Distance <= a.Area.RadiusMeters).OrderBy(a => a.Distance)
                 .ThenBy(a => a.Area.Id).Select(a => a.Area).FirstOrDefault() : null;
         var old = pickup.AcceptedCollectorId;
         EmployeeDispatchShift? chosen = null;
@@ -138,7 +139,7 @@ public sealed class EmployeeDispatchService(IEmployeeDispatchRepository reposito
             if (chosen != null) pickup.TargetDepotId = depotId;
         }
         var next = chosen?.EmployeeId;
-        var waitingReason = home == null ? "Chưa có khu vực phục vụ phù hợp hoặc tọa độ hợp lệ."
+        var waitingReason = home == null ? "Đơn vẫn chờ kho tiếp nhận; cần Owner bố trí vùng/ca hoặc kiểm tra tọa độ."
             : "Chưa có nhân viên trong vùng hoặc vùng hỗ trợ cách điểm thu gom tối đa 5 km, còn ca và khả năng nhận đơn.";
         var priorQueue = await repository.QueueAsync(id, ct);
         if (next != old)
@@ -179,7 +180,7 @@ public sealed class EmployeeDispatchWorker(IServiceScopeFactory scopes, ILogger<
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(15));
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
         do
         {
             try
