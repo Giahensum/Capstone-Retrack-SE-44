@@ -43,7 +43,7 @@ function validate(f) {
   if (t.some(Number.isNaN)) errors.schedule = 'Điền đủ các mốc thời gian.';
   else if (!(t[0] < t[1] && t[1] <= t[2] && t[2] < t[3] && t[3] + 10 * 60000 < t[4]))
     errors.schedule = 'Thứ tự: khảo sát kết thúc trước khi mở trả giá; hạn thu gom phải sau giờ đóng ít nhất 10 phút (thời gian gia hạn tối đa).';
-  else if (t[3] - t[2] < 10 * 60000) errors.schedule = 'Phiên trả giá kéo dài tối thiểu 10 phút.';
+  else if (t[3] - t[2] < 60000) errors.schedule = 'Phiên trả giá kéo dài tối thiểu 1 phút.';
   return errors;
 }
 

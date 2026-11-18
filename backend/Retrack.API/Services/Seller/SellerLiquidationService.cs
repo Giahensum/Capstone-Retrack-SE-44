@@ -14,7 +14,7 @@ public sealed class SellerLiquidationService(ISellerLiquidationRepository reposi
     IDepotBatchRepository depots, TimeProvider clock) : ISellerLiquidationService
 {
     private const int MaxOpenLots = 20;
-    private static readonly TimeSpan MinBiddingWindow = TimeSpan.FromMinutes(10), MaxBiddingWindow = TimeSpan.FromDays(30);
+    private static readonly TimeSpan MinBiddingWindow = TimeSpan.FromMinutes(1), MaxBiddingWindow = TimeSpan.FromDays(30);
     // PostgreSQL lưu microsecond; phản hồi đầu và retry dùng cùng độ chính xác.
     private DateTime Now { get { var value = clock.GetUtcNow().UtcDateTime; return new(value.Ticks / 10 * 10, DateTimeKind.Utc); } }
 
@@ -47,7 +47,7 @@ public sealed class SellerLiquidationService(ISellerLiquidationRepository reposi
         var now = Now;
         if (times[0] < now.AddMinutes(-5)) throw new ArgumentException("Lịch khảo sát không được bắt đầu trong quá khứ.");
         if (times[3] - times[2] < MinBiddingWindow || times[3] - times[2] > MaxBiddingWindow)
-            throw new ArgumentException("Thời gian trả giá phải từ 10 phút đến 30 ngày.");
+            throw new ArgumentException("Thời gian trả giá phải từ 1 phút đến 30 ngày.");
         var hash = Hash(sellerId, dto, times);
 
         await using var tx = await work.BeginAsync();

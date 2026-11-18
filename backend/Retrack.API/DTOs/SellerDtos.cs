@@ -25,6 +25,21 @@ namespace Retrack.API.DTOs
         public int Done { get; set; }
         public decimal TotalIncome { get; set; }
         public decimal MonthlyIncome { get; set; }
+        /// <summary>Phần thu nhập từ đơn thu gom DONE (đã nằm trong TotalIncome/MonthlyIncome).</summary>
+        public decimal PickupIncome { get; set; }
+        /// <summary>Phần thu nhập từ lô thanh lý đã xác nhận nhận đủ tiền (đã nằm trong TotalIncome/MonthlyIncome).</summary>
+        public decimal LiquidationIncome { get; set; }
+        public int LiquidationSold { get; set; }
+        public List<SellerLiquidationSaleDto> LiquidationSales { get; set; } = new();
+    }
+
+    public class SellerLiquidationSaleDto
+    {
+        public Guid LotId { get; set; }
+        public string Title { get; set; } = string.Empty;
+        public string DepotName { get; set; } = string.Empty;
+        public decimal Amount { get; set; }
+        public DateTime ConfirmedAt { get; set; }
     }
 
     public class NearbyDepotDto
