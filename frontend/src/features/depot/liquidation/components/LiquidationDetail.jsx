@@ -94,12 +94,24 @@ export default function LiquidationDetail({ id, onClose }) {
 // Thanh trả giá cố định ở đáy popup: luôn thấy, không phải cuộn.
 function BidBar({ id, lot, refreshing }) {
   const [form, setForm] = useState({ operationId: crypto.randomUUID(), amount: '', consent: false });
-  const save = useLiquidationMutation('post', `/${id}/bids`, () => setForm({ operationId: crypto.randomUUID(), amount: '', consent: false }));
+  const [submitted, setSubmitted] = useState(false);
+  const save = useLiquidationMutation('post', `/${id}/bids`, () => { setForm({ operationId: crypto.randomUUID(), amount: '', consent: false }); setSubmitted(false); });
   const minimum = lot.highestPrice == null ? lot.startingPrice : lot.highestPrice + lot.bidIncrement;
-  return <form className="space-y-2.5" onSubmit={e => { e.preventDefault(); save.mutate({ operationId: form.operationId, amount: Number(form.amount) }); }}>
+  // Kiểm tra rõ ràng ở client (server vẫn là nơi quyết định): chặn và báo lỗi, KHÔNG tự đổi số người dùng đã nhập.
+  const amount = Number(form.amount);
+  const problem = form.amount === '' ? 'Nhập số tiền trả cho cả lô.'
+    : !Number.isSafeInteger(amount) || amount <= 0 ? 'Số tiền phải là số nguyên dương.'
+    : amount > 1_000_000_000_000 ? 'Số tiền tối đa là 1.000 tỷ đồng.'
+    : amount < minimum ? `Giá bạn nhập (${money(amount)}) thấp hơn mức tối thiểu ${money(minimum)}. Vui lòng nhập lại.` : null;
+  return <form noValidate className="space-y-2.5" onSubmit={e => { e.preventDefault(); setSubmitted(true); if (problem) return; save.mutate({ operationId: form.operationId, amount }); }}>
     <div className="flex flex-col gap-2.5 sm:flex-row sm:items-end">
       <label className="block flex-1 text-xs font-semibold text-d-on-surface-variant">Tổng tiền trả cho cả lô (đ) — tối thiểu {money(minimum)}
-        <input required type="number" inputMode="numeric" min={minimum} max="1000000000000" step="1" disabled={save.isPending} className={`${inputClass} mt-1 text-base font-bold`} value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} placeholder={String(minimum)} />
+        {/* Ô chữ chỉ nhận chữ số: không có nút tăng/giảm hay cuộn chuột làm đổi giá trị ngoài ý muốn như ô number. */}
+        <input type="text" inputMode="numeric" autoComplete="off" disabled={save.isPending} className={`${inputClass} mt-1 text-base font-bold ${submitted && problem ? 'border-red-500 focus:border-red-500' : ''}`}
+          value={form.amount} aria-invalid={submitted && problem ? true : undefined} aria-describedby="bid-amount-error"
+          onChange={e => setForm({ ...form, amount: e.target.value.replace(/\D/g, '') })} placeholder={String(minimum)} />
+        {form.amount !== '' && Number.isSafeInteger(amount) && <span className="mt-1 block text-xs font-normal">= {money(amount)}</span>}
+        {submitted && problem && <span id="bid-amount-error" role="alert" className="mt-1 block text-xs font-semibold text-red-600">{problem}</span>}
       </label>
       <button className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full bg-d-primary px-7 py-3 text-sm font-bold text-white shadow-md transition active:scale-95 disabled:opacity-50" disabled={save.isPending || !form.consent || refreshing}><Gavel size={16} />{save.isPending ? 'Đang ghi nhận…' : 'Trả giá cả lô'}</button>
     </div>

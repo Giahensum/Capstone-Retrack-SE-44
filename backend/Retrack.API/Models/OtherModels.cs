@@ -103,6 +103,12 @@ namespace Retrack.API.Models
         [Column("termination_requested_at")] public DateTime? TerminationRequestedAt { get; set; }
         [Column("termination_reason"), MaxLength(2000)] public string? TerminationReason { get; set; }
         [Column("terminated_at")] public DateTime? TerminatedAt { get; set; }
+        // Ký điện tử DocuSign (sandbox): mã envelope, trạng thái ký, mã băm nội dung lúc gửi để biết envelope còn đúng bản hợp đồng hiện tại không.
+        [Column("esign_envelope_id"), MaxLength(64)] public string? EsignEnvelopeId { get; set; }
+        [Column("esign_status"), MaxLength(30)] public string? EsignStatus { get; set; }
+        [Column("esign_terms_hash"), MaxLength(64)] public string? EsignTermsHash { get; set; }
+        [Column("esign_sent_at")] public DateTime? EsignSentAt { get; set; }
+        [Column("esign_completed_at")] public DateTime? EsignCompletedAt { get; set; }
         // BLOCKED cũ không xác định bên chặn: giữ nguyên để đối chiếu, không tự mở.
         [NotMapped] public bool IsBlocked => Status == "BLOCKED" || BlockedByDepot || BlockedByFactory;
         [NotMapped] public string EffectiveStatus => IsBlocked ? "BLOCKED" : Status;
@@ -158,6 +164,9 @@ namespace Retrack.API.Models
         [Column("direct_offer_factory_id")]
         public Guid? DirectOfferFactoryId { get; set; }
 
+        [Column("source_demand_id")]
+        public Guid? SourceDemandId { get; set; }
+
         [Required]
         [Column("material_type")]
         [MaxLength(100)]
@@ -202,6 +211,22 @@ namespace Retrack.API.Models
         [Column("net_amount")] public decimal? NetAmount { get; set; }
         [Column("payment_reference")] public string? PaymentReference { get; set; }
         [Column("settled_at")] public DateTime? SettledAt { get; set; }
+        [Column("depot_payment_confirmed_at")] public DateTime? DepotPaymentConfirmedAt { get; set; }
+        [Column("depot_payment_confirmed_by")] public Guid? DepotPaymentConfirmedBy { get; set; }
+        [Column("settlement_workflow_version")] public int SettlementWorkflowVersion { get; set; }
+        [Column("settlement_revision")] public int SettlementRevision { get; set; }
+        [Column("settlement_proposed_at")] public DateTime? SettlementProposedAt { get; set; }
+        [Column("settlement_approved_at")] public DateTime? SettlementApprovedAt { get; set; }
+        [Column("settlement_approved_by")] public Guid? SettlementApprovedBy { get; set; }
+        [Column("settlement_decision_reason"), MaxLength(2000)] public string? SettlementDecisionReason { get; set; }
+        [Column("return_handed_over_at")] public DateTime? ReturnHandedOverAt { get; set; }
+        [Column("return_handover_proof_url")] public string? ReturnHandoverProofUrl { get; set; }
+        [Column("return_handover_reference"), MaxLength(200)] public string? ReturnHandoverReference { get; set; }
+        [Column("return_handover_note"), MaxLength(2000)] public string? ReturnHandoverNote { get; set; }
+        [Column("return_received_at")] public DateTime? ReturnReceivedAt { get; set; }
+        [Column("return_received_by")] public Guid? ReturnReceivedBy { get; set; }
+        [Column("return_receipt_reference"), MaxLength(200)] public string? ReturnReceiptReference { get; set; }
+        [Column("return_receipt_note"), MaxLength(2000)] public string? ReturnReceiptNote { get; set; }
 
         // Navigation
         [ForeignKey("DepotId")]

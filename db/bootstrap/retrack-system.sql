@@ -224,6 +224,12 @@ ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS contract_version
 ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS contract_terms TEXT;
 ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS contract_terms_hash VARCHAR(64);
 ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS contract_status VARCHAR(30);
+-- Ký điện tử hợp đồng bằng DocuSign (sandbox)
+ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS esign_envelope_id VARCHAR(64);
+ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS esign_status VARCHAR(30);
+ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS esign_terms_hash VARCHAR(64);
+ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS esign_sent_at TIMESTAMPTZ;
+ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS esign_completed_at TIMESTAMPTZ;
 ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS factory_signed_by UUID REFERENCES users(id);
 ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS factory_signed_at TIMESTAMPTZ;
 ALTER TABLE factory_depot_partnerships ADD COLUMN IF NOT EXISTS depot_signed_by UUID REFERENCES users(id);
@@ -261,6 +267,8 @@ CREATE TABLE IF NOT EXISTS inventory_batches (
     net_amount          DECIMAL(18, 2),
     payment_reference   VARCHAR(200),
     settled_at          TIMESTAMPTZ,
+    depot_payment_confirmed_at TIMESTAMPTZ,
+    depot_payment_confirmed_by UUID REFERENCES users(id),
     code                VARCHAR(40),
     image_urls          TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
     -- MARKETPLACE, PENDING_APPROVAL, TRANSPORT_READY, COMPLETED
@@ -274,6 +282,8 @@ ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS vat_percentage DECIMAL(5,
 ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS vat_amount DECIMAL(18, 2);
 ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS invoice_total_amount DECIMAL(18, 2);
 ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS price_includes_vat BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS depot_payment_confirmed_at TIMESTAMPTZ;
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS depot_payment_confirmed_by UUID REFERENCES users(id);
 CREATE SEQUENCE IF NOT EXISTS depot_batch_number START WITH 1 INCREMENT BY 1 NO MINVALUE NO MAXVALUE NO CYCLE;
 CREATE UNIQUE INDEX IF NOT EXISTS ix_inventory_batches_code ON inventory_batches(code);
 
@@ -437,6 +447,45 @@ CREATE TABLE IF NOT EXISTS platform_invoices (
 );
 ALTER TABLE platform_invoices ADD COLUMN IF NOT EXISTS payment_proof_url TEXT;
 ALTER TABLE platform_invoices ADD COLUMN IF NOT EXISTS submitted_at TIMESTAMPTZ;
+
+-- RETRACK_PAYOS_COLUMNS_V1: mã đơn/link PayOS có cột riêng, không còn nhét vào payment_proof_url.
+ALTER TABLE platform_invoices ADD COLUMN IF NOT EXISTS payos_order_code BIGINT;
+ALTER TABLE platform_invoices ADD COLUMN IF NOT EXISTS payos_link_id TEXT;
+ALTER TABLE platform_invoices ADD COLUMN IF NOT EXISTS payos_checkout_url TEXT;
+-- Chuyển dữ liệu cũ: hóa đơn PENDING có link dạng ...?orderCode=<số> được tách sang cột mới (chạy lại không đổi gì).
+UPDATE platform_invoices
+   SET payos_order_code   = substring(payment_proof_url from '[?&#]orderCode=([0-9]+)$')::BIGINT,
+       payos_checkout_url = regexp_replace(payment_proof_url, '[?&#]orderCode=[0-9]+$', ''),
+       payment_proof_url  = NULL
+ WHERE status = 'PENDING' AND payos_order_code IS NULL AND payment_proof_url ~ '[?&#]orderCode=[0-9]+$';
+CREATE UNIQUE INDEX IF NOT EXISTS ux_platform_invoices_payos_order ON platform_invoices (payos_order_code) WHERE payos_order_code IS NOT NULL;
+
+-- RETRACK_CLOSED_PERIOD_BILLING_V1: giữ bản gốc, phát hành bổ sung khi có phí đối soát muộn.
+ALTER TABLE platform_invoices ADD COLUMN IF NOT EXISTS revision INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE platform_invoices ADD COLUMN IF NOT EXISTS adjustment_of_id UUID REFERENCES platform_invoices(id);
+ALTER TABLE platform_invoices DROP CONSTRAINT IF EXISTS uq_platform_invoice_period;
+-- Index do EF đời cũ có thể có tên khác; chỉ bỏ index 3 cột của đúng bảng/schema đang nâng.
+DO $$ DECLARE old_index REGCLASS; BEGIN
+    FOR old_index IN
+        SELECT i.indexrelid::regclass FROM pg_index i
+        WHERE i.indrelid = 'platform_invoices'::regclass AND i.indisunique
+          AND i.indnatts = 3 AND i.indpred IS NULL AND i.indexprs IS NULL
+          AND NOT EXISTS (SELECT 1 FROM pg_constraint c WHERE c.conindid = i.indexrelid)
+          AND (SELECT array_agg(a.attname::text ORDER BY a.attname)
+               FROM unnest(i.indkey) AS k(attnum)
+               JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.attnum)
+              = ARRAY['payer_id', 'period_month', 'period_year']::text[]
+    LOOP EXECUTE format('DROP INDEX %s', old_index); END LOOP;
+END $$;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_platform_invoice_revision
+    ON platform_invoices(payer_id, period_year, period_month, revision);
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'platform_invoices'::regclass AND conname = 'ck_platform_invoice_revision') THEN
+        ALTER TABLE platform_invoices ADD CONSTRAINT ck_platform_invoice_revision CHECK
+            ((revision = 0 AND adjustment_of_id IS NULL) OR (revision > 0 AND adjustment_of_id IS NOT NULL));
+    END IF;
+END $$;
+-- RETRACK_CLOSED_PERIOD_BILLING_V1_END
 
 -- ==========================================
 -- FUNCTIONS & TRIGGERS (updated_at tự động)
@@ -941,6 +990,69 @@ BEGIN
     END IF;
 END $$;
 -- RETRACK_BUYER_FEES_V1_END
+
+-- Bổ sung thông báo cho đề nghị chấm dứt đang chờ Factory từ dữ liệu trước khi có nút chuông.
+-- Chạy lại an toàn: chỉ tạo khi chưa có thông báo của đúng lần đề nghị hiện tại.
+INSERT INTO notifications (id, user_id, depot_id, category, target_type, target_id, title, message, is_read, created_at)
+SELECT gen_random_uuid(), f.owner_id, p.depot_id, 'FACTORY', 'PARTNERS', p.depot_id,
+       'Vựa đề nghị chấm dứt hợp đồng',
+       'Hợp đồng ' || COALESCE(p.contract_code, p.id::text) || ' có đề nghị chấm dứt từ chủ vựa. Mở Vựa đối tác để xem lý do và phản hồi.',
+       FALSE, NOW()
+FROM factory_depot_partnerships p
+JOIN factories f ON f.id = p.factory_id
+JOIN depots d ON d.id = p.depot_id
+WHERE p.termination_status = 'PENDING_FACTORY'
+  AND p.termination_requested_by = d.owner_id
+  AND p.termination_requested_at IS NOT NULL
+  AND NOT EXISTS (
+      SELECT 1 FROM notifications n
+      WHERE n.user_id = f.owner_id AND n.depot_id = p.depot_id
+        AND n.target_type = 'PARTNERS' AND n.title = 'Vựa đề nghị chấm dứt hợp đồng'
+        AND n.created_at >= p.termination_requested_at
+  );
+
+-- RETRACK_BATCH_SETTLEMENT_APPROVAL_V1: lô cũ giữ phiên bản 0, lô tạo từ API mới là 1.
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS settlement_workflow_version INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS settlement_revision INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS settlement_proposed_at TIMESTAMPTZ;
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS settlement_approved_at TIMESTAMPTZ;
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS settlement_approved_by UUID REFERENCES users(id);
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS settlement_decision_reason VARCHAR(2000);
+CREATE TABLE IF NOT EXISTS batch_workflow_events (
+ id UUID PRIMARY KEY, batch_id UUID NOT NULL REFERENCES inventory_batches(id) ON DELETE RESTRICT,
+ actor_id UUID NOT NULL REFERENCES users(id), action VARCHAR(50) NOT NULL,
+ from_status VARCHAR(50) NOT NULL, to_status VARCHAR(50) NOT NULL, revision INTEGER NOT NULL DEFAULT 0,
+ note VARCHAR(2000), snapshot_json TEXT NOT NULL DEFAULT '{}', created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+ALTER TABLE batch_workflow_events ADD COLUMN IF NOT EXISTS price_per_kg NUMERIC(18,2);
+ALTER TABLE batch_workflow_events ADD COLUMN IF NOT EXISTS net_amount NUMERIC(18,2);
+CREATE INDEX IF NOT EXISTS ix_batch_workflow_events_batch_created ON batch_workflow_events(batch_id,created_at DESC,id);
+-- RETRACK_BATCH_SETTLEMENT_APPROVAL_V1_END
+-- RETRACK_DEMAND_ORIGIN_V1: giữ nguồn nhu cầu, không đổi giá hoặc trạng thái lô cũ.
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS source_demand_id UUID;
+DO $demand_origin$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'inventory_batches'::regclass AND conname = 'fk_batch_source_demand') THEN
+        ALTER TABLE inventory_batches ADD CONSTRAINT fk_batch_source_demand FOREIGN KEY (source_demand_id) REFERENCES factory_demands(id);
+    END IF;
+END $demand_origin$;
+CREATE INDEX IF NOT EXISTS ix_batches_source_demand ON inventory_batches(source_demand_id) WHERE source_demand_id IS NOT NULL;
+-- RETRACK_DEMAND_ORIGIN_V1_END
+
+-- RETRACK_BATCH_QUALITY_RESOLUTION_V1_BEGIN
+-- Chỉ trả lại nguồn tồn khi kho xác nhận nhận đủ lô, không tự hoàn từ QC từ chối.
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS return_handed_over_at TIMESTAMPTZ;
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS return_handover_proof_url TEXT;
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS return_handover_reference VARCHAR(200);
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS return_handover_note VARCHAR(2000);
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS return_received_at TIMESTAMPTZ;
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS return_received_by UUID;
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS return_receipt_reference VARCHAR(200);
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS return_receipt_note VARCHAR(2000);
+ALTER TABLE inventory_batches DROP CONSTRAINT IF EXISTS ck_batch_return_receipt;
+ALTER TABLE inventory_batches ADD CONSTRAINT ck_batch_return_receipt CHECK
+    (return_received_at IS NULL OR (return_handed_over_at IS NOT NULL AND return_handover_proof_url IS NOT NULL AND return_received_by IS NOT NULL AND return_receipt_reference IS NOT NULL));
+-- RETRACK_BATCH_QUALITY_RESOLUTION_V1_END
 
 -- RETRACK_SCHEMA_END
 

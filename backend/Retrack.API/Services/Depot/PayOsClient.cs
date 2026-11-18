@@ -15,6 +15,17 @@ public sealed class PayOsOptions
     public string ChecksumKey { get; set; } = "";
     public string ReturnUrl { get; set; } = "";
     public string CancelUrl { get; set; } = "";
+    /// <summary>URL quay về cho Factory; để trống thì suy ra từ ReturnUrl (cùng domain, đường dẫn /factory).</summary>
+    public string FactoryReturnUrl { get; set; } = "";
+    public string FactoryCancelUrl { get; set; } = "";
+    public (string Return, string Cancel) Redirects(PayOsRedirect target)
+    {
+        if (target != PayOsRedirect.Factory) return (ReturnUrl, CancelUrl);
+        string Derive(string explicitUrl, string fallback, string status) =>
+            !string.IsNullOrWhiteSpace(explicitUrl) ? explicitUrl
+            : Uri.TryCreate(fallback, UriKind.Absolute, out var u) ? $"{u.GetLeftPart(UriPartial.Authority)}/factory?payos={status}" : fallback;
+        return (Derive(FactoryReturnUrl, ReturnUrl, "return"), Derive(FactoryCancelUrl, CancelUrl, "cancel"));
+    }
     public int PollSeconds { get; set; } = 15;
     public string BaseUrl { get; set; } = "https://api-merchant.payos.vn";
     public bool IsConfigured => !string.IsNullOrWhiteSpace(ClientId) && !string.IsNullOrWhiteSpace(ApiKey) && !string.IsNullOrWhiteSpace(ChecksumKey);
@@ -24,10 +35,16 @@ public sealed record PayOsLink(string CheckoutUrl, string PaymentLinkId);
 public sealed record PayOsPayment(string Status, long Amount, string? Reference, DateTime? PaidAt);
 public sealed class PayOsException(string message) : Exception(message);
 
+/// <summary>Trang web mà PayOS đưa người nộp quay lại sau khi thanh toán hoặc hủy.</summary>
+public enum PayOsRedirect { Depot, Factory }
+
 public interface IPayOsClient
 {
     bool IsConfigured { get; }
     Task<PayOsLink> CreatePaymentLinkAsync(long orderCode, long amount, string description, CancellationToken ct = default);
+    /// <summary>Mặc định dùng URL của Depot để các bản cài đặt cũ (ví dụ giả lập trong test) vẫn hoạt động.</summary>
+    Task<PayOsLink> CreatePaymentLinkAsync(long orderCode, long amount, string description, PayOsRedirect redirect, CancellationToken ct = default) =>
+        CreatePaymentLinkAsync(orderCode, amount, description, ct);
     Task<PayOsPayment> GetPaymentAsync(long orderCode, CancellationToken ct = default);
     bool VerifyWebhookData(JsonElement data, string signature);
 }
@@ -67,12 +84,16 @@ public sealed class PayOsClient(HttpClient http, IOptions<PayOsOptions> options)
         return CryptographicOperations.FixedTimeEquals(expected, Encoding.UTF8.GetBytes(signature.ToLowerInvariant()));
     }
 
-    public async Task<PayOsLink> CreatePaymentLinkAsync(long orderCode, long amount, string description, CancellationToken ct = default)
+    public Task<PayOsLink> CreatePaymentLinkAsync(long orderCode, long amount, string description, CancellationToken ct = default) =>
+        CreatePaymentLinkAsync(orderCode, amount, description, PayOsRedirect.Depot, ct);
+
+    public async Task<PayOsLink> CreatePaymentLinkAsync(long orderCode, long amount, string description, PayOsRedirect redirect, CancellationToken ct = default)
     {
         EnsureConfigured();
-        var signature = Sign(cfg.ChecksumKey, CreateRequestPayload(amount, cfg.CancelUrl, description, orderCode, cfg.ReturnUrl));
+        var (returnUrl, cancelUrl) = cfg.Redirects(redirect);
+        var signature = Sign(cfg.ChecksumKey, CreateRequestPayload(amount, cancelUrl, description, orderCode, returnUrl));
         using var req = Request(HttpMethod.Post, "/v2/payment-requests");
-        req.Content = JsonContent.Create(new { orderCode, amount, description, cancelUrl = cfg.CancelUrl, returnUrl = cfg.ReturnUrl, signature });
+        req.Content = JsonContent.Create(new { orderCode, amount, description, cancelUrl, returnUrl, signature });
         using var res = await http.SendAsync(req, ct);
         var root = await ReadAsync(res, ct);
         var data = root.GetProperty("data");

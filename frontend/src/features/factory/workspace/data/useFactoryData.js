@@ -30,6 +30,7 @@ function mapBatch(batch) {
 function mapPartner(partner) {
   return {
     id: partner.depotId,
+    partnershipId: partner.id,
     name: partner.name,
     address: partner.address || "",
     phone: partner.contactPhone || "",
@@ -89,6 +90,10 @@ export function useFactoryPrices() {
     queryKey: ["factory", "prices"],
     queryFn: loadFactoryPrices,
   });
+}
+
+export function useFactoryWorkflowHistory(id,page) {
+  return useQuery({queryKey:["factory","workflow",id,page],queryFn:()=>request(`/api/factory/orders/${encodeURIComponent(id)}/workflow-events?page=${page}&pageSize=20`),enabled:Boolean(id)});
 }
 
 export function useFactoryOrder(id) {

@@ -57,6 +57,9 @@ public sealed class DriverDeliveryTests : IAsyncLifetime
         Assert.Null(saved.Batch.FactoryReceivedAt); Assert.Null(saved.Batch.SettledAt);
         Assert.Equal(3, await db.DriverDeliveryEvents.CountAsync());
         Assert.Equal(5, await db.Notifications.CountAsync());
+        var factoryOwnerId = await db.Factories.Where(f => f.Id == saved.Batch.TargetFactoryId).Select(f => f.OwnerId).SingleAsync();
+        var arrival = await db.Notifications.SingleAsync(n => n.UserId == factoryOwnerId && n.Title == "Tài xế báo đã giao hàng");
+        Assert.Equal(saved.Id, arrival.TransportJobId);
         Assert.Equal(2, images.UploadCount);
         Assert.Empty(await db.PickupRequests.ToListAsync());
         Assert.Empty(await db.PlatformTransactions.ToListAsync());

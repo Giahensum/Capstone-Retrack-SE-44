@@ -153,6 +153,9 @@ builder.Services.AddScoped<Retrack.API.Services.Interfaces.ISellerLiquidationSer
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IDepotStockService, Retrack.API.Services.Depot.DepotStockService>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IDepotProofService, Retrack.API.Services.Depot.DepotProofService>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IBatchService, Retrack.API.Services.Depot.BatchService>();
+builder.Services.AddScoped<Retrack.API.Services.Depot.BatchSettlementService>();
+builder.Services.AddScoped<Retrack.API.Services.Depot.BatchReturnService>();
+builder.Services.AddScoped<Retrack.API.Services.Factory.FactoryQualityResolutionService>();
 builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IDepotStaffRepository, DepotStaffRepository>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IStaffService, Retrack.API.Services.Depot.StaffService>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IDepotReportService, Retrack.API.Services.Depot.DepotReportService>();
@@ -162,6 +165,10 @@ builder.Services.Configure<Retrack.API.Services.Depot.PayOsOptions>(builder.Conf
 builder.Services.AddHttpClient<Retrack.API.Services.Depot.IPayOsClient, Retrack.API.Services.Depot.PayOsClient>(c => c.Timeout = TimeSpan.FromSeconds(20));
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IDepotPayOsService, Retrack.API.Services.Depot.DepotPayOsService>();
 builder.Services.AddHostedService<Retrack.API.Services.Depot.PayOsReconciliationWorker>();
+// Ký điện tử hợp đồng bằng DocuSign sandbox (cấu hình qua DocuSign__* trong .env / biến môi trường; để trống thì tắt tính năng)
+builder.Services.Configure<Retrack.API.Services.ESign.DocuSignOptions>(builder.Configuration.GetSection("DocuSign"));
+builder.Services.AddHttpClient<Retrack.API.Services.ESign.IDocuSignClient, Retrack.API.Services.ESign.DocuSignClient>(c => c.Timeout = TimeSpan.FromSeconds(30));
+builder.Services.AddScoped<Retrack.API.Services.ESign.IContractEsignService, Retrack.API.Services.ESign.ContractEsignService>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.INotificationService, Retrack.API.Services.Shared.NotificationService>();
 
 
@@ -174,6 +181,8 @@ builder.Services.AddScoped<Retrack.API.Services.Interfaces.IFactoryPartnerServic
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IFactoryProfileService, Retrack.API.Services.Factory.FactoryProfileService>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IQCService, Retrack.API.Services.Factory.FactoryQCService>();
 builder.Services.AddScoped<Retrack.API.Services.Factory.FactoryAttachmentService>();
+builder.Services.AddScoped<Retrack.API.Services.Factory.FactoryPlatformFeeService>();
+builder.Services.AddScoped<Retrack.API.Services.Factory.FactoryNotificationService>();
 
 // ===== CONTROLLERS & SWAGGER =====
 builder.Services.AddControllers().AddJsonOptions(options =>
@@ -210,7 +219,13 @@ builder.Services.AddSwaggerGen(c =>
     });
     // Resolve duplicate action conflicts (e.g. same route registered twice)
     c.ResolveConflictingActions(apiDescriptions => apiDescriptions.First());
-    c.CustomOperationIds(e => $"{e.ActionDescriptor.RouteValues["controller"]}_{e.ActionDescriptor.RouteValues["action"]}_{e.HttpMethod}");
+    c.CustomOperationIds(e =>
+    {
+        // Minimal API (ví dụ /health/live) không có route value controller/action.
+        e.ActionDescriptor.RouteValues.TryGetValue("controller", out var controller);
+        e.ActionDescriptor.RouteValues.TryGetValue("action", out var action);
+        return $"{controller ?? "Minimal"}_{action ?? e.RelativePath?.Replace('/', '_')}_{e.HttpMethod}";
+    });
 });
 
 // ===== BUILD =====
@@ -235,6 +250,8 @@ app.UseCors("AllowFrontend");
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter();
+// Health check cho Docker/CD: ShortCircuit để bỏ qua HTTPS redirect, CORS, auth (cổng 8080 chỉ nghe HTTP).
+app.MapGet("/health/live", () => Results.Ok(new { status = "ok" })).ShortCircuit();
 app.MapControllers();
 
 // ===== DB-FIRST: app KHÔNG tự migrate; schema/seed nằm ở db/bootstrap/retrack-system.sql =====

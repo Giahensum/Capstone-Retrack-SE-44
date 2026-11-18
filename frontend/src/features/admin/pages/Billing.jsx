@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import AdminLayout from '@/components/layout/AdminLayout';
 import { adminApi, apiErrorMessage } from '../api';
+import { previousClosedBillingMonth, isClosedBillingPeriod } from '../billingPeriod';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import RevenueAreaChart from '../components/RevenueAreaChart';
 import {
@@ -100,8 +101,8 @@ function InvoicesTab() {
   const [status, setStatus] = useState('');
   const [page, setPage] = useState(1);
   const [payTarget, setPayTarget] = useState(null);
-  const now = new Date();
-  const [period, setPeriod] = useState({ year: now.getFullYear(), month: now.getMonth() + 1 });
+  const [period, setPeriod] = useState(previousClosedBillingMonth);
+  const canIssue = isClosedBillingPeriod(period);
 
   const { data, isLoading } = useQuery({
     queryKey: ['admin', 'billing', 'invoices', status, page],
@@ -112,7 +113,7 @@ function InvoicesTab() {
 
   const generateMutation = useMutation({
     mutationFn: () => adminApi.generateInvoices(period),
-    onSuccess: (created) => { toast.success(`Đã tạo ${created.length} hóa đơn cho ${period.month}/${period.year}.`); invalidate(); },
+    onSuccess: (created) => { toast.success(`Đã phát hành/đối soát ${created.length} hóa đơn cho ${period.month}/${period.year}.`); invalidate(); },
     onError: (err) => toast.error(apiErrorMessage(err, 'Không thể tạo hóa đơn.')),
   });
   const markPaidMutation = useMutation({
@@ -129,12 +130,13 @@ function InvoicesTab() {
 
   return (
     <div className="flex flex-col gap-6">
-      <Panel icon={FilePlus2} title="Tạo hóa đơn theo tháng">
+      <Panel icon={FilePlus2} title="Phát hành và đối soát tháng đã chốt">
         <div className="flex flex-wrap items-end gap-4 p-5">
           <Field label="Tháng"><input type="number" min="1" max="12" value={period.month} onChange={(e) => setPeriod((p) => ({ ...p, month: Number(e.target.value) }))} className={`${inputClass} w-24`} /></Field>
           <Field label="Năm"><input type="number" value={period.year} onChange={(e) => setPeriod((p) => ({ ...p, year: Number(e.target.value) }))} className={`${inputClass} w-28`} /></Field>
-          <PrimaryButton icon={FilePlus2} disabled={generateMutation.isPending} onClick={() => generateMutation.mutate()}>{generateMutation.isPending ? 'Đang tạo…' : 'Tạo hóa đơn'}</PrimaryButton>
-          <p className="flex max-w-md items-start gap-2 text-xs text-d-on-surface-variant"><Info size={15} className="mt-0.5 shrink-0 text-d-secondary" />Gom phí theo từng chủ kho / nhà máy có phát sinh giao dịch trong tháng đã chọn.</p>
+          <PrimaryButton icon={FilePlus2} disabled={generateMutation.isPending || !canIssue} onClick={() => generateMutation.mutate()}>{generateMutation.isPending ? 'Đang đối soát…' : 'Phát hành / đối soát'}</PrimaryButton>
+          <p className="flex max-w-md items-start gap-2 text-xs text-d-on-surface-variant"><Info size={15} className="mt-0.5 shrink-0 text-d-secondary" />Chỉ phát hành khi tháng đã kết thúc theo giờ Việt Nam. Phí tháng hiện tại là tạm tính. Chạy lại sẽ đối soát hóa đơn chưa có giao dịch thanh toán; hóa đơn đã gửi chứng từ/đã trả được giữ nguyên, khoản thiếu phát hành bổ sung.</p>
+          {!canIssue && <p role="status" className="text-sm text-d-error">Kỳ chưa kết thúc hoặc không hợp lệ; chưa thể phát hành hóa đơn.</p>}
         </div>
       </Panel>
 
@@ -148,7 +150,7 @@ function InvoicesTab() {
             return (
               <tr key={inv.id} className={`transition-colors hover:bg-d-surface-accent/40 ${paid ? '' : 'bg-amber-50/40'}`}>
                 <Td className="font-semibold">{inv.payerName}</Td>
-                <Td className="text-d-on-surface-variant">{inv.periodMonth}/{inv.periodYear}</Td>
+                <Td className="text-d-on-surface-variant">{inv.periodMonth}/{inv.periodYear}<p className="text-xs">{inv.revision > 0 ? `Bổ sung lần ${inv.revision}` : 'Hóa đơn gốc'}</p></Td>
                 <Td className={`text-right font-black ${paid ? '' : 'text-d-error'}`}>{formatCurrency(inv.totalFeeAmount)}</Td>
                 <Td>
                   {paid ? <Badge tone="primary" icon={CheckCircle2}>Đã thanh toán</Badge>
@@ -158,6 +160,9 @@ function InvoicesTab() {
                   {inv.paidAt ? formatDate(inv.paidAt) : '—'}
                   {/^https?:\/\//i.test(inv.paymentProofUrl || '') && (
                     <a href={inv.paymentProofUrl} target="_blank" rel="noopener noreferrer" className="mt-0.5 flex items-center gap-1 text-xs font-semibold text-d-secondary underline"><ExternalLink size={12} />Xem chứng từ</a>
+                  )}
+                  {inv.paymentProofUrl?.startsWith('/api/factory/attachments/') && (
+                    <button type="button" onClick={() => adminApi.downloadInvoiceProof(inv.paymentProofUrl).catch((error) => toast.error(apiErrorMessage(error, 'Không tải được chứng từ.')))} className="mt-0.5 flex items-center gap-1 text-xs font-semibold text-d-secondary underline"><ExternalLink size={12} />Tải chứng từ Factory</button>
                   )}
                 </Td>
                 <Td className="text-right">
@@ -179,7 +184,7 @@ function InvoicesTab() {
 
       {payTarget && (
         <ConfirmModal icon={BadgeCheck} tone="teal" title="Ghi nhận hóa đơn đã thanh toán?" confirmLabel="Xác nhận đã thanh toán" cancelLabel="Chưa"
-          description={`Hóa đơn ${payTarget.periodMonth}/${payTarget.periodYear} của ${payTarget.payerName} (${formatCurrency(payTarget.totalFeeAmount)}) sẽ được đánh dấu đã thanh toán. Chỉ xác nhận khi đã đối soát tiền thực nhận.`}
+          description={`${payTarget.revision > 0 ? `Hóa đơn bổ sung lần ${payTarget.revision}` : 'Hóa đơn gốc'} kỳ ${payTarget.periodMonth}/${payTarget.periodYear} của ${payTarget.payerName} (${formatCurrency(payTarget.totalFeeAmount)}) sẽ được đánh dấu đã thanh toán. Chỉ xác nhận khi đã đối soát tiền thực nhận.`}
           busy={markPaidMutation.isPending} onCancel={() => setPayTarget(null)} onConfirm={() => markPaidMutation.mutate(payTarget.id)} />
       )}
     </div>
@@ -190,7 +195,9 @@ function InvoicesTab() {
 function FeeConfigTab() {
   const queryClient = useQueryClient();
   const { data, isLoading } = useQuery({ queryKey: ['admin', 'billing', 'fee-config'], queryFn: adminApi.getFeeConfig });
+  const account = useQuery({ queryKey: ['admin', 'billing', 'payment-account'], queryFn: adminApi.getPaymentAccount });
   const [value, setValue] = useState(null);
+  const [accountDraft, setAccountDraft] = useState(null);
 
   const mutation = useMutation({
     mutationFn: (dto) => adminApi.updateFeeConfig(dto),
@@ -198,8 +205,15 @@ function FeeConfigTab() {
     onError: (err) => toast.error(apiErrorMessage(err, 'Không thể cập nhật.')),
   });
   const current = value ?? data?.platformFeePercentage ?? '';
+  const paymentAccount = accountDraft ?? account.data ?? { bankName: '', accountNumber: '', accountHolder: '' };
+  const accountMutation = useMutation({
+    mutationFn: adminApi.updatePaymentAccount,
+    onSuccess: () => { toast.success('Đã lưu tài khoản nhận phí.'); setAccountDraft(null); queryClient.invalidateQueries({ queryKey: ['admin', 'billing', 'payment-account'] }); },
+    onError: (err) => toast.error(apiErrorMessage(err, 'Không thể lưu tài khoản nhận phí.')),
+  });
 
   return (
+    <div className="flex flex-wrap items-start gap-5">
     <Panel icon={Percent} title="Cấu hình phí nền tảng" className="max-w-lg">
       <div className="p-5">
         {isLoading ? <div className="h-24 animate-pulse rounded-2xl bg-d-surface-container" /> : (
@@ -212,6 +226,18 @@ function FeeConfigTab() {
         )}
       </div>
     </Panel>
+    <Panel icon={Banknote} title="Tài khoản nhận phí từ Factory" className="max-w-lg">
+      <div className="p-5">
+        {account.isLoading ? <div className="h-24 animate-pulse rounded-2xl bg-d-surface-container" /> : <form className="flex flex-col gap-4" onSubmit={(event) => { event.preventDefault(); accountMutation.mutate(paymentAccount); }}>
+          <p className="text-sm text-d-on-surface-variant">Factory sẽ thấy thông tin này trên hóa đơn phí tháng. Chỉ nhập tài khoản của đơn vị vận hành RETRACK.</p>
+          <Field label="Ngân hàng"><input required maxLength={100} className={inputClass} value={paymentAccount.bankName} onChange={(event) => setAccountDraft({ ...paymentAccount, bankName: event.target.value })} /></Field>
+          <Field label="Số tài khoản"><input required inputMode="numeric" pattern="[0-9]{4,30}" maxLength={30} className={inputClass} value={paymentAccount.accountNumber} onChange={(event) => setAccountDraft({ ...paymentAccount, accountNumber: event.target.value })} /></Field>
+          <Field label="Tên chủ tài khoản"><input required maxLength={120} className={inputClass} value={paymentAccount.accountHolder} onChange={(event) => setAccountDraft({ ...paymentAccount, accountHolder: event.target.value })} /></Field>
+          <PrimaryButton icon={Save} type="submit" disabled={accountMutation.isPending} className="self-start">{accountMutation.isPending ? 'Đang lưu…' : 'Lưu tài khoản nhận phí'}</PrimaryButton>
+        </form>}
+      </div>
+    </Panel>
+    </div>
   );
 }
 

@@ -20,10 +20,17 @@ Mặc định file có `SET LOCAL retrack.seed_demo = 'on';` để nạp:
 
 | Nhóm | Dữ liệu |
 |---|---|
+<<<<<<< HEAD
 | Tài khoản | Giữ tài khoản các role khác; 6 Employee dispatch hoạt động, 12 Seller dispatch. Hai Employee cũ được đổi email và khóa để bảo toàn tham chiếu lịch sử |
 | Kho/nhà máy | Giữ bộ kho/nhà máy liên role; thêm hai kho điều phối riêng tại Đà Nẵng |
 | Thu gom | Giữ đơn lịch sử liên role; thay bộ Employee tự nhận và bộ điều phối cũ bằng 12 đơn tại 12 tọa độ khác nhau |
 | Điều phối | Employee dispatch01–03 thuộc Kho Thu Mua An Phú, dispatch04–06 thuộc Kho Phế Liệu Hòa Bình; 6 vùng và ca khoảng 20 giờ. Đơn hẹn ngày sau chưa được giao hôm nay |
+=======
+| Tài khoản | 32 tài khoản: 1 Admin, 1 Depot Owner, 8 Employee, 2 Driver, 4 Factory, 16 Seller; Chủ kho demo Ngô Sỹ Giá. Giữ các email chính admin/seller/depot/employee/driver/factory@retrack.vn và Factory2/3 |
+| Kho/nhà máy | 5 kho, 4 nhà máy, 15 liên kết nhân sự; địa chỉ mô phỏng Đà Nẵng |
+| Thu gom | 65 đơn nhiều trạng thái, gồm 13 đơn Employee `e0000000-0929-*` và 36 đơn điều phối `ed250000-*` |
+| Điều phối | 6 nhân viên, 6 Seller, 6 vùng và ca demo khoảng 20 giờ; đơn hẹn ngày sau chưa được giao từ hôm nay |
+>>>>>>> e931a248f38391be70d6177d9afb3fc66e0c4cd9
 | Vận chuyển | 12 chuyến, gồm 3 lô `DRV-DEMO-01/02/03` và 3 lô `DRV-DN-LOCAL-01/02/03`, giữ UUID cũ để mobile tiếp tục test |
 | Tồn/chi phí | Phiếu sắt+ghế cùng chi phí; thêm 900 kg PET nguồn demo cho hai bộ lô Driver, giá vốn chưa xác định |
 | Liên role | Hợp tác, nhu cầu, lô xuất/cân/KCS, thanh toán/phí/hóa đơn, thông báo, bảng giá và lô thanh lý |
@@ -58,6 +65,35 @@ Marker chính: `RETRACK_DEPOT_STOCK_V1`, `RETRACK_LIQUIDATION_DEPOSIT_V1`, `RETR
 Các SQL cũ đã gộp/xóa khỏi Git. Script kiểm kê/dọn PascalCase lưu local trong `.ai-context`, không chạy kèm bootstrap hoặc tự xóa bảng legacy. Tra lịch sử Git trước commit hợp nhất khi cần đối chiếu. Tệp Factory trên ổ đĩa vẫn phải lưu bền vững và sao lưu cùng DB; SQL không chứa nội dung tệp.
 
 ## Khi nhóm thêm bảng/cột hoặc seed
+
+### Cập nhật 17/11/2026: lô Factory, trả hàng và hóa đơn cuối kỳ
+
+Máy mới vẫn chạy toàn bộ **một file SQL duy nhất** như hướng dẫn đầu trang.
+DB đã có dữ liệu cần sao lưu và dừng backend trước khi nâng; không chạy seed.
+Trong Query Tool của đúng database, chạy các khối sau trong một transaction
+riêng, bao bởi BEGIN; và COMMIT;:
+
+- RETRACK_CLOSED_PERIOD_BILLING_V1 đến RETRACK_CLOSED_PERIOD_BILLING_V1_END:
+  revision/liên kết hóa đơn bổ sung và unique index theo lần phát hành.
+- RETRACK_BATCH_SETTLEMENT_APPROVAL_V1 đến RETRACK_BATCH_SETTLEMENT_APPROVAL_V1_END:
+  phiên bản thỏa thuận giá, xác nhận Depot và bảng lịch sử.
+- RETRACK_DEMAND_ORIGIN_V1 đến RETRACK_DEMAND_ORIGIN_V1_END:
+  liên kết lô với nhu cầu Factory.
+- RETRACK_BATCH_QUALITY_RESOLUTION_V1_BEGIN đến RETRACK_BATCH_QUALITY_RESOLUTION_V1_END:
+  chứng từ bàn giao trả và xác nhận nhận đủ.
+
+Nếu chưa nâng các cập nhật trước, cần đối chiếu toàn bộ phần schema trước
+RETRACK_SCHEMA_END; các khối trên không thay thế lịch sử nâng DB.
+Develop cũng có thêm các cột esign_* trong factory_depot_partnerships cho
+DocuSign; cần giữ phần này khi nâng schema từ bản cũ. Chưa cấu hình DocuSign
+thì ký điện tử chưa sẵn sàng; không ảnh hưởng đăng nhập hoặc nhập kho.
+
+Lô cũ giữ settlement_workflow_version=0. Lô mới tạo qua API dùng phiên bản 1:
+Factory đề xuất giá → Depot đồng ý → Factory gửi chứng từ → Depot xác nhận
+nhận đủ tiền mới PAID. Chỉ bước cuối ghi nhận tiền/phí của lô mới.
+QC bị từ chối chưa có nghĩa hàng đã về; chỉ RETURNED sau xác nhận hai phía
+mới hoàn nguồn tồn. Không cập nhật hàng loạt trạng thái cũ để ép theo luồng mới.
+Backend không tự chạy các khối SQL khi dotnet run.
 
 Bổ sung 14/11/2026: hồ sơ kho có phân loại giấy tờ kinh doanh, ảnh kho và tài liệu
 bổ sung. DB cũ cần chạy khối

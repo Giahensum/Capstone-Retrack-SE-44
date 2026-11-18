@@ -28,6 +28,23 @@ public class AdminServiceTests
     private static DateTime Utc(int year, int month, int day) => new(year, month, day, 12, 0, 0, DateTimeKind.Utc);
 
     [Fact]
+    public async Task PaymentAccountRequiresCompleteBankDetailsAndPersistsForFactory()
+    {
+        await using var db = NewDb();
+        var service = NewService(db);
+        Assert.False((await service.GetPaymentAccountAsync()).IsConfigured);
+        await Assert.ThrowsAsync<ArgumentException>(() => service.UpdatePaymentAccountAsync(
+            new PlatformPaymentAccountDto("Ngân hàng thử nghiệm", "abc", "RETRACK"), Guid.NewGuid()));
+        Assert.False((await service.GetPaymentAccountAsync()).IsConfigured);
+
+        var saved = await service.UpdatePaymentAccountAsync(
+            new PlatformPaymentAccountDto("Ngân hàng thử nghiệm", "0000000000", "RETRACK"), Guid.NewGuid());
+        Assert.True(saved.IsConfigured);
+        db.ChangeTracker.Clear();
+        Assert.Equal("0000000000", (await NewService(db).GetPaymentAccountAsync()).AccountNumber);
+    }
+
+    [Fact]
     public async Task CannotDeleteFormerStaffWhoCreatedStockReceipt()
     {
         await using var db = NewDb();
@@ -423,6 +440,9 @@ public class AdminServiceTests
         Assert.NotNull(result.PaidAt);
         Assert.Equal("Nhà máy", result.PayerName);
         Assert.Contains(await db.AuditLogs.ToListAsync(), a => a.Action == "MARK_PAID");
+        Assert.Single(await db.Notifications.Where(x => x.UserId == payer.Id && x.TargetType == "FEES").ToListAsync());
+        await service.MarkInvoicePaidAsync(invoice.Id, Guid.NewGuid());
+        Assert.Single(await db.Notifications.Where(x => x.UserId == payer.Id && x.TargetType == "FEES").ToListAsync());
     }
 
     [Fact]

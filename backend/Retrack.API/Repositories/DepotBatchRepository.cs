@@ -12,7 +12,7 @@ public sealed class DepotBatchRepository(AppDbContext db) : IDepotBatchRepositor
         .Where(b => b.DepotId == depotId && b.Id == batchId)
         .Select(b => new DepotBatchDetailDto(
             new DepotBatchDto(b.Id, b.DepotId, b.MaterialType, b.DeclaredWeightKg, b.Description, b.Status,
-                b.TargetFactoryId ?? b.DirectOfferFactoryId, b.TargetFactory != null ? b.TargetFactory.Name : b.DirectOfferFactory != null ? b.DirectOfferFactory.Name : null, b.CreatedAt, b.Code, b.ImageUrls),
+                b.TargetFactoryId ?? b.DirectOfferFactoryId, b.TargetFactory != null ? b.TargetFactory.Name : b.DirectOfferFactory != null ? b.DirectOfferFactory.Name : null, b.CreatedAt, b.Code, b.ImageUrls, b.SourceDemandId),
             b.TransportJob == null ? null : b.TransportJob.Status,
             b.TransportJob == null || b.TransportJob.Driver == null ? null : b.TransportJob.Driver.FullName,
             b.FactoryReceivedAt, b.FactoryDecidedAt, b.RejectionReason,
@@ -22,11 +22,13 @@ public sealed class DepotBatchRepository(AppDbContext db) : IDepotBatchRepositor
                 b.QualityCheck.PurityPercent, b.QualityCheck.MoisturePercent, b.QualityCheck.ContaminationPercent,
                 b.QualityCheck.QualityNote, b.QualityCheck.Resolution, b.QualityCheck.TicketNumber,
                 b.QualityCheck.TicketImageUrl, b.QualityCheck.InvoiceNumber, b.QualityCheck.InvoiceFileUrl),
-            b.SettledAt == null ? null : new DepotBatchSettlementDto(b.AgreedPricePerKg, b.GrossAmount,
+            b.SettledAt == null && b.SettlementProposedAt == null ? null : new DepotBatchSettlementDto(b.AgreedPricePerKg, b.GrossAmount,
                 b.PlatformFeeAmount, b.NetAmount, b.VatTreatment, b.VatPercentage, b.VatAmount,
-                b.InvoiceTotalAmount, b.PaymentReference, b.SettledAt.Value,
+                b.InvoiceTotalAmount, b.PaymentReference, (b.SettledAt ?? b.SettlementProposedAt)!.Value,
                 b.QualityCheck == null ? null : b.QualityCheck.PaymentProofUrl,
-                b.VatTreatment == null ? null : b.PriceIncludesVat, b.FeePolicy)))
+                b.VatTreatment == null ? null : b.PriceIncludesVat, b.FeePolicy, b.DepotPaymentConfirmedAt),
+            new BatchWorkflowDto(b.SettlementWorkflowVersion, b.SettlementRevision, b.SettlementProposedAt, b.SettlementApprovedAt, b.SettlementDecisionReason),
+            new BatchReturnDto(b.ReturnHandedOverAt, b.ReturnHandoverProofUrl, b.ReturnHandoverReference, b.ReturnHandoverNote, b.ReturnReceivedAt, b.ReturnReceiptReference, b.ReturnReceiptNote)))
         .SingleOrDefaultAsync();
     public async Task<PagedResult<DepotBatchDto>> ListAsync(Guid depotId, DepotQuery query)
     {
@@ -49,7 +51,7 @@ public sealed class DepotBatchRepository(AppDbContext db) : IDepotBatchRepositor
         return new() { Page = query.Page, PageSize = query.PageSize, TotalCount = total,
             Items = offset > int.MaxValue ? [] : await source.Skip((int)offset).Take(query.PageSize)
                 .Select(b => new DepotBatchDto(b.Id, b.DepotId, b.MaterialType, b.DeclaredWeightKg,
-                    b.Description, b.Status, b.TargetFactoryId ?? b.DirectOfferFactoryId, b.TargetFactory == null ? b.DirectOfferFactory == null ? null : b.DirectOfferFactory.Name : b.TargetFactory.Name, b.CreatedAt, b.Code, b.ImageUrls)).ToListAsync() };
+                    b.Description, b.Status, b.TargetFactoryId ?? b.DirectOfferFactoryId, b.TargetFactory == null ? b.DirectOfferFactory == null ? null : b.DirectOfferFactory.Name : b.TargetFactory.Name, b.CreatedAt, b.Code, b.ImageUrls, b.SourceDemandId)).ToListAsync() };
     }
 
 
@@ -60,6 +62,9 @@ public sealed class DepotBatchRepository(AppDbContext db) : IDepotBatchRepositor
     }
     public Task<InventoryBatch?> FindOperationAsync(Guid id) => db.InventoryBatches.AsNoTracking().Include(b => b.TargetFactory).Include(b => b.DirectOfferFactory).SingleOrDefaultAsync(b => b.Id == id);
     public Task<Factory?> FindActiveFactoryAsync(Guid id) => db.Factories.SingleOrDefaultAsync(f => f.Id == id && f.Owner != null && f.Owner.IsActive);
+    public Task<FactoryDemand?> FindDemandAsync(Guid id) => db.FactoryDemands
+        .FromSqlInterpolated($"SELECT * FROM factory_demands WHERE id = {id} FOR SHARE")
+        .AsNoTracking().SingleOrDefaultAsync();
     public Task<FactoryDepotPartnership?> FindPartnerAsync(Guid depotId, Guid factoryId) => db.FactoryDepotPartnerships.AsNoTracking().SingleOrDefaultAsync(p => p.DepotId == depotId && p.FactoryId == factoryId);
     public Task<string?> FeeConfigurationAsync() => db.SystemConfigs.AsNoTracking()
         .Where(x => x.ConfigKey == "PLATFORM_FEE_PERCENTAGE").Select(x => x.ConfigValue).SingleOrDefaultAsync();
@@ -78,4 +83,29 @@ public sealed class DepotBatchRepository(AppDbContext db) : IDepotBatchRepositor
         return batch;
     }
     public Task<bool> HasTransportAsync(Guid batchId) => db.TransportJobs.AnyAsync(t => t.BatchId == batchId);
+    public Task<PlatformTransaction?> FindFeeAsync(Guid batchId) => db.PlatformTransactions.SingleOrDefaultAsync(x => x.SourceType == "BATCH_ORDER" && x.SourceId == batchId);
+    public Task<Guid?> FactoryOwnerAsync(Guid factoryId) => db.Factories.Where(x => x.Id == factoryId).Select(x => (Guid?)x.OwnerId).SingleOrDefaultAsync();
+    public void AddFee(PlatformTransaction transaction) => db.PlatformTransactions.Add(transaction);
+    public void AddWorkflowEvent(BatchWorkflowEvent entry) => db.BatchWorkflowEvents.Add(entry);
+    public Task<PagedResult<BatchWorkflowEventDto>> WorkflowEventsAsync(Guid batchId, DepotQuery query) => DepotRepositoryPage.ReadAsync(
+        db.BatchWorkflowEvents.AsNoTracking().Where(x => x.BatchId == batchId).OrderByDescending(x => x.CreatedAt).ThenBy(x => x.Id)
+            .Select(x => new BatchWorkflowEventDto(x.Id, x.Action, x.FromStatus, x.ToStatus, x.Revision, x.Note, x.CreatedAt, x.PricePerKg, x.NetAmount)), query);
+    public async Task QueuePaymentConfirmedNoticeAsync(InventoryBatch batch)
+    {
+        if (batch.TargetFactoryId is not Guid factoryId) return;
+        await QueueFactoryBatchNoticeAsync(factoryId, batch, "Vựa đã xác nhận nhận tiền",
+            $"Lô {batch.Code ?? batch.Id.ToString()} đã được vựa đối chiếu và xác nhận nhận đủ tiền.");
+    }
+    public async Task QueueFactoryBatchNoticeAsync(Guid factoryId, InventoryBatch batch, string title, string message, string targetType = "BATCH")
+    {
+        var ownerId = await db.Factories.AsNoTracking().Where(x => x.Id == factoryId)
+            .Select(x => (Guid?)x.OwnerId).SingleOrDefaultAsync();
+        if (ownerId is null) return;
+        db.Notifications.Add(new Notification
+        {
+            UserId = ownerId.Value, BatchId = batch.Id, Category = "FACTORY",
+            TargetType = targetType, TargetId = batch.Id,
+            Title = title, Message = message
+        });
+    }
 }
