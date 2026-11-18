@@ -16,25 +16,52 @@ export default function SellerIncome() {
   });
 
   const doneRequests = requests.filter((r) => r.status === 'DONE');
-  const totalIncome = doneRequests.reduce(
+  const pickupIncome = doneRequests.reduce(
     (sum, r) => sum + Number(r.netAmount ?? 0),
     0
   );
+  // Lô thanh lý đã được Seller xác nhận nhận đủ tiền cũng là thu nhập.
+  const liquidationSales = stats?.liquidationSales ?? [];
+  const liquidationIncome = Number(stats?.liquidationIncome ?? 0);
+  const totalIncome = pickupIncome + liquidationIncome;
+
+  // Gộp hai nguồn thành một danh sách giao dịch, mới nhất trước.
+  const transactions = [
+    ...doneRequests.map((r) => ({
+      key: `pickup-${r.id}`,
+      kind: 'pickup',
+      to: `/seller/requests/${r.id}`,
+      title: r.description || r.address,
+      date: r.updatedAt ?? r.createdAt,
+      depotName: r.depotName,
+      amount: Number(r.netAmount ?? 0),
+    })),
+    ...liquidationSales.map((x) => ({
+      key: `liquidation-${x.lotId}`,
+      kind: 'liquidation',
+      to: `/seller/liquidations/${x.lotId}`,
+      title: x.title,
+      date: x.confirmedAt,
+      depotName: x.depotName,
+      amount: Number(x.amount ?? 0),
+    })),
+  ].sort((a, b) => new Date(b.date) - new Date(a.date));
 
   // Group by month
   const monthlyMap = {};
-  doneRequests.forEach((r) => {
-    const d = new Date(r.updatedAt ?? r.createdAt);
+  transactions.forEach((t) => {
+    const d = new Date(t.date);
     const key = new Intl.DateTimeFormat('vi-VN', {
       month: 'numeric',
       year: 'numeric',
       timeZone: 'Asia/Ho_Chi_Minh',
     }).format(d);
-    if (!monthlyMap[key]) monthlyMap[key] = { month: key, count: 0, income: 0 };
-    monthlyMap[key].count++;
-    monthlyMap[key].income += Number(r.netAmount ?? 0);
+    if (!monthlyMap[key]) monthlyMap[key] = { month: key, pickups: 0, lots: 0, income: 0 };
+    if (t.kind === 'liquidation') monthlyMap[key].lots++;
+    else monthlyMap[key].pickups++;
+    monthlyMap[key].income += t.amount;
   });
-  const monthlyData = Object.values(monthlyMap).reverse();
+  const monthlyData = Object.values(monthlyMap);
 
   return (
     <div className="flex flex-col p-4 md:p-6 gap-6 w-full max-w-7xl mx-auto">
@@ -44,7 +71,7 @@ export default function SellerIncome() {
           Thống kê thu nhập
         </h1>
         <p className="font-d-body-md text-d-body-md text-d-on-surface-variant mt-2">
-          Tổng quan số tiền nhận được từ các đơn thu gom phế liệu đã hoàn thành.
+          Tổng quan số tiền nhận được từ các đơn thu gom và lô thanh lý đã hoàn thành.
         </p>
       </div>
 
@@ -60,6 +87,9 @@ export default function SellerIncome() {
           <h3 className="font-d-headline-lg text-d-headline-lg text-d-primary">
             {formatCurrency(totalIncome)}
           </h3>
+          <p className="mt-1 text-xs text-d-on-surface-variant">
+            Thu gom {formatCurrency(pickupIncome)} · Thanh lý {formatCurrency(liquidationIncome)}
+          </p>
         </div>
 
         <div className="d-glass-panel bg-d-surface-container-lowest border border-d-border-subtle rounded-2xl p-6 shadow-sm">
@@ -79,11 +109,14 @@ export default function SellerIncome() {
             <MaterialIcon name="check_circle" className="text-xl" />
           </div>
           <p className="font-d-body-sm text-d-body-sm text-d-on-surface-variant mb-1">
-            Đơn hoàn thành
+            Giao dịch hoàn thành
           </p>
           <h3 className="font-d-headline-lg text-d-headline-lg text-d-on-surface">
-            {doneRequests.length}
+            {transactions.length}
           </h3>
+          <p className="mt-1 text-xs text-d-on-surface-variant">
+            {doneRequests.length} đơn thu gom · {Number(stats?.liquidationSold ?? liquidationSales.length)} lô thanh lý
+          </p>
         </div>
 
         <div className="d-glass-panel bg-d-surface-container-lowest border border-d-border-subtle rounded-2xl p-6 shadow-sm">
@@ -91,11 +124,11 @@ export default function SellerIncome() {
             <MaterialIcon name="receipt" className="text-xl" />
           </div>
           <p className="font-d-body-sm text-d-body-sm text-d-on-surface-variant mb-1">
-            Trung bình mỗi đơn
+            Trung bình mỗi giao dịch
           </p>
           <h3 className="font-d-headline-lg text-d-headline-lg text-d-on-surface">
-            {doneRequests.length > 0
-              ? formatCurrency(totalIncome / doneRequests.length)
+            {transactions.length > 0
+              ? formatCurrency(totalIncome / transactions.length)
               : '–'}
           </h3>
         </div>
@@ -130,7 +163,7 @@ export default function SellerIncome() {
                     Tháng {m.month}
                   </p>
                   <p className="text-xs text-d-on-surface-variant mt-0.5">
-                    {m.count} đơn thu gom hoàn thành
+                    {[m.pickups > 0 && `${m.pickups} đơn thu gom`, m.lots > 0 && `${m.lots} lô thanh lý`].filter(Boolean).join(' · ')} hoàn thành
                   </p>
                 </div>
                 <span className="font-bold text-base text-d-primary">
@@ -150,36 +183,39 @@ export default function SellerIncome() {
               Giao dịch hoàn tất gần đây
             </h2>
             <p className="text-xs text-d-on-surface-variant mt-0.5">
-              Danh sách các đơn thu gom đã nhận chuyển khoản thành công
+              Các đơn thu gom và lô thanh lý đã nhận tiền thành công
             </p>
           </div>
         </div>
 
-        {doneRequests.length === 0 ? (
+        {transactions.length === 0 ? (
           <div className="p-10 text-center text-d-on-surface-variant text-sm">
             Chưa có giao dịch hoàn tất
           </div>
         ) : (
           <div className="divide-y divide-d-border-subtle">
-            {doneRequests.slice(0, 10).map((req) => (
+            {transactions.slice(0, 10).map((req) => (
               <Link
-                key={req.id}
-                to={`/seller/requests/${req.id}`}
+                key={req.key}
+                to={req.to}
                 className="flex items-center justify-between px-6 py-4 hover:bg-d-surface-container-low transition-colors group"
               >
                 <div className="min-w-0 flex-1 pr-4">
                   <p className="font-semibold text-sm text-d-on-surface group-hover:text-d-primary transition-colors truncate">
-                    {req.description || req.address}
+                    {req.kind === 'liquidation' && (
+                      <span className="mr-2 rounded-full bg-d-primary-container px-2 py-0.5 text-[10px] font-bold uppercase text-d-on-primary-container">Thanh lý</span>
+                    )}
+                    {req.title}
                   </p>
                   <div className="flex items-center gap-2 text-xs text-d-on-surface-variant mt-1">
-                    <span>{formatDate(req.updatedAt ?? req.createdAt)}</span>
+                    <span>{formatDate(req.date)}</span>
                     {req.depotName && <span>• 🏢 {req.depotName}</span>}
                   </div>
                 </div>
 
                 <div className="flex items-center gap-3 shrink-0">
                   <span className="font-bold text-sm text-d-primary">
-                    +{formatCurrency(req.netAmount)}
+                    +{formatCurrency(req.amount)}
                   </span>
                   <MaterialIcon
                     name="chevron_right"
