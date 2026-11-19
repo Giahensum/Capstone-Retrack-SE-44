@@ -139,7 +139,7 @@ export default function ContractDocument({ contract: c, bare = false }) {
         <p className="contract-avoid">Mọi tranh chấp phát sinh từ Hợp đồng được hai bên giải quyết trên tinh thần thương lượng, hòa giải. Nếu không đạt được thỏa thuận, tranh chấp được giải quyết tại Tòa án nhân dân có thẩm quyền theo quy định của pháp luật Việt Nam.</p>
 
         <h2 className="contract-avoid pt-1 font-bold">Điều 10. Hiệu lực và hình thức Hợp đồng</h2>
-        <p className="contract-avoid">10.1. Hợp đồng có hiệu lực kể từ thời điểm cả hai bên xác nhận ký điện tử trên nền tảng RETRACK (thời điểm ghi tại phần chữ ký).</p>
+        <p className="contract-avoid">10.1. Hợp đồng có hiệu lực kể từ thời điểm cả hai bên ký điện tử (qua DocuSign hoặc xác nhận điện tử trên nền tảng RETRACK); thời điểm ký được ghi tại phần chữ ký.</p>
         <p className="contract-avoid">10.2. Hợp đồng được lập dưới dạng thông điệp dữ liệu điện tử; bản in từ nền tảng có giá trị như bản thể hiện của Hợp đồng điện tử. Hai bên có thể ký tay bổ sung trên bản in.</p>
       </section>
 
