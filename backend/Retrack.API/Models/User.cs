@@ -59,6 +59,18 @@ namespace Retrack.API.Models
         [MaxLength(2048)]
         public string? BankQrUrl { get; set; }
 
+        // Thu/chi qua sàn: mã BIN ngân hàng nhận (payOS bắt buộc) và trạng thái xác minh.
+        [Column("bank_bin")]
+        [MaxLength(6)]
+        public string? BankBin { get; set; }
+
+        [Column("bank_status")]
+        [MaxLength(30)]
+        public string? BankStatus { get; set; } // PENDING_VERIFICATION, VERIFIED
+
+        [Column("bank_verified_at")]
+        public DateTime? BankVerifiedAt { get; set; }
+
         // Navigation
         [Column("avatar_url")]
         [MaxLength(2048)]
