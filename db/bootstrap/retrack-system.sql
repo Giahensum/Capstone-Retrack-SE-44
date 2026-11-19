@@ -1207,6 +1207,44 @@ INSERT INTO system_configs (config_key, config_value, description) VALUES
 ON CONFLICT (config_key) DO NOTHING;
 -- RETRACK_MONEY_V1_END
 
+-- RETRACK_MONEY_V3_BEGIN
+-- Thu vào sàn (giai đoạn 2): lịch sử mã đơn PayOS của khoản thu, bất thường khi thu tiền, mã đơn đã thanh toán.
+-- Chạy lại nhiều lần an toàn. Chỉ THÊM cột/bảng, không đổi ràng buộc của khối V1.
+ALTER TABLE money_collections ADD COLUMN IF NOT EXISTS paid_order_code BIGINT;
+
+-- Mọi mã đơn PayOS từng cấp cho một khoản thu (kể cả link đã hết hạn): tiền về muộn trên link cũ vẫn truy ra khoản thu.
+-- Mã đơn không trùng platform_invoices.payos_order_code (kiểm tra ở tầng ứng dụng khi cấp mã).
+CREATE TABLE IF NOT EXISTS money_collection_orders (
+    order_code    BIGINT      PRIMARY KEY,
+    collection_id UUID        NOT NULL REFERENCES money_collections(id),
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS ix_money_collection_orders_collection ON money_collection_orders(collection_id);
+
+-- Bất thường khi thu tiền cần Admin hoàn tay: trả thiếu, trả dư, tiền về muộn sau khi hết hạn/hủy, trả trùng, nguồn đã đổi trạng thái.
+-- Duy nhất (collection_id, kind, reference): webhook/đối soát gửi lại không tạo thêm dòng.
+CREATE TABLE IF NOT EXISTS money_collection_anomalies (
+    id              UUID           PRIMARY KEY DEFAULT gen_random_uuid(),
+    collection_id   UUID           NOT NULL REFERENCES money_collections(id),
+    order_code      BIGINT,
+    kind            VARCHAR(30)    NOT NULL,
+    received_amount DECIMAL(18, 0) NOT NULL,
+    expected_amount DECIMAL(18, 0) NOT NULL,
+    refund_amount   DECIMAL(18, 0) NOT NULL DEFAULT 0,
+    reference       VARCHAR(100)   NOT NULL,
+    status          VARCHAR(20)    NOT NULL DEFAULT 'OPEN',
+    note            TEXT,
+    created_at      TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
+    resolved_at     TIMESTAMPTZ,
+    resolved_by     UUID           REFERENCES users(id),
+    CONSTRAINT ck_money_anomalies_kind CHECK (kind IN ('UNDERPAID', 'OVERPAID', 'LATE_PAYMENT', 'DUPLICATE_PAYMENT', 'SOURCE_MISMATCH')),
+    CONSTRAINT ck_money_anomalies_status CHECK (status IN ('OPEN', 'RESOLVED')),
+    CONSTRAINT ck_money_anomalies_amounts CHECK (received_amount >= 0 AND expected_amount >= 0 AND refund_amount >= 0),
+    CONSTRAINT uq_money_anomalies_ref UNIQUE (collection_id, kind, reference)
+);
+CREATE INDEX IF NOT EXISTS ix_money_anomalies_open ON money_collection_anomalies(created_at DESC) WHERE status = 'OPEN';
+-- RETRACK_MONEY_V3_END
+
 -- RETRACK_SCHEMA_END
 
 -- RETRACK_SEED_BEGIN
