@@ -6,7 +6,8 @@ import toast from 'react-hot-toast';
 import { sellerApi } from '../api';
 import GoongAutocomplete from '@/components/ui/GoongAutocomplete';
 import { MaterialIcon } from '@/features/depot/components/DepotIcon';
-import { Loader2, Sparkles, Wand2 } from 'lucide-react';
+import { Loader2, Sparkles, Wand2, Layers } from 'lucide-react';
+import { CLASS_METADATA_MAP, normalizeAiPredictions } from '../aiWasteMetadata';
 
 const TIME_SLOTS = [
   '07:00 - 09:00', '09:00 - 11:00', '11:00 - 13:00',
@@ -90,11 +91,16 @@ export default function CreateRequest() {
   useEffect(() => {
     if (location.state?.aiResult) {
       const ai = location.state.aiResult;
-      setDetectedAiData(ai);
+      const normalized = normalizeAiPredictions(ai);
+      const enrichedAi = {
+        ...ai,
+        top_predictions: (ai.top_predictions && ai.top_predictions.length > 0) ? ai.top_predictions : normalized,
+      };
+      setDetectedAiData(enrichedAi);
       setInputMethod('manual');
       setForm((prev) => ({
         ...prev,
-        description: ai.suggested_description || `Phế liệu ${ai.name_vi} (AI nhận diện: ${ai.confidence}%), tình trạng khô ráo cần kho thu gom.`,
+        description: enrichedAi.suggested_description || `Phế liệu ${enrichedAi.name_vi} (AI nhận diện: ${enrichedAi.confidence}%), tình trạng khô ráo cần kho thu gom.`,
       }));
 
       if (ai.imagePreview || ai.annotated_image) {
@@ -114,6 +120,31 @@ export default function CreateRequest() {
     }
   }, [location.state]);
 
+  // ── Switch prediction among top 5 ──
+  const handleSwitchAiPrediction = (pred) => {
+    if (!detectedAiData) return;
+    const meta = CLASS_METADATA_MAP[pred.class_key] || {};
+    const updated = {
+      ...detectedAiData,
+      ...pred,
+      primary_class: pred.class_key,
+      name_vi: pred.name_vi || meta.name_vi || pred.class_key,
+      confidence: pred.confidence,
+      price_range: pred.price_range || meta.price_range || detectedAiData.price_range,
+      recycling_tip: pred.recycling_tip || meta.recycling_tip || detectedAiData.recycling_tip,
+      suggested_description: pred.suggested_description || meta.suggested_description || '',
+      icon: pred.icon || meta.icon || detectedAiData.icon,
+      unit: pred.unit || meta.unit || detectedAiData.unit,
+      selectedRank: pred.rank,
+    };
+    setDetectedAiData(updated);
+    setForm((prev) => ({
+      ...prev,
+      description: updated.suggested_description || `Phế liệu ${updated.name_vi} (AI nhận diện: ${updated.confidence}%), tình trạng khô ráo cần kho thu gom.`,
+    }));
+    toast.success(`✨ Đã chuyển sang phân loại: ${updated.name_vi} (${updated.confidence}%)`);
+  };
+
   // ── Inline AI scan file handler ──
   const handleAiScanFile = async (e) => {
     const file = e.target.files?.[0];
@@ -122,11 +153,17 @@ export default function CreateRequest() {
     try {
       const res = await sellerApi.classifyAiImage(file, false);
       if (res && res.primary_class) {
-        setDetectedAiData(res);
+        const normalized = normalizeAiPredictions(res);
+        const enrichedRes = {
+          ...res,
+          top_predictions: normalized,
+          selectedRank: 1,
+        };
+        setDetectedAiData(enrichedRes);
         setInputMethod('manual');
         setForm((prev) => ({
           ...prev,
-          description: res.suggested_description || `Phế liệu ${res.name_vi} (AI nhận diện: ${res.confidence}%), tình trạng khô ráo cần kho thu gom.`,
+          description: enrichedRes.suggested_description || `Phế liệu ${enrichedRes.name_vi} (AI nhận diện: ${enrichedRes.confidence}%), tình trạng khô ráo cần kho thu gom.`,
         }));
         setImages((prev) => {
           if (prev.length < 5) {
@@ -511,28 +548,65 @@ export default function CreateRequest() {
 
           {/* AI Detection Result Toast/Card if active */}
           {detectedAiData && (
-            <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-emerald-500 text-white flex items-center justify-center shrink-0">
-                  <MaterialIcon name={detectedAiData.icon || 'check_circle'} className="text-lg" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2 font-bold text-d-on-surface">
-                    <span>✨ Đã áp dụng phân loại AI: {detectedAiData.name_vi}</span>
-                    <span className="text-emerald-700 dark:text-emerald-400 font-mono">({detectedAiData.confidence}%)</span>
+            <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex flex-col gap-3 text-xs shadow-xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-500 text-white flex items-center justify-center shrink-0">
+                    <MaterialIcon name={detectedAiData.icon || 'check_circle'} className="text-lg" />
                   </div>
-                  <p className="text-d-on-surface-variant text-[11px] mt-0.5">
-                    Giá tham khảo: <strong className="text-d-on-surface">{detectedAiData.price_range}</strong> — {detectedAiData.recycling_tip}
-                  </p>
+                  <div>
+                    <div className="flex items-center gap-2 font-bold text-d-on-surface flex-wrap">
+                      <span>✨ Đã áp dụng phân loại AI: {detectedAiData.name_vi}</span>
+                      <span className="text-emerald-700 dark:text-emerald-400 font-mono">({detectedAiData.confidence}%)</span>
+                      {detectedAiData.selectedRank && (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 font-bold">
+                          {detectedAiData.selectedRank === 1 ? '🏆 Top 1' : `Top ${detectedAiData.selectedRank}`}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-d-on-surface-variant text-[11px] mt-0.5">
+                      Giá tham khảo: <strong className="text-d-on-surface">{detectedAiData.price_range}</strong> — {detectedAiData.recycling_tip}
+                    </p>
+                  </div>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setDetectedAiData(null)}
+                  className="self-end sm:self-center text-xs font-bold text-d-on-surface-variant hover:text-d-on-surface px-2 py-1 rounded cursor-pointer"
+                >
+                  ✕ Đóng
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={() => setDetectedAiData(null)}
-                className="self-end sm:self-center text-xs font-bold text-d-on-surface-variant hover:text-d-on-surface px-2 py-1 rounded"
-              >
-                ✕ Đóng
-              </button>
+
+              {/* Selector for other predictions in Top 5 */}
+              {detectedAiData.top_predictions && detectedAiData.top_predictions.length > 1 && (
+                <div className="pt-2.5 border-t border-emerald-500/20 space-y-1.5">
+                  <div className="flex items-center gap-1.5 text-[11px] font-semibold text-d-on-surface">
+                    <Layers size={13} className="text-emerald-600" />
+                    <span>Hoặc chọn nhanh loại khác từ Top 5 AI nhận diện:</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {detectedAiData.top_predictions.map((pred, pIdx) => {
+                      const isCurrent = (detectedAiData.primary_class === pred.class_key) || (detectedAiData.name_vi === pred.name_vi);
+                      return (
+                        <button
+                          key={pred.class_key || pIdx}
+                          type="button"
+                          onClick={() => handleSwitchAiPrediction(pred)}
+                          className={`px-2.5 py-1 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
+                            isCurrent
+                              ? 'bg-emerald-600 text-white shadow-xs'
+                              : 'bg-d-surface-container text-d-on-surface hover:bg-emerald-500/20'
+                          }`}
+                        >
+                          <span>{pIdx === 0 ? '🏆 Top 1' : `Top ${pIdx + 1}`}: {pred.name_vi}</span>
+                          <span className="font-mono text-[10px] opacity-80">({pred.confidence}%)</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
