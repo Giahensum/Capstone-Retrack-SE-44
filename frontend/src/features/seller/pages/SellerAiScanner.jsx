@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { sellerApi } from '../api';
 import { MaterialIcon } from '@/features/depot/components/DepotIcon';
-import { Loader2, Camera, Upload, Sparkles, RefreshCw, ArrowRight, CheckCircle2, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { Loader2, Camera, Upload, Sparkles, RefreshCw, ArrowRight, CheckCircle2, AlertTriangle, ShieldCheck, Check, Layers } from 'lucide-react';
+import { normalizeAiPredictions } from '../aiWasteMetadata';
 
 const DEMO_SAMPLES = [
   {
@@ -27,6 +28,7 @@ export default function SellerAiScanner() {
   const [selectedImage, setSelectedImage] = useState(null); // { file, preview, base64 }
   const [isScanning, setIsScanning] = useState(false);
   const [aiResult, setAiResult] = useState(null);
+  const [selectedPredictionIndex, setSelectedPredictionIndex] = useState(0);
   const [aiStatus, setAiStatus] = useState(null);
 
   // Check AI Service status on mount
@@ -147,6 +149,7 @@ export default function SellerAiScanner() {
 
       if (res && res.primary_class) {
         setAiResult(res);
+        setSelectedPredictionIndex(0);
         toast.success(`Đã nhận diện: ${res.name_vi} (${res.confidence}%) 🎉`);
       } else {
         toast.error('Không thể xác định loại phế liệu. Vui lòng thử góc chụp rõ hơn.');
@@ -164,6 +167,7 @@ export default function SellerAiScanner() {
   const resetScanner = () => {
     setSelectedImage(null);
     setAiResult(null);
+    setSelectedPredictionIndex(0);
     setIsScanning(false);
     if (activeTab === 'camera') {
       setTimeout(() => startCamera(), 100);
@@ -191,13 +195,29 @@ export default function SellerAiScanner() {
     }
   };
 
-  // Transfer AI Result to Create Request
-  const handleProceedToCreateRequest = () => {
+  // Transfer AI Result to Create Request (cho phép chọn bất kỳ loại nào trong Top 5)
+  const handleProceedToCreateRequest = (targetItem = null) => {
     if (!aiResult) return;
+    const predictions = normalizeAiPredictions(aiResult);
+    const itemToUse = targetItem || predictions[selectedPredictionIndex] || predictions[0];
+    if (!itemToUse) return;
+
     navigate('/seller/create', {
       state: {
         aiResult: {
           ...aiResult,
+          primary_class: itemToUse.class_key,
+          name_vi: itemToUse.name_vi,
+          confidence: itemToUse.confidence,
+          icon: itemToUse.icon,
+          price_range: itemToUse.price_range,
+          unit: itemToUse.unit,
+          recycling_tip: itemToUse.recycling_tip,
+          suggested_description: itemToUse.suggested_description,
+          is_recyclable: itemToUse.is_recyclable,
+          material_type: itemToUse.material_type,
+          selectedRank: itemToUse.rank,
+          top_predictions: predictions,
           imagePreview: selectedImage?.preview,
           imageFile: selectedImage?.file,
         },
@@ -479,134 +499,229 @@ export default function SellerAiScanner() {
           )}
 
           {/* AI Result Card */}
-          {aiResult && (
-            <div className="bg-d-surface-container-lowest border border-d-border-subtle rounded-3xl p-6 shadow-md space-y-5">
-              {/* Top Result Banner */}
-              <div className="flex items-start justify-between gap-3 pb-4 border-b border-d-border-subtle">
-                <div className="flex items-start gap-3">
-                  <div className="w-12 h-12 rounded-2xl bg-d-primary text-d-on-primary flex items-center justify-center shrink-0 shadow-sm">
-                    <MaterialIcon name={aiResult.icon || 'category'} className="text-2xl" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-bold text-d-on-surface text-lg">
-                        {aiResult.name_vi}
-                      </h3>
+          {aiResult && (() => {
+            const predictions = normalizeAiPredictions(aiResult);
+            const currentSelected = predictions[selectedPredictionIndex] || predictions[0];
+
+            return (
+              <div className="bg-d-surface-container-lowest border border-d-border-subtle rounded-3xl p-6 shadow-md space-y-6">
+                {/* Header Banner: Currently Selected Waste Material */}
+                <div className="flex items-start justify-between gap-3 pb-4 border-b border-d-border-subtle">
+                  <div className="flex items-start gap-3">
+                    <div className="w-12 h-12 rounded-2xl bg-d-primary text-d-on-primary flex items-center justify-center shrink-0 shadow-sm">
+                      <MaterialIcon name={currentSelected.icon || 'category'} className="text-2xl" />
                     </div>
-                    <p className="text-xs text-d-on-surface-variant font-mono mt-0.5">
-                      Class: {aiResult.primary_class} | Detection: {aiResult.box_status}
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="font-bold text-d-on-surface text-lg">
+                          {currentSelected.name_vi}
+                        </h3>
+                        {currentSelected.is_top1 ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
+                            🏆 Top 1 (Khuyến nghị cao nhất)
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                            Đã chọn Top {currentSelected.rank}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-d-on-surface-variant font-mono mt-0.5">
+                        Mã: {currentSelected.class_key} • Độ tin cậy: {currentSelected.confidence}% • Detection: {aiResult.box_status}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Recyclability Badge */}
+                  <div className="shrink-0">
+                    {currentSelected.is_recyclable ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 text-xs font-bold">
+                        <CheckCircle2 size={12} />
+                        <span>Thu gom được</span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-600 border border-amber-500/20 text-xs font-bold">
+                        <AlertTriangle size={12} />
+                        <span>Rác không thu</span>
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Top 5 Selector Section */}
+                <div className="space-y-3">
+                  <div>
+                    <h4 className="font-bold text-d-on-surface text-sm flex items-center gap-1.5">
+                      <Layers size={16} className="text-d-primary" />
+                      <span>Chọn loại phế liệu để tạo đơn (Top 5 AI nhận diện):</span>
+                    </h4>
+                    <p className="text-[11px] text-d-on-surface-variant mt-0.5">
+                      Hệ thống tự động ưu tiên Top 1 có độ khớp cao nhất. Bạn có thể bấm chọn bất kỳ loại nào trong 5 gợi ý bên dưới để tạo đơn thu gom:
                     </p>
                   </div>
-                </div>
 
-                {/* Recyclability Badge */}
-                <div className="shrink-0">
-                  {aiResult.is_recyclable ? (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 text-xs font-bold">
-                      <CheckCircle2 size={12} />
-                      <span>Thu gom được</span>
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-600 border border-amber-500/20 text-xs font-bold">
-                      <AlertTriangle size={12} />
-                      <span>Rác không thu</span>
-                    </span>
-                  )}
-                </div>
-              </div>
+                  {/* Cards List for Top 5 */}
+                  <div className="space-y-2">
+                    {predictions.map((pred, idx) => {
+                      const isSelected = selectedPredictionIndex === idx;
+                      return (
+                        <div
+                          key={pred.class_key || idx}
+                          onClick={() => setSelectedPredictionIndex(idx)}
+                          className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                            isSelected
+                              ? 'border-2 border-d-primary bg-d-primary/5 shadow-xs ring-1 ring-d-primary/20'
+                              : 'border-d-border-subtle bg-d-surface-container-low hover:border-d-primary/40 hover:bg-d-surface-container'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            {/* Radio check icon */}
+                            <div className="shrink-0">
+                              {isSelected ? (
+                                <div className="w-5 h-5 rounded-full bg-d-primary text-d-on-primary flex items-center justify-center">
+                                  <Check size={12} strokeWidth={3} />
+                                </div>
+                              ) : (
+                                <div className="w-5 h-5 rounded-full border-2 border-d-border-subtle" />
+                              )}
+                            </div>
 
-              {/* Confidence Meter */}
-              <div className="space-y-1.5">
-                <div className="flex justify-between text-xs font-bold">
-                  <span className="text-d-on-surface">Độ tin cậy nhận diện:</span>
-                  <span className="text-d-primary font-mono text-sm">{aiResult.confidence}%</span>
-                </div>
-                <div className="w-full h-2.5 bg-d-surface-container rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-d-primary transition-all duration-500 rounded-full"
-                    style={{ width: `${Math.min(aiResult.confidence, 100)}%` }}
-                  />
-                </div>
-              </div>
+                            {/* Icon */}
+                            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                              isSelected ? 'bg-d-primary text-d-on-primary' : 'bg-d-surface-container text-d-on-surface-variant'
+                            }`}>
+                              <MaterialIcon name={pred.icon || 'category'} className="text-lg" />
+                            </div>
 
-              {/* Price Estimate Card */}
-              <div className="p-4 rounded-2xl bg-d-surface-container-low border border-d-border-subtle space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-d-on-surface flex items-center gap-1.5">
-                    <MaterialIcon name="payments" className="text-d-primary text-base" />
-                    <span>Giá thu mua tham khảo:</span>
-                  </span>
-                  <span className="text-xs font-bold text-d-primary bg-d-primary/10 px-2.5 py-0.5 rounded-full">
-                    {aiResult.unit || 'kg'}
-                  </span>
-                </div>
-                <div className="text-lg font-bold text-d-on-surface">
-                  {aiResult.current_market_price
-                    ? `${aiResult.current_market_price.toLocaleString('vi-VN')} đ/kg (Bảng giá sàn ReTrack)`
-                    : aiResult.price_range}
-                </div>
-                <p className="text-[11px] text-d-on-surface-variant">
-                  * Mức giá thực tế sẽ do kho vựa đối tác thẩm định và cân chuẩn khi điều phối thu gom.
-                </p>
-              </div>
+                            {/* Name & price */}
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-bold text-sm text-d-on-surface truncate">
+                                  {pred.name_vi}
+                                </span>
+                                {pred.is_top1 ? (
+                                  <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-md bg-amber-500/20 text-amber-700 dark:text-amber-300">
+                                    🏆 Top 1
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded-md bg-d-surface-container text-d-on-surface-variant">
+                                    Top {idx + 1}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-[11px] text-d-on-surface-variant truncate mt-0.5">
+                                Giá tham khảo: <strong className="text-d-on-surface">{pred.price_range}</strong>
+                              </p>
+                            </div>
+                          </div>
 
-              {/* OCR Text if detected */}
-              {aiResult.ocr_text && (
-                <div className="p-3.5 rounded-xl bg-d-surface-container-lowest border border-d-border-subtle text-xs space-y-1">
-                  <span className="font-bold text-d-on-surface flex items-center gap-1.5">
-                    <MaterialIcon name="document_scanner" className="text-sm text-d-primary" />
-                    <span>Chữ / Nhãn hiệu nhận diện (OCR):</span>
-                  </span>
-                  <p className="text-d-on-surface-variant font-mono bg-d-surface-container-low p-2 rounded-lg break-all">
-                    "{aiResult.ocr_text}"
-                  </p>
-                </div>
-              )}
+                          {/* Confidence & Action */}
+                          <div className="flex items-center gap-3 shrink-0">
+                            <div className="text-right">
+                              <span className={`font-mono font-bold text-sm block ${
+                                isSelected ? 'text-d-primary' : 'text-d-on-surface-variant'
+                              }`}>
+                                {pred.confidence}%
+                              </span>
+                              <span className="text-[10px] text-d-on-surface-variant">độ khớp</span>
+                            </div>
 
-              {/* Recycling Tips */}
-              {aiResult.recycling_tip && (
-                <div className="p-3.5 rounded-xl bg-blue-500/5 border border-blue-500/20 text-xs space-y-1">
-                  <span className="font-bold text-blue-700 dark:text-blue-400 flex items-center gap-1.5">
-                    <ShieldCheck size={14} />
-                    <span>Lời khuyên xử lý & phân loại:</span>
-                  </span>
-                  <p className="text-d-on-surface-variant leading-relaxed">
-                    {aiResult.recycling_tip}
-                  </p>
-                </div>
-              )}
-
-              {/* Top 5 Breakdown */}
-              {aiResult.top_predictions && aiResult.top_predictions.length > 1 && (
-                <div className="space-y-2 pt-2 border-t border-d-border-subtle">
-                  <span className="text-[11px] font-bold text-d-on-surface-variant uppercase tracking-wider block">
-                    Xác suất các nhóm tương đồng:
-                  </span>
-                  <div className="space-y-1.5">
-                    {aiResult.top_predictions.slice(1, 4).map((pred) => (
-                      <div key={pred.class_key} className="flex items-center justify-between text-xs">
-                        <span className="text-d-on-surface truncate max-w-[200px]">{pred.name_vi}</span>
-                        <span className="text-d-on-surface-variant font-mono">{pred.confidence}%</span>
-                      </div>
-                    ))}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedPredictionIndex(idx);
+                                handleProceedToCreateRequest(pred);
+                              }}
+                              className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all shrink-0 ${
+                                isSelected
+                                  ? 'bg-d-primary text-d-on-primary shadow-xs hover:bg-[#385500]'
+                                  : 'bg-d-surface-container text-d-on-surface hover:bg-d-primary/10 hover:text-d-primary'
+                              }`}
+                            >
+                              {isSelected ? 'Tạo đơn ngay' : 'Chọn tạo đơn'}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
-              )}
 
-              {/* Primary Call to Action */}
-              <div className="pt-3">
-                <button
-                  id="btn-proceed-create-request"
-                  type="button"
-                  onClick={handleProceedToCreateRequest}
-                  className="w-full py-3.5 px-6 rounded-full bg-d-primary text-d-on-primary font-bold text-sm shadow-md hover:bg-[#385500] active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <span>Tạo đơn thu gom với kết quả này</span>
-                  <ArrowRight size={16} />
-                </button>
+                {/* Confidence Meter for selected */}
+                <div className="space-y-1.5 pt-2 border-t border-d-border-subtle">
+                  <div className="flex justify-between text-xs font-bold">
+                    <span className="text-d-on-surface">Độ tin cậy của lựa chọn ({currentSelected.name_vi}):</span>
+                    <span className="text-d-primary font-mono text-sm">{currentSelected.confidence}%</span>
+                  </div>
+                  <div className="w-full h-2.5 bg-d-surface-container rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-d-primary transition-all duration-500 rounded-full"
+                      style={{ width: `${Math.min(currentSelected.confidence, 100)}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* Price Estimate Card */}
+                <div className="p-4 rounded-2xl bg-d-surface-container-low border border-d-border-subtle space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-d-on-surface flex items-center gap-1.5">
+                      <MaterialIcon name="payments" className="text-d-primary text-base" />
+                      <span>Giá thu mua tham khảo ({currentSelected.name_vi}):</span>
+                    </span>
+                    <span className="text-xs font-bold text-d-primary bg-d-primary/10 px-2.5 py-0.5 rounded-full">
+                      {currentSelected.unit || 'kg'}
+                    </span>
+                  </div>
+                  <div className="text-lg font-bold text-d-on-surface">
+                    {currentSelected.price_range}
+                  </div>
+                  <p className="text-[11px] text-d-on-surface-variant">
+                    * Mức giá thực tế sẽ do kho vựa đối tác thẩm định và cân chuẩn khi điều phối thu gom.
+                  </p>
+                </div>
+
+                {/* Recycling Tips */}
+                {currentSelected.recycling_tip && (
+                  <div className="p-3.5 rounded-xl bg-blue-500/5 border border-blue-500/20 text-xs space-y-1">
+                    <span className="font-bold text-blue-700 dark:text-blue-400 flex items-center gap-1.5">
+                      <ShieldCheck size={14} />
+                      <span>Lời khuyên xử lý & phân loại:</span>
+                    </span>
+                    <p className="text-d-on-surface-variant leading-relaxed">
+                      {currentSelected.recycling_tip}
+                    </p>
+                  </div>
+                )}
+
+                {/* OCR Text if detected */}
+                {aiResult.ocr_text && (
+                  <div className="p-3.5 rounded-xl bg-d-surface-container-lowest border border-d-border-subtle text-xs space-y-1">
+                    <span className="font-bold text-d-on-surface flex items-center gap-1.5">
+                      <MaterialIcon name="document_scanner" className="text-sm text-d-primary" />
+                      <span>Chữ / Nhãn hiệu nhận diện trên ảnh (OCR):</span>
+                    </span>
+                    <p className="text-d-on-surface-variant font-mono bg-d-surface-container-low p-2 rounded-lg break-all">
+                      "{aiResult.ocr_text}"
+                    </p>
+                  </div>
+                )}
+
+                {/* Primary Call to Action */}
+                <div className="pt-2">
+                  <button
+                    id="btn-proceed-create-request"
+                    type="button"
+                    onClick={() => handleProceedToCreateRequest(currentSelected)}
+                    className="w-full py-3.5 px-6 rounded-full bg-d-primary text-d-on-primary font-bold text-sm shadow-md hover:bg-[#385500] active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <span>Tạo đơn thu gom với: {currentSelected.name_vi} ({currentSelected.is_top1 ? 'Khuyến nghị Top 1' : `Top ${currentSelected.rank}`})</span>
+                    <ArrowRight size={16} />
+                  </button>
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
         </div>
       </div>
     </div>
