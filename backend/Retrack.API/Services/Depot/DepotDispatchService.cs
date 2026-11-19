@@ -7,6 +7,37 @@ namespace Retrack.API.Services.Depot;
 
 public sealed class DepotDispatchService(IDepotDispatchRepository repository, IDepotService scope, IDepotUnitOfWork work)
 {
+    public async Task<IReadOnlyList<CollectionRegion>> CatalogAsync(Guid owner, Guid depot)
+    {
+        await scope.RequireOwnerAsync(owner, depot);
+        return DanangCollectionCatalog.Regions;
+    }
+
+    private async Task<EmployeeCollectionArea> ResolveCatalogAreaAsync(Guid depot, string code)
+    {
+        var region = DanangCollectionCatalog.Find(code);
+        var id = DanangCollectionCatalog.AreaId(depot, code);
+        var area = await repository.AreaAsync(id)
+            ?? await repository.MatchingAreaAsync(depot, region.Latitude, region.Longitude);
+        if (area != null)
+        {
+            if (area.DepotId != depot) throw new DepotConflictException("Mã vùng xung đột với kho khác.");
+            return area; // Không ghi đè tâm/bán kính hoặc mở lại vùng Owner đã tắt.
+        }
+        area = new EmployeeCollectionArea { Id = id, DepotId = depot, Name = region.Name,
+            Latitude = region.Latitude, Longitude = region.Longitude, RadiusMeters = region.RadiusMeters, IsActive = true };
+        repository.AddArea(area);
+        return area;
+    }
+
+    public async Task<DispatchAreaDto> UseCatalogAreaAsync(Guid owner, Guid depot, string code)
+    {
+        await scope.RequireOwnerAsync(owner, depot);
+        await using var tx = await work.BeginAsync(); await repository.LockAsync();
+        var area = await ResolveCatalogAreaAsync(depot, code);
+        await work.SaveAsync(); await tx.CommitAsync();
+        return new(area.Id, area.Name, area.Latitude, area.Longitude, area.RadiusMeters, area.IsActive, area.DepotId);
+    }
     public async Task<PagedResult<StaffDto>> EmployeesAsync(Guid owner,Guid depot,DepotQuery query)
     {await scope.RequireOwnerAsync(owner,depot);Page(query);return await repository.EmployeesAsync(depot,query);}
     private static void Page(DepotQuery query)
@@ -59,14 +90,17 @@ public sealed class DepotDispatchService(IDepotDispatchRepository repository, ID
             input.Vehicle is not ("motorcycle" or "car" or "truck") || input.CapacityKg is <= 0 or > 20000 || decimal.Round(input.CapacityKg, 2) != input.CapacityKg || input.MaxPendingOrders is < 1 or > 50)
             throw new ArgumentException("Ca tối đa 24 giờ; phương tiện/tải trọng tối đa hai số lẻ/giới hạn đơn không hợp lệ.");
         await using var tx = await work.BeginAsync(); await repository.LockAsync();
-        var area = await repository.AreaAsync(input.AreaId);
+        if (input.CatalogCode != null && input.AreaId != Guid.Empty)
+            throw new ArgumentException("Chỉ chọn vùng đã cấu hình hoặc vùng trong danh mục, không chọn đồng thời.");
+        var area = input.CatalogCode == null ? await repository.AreaAsync(input.AreaId)
+            : await ResolveCatalogAreaAsync(depot, input.CatalogCode);
         if (area == null || area.DepotId != depot) throw new ArgumentException("Khu vực không thuộc kho.");
         if (input.OperationId.HasValue)
         {
             var old = await repository.ShiftAsync(input.OperationId.Value);
             if (old != null)
             {
-                if (old.AreaId != input.AreaId || old.EmployeeId != input.EmployeeId || old.StartsAt != start || old.EndsAt != end || old.Vehicle != input.Vehicle || old.CapacityKg != input.CapacityKg || old.MaxPendingOrders != input.MaxPendingOrders)
+                if (old.AreaId != area.Id || old.EmployeeId != input.EmployeeId || old.StartsAt != start || old.EndsAt != end || old.Vehicle != input.Vehicle || old.CapacityKg != input.CapacityKg || old.MaxPendingOrders != input.MaxPendingOrders)
                     throw new DepotConflictException("Mã thao tác đã được dùng cho ca khác.");
                 await tx.CommitAsync(); return old;
             }
@@ -74,7 +108,7 @@ public sealed class DepotDispatchService(IDepotDispatchRepository repository, ID
         if (end <= now || start > now.AddDays(60) || !area.IsActive || !await repository.ActiveEmployeeAsync(depot, input.EmployeeId))
             throw new ArgumentException("Chọn khu vực/nhân viên đang hoạt động và ca chưa kết thúc, trong 60 ngày tới.");
         if (await repository.OverlapAsync(input.EmployeeId, start, end)) throw new DepotConflictException("Nhân viên đã có ca trùng giờ.");
-        var shift = new EmployeeDispatchShift { Id = input.OperationId ?? Guid.NewGuid(), AreaId = input.AreaId, EmployeeId = input.EmployeeId, StartsAt = start, EndsAt = end, Vehicle = input.Vehicle, CapacityKg = input.CapacityKg, MaxPendingOrders = input.MaxPendingOrders };
+        var shift = new EmployeeDispatchShift { Id = input.OperationId ?? Guid.NewGuid(), AreaId = area.Id, EmployeeId = input.EmployeeId, StartsAt = start, EndsAt = end, Vehicle = input.Vehicle, CapacityKg = input.CapacityKg, MaxPendingOrders = input.MaxPendingOrders };
         repository.AddShift(shift); await work.SaveAsync(); await tx.CommitAsync(); return shift;
     }
     public async Task AssignAsync(Guid owner, Guid depot, Guid id, DispatchAssignInput input)
@@ -99,7 +133,7 @@ public sealed class DepotDispatchService(IDepotDispatchRepository repository, ID
         if (shift.Availability != "AVAILABLE" || shift.StartsAt > now || shift.EndsAt <= now || pickup.PreferredDatetime >= shift.EndsAt ||
             pickup.PreferredDatetime >= now.AddHours(7).Date.AddDays(1).AddHours(-7)) throw new DepotConflictException("Ca chưa sẵn sàng/không phù hợp ngày hẹn; đơn ngày sau chờ đúng ngày phân công.");
         if (pickup.AcceptedCollectorId == shift.EmployeeId) throw new DepotConflictException("Đơn đã thuộc nhân viên này. Hãy tải lại dữ liệu.");
-        if (await repository.AssignedCountAsync(depot, shift.EmployeeId) >= shift.MaxPendingOrders) throw new DepotConflictException("Nhân viên đã đủ giới hạn số đơn trong ca.");
+        if (!shift.IsAutomatic && await repository.AssignedCountAsync(depot, shift.EmployeeId) >= shift.MaxPendingOrders) throw new DepotConflictException("Nhân viên đã đủ giới hạn số đơn trong ca.");
         var previous = pickup.AcceptedCollectorId; pickup.AcceptedCollectorId = shift.EmployeeId; pickup.Status = "SCHEDULED"; pickup.UpdatedAt = now;
         repository.AddEvent(new() { Id = input.OperationId, PickupId = id, FromEmployeeId = previous, ToEmployeeId = shift.EmployeeId, ShiftId = shift.Id, Reason = input.Reason.Trim(), CreatedAt = now });
         var queue = await repository.QueueAsync(id); if (queue == null) { queue = new() { PickupId = id }; repository.AddQueue(queue); }
