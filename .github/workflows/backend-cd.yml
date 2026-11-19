@@ -66,6 +66,10 @@ jobs:
           tags: |
             ${{ steps.meta.outputs.image }}:${{ github.sha }}
             ${{ steps.meta.outputs.image }}:latest
+          # Tắt attestation (provenance/SBOM): VPS dùng containerd image store, kéo manifest attestation-sha256 có thể lỗi
+          # "failed commit on ref attestation-sha256 ... no such file or directory". Image không cần attestation để chạy.
+          provenance: false
+          sbom: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
