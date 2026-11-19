@@ -18,8 +18,18 @@ public sealed class PayOsOptions
     /// <summary>URL quay về cho Factory; để trống thì suy ra từ ReturnUrl (cùng domain, đường dẫn /factory).</summary>
     public string FactoryReturnUrl { get; set; } = "";
     public string FactoryCancelUrl { get; set; } = "";
-    public (string Return, string Cancel) Redirects(PayOsRedirect target)
+    /// <summary>URL quay về cho khoản thu qua sàn (/pay/return); để trống thì suy ra từ ReturnUrl (cùng domain).</summary>
+    public string MoneyReturnUrl { get; set; } = "";
+    public (string Return, string Cancel) Redirects(PayOsRedirect target, string? query = null)
     {
+        if (target == PayOsRedirect.Money)
+        {
+            // Trang /pay/return nhận flow + source để biết khoản thu nào cần đồng bộ; PayOS tự nối thêm code, id, cancel, status, orderCode.
+            var baseUrl = !string.IsNullOrWhiteSpace(MoneyReturnUrl) ? MoneyReturnUrl.TrimEnd('/')
+                : Uri.TryCreate(ReturnUrl, UriKind.Absolute, out var m) ? $"{m.GetLeftPart(UriPartial.Authority)}/pay/return" : "/pay/return";
+            var url = string.IsNullOrWhiteSpace(query) ? baseUrl : baseUrl + (baseUrl.Contains('?') ? "&" : "?") + query;
+            return (url, url);
+        }
         if (target != PayOsRedirect.Factory) return (ReturnUrl, CancelUrl);
         string Derive(string explicitUrl, string fallback, string status) =>
             !string.IsNullOrWhiteSpace(explicitUrl) ? explicitUrl
@@ -36,7 +46,7 @@ public sealed record PayOsPayment(string Status, long Amount, string? Reference,
 public sealed class PayOsException(string message) : Exception(message);
 
 /// <summary>Trang web mà PayOS đưa người nộp quay lại sau khi thanh toán hoặc hủy.</summary>
-public enum PayOsRedirect { Depot, Factory }
+public enum PayOsRedirect { Depot, Factory, Money }
 
 public interface IPayOsClient
 {
@@ -45,6 +55,9 @@ public interface IPayOsClient
     /// <summary>Mặc định dùng URL của Depot để các bản cài đặt cũ (ví dụ giả lập trong test) vẫn hoạt động.</summary>
     Task<PayOsLink> CreatePaymentLinkAsync(long orderCode, long amount, string description, PayOsRedirect redirect, CancellationToken ct = default) =>
         CreatePaymentLinkAsync(orderCode, amount, description, ct);
+    /// <summary>Tạo link cho khoản thu qua sàn: redirectQuery (flow=...&amp;source=...) được nối vào URL quay về. Mặc định bỏ qua query để các bản cài đặt giả lập trong test vẫn hoạt động.</summary>
+    Task<PayOsLink> CreatePaymentLinkAsync(long orderCode, long amount, string description, PayOsRedirect redirect, string? redirectQuery, CancellationToken ct = default) =>
+        CreatePaymentLinkAsync(orderCode, amount, description, redirect, ct);
     Task<PayOsPayment> GetPaymentAsync(long orderCode, CancellationToken ct = default);
     bool VerifyWebhookData(JsonElement data, string signature);
 }
@@ -87,10 +100,13 @@ public sealed class PayOsClient(HttpClient http, IOptions<PayOsOptions> options)
     public Task<PayOsLink> CreatePaymentLinkAsync(long orderCode, long amount, string description, CancellationToken ct = default) =>
         CreatePaymentLinkAsync(orderCode, amount, description, PayOsRedirect.Depot, ct);
 
-    public async Task<PayOsLink> CreatePaymentLinkAsync(long orderCode, long amount, string description, PayOsRedirect redirect, CancellationToken ct = default)
+    public Task<PayOsLink> CreatePaymentLinkAsync(long orderCode, long amount, string description, PayOsRedirect redirect, CancellationToken ct = default) =>
+        CreatePaymentLinkAsync(orderCode, amount, description, redirect, null, ct);
+
+    public async Task<PayOsLink> CreatePaymentLinkAsync(long orderCode, long amount, string description, PayOsRedirect redirect, string? redirectQuery, CancellationToken ct = default)
     {
         EnsureConfigured();
-        var (returnUrl, cancelUrl) = cfg.Redirects(redirect);
+        var (returnUrl, cancelUrl) = cfg.Redirects(redirect, redirectQuery);
         var signature = Sign(cfg.ChecksumKey, CreateRequestPayload(amount, cancelUrl, description, orderCode, returnUrl));
         using var req = Request(HttpMethod.Post, "/v2/payment-requests");
         req.Content = JsonContent.Create(new { orderCode, amount, description, cancelUrl, returnUrl, signature });

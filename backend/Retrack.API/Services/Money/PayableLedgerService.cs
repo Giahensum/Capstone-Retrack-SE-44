@@ -4,7 +4,9 @@ using Retrack.API.Models;
 
 namespace Retrack.API.Services.Money;
 
-public sealed record SaleLineRequest(Guid CollectionId, Guid PayeeId, string Flow, string SourceType, Guid SourceId, decimal Gross, DateTime TriggeredAtUtc);
+/// <param name="CommissionBase">Cơ sở tính hoa hồng; null = gross. Dòng BATCH: gross gồm VAT chi hộ, cơ sở = tiền hàng chưa VAT (docs mục 4).</param>
+public sealed record SaleLineRequest(Guid CollectionId, Guid PayeeId, string Flow, string SourceType, Guid SourceId, decimal Gross, DateTime TriggeredAtUtc,
+    decimal? CommissionBase = null);
 
 /// <param name="RefundKey">Khóa của đúng lần hoàn này (ví dụ mã yêu cầu hoàn). Cùng khóa gọi lại là no-op.</param>
 public sealed record RefundLineRequest(string SourceType, Guid SourceId, string RefundKey, decimal RefundGross, DateTime TriggeredAtUtc);
@@ -36,7 +38,10 @@ public sealed class PayableLedgerService(AppDbContext db, MoneyConfigReader conf
 
         var cfg = await config.GetAsync(ct);
         var rate = await ResolveRateAsync(r.PayeeId, r.Flow, cfg, ct);
-        var commission = CommissionCalculator.Commission(r.Gross, rate);
+        var commissionBase = r.CommissionBase ?? r.Gross;
+        if (commissionBase < 0 || commissionBase > r.Gross || commissionBase != decimal.Truncate(commissionBase))
+            throw new ArgumentException("Cơ sở tính hoa hồng phải là số nguyên đồng trong khoảng 0 đến gross.", nameof(r));
+        var commission = CommissionCalculator.Commission(commissionBase, rate);
         var trigger = Utc(r.TriggeredAtUtc);
         var availableAt = trigger.AddMinutes(cfg.PayoutHoldMinutes);
         var id = Guid.NewGuid();

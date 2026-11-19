@@ -3,7 +3,8 @@ using Retrack.API.Repositories.Interfaces;
 using Retrack.API.Services.Interfaces;
 namespace Retrack.API.Services.Depot;
 
-public sealed class DepotPaymentService(IDepotOwnerRepository owners, IDepotPaymentRepository payments, IDepotUnitOfWork work) : IDepotPaymentService
+public sealed class DepotPaymentService(IDepotOwnerRepository owners, IDepotPaymentRepository payments, IDepotUnitOfWork work,
+    Retrack.API.Services.Money.PlatformMoneyHooks? money = null) : IDepotPaymentService
 {
     public async Task<PickupRequest> MarkSentAsync(Guid requestId, Guid ownerId, string paymentProofUrl)
     {
@@ -14,6 +15,9 @@ public sealed class DepotPaymentService(IDepotOwnerRepository owners, IDepotPaym
             (proof.Scheme != Uri.UriSchemeHttps && proof.Scheme != Uri.UriSchemeHttp))
             throw new ArgumentException("Đường dẫn chứng từ phải là URL HTTP hoặc HTTPS hợp lệ.");
 
+        // PLATFORM (money.mode): đơn chỉ chuyển sang PAYMENT_SENT khi sàn nhận tiền qua PayOS, không nhận chứng từ chuyển khoản tay. LEGACY: không đổi.
+        if (money != null && await money.IsPlatformAsync())
+            throw new DepotConflictException("Thanh toán qua sàn đang bật: vui lòng thanh toán bằng PayOS thay vì tải chứng từ chuyển khoản.");
         await using var transaction = await work.BeginAsync();
         // Tuần tự hóa thanh toán giữa các tiến trình, không chỉ chặn nhấn nút lặp trên trình duyệt.
         var req = await payments.LockAsync(requestId)

@@ -197,6 +197,10 @@ builder.Services.AddSingleton<Retrack.API.Services.Money.SimulatedPayoutProvider
 builder.Services.AddSingleton<Retrack.API.Services.Money.IPayoutProvider>(sp => sp.GetRequiredService<Retrack.API.Services.Money.SimulatedPayoutProvider>());
 builder.Services.AddScoped<Retrack.API.Services.Money.MoneyConfigReader>();
 builder.Services.AddScoped<Retrack.API.Services.Money.PayableLedgerService>();
+// Thu vào sàn qua PayOS (giai đoạn 2): khoản thu, móc nối luồng cũ (chỉ hoạt động khi money.mode = PLATFORM), worker đối soát
+builder.Services.AddScoped<Retrack.API.Services.Money.IMoneyCollectionService, Retrack.API.Services.Money.MoneyCollectionService>();
+builder.Services.AddScoped<Retrack.API.Services.Money.PlatformMoneyHooks>();
+builder.Services.AddHostedService<Retrack.API.Services.Money.MoneyCollectionReconciliationWorker>();
 builder.Services.AddScoped<Retrack.API.Services.Factory.FactoryNotificationService>();
 
 // ===== CONTROLLERS & SWAGGER =====
