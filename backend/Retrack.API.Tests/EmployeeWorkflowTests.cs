@@ -26,7 +26,7 @@ public sealed partial class EmployeeCollectionTests
         var audit = await db.EmployeeCollectionEvents.SingleAsync();
         Assert.Contains("PET", audit.SnapshotJson); Assert.Equal(employee.Id, audit.EmployeeId);
         var count = await db.Notifications.CountAsync();
-        var notice = Assert.Single((await new EmployeeReportingService(db).NotificationsAsync(employee.Id, 1, 20, default)).Items);
+        var notice = Assert.Single((await StaffTestServices.Reports(db).NotificationsAsync(employee.Id, 1, 20, default)).Items);
         Assert.Equal(pickup.Id, notice.PickupRequestId);
         await Transition("SUBMITTED");
         Assert.Equal(count, await db.Notifications.CountAsync());
@@ -82,7 +82,7 @@ public sealed partial class EmployeeCollectionTests
     [Fact]
     public async Task EmployeeReportsScopeHistoryAndNotificationReadToCurrentUser()
     {
-        var reports = new EmployeeReportingService(db);
+        var reports = StaffTestServices.Reports(db);
         db.Notifications.AddRange(new Notification { UserId = employee.Id, Title = "Của tôi" }, new Notification { UserId = colleague.Id, Title = "Người khác" });
         await db.SaveChangesAsync();
         var mine = await reports.NotificationsAsync(employee.Id, 1, 20, default);

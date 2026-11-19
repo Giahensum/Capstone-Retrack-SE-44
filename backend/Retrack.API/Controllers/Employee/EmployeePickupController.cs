@@ -1,191 +1,50 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using Retrack.API.Data;
 using Retrack.API.DTOs;
 using Retrack.API.DTOs.Employee;
-using Retrack.API.Models;
-using Retrack.API.Services.Interfaces;
-using Retrack.API.Services.Shared;
+using Retrack.API.Services.Depot;
+using Retrack.API.Services.Employee;
 
 namespace Retrack.API.Controllers.Employee;
 
-[ApiController]
-[Authorize(Roles = "DEPOT_EMPLOYEE")]
-public class EmployeePickupController(AppDbContext db, INotificationService notify) : ControllerBase
+[ApiController, Authorize(Roles = "DEPOT_EMPLOYEE")]
+public class EmployeePickupController(EmployeePickupService service) : ControllerBase
 {
     private Guid UserId => Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id)
         ? id : throw new UnauthorizedAccessException("Phiên đăng nhập không hợp lệ.");
 
-    private IQueryable<Guid> ActiveDepotIds() => db.DepotStaffs.Where(s => s.UserId == UserId
-        && s.IsActive && s.StaffType == "DEPOT_EMPLOYEE" && s.User.IsActive
-        && s.User.Role == "DEPOT_EMPLOYEE" && s.Depot.Owner.IsActive).Select(s => s.DepotId);
-
-    private async Task<Guid> GetDepotIdAsync(CancellationToken ct)
-    {
-        var depotId = await db.DepotStaffs.AsNoTracking()
-            .Where(s => s.UserId == UserId && s.StaffType == "DEPOT_EMPLOYEE" && s.IsActive
-                && s.User.IsActive && s.User.Role == "DEPOT_EMPLOYEE" && s.Depot.Owner.IsActive)
-            .OrderBy(s => s.Id).Select(s => (Guid?)s.DepotId).FirstOrDefaultAsync(ct);
-        return depotId ?? throw new UnauthorizedAccessException("Tài khoản không liên kết với kho đang hoạt động.");
-    }
-
     [HttpGet("/api/employee/dashboard")]
-    public async Task<IActionResult> Dashboard(CancellationToken ct)
-    {
-        await GetDepotIdAsync(ct);
-        var result = await new Retrack.API.Services.Employee.EmployeeReportingService(db).DashboardAsync(UserId, ct);
-        return Ok(ApiResponse<EmployeeDashboardDto>.Ok(result));
-    }
+    public async Task<IActionResult> Dashboard(CancellationToken ct) =>
+        Ok(ApiResponse<EmployeeDashboardDto>.Ok(await service.DashboardAsync(UserId, ct)));
 
     [HttpGet("/api/employee/pickup-pool")]
-    public async Task<IActionResult> Pool(CancellationToken ct, [FromQuery] int page = 1)
+    public Task<IActionResult> Pool(CancellationToken ct, [FromQuery] int page = 1) => Respond(async () =>
     {
-        var depotId = await GetDepotIdAsync(ct);
-        if (page is < 1 or > 100000) return BadRequest(ApiResponse<object>.Fail("Trang không hợp lệ."));
-        if (await db.EmployeeCollectionAreas.AnyAsync(a => a.DepotId == depotId, ct))
-        {
-            var depots = ActiveDepotIds();
-            var own = db.PickupRequests.AsNoTracking().Where(p => p.AcceptedCollectorId == UserId
-                && p.TargetDepotId != null && depots.Contains(p.TargetDepotId.Value) && p.Status == "SCHEDULED");
-            var items = await own.OrderBy(p => p.PreferredDatetime ?? p.CreatedAt).ThenBy(p => p.Id)
-                .Skip((page - 1) * 20).Take(20)
-                .Select(p => new PickupPoolItemDto(p.Id, p.Seller.FullName, p.Seller.Phone, p.Address,
-                    p.Latitude, p.Longitude, p.PreferredDatetime, p.Description, p.RequestImageUrl, p.CreatedAt)).ToListAsync(ct);
-            return Ok(ApiResponse<object>.Ok(new { items, page, pageSize = 20, total = await own.CountAsync(ct), automatic = true }));
-        }
-        var depot = await db.Depots.AsNoTracking()
-            .Where(d => d.Id == depotId)
-            .Select(d => new { d.Latitude, d.Longitude })
-            .FirstOrDefaultAsync(ct);
-
-        var list = await db.PickupRequests.AsNoTracking()
-            .Where(p => (p.TargetDepotId == depotId || p.TargetDepotId == null) && p.Status == "PENDING" && p.AcceptedCollectorId == null)
-            .OrderBy(p => p.PreferredDatetime == null).ThenBy(p => p.PreferredDatetime)
-            .ThenBy(p => p.CreatedAt).ThenBy(p => p.Id)
-            .Select(p => new
-            {
-                Item = new PickupPoolItemDto(p.Id, p.Seller.FullName, p.Seller.Phone, p.Address,
-                    p.Latitude, p.Longitude, p.PreferredDatetime, p.Description, p.RequestImageUrl, p.CreatedAt),
-                p.TargetDepotId,
-                p.Latitude,
-                p.Longitude
-            })
-            .ToListAsync(ct);
-
-        var filtered = list.Where(p =>
-        {
-            if (p.TargetDepotId != null) return true;
-            if (depot == null || !depot.Latitude.HasValue || !depot.Longitude.HasValue || !p.Latitude.HasValue || !p.Longitude.HasValue) return false;
-            var dist = GeoUtils.CalculateDistanceKm((double)depot.Latitude.Value, (double)depot.Longitude.Value, (double)p.Latitude.Value, (double)p.Longitude.Value);
-            return dist <= 20.0;
-        }).Select(p => p.Item).ToList();
-
-        return Ok(ApiResponse<List<PickupPoolItemDto>>.Ok(filtered));
-    }
+        var result = await service.PoolAsync(UserId, page, ct);
+        return result.Automatic
+            ? Ok(ApiResponse<object>.Ok(new { items = result.Items, page, pageSize = 20, total = result.Total, automatic = true }))
+            : Ok(ApiResponse<List<PickupPoolItemDto>>.Ok(result.Items));
+    });
 
     [HttpGet("/api/employee/pickups/active")]
-    public async Task<IActionResult> Active([FromQuery] int page = 1, CancellationToken ct = default)
-    {
-        if (page < 1 || page > 100000) return BadRequest(ApiResponse<object>.Fail("Trang không hợp lệ."));
-        await GetDepotIdAsync(ct);
-        var userId = UserId;
-        var depots = ActiveDepotIds();
-        var query = db.PickupRequests.AsNoTracking().Where(p => p.TargetDepotId != null && depots.Contains(p.TargetDepotId.Value)
-            && p.AcceptedCollectorId == userId && (p.Status == "SCHEDULED" || p.Status == "IN_PROGRESS" || p.Status == "SELLER_CONFIRMED"));
-        var items = await query.OrderBy(p => p.CreatedAt).ThenBy(p => p.Id).Skip((page - 1) * 20).Take(20)
-            .Select(p => new ActivePickupSummaryDto(p.Id, p.Seller.FullName, p.Seller.Phone,
-                p.Address, p.Status, p.PreferredDatetime)).ToListAsync(ct);
-        return Ok(ApiResponse<object>.Ok(new { items, page, pageSize = 20, total = await query.CountAsync(ct) }));
-    }
+    public Task<IActionResult> Active([FromQuery] int page = 1, CancellationToken ct = default) => Respond(async () =>
+        Ok(ApiResponse<object>.Ok(await service.ActiveAsync(UserId, page, ct))));
 
     [HttpGet("/api/employee/pickup/{pickupId:guid}")]
-    public async Task<IActionResult> Detail(Guid pickupId, CancellationToken ct)
-    {
-        var depotId = await GetDepotIdAsync(ct);
-        var userId = UserId;
-        var depots = ActiveDepotIds();
-        var item = await db.PickupRequests.AsNoTracking()
-            .Where(p => p.Id == pickupId && ((p.TargetDepotId != null && depots.Contains(p.TargetDepotId.Value)) || p.TargetDepotId == null)
-                && ((p.Status == "PENDING" && p.AcceptedCollectorId == null
-                    && !db.EmployeeCollectionAreas.Any(a => a.DepotId == depotId)) || p.AcceptedCollectorId == userId))
-            .Select(p => new
-            {
-                Detail = new EmployeePickupDetailDto(p.Id, p.Seller.FullName, p.Seller.Phone, p.Address,
-                    p.Latitude, p.Longitude, p.PreferredDatetime, p.Description, p.RequestImageUrl, p.CreatedAt,
-                    p.Status, p.AcceptedCollectorId == userId),
-                p.TargetDepotId,
-                p.Latitude,
-                p.Longitude
-            }).FirstOrDefaultAsync(ct);
-
-        if (item == null)
-            return NotFound(ApiResponse<object>.Fail("Đơn không tồn tại hoặc không còn thuộc phạm vi của bạn."));
-
-        if (item.TargetDepotId == null)
-        {
-            var depot = await db.Depots.AsNoTracking().Where(d => d.Id == depotId).Select(d => new { d.Latitude, d.Longitude }).FirstOrDefaultAsync(ct);
-            if (depot == null || !depot.Latitude.HasValue || !depot.Longitude.HasValue || !item.Latitude.HasValue || !item.Longitude.HasValue)
-                return NotFound(ApiResponse<object>.Fail("Đơn không thuộc phạm vi của bạn."));
-
-            var dist = GeoUtils.CalculateDistanceKm((double)depot.Latitude.Value, (double)depot.Longitude.Value, (double)item.Latitude.Value, (double)item.Longitude.Value);
-            if (dist > 20.0)
-                return NotFound(ApiResponse<object>.Fail("Đơn ngoài bán kính phục vụ 20 km của kho."));
-        }
-
-        return Ok(ApiResponse<EmployeePickupDetailDto>.Ok(item.Detail));
-    }
+    public Task<IActionResult> Detail(Guid pickupId, CancellationToken ct) => Respond(async () =>
+        Ok(ApiResponse<EmployeePickupDetailDto>.Ok(await service.DetailAsync(UserId, pickupId, ct))));
 
     [HttpPost("/api/employee/pickup/{pickupId:guid}/accept")]
-    public async Task<IActionResult> Accept(Guid pickupId, CancellationToken ct)
+    public Task<IActionResult> Accept(Guid pickupId, CancellationToken ct) => Respond(async () =>
+        Ok(ApiResponse<PickupPoolItemDto>.Ok(await service.AcceptAsync(UserId, pickupId, ct), "Đã nhận đơn thành công.")));
+
+    // Giữ nguyên loại phản hồi lỗi HTTP của các endpoint cũ khi gọi trực tiếp controller.
+    private async Task<IActionResult> Respond(Func<Task<IActionResult>> action)
     {
-        var depotId = await GetDepotIdAsync(ct);
-        if (await db.EmployeeCollectionAreas.AnyAsync(a => a.DepotId == depotId, ct))
-            return Conflict(ApiResponse<object>.Fail("Kho đang phân công tự động. Hãy mở danh sách đơn được giao cho bạn."));
-        if (!await db.Depots.AnyAsync(d => d.Id == depotId && d.VerificationStatus == "APPROVED", ct))
-            return Conflict(ApiResponse<object>.Fail("Kho chưa được Admin xác minh hồ sơ để nhận giao dịch mới."));
-        var userId = UserId;
-        var pickup = await db.PickupRequests.AsNoTracking().Include(p => p.Seller)
-            .SingleOrDefaultAsync(p => p.Id == pickupId && (p.TargetDepotId == depotId || p.TargetDepotId == null), ct);
-        // Do not reveal another depot's orders, even if the caller knows their UUID.
-        if (pickup == null) return NotFound(ApiResponse<object>.Fail("Không tìm thấy đơn thu gom."));
-
-        if (pickup.TargetDepotId == null)
-        {
-            var depot = await db.Depots.AsNoTracking().Where(d => d.Id == depotId).Select(d => new { d.Latitude, d.Longitude }).FirstOrDefaultAsync(ct);
-            if (depot == null || !depot.Latitude.HasValue || !depot.Longitude.HasValue || !pickup.Latitude.HasValue || !pickup.Longitude.HasValue)
-                return BadRequest(ApiResponse<object>.Fail("Không thể xác định khoảng cách giữa kho và địa chỉ thu gom."));
-
-            var dist = GeoUtils.CalculateDistanceKm((double)depot.Latitude.Value, (double)depot.Longitude.Value, (double)pickup.Latitude.Value, (double)pickup.Longitude.Value);
-            if (dist > 20.0)
-                return BadRequest(ApiResponse<object>.Fail("Đơn hàng nằm ngoài bán kính phục vụ 20 km của kho."));
-        }
-
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        var now = DateTime.UtcNow;
-        // Exactly one concurrent claimant can win this conditional SQL UPDATE.
-        var changed = await db.PickupRequests
-            .Where(p => p.Id == pickupId && (p.TargetDepotId == depotId || p.TargetDepotId == null)
-                && p.Status == "PENDING" && p.AcceptedCollectorId == null
-                && db.Depots.Any(d => d.Id == depotId && d.VerificationStatus == "APPROVED"))
-            .ExecuteUpdateAsync(setters => setters
-                .SetProperty(p => p.AcceptedCollectorId, (Guid?)userId)
-                .SetProperty(p => p.TargetDepotId, depotId)
-                .SetProperty(p => p.Status, "SCHEDULED")
-                .SetProperty(p => p.UpdatedAt, now), ct);
-        if (changed == 0)
-            return Conflict(ApiResponse<object>.Fail("Đơn đã được nhận bởi nhân viên khác hoặc không còn khả dụng."));
-
-        // Dịch vụ thông báo dùng chung DbContext và transaction của thao tác nhận đơn.
-        await notify.SendPickupAsync(pickup.SellerId, pickup.Id, "Đơn thu gom đã được nhận",
-            "Nhân viên kho đã nhận đơn của bạn và sẽ đến sớm.");
-        await transaction.CommitAsync(ct);
-        return Ok(ApiResponse<PickupPoolItemDto>.Ok(Map(pickup), "Đã nhận đơn thành công."));
+        try { return await action(); }
+        catch (DepotConflictException ex) { return Conflict(ApiResponse<object>.Fail(ex.Message)); }
+        catch (KeyNotFoundException ex) { return NotFound(ApiResponse<object>.Fail(ex.Message)); }
+        catch (ArgumentException ex) { return BadRequest(ApiResponse<object>.Fail(ex.Message)); }
     }
-
-    private static PickupPoolItemDto Map(PickupRequest p) => new(p.Id, p.Seller.FullName, p.Seller.Phone,
-        p.Address, p.Latitude, p.Longitude, p.PreferredDatetime, p.Description, p.RequestImageUrl, p.CreatedAt);
 }
-
-

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { FlatList, Pressable, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useIsFocused } from "@react-navigation/native";
@@ -23,14 +23,9 @@ export default function PickupPoolScreen({ navigation }) {
   const [selectedId, setSelectedId] = useState(null);
   const focused = useIsFocused();
   const { data, setData, loading, refreshing, error, reload } =
-    usePickupResource(loader);
+    usePickupResource(loader, 5000);
   const automatic = Boolean(data?.automatic);
   const pickups = Array.isArray(data) ? data : data?.items || [];
-  useEffect(() => {
-    if (!focused) return;
-    const timer = setInterval(() => { void reload(true); }, 15000);
-    return () => clearInterval(timer);
-  }, [focused, reload]);
   const gps = useEmployeeLocation(mode === "map" && focused);
   const { acceptingId, confirm } = useAcceptPickup(
     (accepted) => {
@@ -66,6 +61,7 @@ export default function PickupPoolScreen({ navigation }) {
     <SafeAreaView edges={["bottom"]} style={s.page}>
       <View style={{ padding: 20, gap: 12 }}>
         <Text style={s.title}>{automatic ? "Đơn được phân công" : "Đơn chờ thu gom"}</Text>
+        {automatic ? <Text style={s.muted}>Tự cập nhật đơn được giao khoảng mỗi 5 giây khi đang xem màn hình.</Text> : null}
         <View style={s.row}>
           {[
             ["list", "Danh sách"],

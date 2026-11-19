@@ -62,12 +62,12 @@ namespace Retrack.API.Data
             var employeeUser = new User
             {
                 Id = Guid.Parse("00000000-0000-0000-0000-000000000004"),
-                Email = "employee@retrack.vn",
+                Email = "employee.dispatch07@retrack.test",
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword("Employee@123"),
                 Role = "DEPOT_EMPLOYEE",
                 FullName = "Lê Minh Tuấn",
                 Phone = "0933333333",
-                IsActive = true
+                IsActive = false
             };
 
             var driverUser = new User
