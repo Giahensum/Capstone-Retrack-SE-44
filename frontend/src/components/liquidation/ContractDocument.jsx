@@ -13,11 +13,12 @@ const dots = (n = 28) => '.'.repeat(n);
 
 // Gộp dữ liệu Seller/Chủ kho về cùng một dạng để lập hợp đồng.
 export function toContract(agreement, lot) {
-  const created = new Date(agreement.createdAt);
-  const yyyymmdd = `${created.getFullYear()}${String(created.getMonth() + 1).padStart(2, '0')}${String(created.getDate()).padStart(2, '0')}`;
+  // Số hợp đồng giống bản DocuSign: HDDC + ngày theo giờ Việt Nam + 6 ký tự đầu của mã thỏa thuận.
+  const d = dateParts(agreement.createdAt);
+  const yyyymmdd = `${d.year}${d.month}${d.day}`;
   return {
     id: agreement.id,
-    number: `HĐĐC-${yyyymmdd}-${agreement.id.slice(0, 6).toUpperCase()}`,
+    number: `HDDC-${yyyymmdd}-${agreement.id.slice(0, 6).toUpperCase()}`,
     createdAt: agreement.createdAt,
     title: agreement.title,
     scopeDetails: lot.scopeDetails,

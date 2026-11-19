@@ -49,7 +49,7 @@ public class SellerLiquidationController(ISellerLiquidationService service) : Co
     {
         // Khi đã bật DocuSign, hợp đồng phải được ký điện tử qua DocuSign (api/liquidations/esign).
         await HttpContext.RequestServices.GetRequiredService<Retrack.API.Services.ESign.ILiquidationEsignService>()
-            .EnsureLegacySigningAllowedAsync(id, HttpContext.RequestAborted);
+            .EnsureLegacySigningAllowedAsync(UserId, id, HttpContext.RequestAborted);
         return Ok(ApiResponse<SellerLiquidationAgreementDto>.Ok(await service.SignAsync(UserId, id), "Đã ký hợp đồng đặt cọc."));
     }
 

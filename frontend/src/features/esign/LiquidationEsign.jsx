@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { FileSignature, Download, RefreshCw } from 'lucide-react';
@@ -26,22 +27,30 @@ export function useLiquidationEsign(agreementId) {
   });
 }
 
+/** Giao diện chỉ dùng DocuSign khi máy chủ đã bật và không còn trường hợp ký cũ dở dang (tránh ngõ cụt). */
+export const isEsignActive = (status) => !!status?.configured && !status?.legacyAllowed;
+
 /**
  * Khi DocuSign đưa người dùng quay lại (?esign=return&agreement=<id>), đọc lại trạng thái ký, báo kết quả rồi chỉ xóa các tham số ký
- * khỏi địa chỉ (giữ lại các tham số khác như view/lotId). `onDone` chạy sau khi cập nhật xong để trang tải lại dữ liệu.
+ * khỏi địa chỉ (giữ lại các tham số khác như view/lotId) bằng router để lịch sử trình duyệt không bị lệch.
+ * `onDone` chạy sau khi cập nhật xong để trang tải lại dữ liệu.
  */
 export function useLiquidationEsignReturn(onDone) {
   const doneRef = useRef(onDone);
   doneRef.current = onDone;
   const client = useQueryClient();
+  const [params, setParams] = useSearchParams();
+  const handled = useRef(null);
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
     if (params.get('esign') !== 'return') return;
     const id = params.get('agreement');
     const event = params.get('event');
-    ['esign', 'agreement', 'event'].forEach((key) => params.delete(key));
-    const rest = params.toString();
-    window.history.replaceState({}, '', window.location.pathname + (rest ? `?${rest}` : ''));
+    const key = `${id}|${event}`;
+    if (handled.current === key) return;
+    handled.current = key;
+    const rest = new URLSearchParams(params);
+    ['esign', 'agreement', 'event'].forEach((name) => rest.delete(name));
+    setParams(rest, { replace: true });
     if (!id) return;
     if (event && event !== 'signing_complete') toast('Bạn chưa hoàn tất việc ký hợp đồng.');
     refreshLiquidationEsign(id)
@@ -53,7 +62,7 @@ export function useLiquidationEsignReturn(onDone) {
         doneRef.current?.(status);
       })
       .catch((error) => toast.error(liquidationEsignError(error)));
-  }, [client]);
+  }, [params, setParams, client]);
 }
 
 const primary = 'inline-flex items-center justify-center gap-2 rounded-full bg-d-primary px-6 py-3 text-sm font-bold text-white shadow-md transition active:scale-95 disabled:opacity-50';
@@ -77,7 +86,7 @@ function useAction(agreementId, onChanged) {
 /** Nút ký chính, đặt ở chân hộp thoại/khối hành động. Chuyển trình duyệt sang trang ký DocuSign. */
 export function LiquidationEsignSignButton({ agreementId, status, onChanged, label = 'Ký điện tử (DocuSign)' }) {
   const { busy, error, run } = useAction(agreementId, onChanged);
-  if (!status?.configured || status.mySideSigned || status.state === 'COMPLETED') return null;
+  if (!isEsignActive(status) || status.mySideSigned || status.state === 'COMPLETED') return null;
   const sign = () => run(async () => {
     const { url } = await startLiquidationSigning(agreementId);
     window.location.href = url; // ký xong DocuSign đưa người dùng quay lại hệ thống
@@ -100,7 +109,7 @@ export function LiquidationEsignPanel({ agreementId, status, onChanged }) {
   const refresh = () => run(async () => { const next = await refreshLiquidationEsign(agreementId); reload(next); toast.success('Đã cập nhật trạng thái ký.'); });
   const download = () => run(() => downloadLiquidationContract(agreementId, `${status.contractNumber || 'hop-dong'}-da-ky.pdf`));
   return (
-    <div className="rounded-2xl border border-d-border-subtle bg-d-surface-container-low p-4 text-sm" aria-label="Ký điện tử qua DocuSign">
+    <div className="rounded-2xl border border-d-border-subtle bg-d-surface-container-low p-4 text-sm" role="group" aria-label="Ký điện tử qua DocuSign">
       <p className="font-semibold text-d-on-surface">Ký điện tử qua DocuSign: {STATE_TEXT[status.state] ?? status.state}</p>
       <p className="mt-1 text-xs text-d-on-surface-variant">Seller: {status.sellerSigned ? 'đã ký' : 'chưa ký'} · Chủ kho: {status.buyerSigned ? 'đã ký' : 'chưa ký'}</p>
       <div className="mt-3 flex flex-wrap gap-2">
