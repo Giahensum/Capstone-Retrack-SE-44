@@ -9,7 +9,7 @@ import { styles as s } from "../../theme";
 const labels = { AVAILABLE: "Đang nhận đơn", FULL: "Tạm dừng — Đầy xe", STOPPED: "Đã ngừng ca" };
 
 export default function DispatchAvailability({ onChanged }) {
-  const { data, loading, error, reload } = usePickupResource(pickupApi.getShifts);
+  const { data, loading, error, reload } = usePickupResource(pickupApi.getShifts, 5000);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState("");
@@ -37,10 +37,10 @@ export default function DispatchAvailability({ onChanged }) {
     <Text style={s.label}>Ca và khả năng nhận đơn</Text>
     {loading ? <Text style={s.muted}>Đang tải ca…</Text> : null}
     {error ? <Text style={s.error}>{error}</Text> : null}
-    {!loading && !error && !data?.length ? <Text style={s.muted}>Chưa có ca đang hoạt động. Liên hệ chủ kho để bố trí khu vực và ca.</Text> : null}
+    {!loading && !error && !data?.length ? <Text style={s.muted}>Chưa có kế hoạch thu gom hôm nay. Hệ thống tự bố trí khi có đơn và bạn đủ điều kiện nhận; danh sách sẽ tự cập nhật.</Text> : null}
     {(data || []).map(shift => <View key={shift.id} style={{ gap: 8 }}>
       <Text style={s.text}>{shift.name} · {labels[shift.availability]}</Text>
-      <Text style={s.muted}>{shift.vehicle} · tải trọng tham khảo {shift.capacityKg} kg · tối đa {shift.maxPendingOrders} đơn đang xử lý</Text>
+      <Text style={s.muted}>{shift.vehicle} · tải trọng tham khảo {shift.capacityKg} kg · {shift.isAutomatic ? 'ca tự động, không giới hạn số đơn' : `tối đa ${shift.maxPendingOrders} đơn đang xử lý`}</Text>
       <Text style={s.muted}>Kết thúc: {new Date(shift.endsAt).toLocaleString("vi-VN")}</Text>
       {shift.reason ? <Text style={s.muted}>Lý do: {shift.reason}</Text> : null}
       {shift.availability !== "STOPPED" ? <>

@@ -2,6 +2,22 @@ import { useState } from 'react';
 import { Dialog, QueryState, MutationError, Pager, inputClass, buttonClass } from '../components/DepotUI';
 import { useDispatchQuery, useDispatchMutation, initialLocalTime, vehicleLabels } from './dispatchApi';
 
+export function CatalogAreaForm({ onClose }) {
+  const catalog = useDispatchQuery('catalog');
+  const [code, setCode] = useState('');
+  const save = useDispatchMutation('post', `catalog/${encodeURIComponent(code)}/use`, onClose);
+  const region = catalog.data?.find(r => r.code === code);
+  return <Dialog title="Chọn vùng Đà Nẵng có sẵn" onClose={onClose} busy={save.isPending}>
+    <form className="space-y-4" onSubmit={e => { e.preventDefault(); if (region) save.mutate({}); }}>
+      <fieldset disabled={save.isPending} className="space-y-4">
+        <QueryState query={catalog}><label className="block">Vùng thu gom<select required className={inputClass} value={code} onChange={e => setCode(e.target.value)}><option value="">Chọn vùng dùng chung</option>{catalog.data?.map(r => <option key={r.code} value={r.code}>{r.name}</option>)}</select></label></QueryState>
+        {region && <p>Tâm: {region.latitude}, {region.longitude}. Bán kính gợi ý: {region.radiusMeters.toLocaleString('vi-VN')} m.</p>}
+        <p className="text-sm">Kho vẫn tiếp nhận đơn ngoài các vùng đã cấu hình. Thêm vùng không tự tạo ca hoặc nhân viên. Vùng đã tồn tại được giữ nguyên, kể cả khi đang tắt.</p>
+      </fieldset><MutationError mutation={save} /><Footer busy={save.isPending} onClose={onClose} label="Sử dụng vùng cho kho" />
+    </form>
+  </Dialog>;
+}
+
 export function AreaForm({ area, onClose }) {
   const [id] = useState(() => area?.id ?? crypto.randomUUID());
   const [form, setForm] = useState({ name: area?.name ?? '', latitude: area?.latitude ?? '', longitude: area?.longitude ?? '', radiusMeters: area?.radiusMeters ?? 3000, isActive: area?.isActive ?? true });
@@ -20,20 +36,24 @@ export function AreaForm({ area, onClose }) {
   </Dialog>;
 }
 export function ShiftForm({ onClose }) {
+  const [source, setSource] = useState('catalog'), [catalogCode, setCatalogCode] = useState('');
+  const catalog = useDispatchQuery('catalog');
   const [areaPage, setAreaPage] = useState(1), [staffPage, setStaffPage] = useState(1);
   const areas = useDispatchQuery('areas', { page: areaPage });
   const staff = useDispatchQuery('employees', { page: staffPage });
   const [form, setForm] = useState(() => ({ operationId: crypto.randomUUID(), areaId: '', employeeId: '', startsAt: initialLocalTime(0), endsAt: initialLocalTime(8), vehicle: 'motorcycle', capacityKg: '100', maxPendingOrders: '10' }));
   const save = useDispatchMutation('post', 'shifts', onClose), field = (key, value) => setForm({ ...form, [key]: value });
   return <Dialog title="Bố trí ca thu gom" onClose={onClose} busy={save.isPending} wide>
-    <form className="space-y-4" onSubmit={e => { e.preventDefault(); save.mutate({ ...form, startsAt: new Date(`${form.startsAt}:00+07:00`).toISOString(), endsAt: new Date(`${form.endsAt}:00+07:00`).toISOString(), capacityKg: Number(form.capacityKg), maxPendingOrders: Number(form.maxPendingOrders) }); }}>
+    <form className="space-y-4" onSubmit={e => { e.preventDefault(); save.mutate({ ...form, areaId: source === 'catalog' ? '00000000-0000-0000-0000-000000000000' : form.areaId, catalogCode: source === 'catalog' ? catalogCode : null, startsAt: new Date(`${form.startsAt}:00+07:00`).toISOString(), endsAt: new Date(`${form.endsAt}:00+07:00`).toISOString(), capacityKg: Number(form.capacityKg), maxPendingOrders: Number(form.maxPendingOrders) }); }}>
       <fieldset disabled={save.isPending} className="space-y-4">
-        <QueryState query={areas}><label className="block">Khu vực thu gom<select required className={inputClass} value={form.areaId} onChange={e => field('areaId', e.target.value)}><option value="">Chọn khu vực đang hoạt động</option>{areas.data?.items.filter(a => a.isActive).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></label><Pager page={areaPage} setPage={value => { setAreaPage(value); field('areaId', ''); }} total={areas.data?.totalCount} /></QueryState>
+        <label className="block">Nguồn khu vực<select className={inputClass} value={source} onChange={e => setSource(e.target.value)}><option value="catalog">Danh mục Đà Nẵng dùng chung</option><option value="configured">Vùng kho đã cấu hình</option></select></label>
+        {source === 'catalog' && <QueryState query={catalog}><label className="block">Vùng có sẵn<select required className={inputClass} value={catalogCode} onChange={e => setCatalogCode(e.target.value)}><option value="">Chọn vùng để bố trí ca</option>{catalog.data?.map(r => <option key={r.code} value={r.code}>{r.name} · {r.radiusMeters} m</option>)}</select></label><p className="text-sm mt-2">Vùng được lưu cho kho khi tạo ca thành công. Không cần nhập tọa độ; vùng đã cấu hình giữ nguyên thông tin.</p></QueryState>}
+        {source === 'configured' && <QueryState query={areas}><label className="block">Khu vực thu gom<select required className={inputClass} value={form.areaId} onChange={e => field('areaId', e.target.value)}><option value="">Chọn khu vực đang hoạt động</option>{areas.data?.items.filter(a => a.isActive).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></label><Pager page={areaPage} setPage={value => { setAreaPage(value); field('areaId', ''); }} total={areas.data?.totalCount} /></QueryState>}
         <QueryState query={staff}><label className="block">Nhân viên thu gom<select required className={inputClass} value={form.employeeId} onChange={e => field('employeeId', e.target.value)}><option value="">Chọn nhân viên kho đang hoạt động</option>{staff.data?.items.map(s => <option key={s.id} value={s.userId}>{s.fullName} — {s.phone}</option>)}</select></label><Pager page={staffPage} setPage={value => { setStaffPage(value); field('employeeId', ''); }} total={staff.data?.totalCount} /></QueryState>
         <div className="grid sm:grid-cols-2 gap-4"><label>Bắt đầu ca (giờ Việt Nam)<input required type="datetime-local" className={inputClass} value={form.startsAt} onChange={e => field('startsAt', e.target.value)} /></label><label>Kết thúc ca (giờ Việt Nam)<input required type="datetime-local" className={inputClass} value={form.endsAt} min={form.startsAt} onChange={e => field('endsAt', e.target.value)} /></label>
           <label>Phương tiện<select className={inputClass} value={form.vehicle} onChange={e => field('vehicle', e.target.value)}>{Object.entries(vehicleLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label><label>Tải trọng khai báo (kg)<input required type="number" min="0.01" step="0.01" max="20000" className={inputClass} value={form.capacityKg} onChange={e => field('capacityKg', e.target.value)} /></label>
           <label>Giới hạn đơn đang phụ trách<input required type="number" min="1" max="50" step="1" className={inputClass} value={form.maxPendingOrders} onChange={e => field('maxPendingOrders', e.target.value)} /></label></div>
-        <p className="text-sm text-d-on-surface-variant">Ca tối đa 24 giờ, không trùng ca khác của nhân viên. Tải trọng là thông tin khai báo; hệ thống hiện giới hạn theo số đơn, chưa biết tải kg thực tế trên xe.</p>
+        <p className="text-sm text-d-on-surface-variant">Ca tối đa 24 giờ, không trùng ca khác của nhân viên. Tải trọng là thông tin khai báo; ca thủ công dùng giới hạn đơn đã nhập; ca tự động không giới hạn số đơn. Chưa biết tải kg thực tế trên xe.</p>
       </fieldset><MutationError mutation={save} /><Footer busy={save.isPending} onClose={onClose} label="Lưu ca thu gom" />
     </form>
   </Dialog>;

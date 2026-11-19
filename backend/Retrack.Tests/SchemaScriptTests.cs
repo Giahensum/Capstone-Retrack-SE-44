@@ -101,11 +101,11 @@ public sealed class SchemaScriptTests
         {
             await using var reader = await verify.ExecuteReaderAsync();
             Assert.True(await reader.ReadAsync());
-            Assert.Equal(32L, reader.GetInt64(0));
-            Assert.Equal(6L, reader.GetInt64(1));
+            Assert.Equal(52L, reader.GetInt64(0));
+            Assert.Equal(8L, reader.GetInt64(1));
             Assert.Equal(4L, reader.GetInt64(2));
-            Assert.Equal(15L, reader.GetInt64(3));
-            Assert.Equal(28L, reader.GetInt64(4));
+            Assert.Equal(23L, reader.GetInt64(3));
+            Assert.Equal(40L, reader.GetInt64(4));
             Assert.Equal(10L, reader.GetInt64(5));
             Assert.Equal(2L, reader.GetInt64(6));
             Assert.Equal(2L, reader.GetInt64(7));
