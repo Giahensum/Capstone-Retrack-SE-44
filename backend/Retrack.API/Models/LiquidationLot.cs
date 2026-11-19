@@ -83,5 +83,11 @@ public class LiquidationAgreement
     [Column("deposit_reference"), MaxLength(255)] public string? DepositReference { get; set; }
     [Column("deposit_reported_at")] public DateTime? DepositReportedAt { get; set; }
     [Column("deposit_confirmed_at")] public DateTime? DepositConfirmedAt { get; set; }
+    // Ký điện tử DocuSign cho hợp đồng đặt cọc: envelope, trạng thái (SENT, SELLER_SIGNED, BUYER_SIGNED, COMPLETED, DECLINED, VOIDED) và mã băm nội dung đã gửi.
+    [Column("esign_envelope_id")] public string? EsignEnvelopeId { get; set; }
+    [Column("esign_status"), MaxLength(20)] public string? EsignStatus { get; set; }
+    [Column("esign_terms_hash"), MaxLength(64)] public string? EsignTermsHash { get; set; }
+    [Column("esign_sent_at")] public DateTime? EsignSentAt { get; set; }
+    [Column("esign_completed_at")] public DateTime? EsignCompletedAt { get; set; }
     [Column("created_at")] public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

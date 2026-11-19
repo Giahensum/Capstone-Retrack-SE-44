@@ -45,8 +45,13 @@ public class SellerLiquidationController(ISellerLiquidationService service) : Co
         Ok(ApiResponse<SellerLiquidationAgreementDto>.Ok(await service.ConfirmHandoverAsync(UserId, id), "Đã ghi nhận bàn giao."));
 
     [HttpPatch("agreements/{id:guid}/sign")]
-    public async Task<IActionResult> Sign(Guid id) =>
-        Ok(ApiResponse<SellerLiquidationAgreementDto>.Ok(await service.SignAsync(UserId, id), "Đã ký hợp đồng đặt cọc."));
+    public async Task<IActionResult> Sign(Guid id)
+    {
+        // Khi đã bật DocuSign, hợp đồng phải được ký điện tử qua DocuSign (api/liquidations/esign).
+        await HttpContext.RequestServices.GetRequiredService<Retrack.API.Services.ESign.ILiquidationEsignService>()
+            .EnsureLegacySigningAllowedAsync(id, HttpContext.RequestAborted);
+        return Ok(ApiResponse<SellerLiquidationAgreementDto>.Ok(await service.SignAsync(UserId, id), "Đã ký hợp đồng đặt cọc."));
+    }
 
     [HttpPatch("agreements/{id:guid}/confirm-deposit")]
     public async Task<IActionResult> ConfirmDeposit(Guid id) =>

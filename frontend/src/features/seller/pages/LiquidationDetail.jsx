@@ -16,6 +16,7 @@ import {
   Modal, ConfirmModal, Section, Tile, Notice, Steps, Badge, PriceHero, PriceBar, RankIcon, PHASE_TONE,
 } from '@/components/liquidation/LiquidationUI';
 import { AGREEMENT_STAGE_LABEL, LIQUIDATION_PHASE_LABEL } from '../liquidationLabels';
+import { LiquidationEsignPanel, LiquidationEsignSignButton, useLiquidationEsign, useLiquidationEsignReturn } from '@/features/esign/LiquidationEsign';
 
 // Hành động Seller tiếp theo theo giai đoạn thỏa thuận (server vẫn kiểm lại trạng thái).
 const STAGE_ACTIONS = {
@@ -52,6 +53,9 @@ export default function LiquidationDetail() {
       return phase === 'BIDDING' || phase === 'CLOSING' ? 5000 : 30000;
     },
   });
+  const esign = useLiquidationEsign(data?.agreement?.id);
+  const esignOn = !!esign.data?.configured;
+  useLiquidationEsignReturn(() => refetch());
   const { data: bids } = useQuery({
     queryKey: ['seller-liquidation-bids', id, bidPage],
     queryFn: () => sellerApi.getLiquidationBids(id, bidPage),
@@ -106,7 +110,8 @@ export default function LiquidationDetail() {
   const topBid = bids?.items?.[0]?.amount ?? lot.highestPrice ?? lot.startingPrice;
   const hasDeposit = agreement?.depositAmount > 0;
   const action = agreement ? STAGE_ACTIONS[agreement.stage] : null;
-  const canAct = action && !(action.key === 'sign' && agreement.sellerSignedAt);
+  // Đã bật DocuSign thì bước ký dùng nút DocuSign riêng, không dùng nút xác nhận cũ.
+  const canAct = action && !(action.key === 'sign' && (agreement.sellerSignedAt || esignOn));
 
   let steps = [];
   if (agreement) {
@@ -157,7 +162,12 @@ export default function LiquidationDetail() {
               </button>
             </div>
           )}
+          {agreement.stage === 'WAITING_SIGNATURES' && esignOn && !agreement.sellerSignedAt && (
+            <div className="mt-4"><LiquidationEsignSignButton agreementId={agreement.id} status={esign.data} onChanged={() => refetch()} /></div>
+          )}
           {agreement.stage === 'WAITING_SIGNATURES' && agreement.sellerSignedAt && <p className="mt-3 text-xs text-d-on-surface-variant">Bạn đã ký. Đang chờ chủ kho ký hợp đồng.</p>}
+
+          {hasDeposit && <div className="mt-4"><LiquidationEsignPanel agreementId={agreement.id} status={esign.data} onChanged={() => refetch()} /></div>}
 
           {hasDeposit && (
             <div className="mt-5">
