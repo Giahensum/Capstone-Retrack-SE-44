@@ -37,6 +37,7 @@ const StaffMobilePage = lazy(() => import('@/features/auth/pages/StaffMobilePage
 const FactoryDashboard = lazy(() => import('@/features/factory/workspace/FactoryApp'));
 // Admin
 const AdminDashboard = lazy(() => import('@/features/admin/pages/AdminDashboard'));
+const PayReturnPage = lazy(() => import('@/features/money/PayReturnPage'));
 // Loading fallback
 const PageLoader = () => (<div className="flex items-center justify-center min-h-screen bg-slate-900">
     <div className="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"/>
@@ -94,6 +95,9 @@ export function AppRoutes() {
           <Route path="/admin/*" element={<PrivateRoute allowedRoles={[ROLES.ADMIN]}>
                 <AdminDashboard />
               </PrivateRoute>}/>
+
+          {/* Kết quả thanh toán PayOS: mọi vai trò đã đăng nhập, không giới hạn vai trò */}
+          <Route path="/pay/return" element={<PrivateRoute><PayReturnPage /></PrivateRoute>}/>
 
           {/* Fallback */}
           <Route path="/unauthorized" element={<div className="flex items-center justify-center min-h-screen text-red-400 text-xl">
