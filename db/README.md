@@ -20,17 +20,14 @@ Mặc định file có `SET LOCAL retrack.seed_demo = 'on';` để nạp:
 
 | Nhóm | Dữ liệu |
 |---|---|
-<<<<<<< HEAD
 | Tài khoản | Giữ tài khoản các role khác; 6 Employee dispatch hoạt động, 12 Seller dispatch. Hai Employee cũ được đổi email và khóa để bảo toàn tham chiếu lịch sử |
 | Kho/nhà máy | Giữ bộ kho/nhà máy liên role; thêm hai kho điều phối riêng tại Đà Nẵng |
 | Thu gom | Giữ đơn lịch sử liên role; thay bộ Employee tự nhận và bộ điều phối cũ bằng 12 đơn tại 12 tọa độ khác nhau |
 | Điều phối | Employee dispatch01–03 thuộc Kho Thu Mua An Phú, dispatch04–06 thuộc Kho Phế Liệu Hòa Bình; 6 vùng và ca khoảng 20 giờ. Đơn hẹn ngày sau chưa được giao hôm nay |
-=======
 | Tài khoản | 32 tài khoản: 1 Admin, 1 Depot Owner, 8 Employee, 2 Driver, 4 Factory, 16 Seller; Chủ kho demo Ngô Sỹ Giá. Giữ các email chính admin/seller/depot/employee/driver/factory@retrack.vn và Factory2/3 |
 | Kho/nhà máy | 5 kho, 4 nhà máy, 15 liên kết nhân sự; địa chỉ mô phỏng Đà Nẵng |
 | Thu gom | 65 đơn nhiều trạng thái, gồm 13 đơn Employee `e0000000-0929-*` và 36 đơn điều phối `ed250000-*` |
 | Điều phối | 6 nhân viên, 6 Seller, 6 vùng và ca demo khoảng 20 giờ; đơn hẹn ngày sau chưa được giao từ hôm nay |
->>>>>>> e931a248f38391be70d6177d9afb3fc66e0c4cd9
 | Vận chuyển | 12 chuyến, gồm 3 lô `DRV-DEMO-01/02/03` và 3 lô `DRV-DN-LOCAL-01/02/03`, giữ UUID cũ để mobile tiếp tục test |
 | Tồn/chi phí | Phiếu sắt+ghế cùng chi phí; thêm 900 kg PET nguồn demo cho hai bộ lô Driver, giá vốn chưa xác định |
 | Liên role | Hợp tác, nhu cầu, lô xuất/cân/KCS, thanh toán/phí/hóa đơn, thông báo, bảng giá và lô thanh lý |
