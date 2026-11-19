@@ -27,7 +27,7 @@ public sealed class EmployeeDispatchRepository(AppDbContext db) : IEmployeeDispa
                 && Staff(userId).Any(s => s.DepotId == area.DepotId)
             orderby shift.StartsAt, shift.Id
             select new { shift.Id, area.Name, area.DepotId, shift.StartsAt, shift.EndsAt,
-                shift.Availability, shift.Reason, shift.Vehicle, shift.CapacityKg, shift.MaxPendingOrders })
+                shift.Availability, shift.Reason, shift.Vehicle, shift.CapacityKg, shift.MaxPendingOrders, shift.IsAutomatic })
             .Take(20).ToListAsync(ct);
     }
 

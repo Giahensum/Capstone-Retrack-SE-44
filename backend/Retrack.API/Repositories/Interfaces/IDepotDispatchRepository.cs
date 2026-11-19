@@ -16,6 +16,7 @@ public interface IDepotDispatchRepository
     Task<DispatchPickupDto?> DetailAsync(Guid depot, Guid id);
     Task<PagedResult<DispatchHistoryDto>> HistoryAsync(Guid depot, Guid id, DepotQuery query);
     Task<EmployeeCollectionArea?> AreaAsync(Guid id);
+    Task<EmployeeCollectionArea?> MatchingAreaAsync(Guid depot, double latitude, double longitude);
     Task<EmployeeDispatchShift?> ShiftAsync(Guid id);
     Task<bool> ActiveEmployeeAsync(Guid depot, Guid employee);
     Task<bool> OverlapAsync(Guid employee, DateTime start, DateTime end);
