@@ -13,6 +13,8 @@ public sealed class VerificationScannerOptions
     public string Host { get; set; } = "127.0.0.1";
     public int Port { get; set; } = 3310;
     public int TimeoutSeconds { get; set; } = 10;
+    /// <summary>Chỉ dành cho demo: cho phép nhận hồ sơ KHÔNG quét mã độc khi Mode=Disabled ngoài môi trường Development. Mặc định tắt.</summary>
+    public bool AllowUnscannedForDemo { get; set; }
 }
 
 public sealed class VerificationScannerUnavailableException : Exception
@@ -29,13 +31,15 @@ public sealed class VerificationFileScanner(IOptions<VerificationScannerOptions>
         ? new(true, "ClamAv", "Tệp mới được quét trước khi lưu. Nếu dịch vụ quét gián đoạn, hồ sơ sẽ chưa được nhận.")
         : environment.IsDevelopment() && config.Mode == "Disabled"
             ? new(true, "DevelopmentOnly", "Môi trường phát triển chưa bật quét mã độc. Chỉ dùng tài liệu kiểm thử, không nộp giấy tờ thật.")
-            : new(false, "Unavailable", "Chưa cấu hình dịch vụ kiểm tra an toàn tệp. Liên hệ quản trị để mở chức năng nộp hồ sơ.");
+            : config.Mode == "Disabled" && config.AllowUnscannedForDemo
+                ? new(true, "DemoUnscanned", "CHƯA quét mã độc (chế độ demo). Chỉ dùng tài liệu thử, không nộp giấy tờ thật.")
+                : new(false, "Unavailable", "Chưa cấu hình dịch vụ kiểm tra an toàn tệp. Liên hệ quản trị để mở chức năng nộp hồ sơ.");
 
     public async Task<bool> ScanAsync(ReadOnlyMemory<byte> content, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (content.Length is <= 0 or > 2 * 1024 * 1024) throw new ArgumentException("Tệp cần nằm trong giới hạn 2 MB.");
-        if (Policy.Mode == "DevelopmentOnly") return false;
+        if (Policy.Mode is "DevelopmentOnly" or "DemoUnscanned") return false; // không quét: tệp được coi là sạch, chỉ dùng cho môi trường thử/demo
         if (config.Mode != "ClamAv") throw new VerificationScannerUnavailableException();
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(config.TimeoutSeconds));

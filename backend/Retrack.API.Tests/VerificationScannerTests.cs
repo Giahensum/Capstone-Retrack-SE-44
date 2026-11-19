@@ -19,8 +19,8 @@ public sealed class VerificationScannerTests
         public string ContentRootPath { get; set; } = "";
         public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
     }
-    private static VerificationFileScanner Scanner(int port = 1, string mode = "ClamAv", string environment = "Production") =>
-        new(Options.Create(new VerificationScannerOptions { Port = port, Mode = mode, TimeoutSeconds = 1 }), new Host(environment));
+    private static VerificationFileScanner Scanner(int port = 1, string mode = "ClamAv", string environment = "Production", bool demo = false) =>
+        new(Options.Create(new VerificationScannerOptions { Port = port, Mode = mode, TimeoutSeconds = 1, AllowUnscannedForDemo = demo }), new Host(environment));
     [Fact]
     public async Task Disabled_scanning_is_explicit_in_development_and_fails_closed_in_production()
     {
@@ -30,6 +30,21 @@ public sealed class VerificationScannerTests
         using var production = Scanner(mode: "Disabled");
         Assert.False(production.Policy.AcceptsUploads);
         await Assert.ThrowsAsync<VerificationScannerUnavailableException>(() => production.ScanAsync("%PDF-1.7"u8.ToArray()));
+    }
+    [Fact]
+    public async Task Demo_switch_accepts_unscanned_files_only_when_disabled_mode_and_flag_are_both_set()
+    {
+        using var demo = Scanner(mode: "Disabled", demo: true);
+        Assert.True(demo.Policy.AcceptsUploads); Assert.Equal("DemoUnscanned", demo.Policy.Mode);
+        Assert.Contains("CHƯA quét", demo.Policy.Message);
+        Assert.False(await demo.ScanAsync("%PDF-1.7"u8.ToArray()));
+        // Cờ không làm yếu chế độ quét thật: ClamAV vẫn bắt buộc quét và vẫn đóng khi dịch vụ lỗi.
+        using var clam = Scanner(mode: "ClamAv", demo: true);
+        Assert.Equal("ClamAv", clam.Policy.Mode);
+        await Assert.ThrowsAsync<VerificationScannerUnavailableException>(() => clam.ScanAsync("%PDF-1.7"u8.ToArray()));
+        // Không bật cờ thì production vẫn đóng.
+        using var closed = Scanner(mode: "Disabled", demo: false);
+        Assert.False(closed.Policy.AcceptsUploads);
     }
     [Theory]
     [InlineData("stream: OK\0", false, false)]

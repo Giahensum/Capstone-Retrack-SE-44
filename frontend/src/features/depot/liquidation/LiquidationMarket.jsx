@@ -4,6 +4,8 @@ import { Page, QueryState, Pager, inputClass, buttonClass } from '@/features/dep
 import { money } from '@/features/depot/depotApi';
 import { useLiquidationQuery, useLiquidationScope, liquidationLabels, localTime } from './liquidationApi';
 import LiquidationDetail from './components/LiquidationDetail';
+import { useQueryClient } from '@tanstack/react-query';
+import { useLiquidationEsignReturn } from '@/features/esign/LiquidationEsign';
 
 const pageSize = 12;
 const views = {
@@ -17,6 +19,8 @@ const views = {
 
 export default function LiquidationMarket() {
   const { depotId } = useLiquidationScope();
+  const client = useQueryClient();
+  useLiquidationEsignReturn(() => client.invalidateQueries({ queryKey: ['liquidation'] }));
   const [params, setParams] = useSearchParams();
   const requestedView = params.get('view');
   const view = Object.hasOwn(views, requestedView) ? requestedView : 'OPEN';

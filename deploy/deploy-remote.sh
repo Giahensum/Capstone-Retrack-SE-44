@@ -46,7 +46,14 @@ fi
 # 2) Đăng nhập GHCR (nếu có) và kéo image
 PREV=$(envval API_IMAGE)
 if [ -n "${GHCR_TOKEN:-}" ]; then echo "$GHCR_TOKEN" | docker login ghcr.io -u "${GHCR_USER:-github}" --password-stdin >/dev/null; fi
-[ "${SKIP_PULL:-0}" = 1 ] || docker pull "$IMAGE"
+if [ "${SKIP_PULL:-0}" != 1 ]; then
+  # Kéo image có thử lại: lỗi mạng/containerd thoáng qua không làm hỏng cả lần triển khai (nhưng lỗi thật vẫn dừng script).
+  for attempt in 1 2 3; do
+    docker pull "$IMAGE" && break
+    if [ "$attempt" = 3 ]; then echo "Kéo image thất bại sau 3 lần: $IMAGE (kiểm tra ổ đĩa: df -h; thử: systemctl restart containerd docker)"; exit 1; fi
+    echo "Kéo image lỗi, thử lại sau $((attempt * 10)) giây (lần $attempt/3)…"; sleep $((attempt * 10))
+  done
+fi
 
 # 3) Compose cần API_IMAGE hợp lệ cho mọi lệnh ⇒ ghi image mới ngay; lỗi thì đặt lại $PREV ở bước 6
 set_env API_IMAGE "$IMAGE"
