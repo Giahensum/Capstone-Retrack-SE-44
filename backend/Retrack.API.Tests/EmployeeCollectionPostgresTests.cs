@@ -61,6 +61,14 @@ public sealed class EmployeeCollectionPostgresTests
             var before = await depot.GetPaymentSummaryAsync(ownerId, pickup.TargetDepotId.Value);
             await Assert.ThrowsAsync<DepotConflictException>(() => service.MarkPaymentSentAsync(pickupId, ownerId, "https://example.com/proof.png"));
             Assert.False(await db.PlatformTransactions.AnyAsync(t => t.SourceId == pickupId));
+            // Seed giữ hồ sơ nhân viên cũ nhưng khóa đăng nhập: phải chặn bàn giao khi bị khóa.
+            var collector = await db.Users.SingleAsync(u => u.Id == pickup.AcceptedCollectorId);
+            Assert.False(collector.IsActive);
+            await Assert.ThrowsAsync<DepotForbiddenException>(() => StaffTestServices.Collection(db, new ConcurrentImages())
+                .TransitionAsync(collector.Id, pickupId, "HANDED_OVER", 1, default));
+            // Chỉ kích hoạt trong schema fixture riêng để tiếp tục kiểm thử luồng thanh toán lịch sử.
+            collector.IsActive = true;
+            await db.SaveChangesAsync();
             var handedOver = await StaffTestServices.Collection(db, new ConcurrentImages())
                 .TransitionAsync(pickup.AcceptedCollectorId!.Value, pickupId, "HANDED_OVER", 1, default);
             Assert.Equal("AWAITING_PAYMENT", handedOver.Status);
