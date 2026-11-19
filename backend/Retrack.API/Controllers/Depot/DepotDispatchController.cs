@@ -10,6 +10,8 @@ namespace Retrack.API.Controllers.Depot;
 public sealed class DepotDispatchController(DepotDispatchService service) : ControllerBase
 {
     private Guid Owner => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    [HttpGet("catalog")] public async Task<IActionResult> Catalog(Guid depotId) => Ok(ApiResponse<IReadOnlyList<CollectionRegion>>.Ok(await service.CatalogAsync(Owner, depotId)));
+    [HttpPost("catalog/{code}/use")] public async Task<IActionResult> UseCatalog(Guid depotId, string code) => Ok(ApiResponse<DispatchAreaDto>.Ok(await service.UseCatalogAreaAsync(Owner, depotId, code)));
     [HttpGet("employees")] public async Task<IActionResult> Employees(Guid depotId,[FromQuery]DepotQuery query)=>Ok(ApiResponse<PagedResult<StaffDto>>.Ok(await service.EmployeesAsync(Owner,depotId,query)));
     [HttpGet("areas")] public async Task<IActionResult> Areas(Guid depotId, [FromQuery] DepotQuery query) => Ok(ApiResponse<PagedResult<DispatchAreaDto>>.Ok(await service.AreasAsync(Owner, depotId, query)));
     [HttpGet("shifts")] public async Task<IActionResult> Shifts(Guid depotId, [FromQuery] DepotQuery query, bool availableOnly = false, Guid? excludeEmployeeId = null, Guid? pickupId = null) => Ok(ApiResponse<PagedResult<DispatchShiftDto>>.Ok(await service.ShiftsAsync(Owner, depotId, query, availableOnly, excludeEmployeeId, pickupId)));

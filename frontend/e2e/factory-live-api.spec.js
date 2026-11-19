@@ -34,6 +34,7 @@ test.describe("Factory UI with the local API and PostgreSQL test database", () =
     await page.getByRole("button", { name: "Nhu cầu thu mua" }).click();
     const row = page.getByRole("row").filter({ hasText: fixtureNote });
     await expect(row).toBeVisible();
+    await row.locator("summary").click();
     await row.getByRole("button", { name: "Xóa" }).click();
     await page.getByRole("button", { name: "Xác nhận" }).click();
     await expect(page.getByText(fixtureNote)).toHaveCount(0);
@@ -61,10 +62,8 @@ test.describe("Factory UI with the local API and PostgreSQL test database", () =
       await page.getByRole("button", { name: "Lập phiếu cân" }).click();
       await page.getByLabel("Gross • Xe có hàng (kg)").fill("105");
       await page.getByLabel("Tare • Xe rỗng (kg)").fill("5");
-      await page.getByRole("button", { name: "Lưu phiếu cân" }).click();
-      await expect(page.getByText("Đã lưu phiếu cân. Lô hàng sẵn sàng kiểm tra KCS.")).toBeVisible();
-
-      await page.getByRole("button", { name: "Kiểm tra & Chốt KCS" }).click();
+      await page.getByRole("button", { name: "Lưu và chuyển sang KCS" }).click();
+      await expect(page.getByText("Đã lưu phiếu cân. Tiếp tục nhập kết quả KCS.")).toBeVisible();
       await page.getByLabel("Độ tinh khiết (%)").fill("95");
       await page.getByLabel("Độ ẩm (%)").fill("2");
       await page.getByLabel("Tạp chất (%)").fill("3");
@@ -75,15 +74,18 @@ test.describe("Factory UI with the local API and PostgreSQL test database", () =
       await page.getByRole("button", { name: "Quyết toán", exact: true }).click();
       await page.getByRole("row").filter({ hasText: orderId }).getByRole("button", { name: "Chi tiết" }).click();
       await page.getByRole("button", { name: "Thỏa thuận giá & Quyết toán" }).click();
-      await page.getByLabel("Đơn giá đã thỏa thuận sau KCS (đ/kg)").fill("1200");
-      await page.getByLabel("Mã tham chiếu chuyển khoản").fill("LIVE-E2E-FACTORY");
-      await page.locator(".checkbox-line input[type=checkbox]").check();
-      await page.getByRole("button", { name: "Ghi nhận quyết toán" }).click();
-      await expect(page.getByText("Đã ghi nhận quyết toán. Có thể đánh giá lô hàng.")).toBeVisible();
+      await page.getByLabel(/Đơn giá đã thỏa thuận sau KCS/).fill("1200");
+      await page.getByLabel("VAT theo hóa đơn của vựa").selectOption("TAXABLE:10");
+      await page.getByLabel("Số hóa đơn điện tử").fill(`HD-E2E-${Date.now()}`);
+      await page.getByLabel("Ngày hóa đơn").fill("2026-10-18");
+      await page.getByLabel("Mã số thuế bên bán (vựa)").fill("0314892841");
+      await page.getByLabel(/Tôi xác nhận giá và số tiền quyết toán/).check();
+      await page.getByRole("button", { name: "Chốt quyết toán" }).click();
+      await expect(page.getByText("Đã chốt quyết toán. Bước tiếp theo: xác nhận đã chuyển tiền và gửi chứng từ.")).toBeVisible();
 
       await page.reload();
       await page.getByRole("button", { name: "Quyết toán", exact: true }).click();
-      await expect(page.getByRole("table").getByText("Đã quyết toán", { exact: true })).toBeVisible();
+      await expect(page.getByRole("table").getByText("Đã quyết toán, chờ chuyển tiền", { exact: true })).toBeVisible();
     } finally {
       if (fixture) cleanupDeliveredFactoryOrder(fixture.batchId);
     }
