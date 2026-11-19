@@ -1,5 +1,6 @@
 import os
 import io
+import re
 import time
 import base64
 import logging
@@ -205,20 +206,28 @@ CROP_PADDING       = 0.08
 # Cơ chế Multi-Model Knowledge Stacking (Late Fusion Ensemble)
 YOLO_TO_RETRACK_PRIOR = {
     # 1. Chai lọ & đồ chứa
-    'bottle': {'plastic': 2.5, 'white-glass': 2.0, 'brown-glass': 1.8, 'green-glass': 1.8, 'cardboard': -2.5, 'paper': -2.5, 'clothes': -2.5, 'biological': -2.5, 'shoes': -2.5},
+    'bottle': {'plastic': 2.5, 'white-glass': 2.0, 'brown-glass': 1.8, 'green-glass': 1.8, 'metal': 1.5, 'cardboard': -2.5, 'paper': -2.5, 'clothes': -2.5, 'biological': -2.5, 'shoes': -2.5},
     'wine glass': {'white-glass': 3.0, 'green-glass': 2.2, 'brown-glass': 2.0, 'plastic': 1.0, 'cardboard': -2.5, 'paper': -2.5, 'clothes': -2.5},
-    'cup': {'plastic': 2.2, 'paper': 1.8, 'white-glass': 1.5, 'metal': 1.2, 'cardboard': -2.0, 'clothes': -2.5},
-    'bowl': {'white-glass': 2.0, 'plastic': 2.0, 'metal': 1.5, 'cardboard': -2.0, 'clothes': -2.5},
+    'cup': {'metal': 3.5, 'plastic': 2.2, 'white-glass': 1.8, 'paper': -2.5, 'cardboard': -2.5, 'clothes': -2.5},
+    'bowl': {'metal': 2.5, 'plastic': 2.0, 'white-glass': 1.8, 'paper': -2.5, 'cardboard': -2.0, 'clothes': -2.5},
     'vase': {'white-glass': 2.8, 'brown-glass': 2.0, 'green-glass': 2.0, 'plastic': 1.2, 'cardboard': -2.5, 'paper': -2.5, 'clothes': -2.5},
 
-    # 2. Dụng cụ kim loại
-    'fork': {'metal': 4.0, 'cardboard': -2.5, 'paper': -2.5, 'clothes': -2.5},
-    'knife': {'metal': 4.0, 'cardboard': -2.5, 'paper': -2.5, 'clothes': -2.5},
-    'spoon': {'metal': 4.0, 'cardboard': -2.5, 'paper': -2.5, 'clothes': -2.5},
+    # 2. Dụng cụ & kim loại
+    'fork': {'metal': 4.5, 'cardboard': -2.5, 'paper': -2.5, 'clothes': -2.5},
+    'knife': {'metal': 4.5, 'cardboard': -2.5, 'paper': -2.5, 'clothes': -2.5},
+    'spoon': {'metal': 4.5, 'cardboard': -2.5, 'paper': -2.5, 'clothes': -2.5},
     'scissors': {'metal': 4.5, 'cardboard': -2.5, 'paper': -2.5, 'clothes': -2.5},
+    'sink': {'metal': 4.5, 'cardboard': -2.5, 'paper': -2.5},
+    'stop sign': {'metal': 3.5, 'cardboard': -2.5, 'paper': -2.5},
+    'bicycle': {'metal': 4.5, 'cardboard': -2.5, 'paper': -2.5},
+    'motorcycle': {'metal': 4.5, 'cardboard': -2.5, 'paper': -2.5},
+    'microwave': {'metal': 3.0, 'battery': 1.5, 'paper': -2.5, 'cardboard': -2.5},
+    'oven': {'metal': 3.0, 'paper': -2.5, 'cardboard': -2.5},
+    'toaster': {'metal': 3.0, 'paper': -2.5, 'cardboard': -2.5},
+    'refrigerator': {'metal': 3.0, 'paper': -2.5, 'cardboard': -2.5},
 
     # 3. Giấy & sách báo
-    'book': {'paper': 4.5, 'cardboard': -1.5, 'plastic': -2.5, 'metal': -2.5, 'clothes': -2.5, 'biological': -2.5},
+    'book': {'paper': 4.5, 'cardboard': -1.5, 'plastic': -2.5, 'metal': -3.0, 'clothes': -2.5, 'biological': -2.5},
 
     # 4. Rác điện tử & pin
     'laptop': {'battery': 4.0, 'plastic': 1.2, 'metal': 1.5, 'paper': -2.5, 'cardboard': -2.5, 'clothes': -2.5},
@@ -243,7 +252,7 @@ YOLO_TO_RETRACK_PRIOR = {
     'hot dog': {'biological': 5.0, 'plastic': -2.5, 'paper': -2.5, 'metal': -2.5, 'cardboard': -2.5},
     'pizza': {'biological': 5.0, 'plastic': -2.5, 'paper': -2.5, 'metal': -2.5, 'cardboard': -2.5},
     'donut': {'biological': 5.0, 'plastic': -2.5, 'paper': -2.5, 'metal': -2.5, 'cardboard': -2.5},
-    'cake': {'biological': 5.0, 'plastic': -2.5, 'paper': -2.5, 'metal': -2.5, 'cardboard': -2.5},
+    'cake': {'biological': 3.5, 'cardboard': -2.0},
     'potted plant': {'biological': 3.5, 'plastic': 1.2, 'paper': -2.5},
 
     # 7. Đồ dùng nhựa & khác
@@ -277,46 +286,105 @@ def _apply_visual_heuristics(logits_np, crop_img, ocr_text=''):
     # 1. Phân tích OCR nhận diện nhãn hiệu và từ khóa ngành phế liệu
     ocr_lower = ocr_text.lower().strip()
     if len(ocr_lower) > 2 and ocr_lower not in ['(khong co chu)', '(ocr loi)']:
-        metal_kws = ['tiger', 'heineken', 'bia', 'beer', 'saigon', 'hanoi', '333', 'coca', 'pepsi', 'sprite', 'fanta', 'redbull', 'sting']
+        metal_phrases = [
+            'tiger', 'heineken', 'bia', 'beer', 'saigon', 'sài gòn', 'hanoi', 'hà nội',
+            '333', 'larue', 'budweiser', 'sapporo', 'huda', 'halida', 'bavaria', 'tuborg',
+            'strongbow', 'somersby', 'chill', 'bivina', 'việt hà', 'coca', 'coke', 'pepsi',
+            'sprite', 'fanta', 'redbull', 'red bull', 'bò húc', 'bò cụng', 'sting', 'mirinda',
+            '7up', 'seven up', 'twister', 'compact', 'warrior', 'revive', 'dr thanh',
+            'wake up', '247', 'number 1', 'number one', 'thums up', 'monster', 'rockstar',
+            'pocari', 'soda', 'tonic', 'highlands', 'birdy', 'nescafe', 'ông thọ', 'ngôi sao',
+            'phương nam', 'cô gái hà lan', 'cá hộp', 'thịt hộp', 'heo 2 lát', 'pate',
+            '330ml', '330 ml', '250ml', '250 ml', '320ml', '355ml', '500ml', 'alc', '% vol',
+            '%vol', 'độ cồn', 'lon nhôm', 'vỏ lon', 'nắp khoen', 'nắp giật', 'bật nắp', 'lon bia',
+            'lon nước', 'aluminum', 'aluminium'
+        ]
         carton_kws = ['shopee', 'lazada', 'tiki', 'giaohang', 'ghn', 'viettelpost', 'j&t', 'carton', 'box']
-        paper_kws = ['tập', 'sách', 'báo', 'tạp chí', 'photo', 'a4', 'hóa đơn', 'chứng từ', 'vở', 'document', 'paper']
         battery_kws = ['panasonic', 'pin', 'alkaline', 'battery', 'dry cell', 'accumulator', 'mah', '1.5v', '12v', 'lion', 'li-ion']
         plastic_kws = ['aquafina', 'lavie', 'dasani', 'pet', 'hdpe', 'dầu ăn', 'cooking oil', 'cái lân', 'neptune', 'simply']
 
-        for kw in metal_kws:
-            if kw in ocr_lower:
-                boost[CLASS_IDX['metal']] += 1.8
-                break
+        # Đồ kim loại & vỏ lon (loại trừ các từ lừa như hợp đồng, cộng đồng, đồng hồ)
+        clean_ocr_metal = re.sub(
+            r'\b(hợp đồng|hop dong|cộng đồng|cong dong|đồng hồ|dong ho|đồng nai|dong nai|đồng tháp|dong thap)\b',
+            '', ocr_lower
+        )
+        has_metal = any(p in clean_ocr_metal for p in metal_phrases)
+        if not has_metal:
+            words = re.findall(r'\b(nhôm|nhom|thiếc|thiec|inox|sắt vụn|sat vun|đồng đỏ|dong do|đồng vàng|dong vang|vỏ lon|vo lon|lon)\b', clean_ocr_metal)
+            has_metal = len(words) > 0
+
+        if has_metal:
+            boost[CLASS_IDX['metal']] += 3.5
+            boost[CLASS_IDX['paper']] -= 3.0
+            boost[CLASS_IDX['cardboard']] -= 2.0
+
+        # Thùng bìa carton
         for kw in carton_kws:
             if kw in ocr_lower:
                 boost[CLASS_IDX['cardboard']] += 2.0
                 break
-        for kw in paper_kws:
-            if kw in ocr_lower:
-                boost[CLASS_IDX['paper']] += 2.0
-                break
+
+        # Pin & ắc quy
         for kw in battery_kws:
             if kw in ocr_lower:
                 boost[CLASS_IDX['battery']] += 2.5
                 break
+
+        # Đồ nhựa
         for kw in plastic_kws:
             if kw in ocr_lower:
                 boost[CLASS_IDX['plastic']] += 1.5
                 break
 
-    # 2. Phân tích màu sắc đặc trưng nhẹ nhàng (không áp đảo mạng nơ-ron)
+        # Giấy báo, sách vở (Bộ lọc làm sạch nghiêm ngặt: loại trừ 'tập đoàn', 'thông báo', 'cảnh báo', 'bảo quản')
+        clean_ocr_paper = re.sub(
+            r'\b(tập đoàn|tap doan|tập trung|tap trung|thu tập|thông báo|thong bao|cảnh báo|canh bao|báo cáo|bao cao|danh sách|danh sach|bảo quản|bao quan|phòng ngừa|phong ngua)\b',
+            '', ocr_lower
+        )
+        strict_paper_phrases = [
+            'sách giáo khoa', 'sách vở', 'tập vở', 'vở viết', 'vở bài tập', 'vở học sinh', 'tờ báo',
+            'báo chí', 'báo tuổi trẻ', 'báo thanh niên', 'báo nhân dân', 'báo lao động', 'tạp chí',
+            'giấy photo', 'giấy in', 'giấy a4', 'a4 70gsm', 'a4 80gsm', 'hóa đơn', 'chứng từ',
+            'tài liệu', 'hồ sơ', 'photocopy', 'in ấn', 'nhà xuất bản', 'nxb giáo dục', 'trang sách'
+        ]
+        has_paper = any(p in clean_ocr_paper for p in strict_paper_phrases)
+        if not has_paper:
+            words = re.findall(r'\b(sách|vở|tạp chí|document|paper)\b', clean_ocr_paper)
+            has_paper = len(words) > 0
+
+        if has_paper and not has_metal:
+            boost[CLASS_IDX['paper']] += 2.5
+            boost[CLASS_IDX['metal']] -= 2.0
+
+    # 2. Phân tích quang học bề mặt & màu sắc (Specular Glint & HSV Colorimetry)
     hsv = cv2.cvtColor(crop_img, cv2.COLOR_RGB2HSV).astype(np.float32)
     h_ch, s_ch, v_ch = hsv[:, :, 0], hsv[:, :, 1], hsv[:, :, 2]
     mean_s = float(s_ch.mean() / 255.0)
 
-    brown_ratio = float(((h_ch >= 8) & (h_ch <= 26) & (s_ch > 60) & (v_ch > 70) & (v_ch < 205)).mean())
-    green_ratio = float(((h_ch >= 35) & (h_ch <= 85) & (s_ch > 50)).mean())
+    # Tỷ lệ điểm sáng phản xạ quang học kim loại (Specular Highlights: v > 220, s < 50)
+    specular_ratio = float(((v_ch > 220) & (s_ch < 50)).mean())
+    std_v = float(v_ch.std())
 
-    # Thùng carton màu nâu tự nhiên
-    if brown_ratio > 0.35 and mean_s > 0.25:
+    # Lon nước ngọt / bia màu vàng kim (Red Bull, Bia Sài Gòn Special): sắc độ vàng đậm + ánh sáng chói kim loại
+    gold_can_ratio = float(((h_ch >= 16) & (h_ch <= 38) & (s_ch > 80) & (v_ch > 185)).mean())
+    if gold_can_ratio > 0.15 and specular_ratio > 0.04:
+        boost[CLASS_IDX['metal']] += 2.8
+        boost[CLASS_IDX['paper']] -= 2.5
+        boost[CLASS_IDX['cardboard']] -= 2.0
+
+    # Lon nước giải khát màu đỏ tươi (Coca-Cola, Sting): đỏ bão hòa cao + độ chói/tương phản nếp gấp kim loại
+    red_can_ratio = float((((h_ch <= 12) | (h_ch >= 168)) & (s_ch > 100) & (v_ch > 120)).mean())
+    if red_can_ratio > 0.20 and (specular_ratio > 0.04 or std_v > 50):
+        boost[CLASS_IDX['metal']] += 2.8
+        boost[CLASS_IDX['paper']] -= 2.5
+
+    # Thùng carton màu nâu tự nhiên (không có ánh kim loại)
+    brown_ratio = float(((h_ch >= 8) & (h_ch <= 26) & (s_ch > 60) & (v_ch > 70) & (v_ch < 205)).mean())
+    if brown_ratio > 0.35 and mean_s > 0.25 and specular_ratio < 0.05:
         boost[CLASS_IDX['cardboard']] += 1.2
 
-    # Thủy tinh xanh Heineken / nước ngọt
+    # Thủy tinh xanh lá (Heineken, bia chai xanh)
+    green_ratio = float(((h_ch >= 35) & (h_ch <= 85) & (s_ch > 50)).mean())
     if green_ratio > 0.20:
         boost[CLASS_IDX['green-glass']] += 1.5
 
@@ -480,12 +548,18 @@ def _run_classification(image_np_rgb: np.ndarray):
     top_predictions = []
     for idx in top_indices:
         c_name = CLASSES[idx]
+        c_meta = METADATA.get(c_name, {})
         top_predictions.append({
             "class_key": c_name,
-            "name_vi": METADATA.get(c_name, {}).get("name_vi", c_name),
+            "name_vi": c_meta.get("name_vi", c_name),
             "confidence": round(float(probs[idx]) * 100.0, 1),
-            "material_type": METADATA.get(c_name, {}).get("material_type", "OTHER"),
-            "is_recyclable": METADATA.get(c_name, {}).get("is_recyclable", True),
+            "material_type": c_meta.get("material_type", "OTHER"),
+            "is_recyclable": c_meta.get("is_recyclable", True),
+            "icon": c_meta.get("icon", "category"),
+            "unit": c_meta.get("unit", "kg"),
+            "price_range": c_meta.get("price_range", "Đang cập nhật"),
+            "recycling_tip": c_meta.get("tip", ""),
+            "suggested_description": c_meta.get("suggested_desc", ""),
         })
 
     # Annotate image
