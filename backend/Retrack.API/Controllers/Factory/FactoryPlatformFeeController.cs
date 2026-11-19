@@ -2,13 +2,17 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Retrack.API.DTOs;
 using Retrack.API.DTOs.Depot;
+using Retrack.API.Services.Depot;
 using Retrack.API.Services.Factory;
 
 namespace Retrack.API.Controllers.Factory;
 
 [Route("api/factory/platform-fees"), Authorize(Roles = "FACTORY")]
-public sealed class FactoryPlatformFeeController(FactoryPlatformFeeService service) : FactoryControllerBase
+public sealed class FactoryPlatformFeeController(FactoryPlatformFeeService service, IPayOsClient payos) : FactoryControllerBase
 {
+    [HttpGet("payos-availability")]
+    public IActionResult PayOsAvailability() => Ok(ApiResponse<bool>.Ok(payos.IsConfigured));
+
     [HttpGet("transactions")]
     public async Task<IActionResult> Transactions([FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default)
     {
