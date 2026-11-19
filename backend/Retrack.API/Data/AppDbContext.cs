@@ -62,6 +62,9 @@ namespace Retrack.API.Data
         public DbSet<PayoutRun> PayoutRuns { get; set; }
         public DbSet<PayeeCommission> PayeeCommissions { get; set; }
         public DbSet<PayeePayoutSetting> PayeePayoutSettings { get; set; }
+        // Thu vào sàn giai đoạn 2 (RETRACK_MONEY_V3)
+        public DbSet<MoneyCollectionOrder> MoneyCollectionOrders { get; set; }
+        public DbSet<MoneyCollectionAnomaly> MoneyCollectionAnomalies { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {

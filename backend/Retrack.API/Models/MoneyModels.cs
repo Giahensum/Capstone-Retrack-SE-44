@@ -49,6 +49,8 @@ public class MoneyCollection
     [Column("payos_link_id")] public string? PayosLinkId { get; set; }
     [Column("paid_at")] public DateTime? PaidAt { get; set; }
     [Column("received_amount")] public decimal? ReceivedAmount { get; set; }
+    /// <summary>Mã đơn PayOS đã thanh toán khoản thu này (RETRACK_MONEY_V3); phân biệt webhook gửi lại với tiền trả trùng trên link khác.</summary>
+    [Column("paid_order_code")] public long? PaidOrderCode { get; set; }
     [Column("created_at")] public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     [Column("updated_at")] public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }
