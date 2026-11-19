@@ -1,4 +1,4 @@
--- ============================================================
+-- =====================================================
 -- RETRACK — KHỞI TẠO TOÀN HỆ THỐNG VÀ DỮ LIỆU DEMO
 -- Máy mới: tạo database rỗng bằng pgAdmin, mở Query Tool của đúng DB,
 -- mở file này và nhấn F5 để chạy TOÀN BỘ, không cần lệnh terminal.
@@ -8,7 +8,7 @@
 -- Không thay kết nối/mật khẩu PostgreSQL; cấu hình backend bằng .env local.
 -- File khởi tạo không thay thế quy trình nâng cấp database có dữ liệu thật.
 -- Nếu lỗi: toàn bộ transaction chưa được ghi; chạy ROLLBACK; trước khi thử lại.
--- ============================================================
+-- =====================================================
 
 BEGIN;
 SET LOCAL retrack.seed_demo = 'on';
@@ -16,9 +16,9 @@ SET LOCAL retrack.seed_demo = 'on';
 -- RETRACK_SCHEMA_BEGIN
 -- UUID dùng hàm lõi của PostgreSQL, không phụ thuộc extension hoặc schema cài đặt.
 
--- ==========================================
+-- ===================================
 -- MODULE 1: HỆ THỐNG & TÀI KHOẢN (ROLES)
--- ==========================================
+-- ===================================
 
 -- Bảng cấu hình hệ thống (Admin quản lý phí)
 CREATE TABLE IF NOT EXISTS system_configs (
@@ -106,9 +106,9 @@ CREATE TABLE IF NOT EXISTS depot_staffs (
     is_active       BOOLEAN      DEFAULT TRUE
 );
 
--- ==========================================
+-- ===================================
 -- MODULE 2: GIAI ĐOẠN 1 - THU GOM PHẾ LIỆU & PHÍ MẶC ĐỊNH 5%
--- ==========================================
+-- ===================================
 
 -- Yêu cầu thu gom của Seller
 CREATE TABLE IF NOT EXISTS pickup_requests (
@@ -170,9 +170,9 @@ CREATE TABLE IF NOT EXISTS seller_depot_reviews (
     created_at          TIMESTAMPTZ  DEFAULT NOW()
 );
 
--- ==========================================
+-- ===================================
 -- MODULE 3: DEMAND BOARD & LÔ HÀNG (GIAI ĐOẠN 2)
--- ==========================================
+-- ===================================
 
 -- Bảng nhu cầu nhà máy (Demand Board)
 CREATE TABLE IF NOT EXISTS factory_demands (
@@ -287,9 +287,9 @@ ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS depot_payment_confirmed_b
 CREATE SEQUENCE IF NOT EXISTS depot_batch_number START WITH 1 INCREMENT BY 1 NO MINVALUE NO MAXVALUE NO CYCLE;
 CREATE UNIQUE INDEX IF NOT EXISTS ix_inventory_batches_code ON inventory_batches(code);
 
--- ==========================================
+-- ===================================
 -- MODULE 4: VẬN CHUYỂN & QC & QUYẾT TOÁN CÓ PHÍ (GIAI ĐOẠN 3)
--- ==========================================
+-- ===================================
 
 -- Công việc vận chuyển
 CREATE TABLE IF NOT EXISTS transport_jobs (
@@ -371,9 +371,9 @@ CREATE TABLE IF NOT EXISTS factory_depot_reviews (
     created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
--- ==========================================
+-- ===================================
 -- MODULE 5: REVENUE - DOANH THU NỀN TẢNG
--- ==========================================
+-- ===================================
 
 -- Bảng lưu vết doanh thu của nền tảng để hiển thị cho Admin
 CREATE TABLE IF NOT EXISTS platform_transactions (
@@ -391,9 +391,9 @@ ALTER TABLE platform_transactions ADD COLUMN IF NOT EXISTS payer_id UUID;
 ALTER TABLE platform_transactions ADD COLUMN IF NOT EXISTS transaction_amount DECIMAL(18, 2);
 ALTER TABLE platform_transactions ADD COLUMN IF NOT EXISTS fee_percentage DECIMAL(5, 2);
 
--- ==========================================
+-- ===================================
 -- MODULE 6: ADMIN - AUDIT LOG, HÓA ĐƠN PHÍ, THÔNG BÁO
--- ==========================================
+-- ===================================
 
 -- Nhật ký hành động của Admin trên hệ thống (tạo/sửa/xóa user, giá tham khảo, cấu hình phí, hóa đơn...)
 CREATE TABLE IF NOT EXISTS audit_logs (
@@ -487,9 +487,9 @@ DO $$ BEGIN
 END $$;
 -- RETRACK_CLOSED_PERIOD_BILLING_V1_END
 
--- ==========================================
+-- ===================================
 -- FUNCTIONS & TRIGGERS (updated_at tự động)
--- ==========================================
+-- ===================================
 
 -- Function dùng chung cho trigger updated_at
 CREATE OR REPLACE FUNCTION set_updated_at()
@@ -536,9 +536,9 @@ CREATE TRIGGER trg_partnerships_upd
     BEFORE UPDATE ON factory_depot_partnerships
     FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
--- ==========================================
+-- ===================================
 -- INDEX GỢI Ý (Performance)
--- ==========================================
+-- ===================================
 CREATE INDEX IF NOT EXISTS idx_users_email     ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_role      ON users(role);
 CREATE INDEX IF NOT EXISTS idx_pr_seller       ON pickup_requests(seller_id);
@@ -602,9 +602,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS ix_driver_delivery_operation
 CREATE INDEX IF NOT EXISTS ix_driver_delivery_history
     ON driver_delivery_events(job_id, driver_id, created_at DESC);
 
--- ==========================================
+-- ===================================
 -- MODULE 8: XÁC THỰC OTP & QUÊN MẬT KHẨU
--- ==========================================
+-- ===================================
 CREATE TABLE IF NOT EXISTS password_reset_otps (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     email       VARCHAR(255) NOT NULL,
@@ -1244,6 +1244,21 @@ CREATE TABLE IF NOT EXISTS money_collection_anomalies (
 );
 CREATE INDEX IF NOT EXISTS ix_money_anomalies_open ON money_collection_anomalies(created_at DESC) WHERE status = 'OPEN';
 -- RETRACK_MONEY_V3_END
+
+-- RETRACK_MONEY_V2_BEGIN
+-- Thu - chi qua sàn (giai đoạn 3 và 5: engine chi). Chạy lại nhiều lần an toàn. Xem docs/thiet-ke-thu-chi-qua-san.md.
+-- Thời điểm đổi tài khoản ngân hàng gần nhất: kỳ chi bị giữ (HELD) trong payout.bank_change_hold_hours sau khi đổi.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS bank_changed_at TIMESTAMPTZ;
+-- Số lần gửi lệnh chi của kỳ: khóa idempotency là code (lần 1) hoặc code-N (lần N, chỉ tăng sau lỗi rõ ràng).
+ALTER TABLE payout_runs ADD COLUMN IF NOT EXISTS attempt INT NOT NULL DEFAULT 1;
+ALTER TABLE payout_runs ADD COLUMN IF NOT EXISTS last_attempt_at TIMESTAMPTZ;
+ALTER TABLE payout_runs DROP CONSTRAINT IF EXISTS ck_payout_runs_attempt;
+ALTER TABLE payout_runs ADD CONSTRAINT ck_payout_runs_attempt CHECK (attempt >= 1);
+CREATE INDEX IF NOT EXISTS ix_payout_runs_payee_period ON payout_runs(payee_id, period_end DESC);
+INSERT INTO system_configs (config_key, config_value, description) VALUES
+    ('payout.bank_change_hold_hours', '24', 'Giữ kỳ chi sau khi người nhận đổi tài khoản ngân hàng (giờ)')
+ON CONFLICT (config_key) DO NOTHING;
+-- RETRACK_MONEY_V2_END
 
 -- RETRACK_SCHEMA_END
 

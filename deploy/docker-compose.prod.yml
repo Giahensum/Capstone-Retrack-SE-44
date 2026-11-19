@@ -58,6 +58,11 @@ services:
       PayOS__ReturnUrl: ${PAYOS_RETURN_URL:-http://localhost:5173/depot/payments/fees?payos=return}
       PayOS__CancelUrl: ${PAYOS_CANCEL_URL:-http://localhost:5173/depot/payments/fees?payos=cancel}
       PayOS__PollSeconds: ${PAYOS_POLL_SECONDS:-15}
+      # payOS kênh CHI (bộ khóa riêng, để trống thì không bật gì): chỉ chọn được payout.provider=PAYOS khi đủ 3 khóa
+      PayOSPayout__ClientId: ${PAYOS_PAYOUT_CLIENT_ID:-}
+      PayOSPayout__ApiKey: ${PAYOS_PAYOUT_API_KEY:-}
+      PayOSPayout__ChecksumKey: ${PAYOS_PAYOUT_CHECKSUM_KEY:-}
+      PayOSPayout__SignatureMode: ${PAYOS_PAYOUT_SIGNATURE_MODE:-Canonical}
       AiService__Url: ${AI_SERVICE_URL:-http://127.0.0.1:5005}
       # Ký điện tử hợp đồng (DocuSign sandbox); để trống thì tính năng tắt
       DocuSign__IntegrationKey: ${DOCUSIGN_INTEGRATION_KEY:-}
