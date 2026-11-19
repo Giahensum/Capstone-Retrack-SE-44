@@ -116,31 +116,31 @@ public sealed class EmployeeDispatchService(IEmployeeDispatchRepository reposito
                 return CollectionValidation.Distance((double)pickup.Latitude!.Value,
                     (double)pickup.Longitude!.Value, recipientArea.Latitude, recipientArea.Longitude);
             }
-            bool CoversOrSupports(EmployeeDispatchShift shift) => shift.AreaId == home.Id
+            bool CoversOrSupports(EmployeeDispatchShift shift) => shift.IsAutomatic || shift.AreaId == home.Id
                 || DistanceToShift(shift) <= MaxSupportDistanceMeters;
-            // Giữ phân công ổn định; không chuyển đơn vì một người khác vừa rảnh hơn.
+            var counts = await repository.WorkloadAsync(depotId, ct);
+            var day = now.AddHours(7).Date.AddHours(-7);
+            var excluded = await repository.ExcludedAsync(id, day, ct);
             if (old.HasValue && shifts.Any(s => s.EmployeeId == old && CoversOrSupports(s)
                 && (pickup.PreferredDatetime == null || pickup.PreferredDatetime < s.EndsAt)))
             {
                 await TouchQueue(id, "ASSIGNED", now, ct);
                 return;
             }
-            var counts = await repository.WorkloadAsync(depotId, ct);
             // Không quay lại người từng bàn giao đơn trong ngày, tránh vòng lặp.
-            var day = now.AddHours(7).Date.AddHours(-7);
-            var excluded = await repository.ExcludedAsync(id, day, ct);
             chosen = shifts.Where(s => s.EmployeeId != old && !excluded.Contains(s.EmployeeId)
                 && CoversOrSupports(s)
-                && counts.GetValueOrDefault(s.EmployeeId) < s.MaxPendingOrders
+                && (s.IsAutomatic || counts.GetValueOrDefault(s.EmployeeId) < s.MaxPendingOrders)
                 && (pickup.PreferredDatetime == null || pickup.PreferredDatetime < s.EndsAt))
                 .OrderBy(s => s.AreaId == home.Id ? 0 : 1)
-                .ThenBy(s => counts.GetValueOrDefault(s.EmployeeId) * 1500 + DistanceToShift(s))
+                .ThenBy(s => DistanceToShift(s))
+                .ThenBy(s => s.StartsAt)
                 .ThenBy(s => s.Id).FirstOrDefault();
             if (chosen != null) pickup.TargetDepotId = depotId;
         }
         var next = chosen?.EmployeeId;
         var waitingReason = home == null ? "Đơn vẫn chờ kho tiếp nhận; cần Owner bố trí vùng/ca hoặc kiểm tra tọa độ."
-            : "Chưa có nhân viên trong vùng hoặc vùng hỗ trợ cách điểm thu gom tối đa 5 km, còn ca và khả năng nhận đơn.";
+            : "Chưa có nhân viên cùng kho còn ca và khả năng nhận đơn. Chờ nhân viên sẵn sàng hoặc Owner xử lý ngoại lệ.";
         var priorQueue = await repository.QueueAsync(id, ct);
         if (next != old)
         {
@@ -186,6 +186,7 @@ public sealed class EmployeeDispatchWorker(IServiceScopeFactory scopes, ILogger<
             try
             {
                 using var scope = scopes.CreateScope();
+                await scope.ServiceProvider.GetRequiredService<EmployeeDailyPlanService>().PrepareAsync(DateTime.UtcNow, stoppingToken);
                 await scope.ServiceProvider.GetRequiredService<EmployeeDispatchService>().DispatchAsync(stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }

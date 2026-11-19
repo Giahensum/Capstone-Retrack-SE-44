@@ -3,9 +3,9 @@ namespace Retrack.API.DTOs.Depot;
 public record DispatchAreaDto(Guid Id, string Name, double Latitude, double Longitude, double RadiusMeters, bool IsActive, Guid DepotId);
 public record DispatchAreaInput(string Name, double Latitude, double Longitude, double RadiusMeters, bool IsActive);
 public record DispatchShiftInput(Guid AreaId, Guid EmployeeId, DateTimeOffset StartsAt, DateTimeOffset EndsAt,
-    string Vehicle, decimal CapacityKg, int MaxPendingOrders, Guid? OperationId = null);
+    string Vehicle, decimal CapacityKg, int MaxPendingOrders, Guid? OperationId = null, string? CatalogCode = null);
 public record DispatchShiftDto(Guid Id, Guid AreaId, string AreaName, Guid EmployeeId, string EmployeeName,
-    DateTime StartsAt, DateTime EndsAt, string Availability, string? Reason, string Vehicle, decimal CapacityKg, int MaxPendingOrders, int AssignedCount);
+    DateTime StartsAt, DateTime EndsAt, string Availability, string? Reason, string Vehicle, decimal CapacityKg, int MaxPendingOrders, int AssignedCount, bool IsAutomatic = false);
 public record DispatchPickupDto(Guid Id, string SellerName, string SellerPhone, string Address, string? Description,
     decimal? Latitude, decimal? Longitude, DateTime? PreferredDatetime, string Status, Guid? EmployeeId,
     string? EmployeeName, string? QueueReason, bool HasCheckIn, DateTime CreatedAt);

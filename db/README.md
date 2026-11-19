@@ -16,18 +16,16 @@ Không cần terminal để dựng DB, không cần file seed thứ hai hoặc `
 
 ## Dữ liệu demo đã gộp
 
+Bổ sung kế hoạch tự động theo ngày: 12 đơn, 12 Seller và 8 Employee ở hai kho mới không có vùng/ca seed. Worker tự chuẩn bị danh mục và phân công; xem [AUTO_DAILY_COLLECTION.md](../docs/AUTO_DAILY_COLLECTION.md). DB cũ cần chạy riêng khối `RETRACK_AUTO_DISPATCH_DAY_V1_BEGIN/END` trước backend mới, không chạy seed trên production. Bộ 6 Employee cũ vẫn giữ để đối chiếu, bộ mới dùng `employee.dispatch09` đến `employee.dispatch16`.
+
 Mặc định file có `SET LOCAL retrack.seed_demo = 'on';` để nạp:
 
 | Nhóm | Dữ liệu |
 |---|---|
-| Tài khoản | Giữ tài khoản các role khác; 6 Employee dispatch hoạt động, 12 Seller dispatch. Hai Employee cũ được đổi email và khóa để bảo toàn tham chiếu lịch sử |
-| Kho/nhà máy | Giữ bộ kho/nhà máy liên role; thêm hai kho điều phối riêng tại Đà Nẵng |
-| Thu gom | Giữ đơn lịch sử liên role; thay bộ Employee tự nhận và bộ điều phối cũ bằng 12 đơn tại 12 tọa độ khác nhau |
-| Điều phối | Employee dispatch01–03 thuộc Kho Thu Mua An Phú, dispatch04–06 thuộc Kho Phế Liệu Hòa Bình; 6 vùng và ca khoảng 20 giờ. Đơn hẹn ngày sau chưa được giao hôm nay |
-| Tài khoản | 32 tài khoản: 1 Admin, 1 Depot Owner, 8 Employee, 2 Driver, 4 Factory, 16 Seller; Chủ kho demo Ngô Sỹ Giá. Giữ các email chính admin/seller/depot/employee/driver/factory@retrack.vn và Factory2/3 |
-| Kho/nhà máy | 5 kho, 4 nhà máy, 15 liên kết nhân sự; địa chỉ mô phỏng Đà Nẵng |
-| Thu gom | 65 đơn nhiều trạng thái, gồm 13 đơn Employee `e0000000-0929-*` và 36 đơn điều phối `ed250000-*` |
-| Điều phối | 6 nhân viên, 6 Seller, 6 vùng và ca demo khoảng 20 giờ; đơn hẹn ngày sau chưa được giao từ hôm nay |
+| Tài khoản | 52 tài khoản: 1 Admin, 1 Depot Owner, 16 Employee (14 hoạt động), 2 Driver, 4 Factory, 28 Seller. Tên và mô tả tự nhiên, dữ liệu chỉ dùng demo |
+| Kho/nhà máy | 8 kho, 4 nhà máy, 23 liên kết nhân sự; thêm Thành Đạt và Minh Phát để test tự lập ca |
+| Thu gom | 40 đơn gồm dữ liệu lịch sử liên role, 12 đơn dispatch tại địa điểm công cộng và 12 đơn bổ sung gọn cho hai kho mới |
+| Điều phối | dispatch01–03 thuộc An Phú, dispatch04–06 thuộc Hòa Bình. dispatch09–12 thuộc Thành Đạt, dispatch13–16 thuộc Minh Phát; hai kho mới không seed ca/vùng, worker tự lập. Đơn hẹn ngày sau chờ đúng ngày |
 | Vận chuyển | 12 chuyến, gồm 3 lô `DRV-DEMO-01/02/03` và 3 lô `DRV-DN-LOCAL-01/02/03`, giữ UUID cũ để mobile tiếp tục test |
 | Tồn/chi phí | Phiếu sắt+ghế cùng chi phí; thêm 900 kg PET nguồn demo cho hai bộ lô Driver, giá vốn chưa xác định |
 | Liên role | Hợp tác, nhu cầu, lô xuất/cân/KCS, thanh toán/phí/hóa đơn, thông báo, bảng giá và lô thanh lý |
