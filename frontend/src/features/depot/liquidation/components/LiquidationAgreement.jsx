@@ -13,7 +13,7 @@ import ContractViewer from '@/components/liquidation/ContractViewer';
 import { toContract } from '@/components/liquidation/ContractDocument';
 import { Modal, Section, Tile, Notice, Steps, Badge } from '@/components/liquidation/LiquidationUI';
 import { useLiquidationQuery, useLiquidationMutation, useLiquidationScope, localTime } from '../liquidationApi';
-import { LiquidationEsignPanel, LiquidationEsignSignButton, useLiquidationEsign } from '@/features/esign/LiquidationEsign';
+import { LiquidationEsignPanel, LiquidationEsignSignButton, isEsignActive, useLiquidationEsign } from '@/features/esign/LiquidationEsign';
 
 const primaryBtn = 'inline-flex items-center justify-center gap-2 rounded-full bg-d-primary px-6 py-2.5 text-sm font-bold text-white shadow-sm transition active:scale-95 disabled:opacity-50';
 const checkLabel = 'flex cursor-pointer gap-2.5 text-sm text-d-on-surface';
@@ -35,7 +35,7 @@ export default function LiquidationAgreement({ id, onClose }) {
   const reportDeposit = useLiquidationMutation('patch', `/agreements/${id}/report-deposit`, reset);
   const d = query.data;
   const esign = useLiquidationEsign(id);
-  const esignOn = !!esign.data?.configured;
+  const esignOn = isEsignActive(esign.data);
   const onEsignChanged = () => client.invalidateQueries({ queryKey: ['liquidation', userId, depotId] });
   const busy = report.isPending || handover.isPending || sign.isPending || reportDeposit.isPending;
 
@@ -63,7 +63,7 @@ export default function LiquidationAgreement({ id, onClose }) {
     if (hasDeposit && !d.buyerSignedAt && esignOn) {
       // Máy chủ đã bật DocuSign: ký điện tử qua DocuSign thay cho nút xác nhận cũ.
       action = <LiquidationEsignSignButton agreementId={id} status={esign.data} onChanged={onEsignChanged} />;
-    } else if (hasDeposit && !d.buyerSignedAt) {
+    } else if (hasDeposit && !d.buyerSignedAt && !esign.isPending) {
       action = (
         <div className="space-y-2.5">
           <label className={checkLabel}><input type="checkbox" className={checkbox} disabled={busy} checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />Tôi đã đọc và đồng ý ký hợp đồng đặt cọc mua trọn lô này.</label>

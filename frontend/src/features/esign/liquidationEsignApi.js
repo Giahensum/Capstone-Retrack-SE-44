@@ -13,7 +13,17 @@ export const startLiquidationSigning = (id) => api.post(`/liquidations/esign/${i
 export const refreshLiquidationEsign = (id) => api.post(`/liquidations/esign/${id}/refresh`).then(unwrap);
 
 export async function downloadLiquidationContract(id, fileName) {
-  const res = await api.get(`/liquidations/esign/${id}/document`, { responseType: 'blob' });
+  let res;
+  try {
+    res = await api.get(`/liquidations/esign/${id}/document`, { responseType: 'blob' });
+  } catch (error) {
+    // Với responseType 'blob' thông báo lỗi của máy chủ nằm trong Blob: đọc ra để người dùng thấy lý do tiếng Việt.
+    const blob = error?.response?.data;
+    if (blob instanceof Blob) {
+      try { error.response.data = JSON.parse(await blob.text()); } catch { /* giữ thông báo mặc định */ }
+    }
+    throw error;
+  }
   const url = URL.createObjectURL(res.data);
   const link = document.createElement('a');
   link.href = url;
