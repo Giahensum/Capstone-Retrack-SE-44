@@ -17,6 +17,7 @@ const NAV_ITEMS = [
   { iconName: 'gavel', label: 'Lô thanh lý', to: '/seller/liquidations' },
   { iconName: 'notifications', label: 'Thông báo', to: '/seller/notifications', badge: true },
   { iconName: 'bar_chart', label: 'Thống kê thu nhập', to: '/seller/income' },
+  { iconName: 'account_balance_wallet', label: 'Thu nhập & chi trả', to: '/seller/earnings' },
   { iconName: 'inventory_2', label: 'Hồ sơ cá nhân', to: '/seller/profile' },
 ];
 

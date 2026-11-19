@@ -7,6 +7,7 @@ const CreateRequest = lazy(() => import('./CreateRequest'));
 const RequestList = lazy(() => import('./RequestList'));
 const RequestDetail = lazy(() => import('./RequestDetail'));
 const SellerIncome = lazy(() => import('./SellerIncome'));
+const MoneyEarnings = lazy(() => import('@/features/money-payee/EarningsPage'));
 const SellerProfile = lazy(() => import('./SellerProfile'));
 const SellerNotifications = lazy(() => import('./SellerNotifications'));
 const SellerAiScanner = lazy(() => import('./SellerAiScanner'));
@@ -35,6 +36,7 @@ export default function SellerDashboard() {
           <Route path="liquidations/:id" element={<LiquidationDetail />} />
           <Route path="notifications" element={<SellerNotifications />} />
           <Route path="income" element={<SellerIncome />} />
+          <Route path="earnings" element={<MoneyEarnings />} />
           <Route path="profile" element={<SellerProfile />} />
           <Route path="*" element={<SellerHome />} />
         </Routes>

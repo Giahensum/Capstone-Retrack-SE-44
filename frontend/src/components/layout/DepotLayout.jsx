@@ -56,6 +56,7 @@ const DepotLayout = () => {
     { iconName: 'monitoring', label: 'Hiệu suất nhân sự', to: '/depot/staff/performance' },
     { iconName: 'payments', label: 'Thanh toán chờ duyệt', to: '/depot/payments' },
     { iconName: 'receipt', label: 'Phí nền tảng', to: '/depot/payments/fees' },
+    { iconName: 'account_balance_wallet', label: 'Thu nhập & chi trả', to: '/depot/earnings' },
     { iconName: 'bar_chart', label: 'Báo cáo doanh thu', to: '/depot/reports' },
   ];
 
