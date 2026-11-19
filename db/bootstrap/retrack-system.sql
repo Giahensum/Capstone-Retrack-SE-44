@@ -1207,6 +1207,21 @@ INSERT INTO system_configs (config_key, config_value, description) VALUES
 ON CONFLICT (config_key) DO NOTHING;
 -- RETRACK_MONEY_V1_END
 
+-- RETRACK_MONEY_V2_BEGIN
+-- Thu - chi qua sàn (giai đoạn 3 và 5: engine chi). Chạy lại nhiều lần an toàn. Xem docs/thiet-ke-thu-chi-qua-san.md.
+-- Thời điểm đổi tài khoản ngân hàng gần nhất: kỳ chi bị giữ (HELD) trong payout.bank_change_hold_hours sau khi đổi.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS bank_changed_at TIMESTAMPTZ;
+-- Số lần gửi lệnh chi của kỳ: khóa idempotency là code (lần 1) hoặc code-N (lần N, chỉ tăng sau lỗi rõ ràng).
+ALTER TABLE payout_runs ADD COLUMN IF NOT EXISTS attempt INT NOT NULL DEFAULT 1;
+ALTER TABLE payout_runs ADD COLUMN IF NOT EXISTS last_attempt_at TIMESTAMPTZ;
+ALTER TABLE payout_runs DROP CONSTRAINT IF EXISTS ck_payout_runs_attempt;
+ALTER TABLE payout_runs ADD CONSTRAINT ck_payout_runs_attempt CHECK (attempt >= 1);
+CREATE INDEX IF NOT EXISTS ix_payout_runs_payee_period ON payout_runs(payee_id, period_end DESC);
+INSERT INTO system_configs (config_key, config_value, description) VALUES
+    ('payout.bank_change_hold_hours', '24', 'Giữ kỳ chi sau khi người nhận đổi tài khoản ngân hàng (giờ)')
+ON CONFLICT (config_key) DO NOTHING;
+-- RETRACK_MONEY_V2_END
+
 -- RETRACK_SCHEMA_END
 
 -- RETRACK_SEED_BEGIN
