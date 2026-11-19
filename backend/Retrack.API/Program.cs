@@ -163,6 +163,10 @@ builder.Services.AddScoped<IAdminService, AdminService>();
 // PayOS thanh toán phí nền tảng (cấu hình qua PayOS__* trong .env / biến môi trường)
 builder.Services.Configure<Retrack.API.Services.Depot.PayOsOptions>(builder.Configuration.GetSection("PayOS"));
 builder.Services.AddHttpClient<Retrack.API.Services.Depot.IPayOsClient, Retrack.API.Services.Depot.PayOsClient>(c => c.Timeout = TimeSpan.FromSeconds(20));
+// payOS kênh CHI (Lệnh chi), khóa riêng PayOSPayout__*; client độc lập, chưa nối vào service nào
+builder.Services.Configure<Retrack.API.Services.Money.PayOsPayoutOptions>(builder.Configuration.GetSection("PayOSPayout"));
+builder.Services.AddHttpClient<Retrack.API.Services.Money.IPayOsPayoutClient, Retrack.API.Services.Money.PayOsPayoutClient>((sp, c) =>
+    c.Timeout = TimeSpan.FromSeconds(Math.Clamp(sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<Retrack.API.Services.Money.PayOsPayoutOptions>>().Value.TimeoutSeconds, 1, 120)));
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IDepotPayOsService, Retrack.API.Services.Depot.DepotPayOsService>();
 builder.Services.AddHostedService<Retrack.API.Services.Depot.PayOsReconciliationWorker>();
 // Ký điện tử hợp đồng bằng DocuSign sandbox (cấu hình qua DocuSign__* trong .env / biến môi trường; để trống thì tắt tính năng)
