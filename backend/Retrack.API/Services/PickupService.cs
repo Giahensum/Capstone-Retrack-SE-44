@@ -28,12 +28,15 @@ namespace Retrack.API.Services
         private readonly IPickupRequestRepository _repo;
         private readonly AppDbContext _db;
         private readonly Interfaces.IDepotPaymentService _payments;
+        private readonly Money.PlatformMoneyHooks? _money;
 
-        public PickupService(IPickupRequestRepository repo, AppDbContext db, Interfaces.IDepotPaymentService payments)
+        // money: tùy chọn (null = LEGACY) để không đổi nơi khởi tạo hiện có.
+        public PickupService(IPickupRequestRepository repo, AppDbContext db, Interfaces.IDepotPaymentService payments, Money.PlatformMoneyHooks? money = null)
         {
             _repo = repo;
             _db = db;
             _payments = payments;
+            _money = money;
         }
 
         public async Task<PickupRequestDto> CreateAsync(Guid sellerId, CreatePickupRequestDto dto)
@@ -292,6 +295,8 @@ namespace Retrack.API.Services
                 $"Bạn đã xác nhận nhận tiền cho đơn #{req.Id.ToString()[..8].ToUpper()}. Đơn thu gom đã hoàn tất.", "PAYMENT"));
             req.StockReceivedAt ??= DateTime.UtcNow;
             req.UpdatedAt = DateTime.UtcNow;
+            // PLATFORM (money.mode): đơn DONE sinh dòng SALE cho Seller trong cùng transaction. LEGACY: không làm gì.
+            if (_money != null) await _money.OnPickupDoneAsync(req, req.UpdatedAt);
             if (req.TargetDepotId.HasValue)
             {
                 var owner = await _db.Depots.Where(x => x.Id == req.TargetDepotId.Value).Select(x => (Guid?)x.OwnerId).SingleOrDefaultAsync();
