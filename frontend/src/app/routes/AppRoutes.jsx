@@ -30,6 +30,8 @@ const DepotNotifications = lazy(() => import('@/features/depot/Notifications'));
 const DepotDispatch = lazy(() => import('@/features/depot/dispatch/DispatchPage'));
 const DepotBuyingPrices = lazy(() => import('@/features/depot/BuyingPrices'));
 import { DepotProvider } from '@/features/depot/DepotContext';
+// Thu nhập & chi trả của người nhận (Seller, Chủ kho, Nhà máy dùng chung một trang)
+const MoneyEarnings = lazy(() => import('@/features/money-payee/EarningsPage'));
 // Employee
 const StaffMobilePage = lazy(() => import('@/features/auth/pages/StaffMobilePage'));
 // Driver
@@ -67,6 +69,7 @@ export function AppRoutes() {
               <Route path="partners" element={<DepotPartners />} />
               <Route path="payments" element={<DepotPayments />} />
               <Route path="payments/fees" element={<DepotPlatformFees />} />
+              <Route path="earnings" element={<MoneyEarnings />} />
               <Route path="reports" element={<DepotRevenueReport />} />
               <Route path="staff" element={<DepotStaff />} />
               <Route path="staff/performance" element={<DepotStaffPerformance />} />
