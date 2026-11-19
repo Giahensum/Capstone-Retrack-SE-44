@@ -11,7 +11,7 @@ export default function DriverEventsPanel({ id }) {
       <p className="font-semibold">{actions[x.action] ?? x.action} · {x.driverName}</p><p className="text-sm">{new Date(x.createdAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}{x.phone ? ` · Điện thoại: ${x.phone}` : ''}</p>
       <p className="whitespace-pre-wrap break-words">{x.reason}</p>{/^https:\/\/\S+$/i.test(x.imageUrl ?? '') && <a className="text-d-primary underline" href={x.imageUrl} target="_blank" rel="noopener noreferrer">Xem ảnh ghi nhận</a>}
       {['incident', 'cancel', 'reject'].includes(x.action) && <div><p className="text-sm mb-2">{statuses[x.followupStatus] ?? 'Chưa có ghi chú xử lý của kho'}</p><button type="button" className={buttonClass} onClick={() => setSelected(x)}>Theo dõi xử lý</button></div>}
-    </article>)}{query.data?.totalCount === 0 && <p className="text-sm">Chưa có nhật ký vận chuyển.</p>}</div><Pager page={page} setPage={setPage} total={query.data?.totalCount} /></QueryState>
+    </article>)}{query.data?.totalCount === 0 && <p className="text-sm">Chưa có nhật ký vận chuyển.</p>}</div>{query.data?.totalCount > 20 && <Pager page={page} setPage={setPage} total={query.data.totalCount} />}</QueryState>
     {selected && <Followup event={selected} onClose={() => setSelected(null)} />}
   </section>;
 }
