@@ -183,6 +183,16 @@ builder.Services.AddScoped<Retrack.API.Services.Interfaces.IFactoryProfileServic
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IQCService, Retrack.API.Services.Factory.FactoryQCService>();
 builder.Services.AddScoped<Retrack.API.Services.Factory.FactoryAttachmentService>();
 builder.Services.AddScoped<Retrack.API.Services.Factory.FactoryPlatformFeeService>();
+// Thu/chi qua sàn (giai đoạn 1: nền móng, chưa nối vào luồng nào). Nhà cung cấp chi mặc định là mô phỏng.
+builder.Services.AddSingleton(new Retrack.API.Services.Money.SimulatedPayoutOptions
+{
+    Delay = TimeSpan.FromSeconds(builder.Configuration.GetValue("Money:SimulatedPayoutDelaySeconds", 5)),
+    InitialBalance = builder.Configuration.GetValue("Money:SimulatedPayoutBalance", 100_000_000m),
+});
+builder.Services.AddSingleton<Retrack.API.Services.Money.SimulatedPayoutProvider>();
+builder.Services.AddSingleton<Retrack.API.Services.Money.IPayoutProvider>(sp => sp.GetRequiredService<Retrack.API.Services.Money.SimulatedPayoutProvider>());
+builder.Services.AddScoped<Retrack.API.Services.Money.MoneyConfigReader>();
+builder.Services.AddScoped<Retrack.API.Services.Money.PayableLedgerService>();
 builder.Services.AddScoped<Retrack.API.Services.Factory.FactoryNotificationService>();
 
 // ===== CONTROLLERS & SWAGGER =====
