@@ -22,6 +22,13 @@ public static class MoneySources
     public const string LiquidationAgreement = "LIQUIDATION_AGREEMENT";
 }
 
+/// <summary>Trạng thái kỳ chi (khớp ck_payout_runs_status).</summary>
+public static class PayoutStatuses
+{
+    public const string Pending = "PENDING", AwaitingApproval = "AWAITING_APPROVAL", Processing = "PROCESSING", Paid = "PAID",
+        Failed = "FAILED", Unknown = "UNKNOWN", Held = "HELD", Deferred = "DEFERRED", Carried = "CARRIED", Settled = "SETTLED";
+}
+
 public static class PayableKinds { public const string Sale = "SALE"; public const string Refund = "REFUND"; }
 
 public static class PayableStates
@@ -99,6 +106,9 @@ public class PayoutRun
     [Column("created_at")] public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     [Column("paid_at")] public DateTime? PaidAt { get; set; }
     [Column("version")] public int Version { get; set; }
+    /// <summary>Lần gửi lệnh chi: khóa idempotency là code (lần 1) hoặc code-N.</summary>
+    [Column("attempt")] public int Attempt { get; set; } = 1;
+    [Column("last_attempt_at")] public DateTime? LastAttemptAt { get; set; }
 }
 
 [Table("payee_commissions")]

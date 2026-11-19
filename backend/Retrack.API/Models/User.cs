@@ -71,6 +71,9 @@ namespace Retrack.API.Models
         [Column("bank_verified_at")]
         public DateTime? BankVerifiedAt { get; set; }
 
+        [Column("bank_changed_at")]
+        public DateTime? BankChangedAt { get; set; }
+
         // Navigation
         [Column("avatar_url")]
         [MaxLength(2048)]
