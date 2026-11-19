@@ -871,6 +871,14 @@ ALTER TABLE liquidation_agreements ADD CONSTRAINT ck_liquidation_deposit_flow CH
     AND (deposit_confirmed_at IS NULL OR deposit_reported_at IS NOT NULL)
     AND (payment_reported_at IS NULL OR deposit_amount = 0 OR deposit_confirmed_at IS NOT NULL));
 
+-- RETRACK_LIQUIDATION_ESIGN_V1: ký điện tử (DocuSign) hợp đồng đặt cọc thanh lý; chạy lại nhiều lần an toàn.
+ALTER TABLE liquidation_agreements ADD COLUMN IF NOT EXISTS esign_envelope_id TEXT;
+ALTER TABLE liquidation_agreements ADD COLUMN IF NOT EXISTS esign_status VARCHAR(20);
+ALTER TABLE liquidation_agreements ADD COLUMN IF NOT EXISTS esign_terms_hash VARCHAR(64);
+ALTER TABLE liquidation_agreements ADD COLUMN IF NOT EXISTS esign_sent_at TIMESTAMPTZ;
+ALTER TABLE liquidation_agreements ADD COLUMN IF NOT EXISTS esign_completed_at TIMESTAMPTZ;
+CREATE UNIQUE INDEX IF NOT EXISTS ux_liquidation_agreements_esign_envelope ON liquidation_agreements (esign_envelope_id) WHERE esign_envelope_id IS NOT NULL;
+
 -- RETRACK_DEPOT_NOTIFICATIONS_V1: tương thích thông báo Employee/Driver đã có.
 ALTER TABLE notifications ADD COLUMN IF NOT EXISTS depot_id UUID;
 ALTER TABLE notifications ADD COLUMN IF NOT EXISTS batch_id UUID;

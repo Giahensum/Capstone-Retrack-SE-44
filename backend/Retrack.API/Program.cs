@@ -169,6 +169,7 @@ builder.Services.AddHostedService<Retrack.API.Services.Depot.PayOsReconciliation
 builder.Services.Configure<Retrack.API.Services.ESign.DocuSignOptions>(builder.Configuration.GetSection("DocuSign"));
 builder.Services.AddHttpClient<Retrack.API.Services.ESign.IDocuSignClient, Retrack.API.Services.ESign.DocuSignClient>(c => c.Timeout = TimeSpan.FromSeconds(30));
 builder.Services.AddScoped<Retrack.API.Services.ESign.IContractEsignService, Retrack.API.Services.ESign.ContractEsignService>();
+builder.Services.AddScoped<Retrack.API.Services.ESign.ILiquidationEsignService, Retrack.API.Services.ESign.LiquidationEsignService>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.INotificationService, Retrack.API.Services.Shared.NotificationService>();
 
 
