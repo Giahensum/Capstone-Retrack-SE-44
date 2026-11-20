@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { AlertTriangle, Wallet, RefreshCw, Send, ListChecks, Plus } from 'lucide-react';
@@ -54,7 +54,7 @@ export default function TestTransferTab({ settings }) {
   const send = useMutation({
     mutationFn: () => moneyAdminApi.testTransfer({ clientKey, amount: Number(form.amount), toBin: form.bin, toAccountNumber: form.account.trim() }),
     onSuccess: (data) => {
-      setConfirming(false); setResult(data); setErr(''); setSubmitted(true); writeStore({ key: clientKey, submitted: true });
+      setConfirming(false); setResult(data); setErr(''); setSubmitted(true); writeStore({ key: clientKey, submitted: true, provider: settings?.payoutProvider });
       qc.invalidateQueries({ queryKey: ['money-admin', 'test-transfer', clientKey] });
       qc.invalidateQueries({ queryKey: ['money-admin', 'balance'] });
       toast.success('Đã gửi lệnh chuyển thử');
@@ -72,6 +72,14 @@ export default function TestTransferTab({ settings }) {
     const k = newClientKey();
     setClientKey(k); setSubmitted(false); setResult(null); setErr(''); writeStore(null);
   };
+  // Khóa cũ thuộc nhà cung cấp khác (ví dụ đã chuyển thử bằng SIMULATED rồi đổi sang PAYOS) thì bỏ đi để gửi lệnh mới với khóa mới.
+  const provider = settings?.payoutProvider;
+  useEffect(() => {
+    if (!provider) return;
+    const st = readStore();
+    if (st && st.provider !== provider) newTransfer();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [provider]);
   const outcome = result?.outcome;
   // Chỉ cho tạo lệnh mới khi lệnh trước đã kết thúc rõ ràng; UNKNOWN thì chỉ gửi lại cùng khóa.
   const canStartNew = submitted && (terminal || outcome === 'FAILED') && outcome !== 'UNKNOWN';
