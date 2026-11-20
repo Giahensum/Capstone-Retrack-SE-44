@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useState } from 'react';
 import { Badge } from '@/components/liquidation/LiquidationUI';
 import { inputClass, labelClass } from '@/features/admin/components/AdminUI';
 import { payoutStatusMeta, bankStatusMeta, outcomeMeta } from './moneyLabels';
+import { anomalyKindMeta, anomalyStatusMeta, refundStatusMeta } from './refundLabels';
 
 // Thành phần nhỏ dùng chung cho màn Thu chi (Admin) và Thu nhập (người nhận).
 
@@ -12,6 +13,21 @@ export function PayoutStatusChip({ status }) {
 
 export function BankStatusChip({ status }) {
   const m = bankStatusMeta(status);
+  return <Badge tone={m.tone}>{m.label}</Badge>;
+}
+
+export function AnomalyKindChip({ kind }) {
+  const m = anomalyKindMeta(kind);
+  return <Badge tone={m.tone}>{m.label}</Badge>;
+}
+
+export function AnomalyStatusChip({ status }) {
+  const m = anomalyStatusMeta(status);
+  return <Badge tone={m.tone}>{m.label}</Badge>;
+}
+
+export function RefundStatusChip({ status }) {
+  const m = refundStatusMeta(status);
   return <Badge tone={m.tone}>{m.label}</Badge>;
 }
 

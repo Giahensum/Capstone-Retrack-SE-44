@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { Wallet, Hourglass, CircleDollarSign, Send, BadgeCheck, MinusCircle, CalendarClock, Landmark, ReceiptText, Info, Save, Pencil } from 'lucide-react';
+import { Wallet, Undo2, Hourglass, CircleDollarSign, Send, BadgeCheck, MinusCircle, CalendarClock, Landmark, ReceiptText, Info, Save, Pencil } from 'lucide-react';
 import { Panel, StatCard, DataTable, Th, Td, TableMessage, Pagination, Field, inputClass, PrimaryButton, GhostButton } from '@/features/admin/components/AdminUI';
-import { Notice } from '@/components/liquidation/LiquidationUI';
+import { Badge, Notice } from '@/components/liquidation/LiquidationUI';
 import { moneyPayeeApi } from './moneyPayeeApi';
 import { vnd, fmtDateTime, fmtDate, apiError } from '@/features/money-admin/moneyLabels';
 import { PayoutStatusChip, BankStatusChip, BankSelect, FieldError } from '@/features/money-admin/moneyUi';
-import { validateBankForm, buildBankBody, bankHelpText } from './payeeBank';
+import { payerRefundStatusMeta } from '@/features/money-admin/refundLabels';
+import { validateBankForm, buildBankBody, bankHelpText, BANK_POLICY_TEXT, BANK_SAVED_TEXT } from './payeeBank';
 
 const PAGE_SIZE = 10;
 
@@ -83,7 +84,7 @@ function BankCard() {
     onSuccess: (data) => {
       qc.setQueryData(['money-payee', 'bank'], data);
       setEditing(false); setErr('');
-      toast.success(data.status === 'VERIFIED' ? 'Đã lưu và tự xác minh tài khoản' : 'Đã lưu tài khoản, đang chờ xác minh');
+      toast.success(BANK_SAVED_TEXT);
     },
     onError: (e) => setErr(apiError(e, 'Không lưu được tài khoản.')),
   });
@@ -117,7 +118,8 @@ function BankCard() {
                 <div><dt className="text-xs font-semibold text-d-on-surface-variant">Chủ tài khoản</dt><dd className="font-semibold">{bank.accountName ?? '—'}</dd></div>
               </dl>
             )}
-            {bank.holdUntil && <p className="text-xs font-semibold text-amber-700">Giữ chi đến {fmtDateTime(bank.holdUntil)}.</p>}
+            {bank.status === 'REJECTED' && bank.rejectReason && <Notice tone="red" icon={Info}>Lý do từ chối: {bank.rejectReason}</Notice>}
+            <p className="text-xs text-d-on-surface-variant">{BANK_POLICY_TEXT}</p>
           </>
         )}
         {editing && (
@@ -135,8 +137,7 @@ function BankCard() {
               </Field>
             </div>
             <div className="md:col-span-2"><Notice icon={Info} tone="blue">
-              Tên chủ tài khoản phải khớp họ tên trong hồ sơ của bạn thì hệ thống mới tự xác minh; nếu không, Admin sẽ xác minh thủ công.
-              Khi đổi tài khoản, khoản chi sẽ bị giữ lại một thời gian (vài giờ đến vài ngày, theo quy định của sàn) để chống gian lận.
+              {BANK_POLICY_TEXT} Hãy nhập đúng tên chủ tài khoản như trên ngân hàng để Admin duyệt nhanh hơn.
             </Notice></div>
             {err && <div className="md:col-span-2"><p role="alert" className="text-sm font-semibold text-d-error">{err}</p></div>}
             <div className="flex flex-wrap gap-2 md:col-span-2">
@@ -146,6 +147,41 @@ function BankCard() {
           </form>
         )}
       </div>
+    </Panel>
+  );
+}
+
+/** Hoàn tiền cho tôi: chỉ hiện khi người dùng có ít nhất một lệnh hoàn. */
+function MyRefunds() {
+  const [page, setPage] = useState(1);
+  const q = useQuery({
+    queryKey: ['money-payee', 'refunds', page],
+    queryFn: () => moneyPayeeApi.listMyRefunds({ page, pageSize: PAGE_SIZE }),
+    placeholderData: (p) => p,
+  });
+  const items = q.data?.items ?? [];
+  if (q.isLoading || q.isError || (q.data?.totalCount ?? 0) === 0) return null;
+  return (
+    <Panel icon={Undo2} title="Hoàn tiền cho tôi">
+      <DataTable minWidth={640} head={<><Th>Mã</Th><Th className="text-right">Số tiền</Th><Th>Trạng thái</Th><Th>Tạo lúc</Th></>}>
+        <TableMessage cols={4} empty={items.length === 0}>Chưa có khoản hoàn tiền nào.</TableMessage>
+        {items.map((r) => {
+          const m = payerRefundStatusMeta(r.status);
+          return (
+            <tr key={r.code} className="align-top">
+              <Td className="font-mono text-xs">{r.code}</Td>
+              <Td className="text-right font-bold">{vnd(r.amount)}</Td>
+              <Td>
+                <Badge tone={m.tone}>{m.label}</Badge>
+                {r.statusNote && <p className="mt-1 max-w-xs text-xs text-d-on-surface-variant">{r.statusNote}</p>}
+                {r.paidAt && <p className="mt-1 text-xs text-d-on-surface-variant">Hoàn lúc {fmtDateTime(r.paidAt)}</p>}
+              </Td>
+              <Td>{fmtDateTime(r.createdAt)}</Td>
+            </tr>
+          );
+        })}
+      </DataTable>
+      {q.data && <Pagination page={page} pageSize={q.data.pageSize} totalCount={q.data.totalCount} onPageChange={setPage} />}
     </Panel>
   );
 }
@@ -164,6 +200,7 @@ export default function EarningsPage() {
       <Summary />
       <BankCard />
       <History />
+      <MyRefunds />
     </div>
   );
 }

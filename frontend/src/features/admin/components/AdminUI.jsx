@@ -62,6 +62,9 @@ export function FilterTabs({ tabs, value, onChange }) {
           <button key={t.key || 'all'} type="button" role="tab" aria-selected={active} onClick={() => onChange(t.key)}
             className={`inline-flex h-9 items-center gap-1.5 rounded-full border px-4 text-sm font-semibold transition ${active ? 'border-d-primary bg-d-primary text-white shadow-sm' : 'border-d-border-subtle bg-white text-d-on-surface-variant hover:bg-d-surface-container'}`}>
             {t.icon && <t.icon size={15} aria-hidden="true" />}{t.label}
+            {t.badge > 0 && (
+              <span aria-label={`${t.badge} mục cần xử lý`} className={`ml-0.5 inline-flex min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-black ${active ? 'bg-white text-d-primary' : 'bg-red-600 text-white'}`}>{t.badge > 99 ? '99+' : t.badge}</span>
+            )}
           </button>
         );
       })}

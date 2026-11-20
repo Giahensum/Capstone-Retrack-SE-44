@@ -4,7 +4,7 @@
 export const PAYOUT_STATUS = {
   PROCESSING: { label: 'Đang chi', tone: 'blue', hint: 'Lệnh chi đã gửi, đang chờ ngân hàng xác nhận.' },
   AWAITING_APPROVAL: { label: 'Chờ duyệt', tone: 'amber', hint: 'Số tiền vượt hạn mức tự chi, cần Admin bấm Duyệt.' },
-  HELD: { label: 'Đang giữ', tone: 'amber', hint: 'Tài khoản ngân hàng chưa xác minh hoặc mới đổi, chưa chi.' },
+  HELD: { label: 'Đang giữ', tone: 'amber', hint: 'Tài khoản ngân hàng chưa được Admin duyệt, chưa chi. Duyệt xong kỳ tự được giải phóng.' },
   DEFERRED: { label: 'Dồn kỳ sau', tone: 'slate', hint: 'Dưới mức chi tối thiểu, sẽ cộng vào kỳ chi tiếp theo.' },
   CARRIED: { label: 'Mang nợ sang', tone: 'red', hint: 'Kỳ âm, khoản nợ được trừ vào kỳ sau.' },
   SETTLED: { label: 'Đã bù trừ', tone: 'teal', hint: 'Thực chi bằng 0, không cần chuyển tiền.' },
@@ -34,13 +34,17 @@ export function outcomeMeta(outcome) {
   return OUTCOME[outcome] ?? { label: outcome || '—', tone: 'slate' };
 }
 
+// Mọi thay đổi tài khoản (kể cả lần nhập đầu) đều chờ Admin duyệt; không còn tự xác minh hay thời gian giữ.
 export const BANK_STATUS = {
-  VERIFIED: { label: 'Đã xác minh', tone: 'primary' },
-  PENDING_VERIFICATION: { label: 'Chờ xác minh', tone: 'amber' },
+  NONE: { label: 'Chưa có tài khoản', tone: 'slate' },
+  VERIFIED: { label: 'Đã duyệt', tone: 'primary' },
+  PENDING_VERIFICATION: { label: 'Chờ Admin duyệt', tone: 'amber' },
+  REJECTED: { label: 'Bị từ chối', tone: 'red' },
 };
+export const BANK_STATUS_OPTIONS = ['PENDING_VERIFICATION', 'VERIFIED', 'REJECTED', 'NONE'];
 
 export function bankStatusMeta(status) {
-  if (!status) return { label: 'Chưa có tài khoản', tone: 'slate' };
+  if (!status) return BANK_STATUS.NONE;
   return BANK_STATUS[status] ?? { label: status, tone: 'slate' };
 }
 
@@ -164,7 +168,6 @@ export const SETTINGS_LIMITS = {
   payoutHoldMinutes: [0, 525600],
   payoutMinAmount: [0, 1_000_000_000],
   payoutAutoMaxAmount: [0, 100_000_000_000],
-  payoutBankChangeHoldHours: [0, 720],
   payoutTestMaxAmount: [1000, 100_000],
 };
 
@@ -183,7 +186,6 @@ export function validateSettings(form) {
   checkWhole(errors, 'payoutHoldMinutes', form.payoutHoldMinutes, 'Thời gian giữ tiền (phút)');
   checkWhole(errors, 'payoutMinAmount', form.payoutMinAmount, 'Số chi tối thiểu');
   checkWhole(errors, 'payoutAutoMaxAmount', form.payoutAutoMaxAmount, 'Hạn mức tự chi');
-  checkWhole(errors, 'payoutBankChangeHoldHours', form.payoutBankChangeHoldHours, 'Thời gian giữ sau khi đổi ngân hàng (giờ)');
   checkWhole(errors, 'payoutTestMaxAmount', form.payoutTestMaxAmount, 'Số tiền chuyển thử tối đa');
   if (!['DAILY', 'WEEKLY'].includes(form.payoutSchedule)) errors.payoutSchedule = 'Chọn lịch chi hằng ngày hoặc hằng tuần.';
   if (!['LEGACY', 'PLATFORM'].includes(form.mode)) errors.mode = 'Chọn chế độ thu chi.';
@@ -202,7 +204,6 @@ export function settingsToForm(s) {
     payoutHoldMinutes: str(s.payoutHoldMinutes),
     payoutMinAmount: str(s.payoutMinAmount),
     payoutAutoMaxAmount: str(s.payoutAutoMaxAmount),
-    payoutBankChangeHoldHours: str(s.payoutBankChangeHoldHours),
     payoutProvider: s.payoutProvider,
     payoutTestEnabled: !!s.payoutTestEnabled,
     payoutTestMaxAmount: str(s.payoutTestMaxAmount),
@@ -219,7 +220,6 @@ export function formToSettingsPatch(f) {
     payoutHoldMinutes: Number(f.payoutHoldMinutes),
     payoutMinAmount: Number(f.payoutMinAmount),
     payoutAutoMaxAmount: Number(f.payoutAutoMaxAmount),
-    payoutBankChangeHoldHours: Number(f.payoutBankChangeHoldHours),
     payoutProvider: f.payoutProvider,
     payoutTestEnabled: f.payoutTestEnabled,
     payoutTestMaxAmount: Number(f.payoutTestMaxAmount),
