@@ -180,11 +180,12 @@ export default function ReconcileTab({ settings, onOpenRun }) {
       <Panel icon={CalendarRange} title="Kỳ đối soát (giờ Việt Nam)">
         <div className="flex flex-wrap items-end gap-4 p-5">
           <Field label="Từ ngày (00:00)"><input type="date" value={start} max={today} onChange={(e) => setStart(e.target.value)} className={`${inputClass} w-48`} /></Field>
-          <Field label="Đến ngày (00:00, không gồm ngày này)" hint="Tối đa là hôm nay. Muốn gồm cả hôm qua, chọn hôm nay.">
+          <Field label="Đến ngày (00:00, không gồm ngày này)">
             <input type="date" value={end} max={today} onChange={(e) => setEnd(e.target.value)} className={`${inputClass} w-48`} />
           </Field>
           <PrimaryButton icon={Eye} onClick={() => previewMut.mutate()} disabled={!canPreview}>{previewMut.isPending ? 'Đang xem trước…' : 'Xem trước'}</PrimaryButton>
         </div>
+        <p className="px-5 pb-3 text-xs text-d-on-surface-variant">Tối đa là hôm nay. Muốn gồm cả hôm qua, chọn hôm nay.</p>
         <div className="px-5 pb-4"><FieldError>{periodError && (start || end) ? periodError : ''}</FieldError></div>
       </Panel>
 
