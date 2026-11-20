@@ -47,10 +47,21 @@ test('validatePeriod', () => {
 });
 
 const server = {
-  mode: 'PLATFORM', defaultCommission: { PICKUP: 5, BATCH: 3.5, LIQUIDATION: 2 }, payoutAutoEnabled: false, payoutSchedule: 'DAILY',
+  mode: 'PLATFORM', defaultCommission: { PICKUP: 5, BATCH: 3.5, LIQUIDATION: 2 }, payoutAutoEnabled: false, payoutSchedule: 'DAILY', payoutScheduleHour: 2, payoutScheduleWeekday: 1,
   payoutHoldMinutes: 1440, payoutMinAmount: 50000, payoutAutoMaxAmount: 5000000, payoutProvider: 'SIMULATED',
   payoutTestEnabled: false, payoutTestMaxAmount: 5000,
 };
+
+test('giờ và ngày chạy chi tự động: kiểm tra giá trị và gửi lên máy chủ', () => {
+  const form = settingsToForm(server);
+  assert.equal(form.payoutScheduleHour, '2');
+  assert.ok(validateSettings({ ...form, payoutScheduleHour: '24' }).payoutScheduleHour);
+  assert.ok(validateSettings({ ...form, payoutScheduleHour: '' }).payoutScheduleHour);
+  assert.ok(validateSettings({ ...form, payoutScheduleWeekday: '8' }).payoutScheduleWeekday);
+  const patch = formToSettingsPatch({ ...form, payoutScheduleHour: '14', payoutScheduleWeekday: '5' });
+  assert.equal(patch.payoutScheduleHour, 14);
+  assert.equal(patch.payoutScheduleWeekday, 5);
+});
 
 test('validateSettings: cấu hình hợp lệ và các giới hạn như backend', () => {
   const form = settingsToForm(server);

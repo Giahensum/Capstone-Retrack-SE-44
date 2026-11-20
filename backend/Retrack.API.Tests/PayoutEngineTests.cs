@@ -57,14 +57,24 @@ public sealed class PayoutRulesTests
     }
 
     [Theory]
-    [InlineData("2026-03-10T03:00:00Z", "DAILY", "2026-03-09T17:00:00Z")]   // 10:00 VN: mốc 0 giờ hôm nay
-    [InlineData("2026-03-09T18:30:00Z", "DAILY", "2026-03-08T17:00:00Z")]   // 01:30 VN: chưa tới 02:00, mốc hôm qua
-    [InlineData("2026-03-09T19:00:00Z", "DAILY", "2026-03-09T17:00:00Z")]   // đúng 02:00 VN
-    [InlineData("2026-03-11T03:00:00Z", "WEEKLY", "2026-03-08T17:00:00Z")]  // thứ Tư 10:00 VN: thứ Hai 9/3 0 giờ VN
-    [InlineData("2026-03-08T19:30:00Z", "WEEKLY", "2026-03-08T17:00:00Z")]  // thứ Hai 9/3 02:30 VN
-    [InlineData("2026-03-08T18:30:00Z", "WEEKLY", "2026-03-01T17:00:00Z")]  // thứ Hai 01:30 VN: còn mốc tuần trước
-    public void ScheduleBoundaryIsVietnamMidnight(string now, string schedule, string expected) =>
+    [InlineData("2026-03-10T03:00:00Z", "DAILY", "2026-03-09T19:00:00Z")]   // 10:00 VN: mốc 0 giờ hôm nay
+    [InlineData("2026-03-09T18:30:00Z", "DAILY", "2026-03-08T19:00:00Z")]   // 01:30 VN: chưa tới 02:00, mốc hôm qua
+    [InlineData("2026-03-09T19:00:00Z", "DAILY", "2026-03-09T19:00:00Z")]   // đúng 02:00 VN
+    [InlineData("2026-03-11T03:00:00Z", "WEEKLY", "2026-03-08T19:00:00Z")]  // thứ Tư 10:00 VN: thứ Hai 9/3 0 giờ VN
+    [InlineData("2026-03-08T19:30:00Z", "WEEKLY", "2026-03-08T19:00:00Z")]  // thứ Hai 9/3 02:30 VN
+    [InlineData("2026-03-08T18:30:00Z", "WEEKLY", "2026-03-01T19:00:00Z")]  // thứ Hai 01:30 VN: còn mốc tuần trước
+    public void ScheduleBoundaryIsTheScheduledInstantAtDefaultTwoAm(string now, string schedule, string expected) =>
         Assert.Equal(DateTime.Parse(expected, null, System.Globalization.DateTimeStyles.AdjustToUniversal), PayoutRules.ScheduleBoundaryUtc(DateTime.Parse(now, null, System.Globalization.DateTimeStyles.AdjustToUniversal), schedule));
+
+    [Theory]
+    [InlineData("2026-03-10T03:00:00Z", "DAILY", 14, 1, "2026-03-09T07:00:00Z")]   // 10:00 VN, chạy 14:00: chưa tới giờ nên mốc là 14:00 hôm qua
+    [InlineData("2026-03-10T08:00:00Z", "DAILY", 14, 1, "2026-03-10T07:00:00Z")]   // 15:00 VN: mốc 14:00 hôm nay
+    [InlineData("2026-03-10T08:00:00Z", "DAILY", 0, 1, "2026-03-09T17:00:00Z")]    // chạy 00:00: mốc 0 giờ hôm nay
+    [InlineData("2026-03-11T08:00:00Z", "WEEKLY", 9, 5, "2026-03-06T02:00:00Z")]   // thứ Tư 15:00 VN, chạy thứ Sáu 09:00: mốc thứ Sáu 6/3 09:00 VN
+    [InlineData("2026-03-11T08:00:00Z", "WEEKLY", 16, 3, "2026-03-04T09:00:00Z")]  // thứ Tư 15:00 VN, chạy thứ Tư 16:00: chưa tới giờ, còn mốc tuần trước (4/3 16:00 VN)
+    [InlineData("2026-03-14T20:00:00Z", "WEEKLY", 2, 7, "2026-03-14T19:00:00Z")]   // 03:00 VN Chủ nhật 15/3, chạy Chủ nhật 02:00: mốc 15/3 02:00 VN
+    public void ScheduleBoundaryFollowsConfiguredHourAndWeekday(string now, string schedule, int hour, int weekday, string expected) =>
+        Assert.Equal(DateTime.Parse(expected, null, System.Globalization.DateTimeStyles.AdjustToUniversal), PayoutRules.ScheduleBoundaryUtc(DateTime.Parse(now, null, System.Globalization.DateTimeStyles.AdjustToUniversal), schedule, hour, weekday));
 
     [Fact]
     public void CodeIsDeterministicWithLetterSuffixesAndKeysNeverCollide()

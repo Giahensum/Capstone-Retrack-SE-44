@@ -227,6 +227,19 @@ export default function SettingsTab({ settings, settingsQuery }) {
               </select>
               <FieldError>{errors.payoutSchedule}</FieldError>
             </Field>
+            <Field label="Giờ chạy chi tự động (0 đến 23, giờ Việt Nam)" hint="Kỳ chi chốt tại thời điểm này: tiền sẵn sàng trước giờ đó sẽ vào kỳ.">
+              <input type="number" inputMode="numeric" min={0} max={23} step={1} value={form.payoutScheduleHour}
+                onChange={(e) => set({ payoutScheduleHour: e.target.value })} aria-invalid={!!errors.payoutScheduleHour} className={inputClass} />
+              <FieldError>{errors.payoutScheduleHour}</FieldError>
+            </Field>
+            {form.payoutSchedule === 'WEEKLY' && (
+              <Field label="Ngày chạy trong tuần">
+                <select value={form.payoutScheduleWeekday} onChange={(e) => set({ payoutScheduleWeekday: e.target.value })} className={`${inputClass} cursor-pointer`}>
+                  {[['1', 'Thứ Hai'], ['2', 'Thứ Ba'], ['3', 'Thứ Tư'], ['4', 'Thứ Năm'], ['5', 'Thứ Sáu'], ['6', 'Thứ Bảy'], ['7', 'Chủ nhật']].map(([v, t]) => <option key={v} value={v}>{t}</option>)}
+                </select>
+                <FieldError>{errors.payoutScheduleWeekday}</FieldError>
+              </Field>
+            )}
             {num('payoutHoldMinutes', 'Giữ tiền trước khi chi (phút)', 'Từ 0 đến 525.600. Khoản thu chỉ sẵn sàng chi sau thời gian này.')}
             {num('payoutMinAmount', 'Số chi tối thiểu (đ)', 'Kỳ thực chi thấp hơn mức này sẽ dồn sang kỳ sau.')}
             {num('payoutAutoMaxAmount', 'Hạn mức tự chi (đ)', 'Kỳ thực chi vượt mức này cần Admin duyệt.')}

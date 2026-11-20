@@ -57,7 +57,7 @@ public sealed class PayoutWorkerTests : PayoutTestBase
         await using (var db = Open()) await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO payee_payout_settings (user_id, auto_enabled) VALUES ({b}, false)");
         await using var sp = Services(Fake);
         var worker = AutoWorker(sp);
-        var boundary = new DateTime(2026, 3, 9, 17, 0, 0, DateTimeKind.Utc);
+        var boundary = new DateTime(2026, 3, 9, 19, 0, 0, DateTimeKind.Utc); // 02:00 giờ Việt Nam ngày 10/3 (giờ chạy mặc định)
 
         Assert.Equal(1, await worker.RunOnceAsync(default));
         await using (var db = Open())
@@ -78,7 +78,7 @@ public sealed class PayoutWorkerTests : PayoutTestBase
 
         Clock.Set(new(2026, 3, 11, 3, 0, 0, DateTimeKind.Utc)); // hôm sau
         Assert.Equal(0, await worker.RunOnceAsync(default));
-        Assert.Equal(new DateTime(2026, 3, 10, 17, 0, 0, DateTimeKind.Utc).ToString("o", CultureInfo.InvariantCulture), await Marker());
+        Assert.Equal(new DateTime(2026, 3, 10, 19, 0, 0, DateTimeKind.Utc).ToString("o", CultureInfo.InvariantCulture), await Marker());
 
         // Admin chạy thủ công cho người đã tắt tự chi: dòng cũ vẫn được chi
         await using var db2 = Open();
