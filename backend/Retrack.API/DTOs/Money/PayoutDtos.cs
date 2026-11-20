@@ -4,7 +4,7 @@ namespace Retrack.API.DTOs.Money;
 
 // ===== Cấu hình =====
 public sealed record MoneySettingsDto(string Mode, Dictionary<string, decimal> DefaultCommission, bool PayoutAutoEnabled, string PayoutSchedule,
-    int PayoutHoldMinutes, decimal PayoutMinAmount, decimal PayoutAutoMaxAmount, int PayoutBankChangeHoldHours, string PayoutProvider,
+    int PayoutHoldMinutes, decimal PayoutMinAmount, decimal PayoutAutoMaxAmount, string PayoutProvider,
     bool PayoutTestEnabled, decimal PayoutTestMaxAmount, bool PayosPayoutConfigured);
 
 /// <summary>Cập nhật từng phần: trường null là giữ nguyên.</summary>
@@ -18,7 +18,6 @@ public sealed class UpdateMoneySettingsDto
     public int? PayoutHoldMinutes { get; set; }
     public decimal? PayoutMinAmount { get; set; }
     public decimal? PayoutAutoMaxAmount { get; set; }
-    public int? PayoutBankChangeHoldHours { get; set; }
     public string? PayoutProvider { get; set; }
     public bool? PayoutTestEnabled { get; set; }
     public decimal? PayoutTestMaxAmount { get; set; }
@@ -69,16 +68,18 @@ public sealed record PayableLineDto(Guid Id, Guid CollectionId, Guid PayeeId, st
     string? RefundKey, decimal Gross, decimal CommissionRate, decimal Commission, decimal Net, string State, DateTime AvailableAt, Guid? PayoutId, DateTime CreatedAt);
 
 // ===== Người nhận =====
-public sealed record PayeeBankDto(string? BankName, string? BankBin, string? AccountNumberMasked, string? AccountName, string Status, DateTime? VerifiedAt, DateTime? ChangedAt, DateTime? HoldUntil);
+public sealed record PayeeBankDto(string? BankName, string? BankBin, string? AccountNumberMasked, string? AccountName, string Status, DateTime? VerifiedAt, DateTime? ChangedAt, string? RejectReason);
 
 public sealed record PayeeSummaryDto(Guid UserId, string FullName, string Role, bool IsActive, decimal HeldAmount, decimal AvailableAmount, decimal InPayoutAmount,
     bool AutoPayoutEnabled, PayeeBankDto Bank);
 
 /// <summary>Chỉ dành cho Admin: có số tài khoản đầy đủ để đối chiếu trước khi xác minh.</summary>
 public sealed record PayeeBankAdminDto(Guid UserId, string FullName, string? BankName, string? BankBin, string? AccountNumber, string? AccountName, string Status,
-    DateTime? VerifiedAt, DateTime? ChangedAt, bool NameMatchesFullName);
+    DateTime? VerifiedAt, DateTime? ChangedAt, bool NameMatchesFullName, string? RejectReason);
 
 public sealed class VerifyBankRequest { public string ExpectedAccountNumber { get; set; } = ""; }
+public sealed class RejectBankRequest { public string ExpectedAccountNumber { get; set; } = ""; public string Reason { get; set; } = ""; }
+public sealed record PendingBankCountDto(int PendingBankCount);
 public sealed class AutoPayoutRequest { public bool AutoEnabled { get; set; } }
 
 public sealed class UpdateBankRequest

@@ -1077,7 +1077,7 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS bank_bin VARCHAR(6);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS bank_status VARCHAR(30);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS bank_verified_at TIMESTAMPTZ;
 ALTER TABLE users DROP CONSTRAINT IF EXISTS ck_users_bank_status;
-ALTER TABLE users ADD CONSTRAINT ck_users_bank_status CHECK (bank_status IS NULL OR bank_status IN ('PENDING_VERIFICATION', 'VERIFIED'));
+ALTER TABLE users ADD CONSTRAINT ck_users_bank_status CHECK (bank_status IS NULL OR bank_status IN ('PENDING_VERIFICATION', 'VERIFIED', 'REJECTED'));
 
 -- Khoản thu vào sàn: mỗi nguồn chỉ có tối đa một khoản thu PENDING/PAID.
 CREATE TABLE IF NOT EXISTS money_collections (
@@ -1263,6 +1263,54 @@ INSERT INTO system_configs (config_key, config_value, description) VALUES
     ('payout.bank_change_hold_hours', '24', 'Giữ kỳ chi sau khi người nhận đổi tài khoản ngân hàng (giờ)')
 ON CONFLICT (config_key) DO NOTHING;
 -- RETRACK_MONEY_V2_END
+
+-- RETRACK_MONEY_V4_BEGIN
+-- Hoàn tiền cho người trả vào sàn + Admin duyệt/từ chối tài khoản ngân hàng. Chạy lại nhiều lần an toàn. Không xóa/đổi đối tượng cũ.
+-- Tài khoản ngân hàng: không còn thời gian giữ; mọi thay đổi chờ Admin duyệt (PENDING_VERIFICATION), Admin có thể từ chối (REJECTED) kèm lý do.
+-- (Cột users.bank_changed_at và khóa system_configs payout.bank_change_hold_hours của V2 được giữ nguyên nhưng không còn được đọc.)
+ALTER TABLE users ADD COLUMN IF NOT EXISTS bank_reject_reason TEXT;
+ALTER TABLE users DROP CONSTRAINT IF EXISTS ck_users_bank_status;
+ALTER TABLE users ADD CONSTRAINT ck_users_bank_status CHECK (bank_status IS NULL OR bank_status IN ('PENDING_VERIFICATION', 'VERIFIED', 'REJECTED'));
+
+-- Lệnh hoàn tiền: tiền đi từ tài khoản chi của sàn về tài khoản ngân hàng của người trả (payer).
+CREATE TABLE IF NOT EXISTS money_refunds (
+    id              UUID           PRIMARY KEY DEFAULT gen_random_uuid(),
+    code            VARCHAR(40)    NOT NULL,
+    collection_id   UUID           NOT NULL REFERENCES money_collections(id),
+    anomaly_id      UUID           REFERENCES money_collection_anomalies(id),
+    payer_id        UUID           NOT NULL REFERENCES users(id),
+    kind            VARCHAR(20)    NOT NULL,
+    amount          DECIMAL(18, 0) NOT NULL,
+    reason          TEXT           NOT NULL DEFAULT '',
+    status          VARCHAR(20)    NOT NULL DEFAULT 'PENDING',
+    provider        VARCHAR(20)    NOT NULL DEFAULT 'SIMULATED',
+    provider_ref    VARCHAR(100),
+    gateway_status  VARCHAR(40),
+    fail_reason     TEXT,
+    attempt         INT            NOT NULL DEFAULT 1,
+    last_attempt_at TIMESTAMPTZ,
+    bank_snapshot   JSONB,
+    created_by      UUID           REFERENCES users(id),
+    approved_by     UUID           REFERENCES users(id),
+    approved_at     TIMESTAMPTZ,
+    paid_at         TIMESTAMPTZ,
+    version         INT            NOT NULL DEFAULT 0,
+    created_at      TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
+    CONSTRAINT ck_money_refunds_kind CHECK (kind IN ('EXCESS', 'DUPLICATE', 'LATE', 'FULL', 'PARTIAL')),
+    CONSTRAINT ck_money_refunds_status CHECK (status IN ('PENDING', 'AWAITING_APPROVAL', 'PROCESSING', 'PAID', 'FAILED', 'UNKNOWN', 'MANUAL_PAID', 'CANCELLED')),
+    CONSTRAINT ck_money_refunds_amount CHECK (amount > 0),
+    CONSTRAINT ck_money_refunds_attempt CHECK (attempt >= 1),
+    CONSTRAINT ck_money_refunds_provider CHECK (provider IN ('SIMULATED', 'PAYOS'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_money_refunds_code ON money_refunds(code);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_money_refunds_provider_ref ON money_refunds(provider_ref) WHERE provider_ref IS NOT NULL AND provider_ref <> '';
+-- Một bất thường chỉ có một lệnh hoàn còn hiệu lực (bị hủy hoặc thất bại thì được tạo lại).
+CREATE UNIQUE INDEX IF NOT EXISTS ux_money_refunds_anomaly_active ON money_refunds(anomaly_id) WHERE anomaly_id IS NOT NULL AND status NOT IN ('CANCELLED', 'FAILED');
+CREATE INDEX IF NOT EXISTS ix_money_refunds_collection ON money_refunds(collection_id);
+CREATE INDEX IF NOT EXISTS ix_money_refunds_payer ON money_refunds(payer_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS ix_money_refunds_status ON money_refunds(status, created_at DESC);
+-- RETRACK_MONEY_V4_END
 
 -- RETRACK_SCHEMA_END
 

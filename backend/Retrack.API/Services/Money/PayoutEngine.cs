@@ -28,16 +28,15 @@ public sealed partial class PayoutEngine(AppDbContext db, MoneyConfigReader conf
     {
         var (ids, start, end) = NormalizeRequest(payeeIds, periodStart, periodEnd);
         var cfg = await configReader.GetAsync(ct);
-        var hold = await BankHoldHoursAsync(ct);
         var now = Now;
         var users = await LoadUsersAsync(ids, ct);
         var items = new List<PayoutPlan>();
         foreach (var id in ids)
-            items.Add(await PreviewOneAsync(id, users.GetValueOrDefault(id), start, end, cfg, hold, now, ct));
+            items.Add(await PreviewOneAsync(id, users.GetValueOrDefault(id), start, end, cfg, now, ct));
         return new(start, end, items);
     }
 
-    private async Task<PayoutPlan> PreviewOneAsync(Guid id, User? user, DateTime start, DateTime end, MoneyConfig cfg, int hold, DateTime now, CancellationToken ct)
+    private async Task<PayoutPlan> PreviewOneAsync(Guid id, User? user, DateTime start, DateTime end, MoneyConfig cfg, DateTime now, CancellationToken ct)
     {
         if (user == null) return Empty(id, "", "ERROR", "Không tìm thấy người nhận.");
         if (!user.IsActive) return Empty(user, "SKIPPED", "Tài khoản người nhận không hoạt động.");
@@ -52,7 +51,7 @@ public sealed partial class PayoutEngine(AppDbContext db, MoneyConfigReader conf
         if (lines.Count == 0) return Empty(user, "NO_LINES", "Không có dòng sổ cái nào đủ điều kiện chi trong kỳ này.");
         var carried = CarryOver(await LatestRunAsync(id, ct));
         var totals = PayoutRules.Totals(lines, carried);
-        var bank = PayoutRules.CheckBank(user.BankBin, user.BankAccountNumber, user.BankAccountName, user.BankStatus, user.BankChangedAt, now, hold);
+        var bank = PayoutRules.CheckBank(user.BankBin, user.BankAccountNumber, user.BankAccountName, user.BankStatus);
         var (status, reason) = PayoutRules.Decide(totals.Net, cfg, bank, alreadyApproved: false);
         return Plan(user, "NEW", null, null, null, lines, totals, status, reason);
     }
@@ -69,14 +68,13 @@ public sealed partial class PayoutEngine(AppDbContext db, MoneyConfigReader conf
         var (ids, start, end) = NormalizeRequest(payeeIds, periodStart, periodEnd);
         var provider = await providers.ResolveCurrentAsync(ct); // lỗi rõ ràng nếu chọn PAYOS mà thiếu khóa
         var cfg = await configReader.GetAsync(ct);
-        var hold = await BankHoldHoursAsync(ct);
         await new PayableLedgerService(db, configReader, clock).MarkAvailableAsync(Now, ct);
         var items = new List<PayoutPlan>();
         foreach (var id in ids)
         {
             ct.ThrowIfCancellationRequested();
             PayoutPlan plan;
-            try { plan = await RunOneAsync(id, start, end, actorId, autoOnly, cfg, hold, provider.Name, ct); }
+            try { plan = await RunOneAsync(id, start, end, actorId, autoOnly, cfg, provider.Name, ct); }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 db.ChangeTracker.Clear();
@@ -124,7 +122,7 @@ public sealed partial class PayoutEngine(AppDbContext db, MoneyConfigReader conf
         return results;
     }
 
-    private async Task<PayoutPlan> RunOneAsync(Guid id, DateTime start, DateTime end, Guid? actor, bool autoOnly, MoneyConfig cfg, int hold, string providerName, CancellationToken ct)
+    private async Task<PayoutPlan> RunOneAsync(Guid id, DateTime start, DateTime end, Guid? actor, bool autoOnly, MoneyConfig cfg, string providerName, CancellationToken ct)
     {
         db.ChangeTracker.Clear();
         var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == id, ct);
@@ -154,7 +152,7 @@ public sealed partial class PayoutEngine(AppDbContext db, MoneyConfigReader conf
 
         var totals = PayoutRules.Totals(lines, CarryOver(latest));
         var now = Now;
-        var bank = PayoutRules.CheckBank(user.BankBin, user.BankAccountNumber, user.BankAccountName, user.BankStatus, user.BankChangedAt, now, hold);
+        var bank = PayoutRules.CheckBank(user.BankBin, user.BankAccountNumber, user.BankAccountName, user.BankStatus);
         var (status, reason) = PayoutRules.Decide(totals.Net, cfg, bank, alreadyApproved: false);
         var code = await NextCodeAsync(id, start, end, ct);
         var run = new PayoutRun
@@ -340,7 +338,7 @@ public sealed partial class PayoutEngine(AppDbContext db, MoneyConfigReader conf
         return to == PayoutStatuses.Processing ? await SubmitAsync(runId, ct) : await LoadRunAsync(runId, ct);
     }
 
-    /// <summary>Giải phóng kỳ HELD khi lý do giữ đã hết (tài khoản đã xác minh và qua thời gian giữ sau khi đổi).</summary>
+    /// <summary>Giải phóng kỳ HELD khi lý do giữ đã hết (tài khoản đã được Admin duyệt).</summary>
     public async Task<PayoutRun> ReleaseAsync(Guid runId, Guid actorId, CancellationToken ct = default)
     {
         var run = await LoadRunAsync(runId, ct);
@@ -354,6 +352,27 @@ public sealed partial class PayoutEngine(AppDbContext db, MoneyConfigReader conf
             throw new DepotConflictException("Kỳ chi vừa được xử lý bởi thao tác khác. Hãy tải lại.");
         await AuditAsync(actorId, "PAYOUT_RELEASED", run.Id, new { run.Code, to }, ct);
         return to == PayoutStatuses.Processing ? await SubmitAsync(runId, ct) : await LoadRunAsync(runId, ct);
+    }
+
+    /// <summary>
+    /// Sau khi Admin duyệt tài khoản ngân hàng: giải phóng mọi kỳ HELD của người nhận (kỳ chỉ bị HELD vì tài khoản chưa đủ điều kiện).
+    /// Mỗi kỳ qua <see cref="ReleaseAsync"/> (kiểm tra lại tài khoản, vượt hạn mức thì sang AWAITING_APPROVAL, còn lại PROCESSING và gửi nhà cung cấp NGOÀI transaction).
+    /// Lỗi ở một kỳ không chặn các kỳ khác. Trả số kỳ đã giải phóng.
+    /// </summary>
+    public async Task<int> ReleaseHeldForPayeeAsync(Guid payeeId, Guid actorId, CancellationToken ct = default)
+    {
+        var ids = await db.PayoutRuns.AsNoTracking().Where(r => r.PayeeId == payeeId && r.Status == PayoutStatuses.Held).OrderBy(r => r.CreatedAt).ThenBy(r => r.Id).Take(100).Select(r => r.Id).ToListAsync(ct);
+        var released = 0;
+        foreach (var id in ids)
+        {
+            try { await ReleaseAsync(id, actorId, ct); released++; }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                db.ChangeTracker.Clear();
+                log.LogWarning(ex, "Không giải phóng được kỳ chi {Run} sau khi duyệt tài khoản ngân hàng.", id);
+            }
+        }
+        return released;
     }
 
     /// <summary>
@@ -458,12 +477,6 @@ public sealed partial class PayoutEngine(AppDbContext db, MoneyConfigReader conf
     private async Task<Dictionary<Guid, User>> LoadUsersAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct) =>
         await db.Users.AsNoTracking().Where(u => ids.Contains(u.Id)).ToDictionaryAsync(u => u.Id, ct);
 
-    private async Task<int> BankHoldHoursAsync(CancellationToken ct)
-    {
-        var v = await db.SystemConfigs.AsNoTracking().Where(c => c.ConfigKey == PayoutConfigKeys.BankChangeHoldHours).Select(c => c.ConfigValue).FirstOrDefaultAsync(ct);
-        return int.TryParse(v, NumberStyles.Integer, CultureInfo.InvariantCulture, out var h) && h is >= 0 and <= 720 ? h : PayoutConfigKeys.DefaultBankChangeHoldHours;
-    }
-
     private Task<PayoutRun?> LatestRunAsync(Guid payeeId, CancellationToken ct) =>
         db.PayoutRuns.AsNoTracking().Where(r => r.PayeeId == payeeId).OrderByDescending(r => r.PeriodEnd).ThenByDescending(r => r.CreatedAt).ThenByDescending(r => r.Id).FirstOrDefaultAsync(ct);
 
@@ -496,8 +509,7 @@ public sealed partial class PayoutEngine(AppDbContext db, MoneyConfigReader conf
     {
         var u = await db.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == run.PayeeId, ct) ?? throw new KeyNotFoundException("Không tìm thấy người nhận.");
         if (!u.IsActive) return (new(false, "Tài khoản người nhận không hoạt động."), null);
-        var hold = await BankHoldHoursAsync(ct);
-        var bank = PayoutRules.CheckBank(u.BankBin, u.BankAccountNumber, u.BankAccountName, u.BankStatus, u.BankChangedAt, Now, hold);
+        var bank = PayoutRules.CheckBank(u.BankBin, u.BankAccountNumber, u.BankAccountName, u.BankStatus);
         return (bank, refresh && bank.Ready ? SnapshotJson(u) : null);
     }
 

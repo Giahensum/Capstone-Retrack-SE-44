@@ -98,3 +98,44 @@ public sealed class PayoutReconcileWorker(IServiceScopeFactory scopes, IOptions<
         return touched;
     }
 }
+
+/// <summary>Định kỳ hỏi nhà cung cấp về lệnh hoàn PROCESSING/UNKNOWN (cùng cấu hình chu kỳ/tuổi tối thiểu/cỡ lô với đối soát kỳ chi).</summary>
+public sealed class RefundReconcileWorker(IServiceScopeFactory scopes, IOptions<PayoutWorkerOptions> options, ILogger<RefundReconcileWorker> logger) : BackgroundService
+{
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        if (!options.Value.Enabled) return;
+        using var timer = new PeriodicTimer(options.Value.ReconcileInterval);
+        try
+        {
+            while (await timer.WaitForNextTickAsync(stoppingToken).ConfigureAwait(false))
+            {
+                try { await RunOnceAsync(stoppingToken); }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { return; }
+                catch (Exception ex) { logger.LogWarning(ex, "Đối soát lệnh hoàn thất bại, sẽ thử lại ở lượt sau."); }
+            }
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    /// <summary>Một lượt đối soát. Trả số lệnh hoàn đã chạm tới (không phân biệt kết quả).</summary>
+    public async Task<int> RunOnceAsync(CancellationToken ct)
+    {
+        List<Guid> ids;
+        await using (var scope = scopes.CreateAsyncScope())
+            ids = await scope.ServiceProvider.GetRequiredService<RefundEngine>().DueForReconcileAsync(options.Value.ReconcileMinAge, options.Value.ReconcileBatchSize, ct);
+        var touched = 0;
+        foreach (var id in ids)
+        {
+            ct.ThrowIfCancellationRequested();
+            try
+            {
+                await using var scope = scopes.CreateAsyncScope(); // mỗi lệnh một DbContext riêng
+                await scope.ServiceProvider.GetRequiredService<RefundEngine>().ReconcileAsync(id, null, ct);
+                touched++;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException) { logger.LogWarning(ex, "Không đối soát được lệnh hoàn {RefundId}.", id); }
+        }
+        return touched;
+    }
+}
