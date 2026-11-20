@@ -63,6 +63,8 @@ public sealed class MoneyAdminService(AppDbContext db, MoneyConfigReader configR
         }
         if (dto.PayoutMinAmount != null) changes[MoneyConfigKeys.PayoutMinAmount] = Whole(dto.PayoutMinAmount.Value, "Số chi tối thiểu", 0, 1_000_000_000m);
         if (dto.PayoutAutoMaxAmount != null) changes[MoneyConfigKeys.PayoutAutoMaxAmount] = Whole(dto.PayoutAutoMaxAmount.Value, "Hạn mức tự chi", 0, 100_000_000_000m);
+        if (dto.PayoutMinAmount != null && dto.PayoutAutoMaxAmount != null && dto.PayoutAutoMaxAmount < dto.PayoutMinAmount)
+            throw new ArgumentException("Hạn mức tự chi phải lớn hơn hoặc bằng số chi tối thiểu.");
         if (dto.PayoutProvider != null)
         {
             var p = dto.PayoutProvider.Trim().ToUpperInvariant();

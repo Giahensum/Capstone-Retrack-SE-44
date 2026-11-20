@@ -58,7 +58,7 @@ export default function PaymentDrawer({ payment, onClose }) {
         </section>
         <section aria-label="Số tiền cần thanh toán" className="space-y-2 rounded-2xl bg-d-surface-accent p-4">
           <div className="flex justify-between gap-4"><span>Giá trị vật liệu</span><strong>{money(item.grossAmount)}</strong></div>
-          <div className="flex justify-between gap-4 text-d-on-surface-variant"><span>{item.feePolicy === 'BUYER_SEPARATE_V1' ? 'Phí kho trả riêng' : 'Phí khấu trừ — đơn cũ'} ({item.platformFeePercentage}%)</span><span>{item.feePolicy === 'BUYER_SEPARATE_V1' ? '+ ' : '− '}{money(item.platformFeeAmount)}</span></div>
+          {!collection.platform && <div className="flex justify-between gap-4 text-d-on-surface-variant"><span>{item.feePolicy === 'BUYER_SEPARATE_V1' ? 'Phí kho trả riêng' : 'Phí khấu trừ — đơn cũ'} ({item.platformFeePercentage}%)</span><span>{item.feePolicy === 'BUYER_SEPARATE_V1' ? '+ ' : '− '}{money(item.platformFeeAmount)}</span></div>
           <div className="flex justify-between gap-4 border-t border-d-border-subtle pt-3 text-lg font-bold text-d-primary"><span>Chuyển cho người bán</span><span>{money(item.netAmount)}</span></div>
           {item.feePolicy === 'BUYER_SEPARATE_V1' && <p className="mt-3 text-sm text-d-on-surface-variant">Tổng chi của kho: <strong>{money(item.buyerTotalAmount)}</strong>. Phí trả nền tảng qua hóa đơn riêng, không trừ tiền Seller.</p>}
         </section>

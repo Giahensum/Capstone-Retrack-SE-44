@@ -186,6 +186,7 @@ export function validateSettings(form) {
   checkWhole(errors, 'payoutHoldMinutes', form.payoutHoldMinutes, 'Thời gian giữ tiền (phút)');
   checkWhole(errors, 'payoutMinAmount', form.payoutMinAmount, 'Số chi tối thiểu');
   checkWhole(errors, 'payoutAutoMaxAmount', form.payoutAutoMaxAmount, 'Hạn mức tự chi');
+  if (!errors.payoutMinAmount && !errors.payoutAutoMaxAmount && Number(form.payoutAutoMaxAmount) < Number(form.payoutMinAmount)) errors.payoutAutoMaxAmount = 'Hạn mức tự chi phải lớn hơn hoặc bằng số chi tối thiểu.';
   checkWhole(errors, 'payoutTestMaxAmount', form.payoutTestMaxAmount, 'Số tiền chuyển thử tối đa');
   if (!['DAILY', 'WEEKLY'].includes(form.payoutSchedule)) errors.payoutSchedule = 'Chọn lịch chi hằng ngày hoặc hằng tuần.';
   if (!['LEGACY', 'PLATFORM'].includes(form.mode)) errors.mode = 'Chọn chế độ thu chi.';

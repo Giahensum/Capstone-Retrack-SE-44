@@ -59,7 +59,7 @@ function OverrideDialog({ initial, onClose }) {
   return (
     <Modal size="md" icon={Percent} title={initial ? 'Sửa hoa hồng riêng' : 'Thêm hoa hồng riêng'} onClose={onClose} busy={save.isPending}
       footer={<FormFooter formId="override-form" onCancel={onClose} submitting={save.isPending} submitLabel="Lưu" icon={Save} />}>
-      <form id="override-form" onSubmit={submit} className="flex flex-col gap-4">
+      <form id="override-form" noValidate onSubmit={submit} className="flex flex-col gap-4">
         {initial ? (
           <p className="text-sm">Người nhận: <strong>{initial.userName}</strong> ({roleLabel(initial.role)})</p>
         ) : (
