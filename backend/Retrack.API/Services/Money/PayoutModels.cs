@@ -29,9 +29,9 @@ public sealed class PayoutWorkerOptions
     /// <summary>Chu kỳ kiểm tra lịch tự chi.</summary>
     public TimeSpan AutoInterval { get; set; } = TimeSpan.FromMinutes(1);
     /// <summary>Chu kỳ đối soát kỳ chi PROCESSING/UNKNOWN.</summary>
-    public TimeSpan ReconcileInterval { get; set; } = TimeSpan.FromMinutes(1);
+    public TimeSpan ReconcileInterval { get; set; } = TimeSpan.FromSeconds(30);
     /// <summary>Chỉ đối soát kỳ chi có lần gửi cuối cũ hơn khoảng này.</summary>
-    public TimeSpan ReconcileMinAge { get; set; } = TimeSpan.FromMinutes(1);
+    public TimeSpan ReconcileMinAge { get; set; } = TimeSpan.FromSeconds(30);
     public int ReconcileBatchSize { get; set; } = 50;
     public bool Enabled { get; set; } = true;
 }

@@ -96,7 +96,7 @@ public sealed class MoneyAdminService(AppDbContext db, MoneyConfigReader configR
     private static string Whole(decimal v, string label, decimal min, decimal max)
     {
         if (v != decimal.Truncate(v) || v < min || v > max)
-            throw new ArgumentException($"{label} phải là số nguyên đồng từ {min.ToString("N0", CultureInfo.InvariantCulture)} đến {max.ToString("N0", CultureInfo.InvariantCulture)}.");
+            throw new ArgumentException($"{label} phải là số nguyên đồng từ {MoneyFormat.Vnd(min)} đến {MoneyFormat.Vnd(max)}.");
         return v.ToString(CultureInfo.InvariantCulture);
     }
 
@@ -253,8 +253,7 @@ public sealed class MoneyAdminService(AppDbContext db, MoneyConfigReader configR
         var bankFilter = string.IsNullOrWhiteSpace(bankStatus) ? null : bankStatus.Trim().ToUpperInvariant();
         if (bankFilter != null && bankFilter is not ("VERIFIED" or "PENDING_VERIFICATION" or "REJECTED" or "NONE"))
             throw new ArgumentException("Bộ lọc bankStatus phải là VERIFIED, PENDING_VERIFICATION, REJECTED hoặc NONE.");
-        var q = db.Users.AsNoTracking().Where(u => roles.Contains(u.Role)
-            && (u.BankAccountNumber != null || db.PayableLines.Any(l => l.PayeeId == u.Id && (l.State == PayableStates.Held || l.State == PayableStates.Available || l.State == PayableStates.InPayout))));
+        var q = db.Users.AsNoTracking().Where(u => roles.Contains(u.Role));
         if (bankFilter == "NONE") q = q.Where(u => u.BankAccountNumber == null);
         else if (bankFilter == "PENDING_VERIFICATION") q = q.Where(u => u.BankAccountNumber != null && (u.BankStatus == null || u.BankStatus == "PENDING_VERIFICATION"));
         else if (bankFilter != null) q = q.Where(u => u.BankAccountNumber != null && u.BankStatus == bankFilter);

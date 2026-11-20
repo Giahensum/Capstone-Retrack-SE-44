@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
 import { GoogleLogin } from '@react-oauth/google';
 import toast from 'react-hot-toast';
@@ -29,6 +29,7 @@ const SEED_ACCOUNTS = [
 ];
 export default function LoginPage() {
     const navigate = useNavigate();
+    const location = useLocation();
     const { login } = useAuth();
     const [showPass, setShowPass] = useState(false);
     const [showForgotPassword, setShowForgotPassword] = useState(false);
@@ -46,7 +47,8 @@ export default function LoginPage() {
             return;
         }
         toast.success(`Xin chào, ${data.fullName}!`);
-        navigate(ROLE_HOME[data.role] ?? '/');
+        const back = location.state?.from;
+        navigate(typeof back === 'string' && back.startsWith('/pay/return') ? back : (ROLE_HOME[data.role] ?? '/'));
     };
     // ── Email/Password login ──────────────────────────────
     const loginMutation = useMutation({

@@ -3,7 +3,7 @@
 export function validateBankForm({ bankBin, accountNumber, accountName }) {
   const errors = {};
   if (!bankBin) errors.bankBin = 'Chọn ngân hàng.';
-  if (!/^\d{6,19}$/.test((accountNumber ?? '').trim())) errors.accountNumber = 'Số tài khoản gồm 6 đến 19 chữ số, không có khoảng trắng.';
+  if (!/^\d{6,20}$/.test((accountNumber ?? '').trim())) errors.accountNumber = 'Số tài khoản gồm 6 đến 20 chữ số, không có khoảng trắng.';
   const name = (accountName ?? '').trim();
   if (name.length < 2) errors.accountName = 'Nhập tên chủ tài khoản đúng như trên ngân hàng.';
   else if (name.length > 100) errors.accountName = 'Tên chủ tài khoản tối đa 100 ký tự.';
