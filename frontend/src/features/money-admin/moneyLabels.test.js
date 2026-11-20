@@ -48,7 +48,7 @@ test('validatePeriod', () => {
 
 const server = {
   mode: 'PLATFORM', defaultCommission: { PICKUP: 5, BATCH: 3.5, LIQUIDATION: 2 }, payoutAutoEnabled: false, payoutSchedule: 'DAILY',
-  payoutHoldMinutes: 1440, payoutMinAmount: 50000, payoutAutoMaxAmount: 5000000, payoutBankChangeHoldHours: 72, payoutProvider: 'SIMULATED',
+  payoutHoldMinutes: 1440, payoutMinAmount: 50000, payoutAutoMaxAmount: 5000000, payoutProvider: 'SIMULATED',
   payoutTestEnabled: false, payoutTestMaxAmount: 5000,
 };
 
@@ -56,7 +56,7 @@ test('validateSettings: cấu hình hợp lệ và các giới hạn như backen
   const form = settingsToForm(server);
   assert.deepEqual(validateSettings(form), {});
   assert.ok(validateSettings({ ...form, payoutHoldMinutes: '525601' }).payoutHoldMinutes);
-  assert.ok(validateSettings({ ...form, payoutBankChangeHoldHours: '721' }).payoutBankChangeHoldHours);
+  assert.equal('payoutBankChangeHoldHours' in settingsToForm(server), false);
   assert.ok(validateSettings({ ...form, payoutTestMaxAmount: '999' }).payoutTestMaxAmount);
   assert.ok(validateSettings({ ...form, payoutTestMaxAmount: '100001' }).payoutTestMaxAmount);
   assert.ok(validateSettings({ ...form, payoutMinAmount: '1.5' }).payoutMinAmount);
@@ -103,7 +103,9 @@ test('summarizePlan: chỉ tính người nhận sẽ tạo kỳ mới', async (
 test('maskAccount, bankStatusMeta, fmtDateTime', () => {
   assert.equal(maskAccount('0123456789'), '••••••6789');
   assert.equal(maskAccount(''), '—');
-  assert.equal(bankStatusMeta('VERIFIED').label, 'Đã xác minh');
+  assert.equal(bankStatusMeta('VERIFIED').label, 'Đã duyệt');
+  assert.equal(bankStatusMeta('PENDING_VERIFICATION').label, 'Chờ Admin duyệt');
+  assert.equal(bankStatusMeta('REJECTED').tone, 'red');
   assert.equal(bankStatusMeta(null).label, 'Chưa có tài khoản');
   // 2026-01-01T17:00Z = 00:00 ngày 02/01 giờ Việt Nam (backend không gắn hậu tố Z)
   assert.match(fmtDateTime('2026-01-01T17:00:00'), /02\/01\/2026/);

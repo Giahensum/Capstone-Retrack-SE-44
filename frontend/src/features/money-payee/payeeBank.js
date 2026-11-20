@@ -15,11 +15,18 @@ export function buildBankBody(f, banks = []) {
   return { bankName: bank?.name ?? '', bankBin: f.bankBin, accountNumber: f.accountNumber.trim(), accountName: f.accountName.trim() };
 }
 
+/** Quy định chung hiển thị cho người nhận: mọi thay đổi đều cần Admin duyệt, không có thời gian chờ hay tự xác minh. */
+export const BANK_POLICY_TEXT = 'Tài khoản mới hoặc đã đổi cần Admin duyệt trước khi nhận tiền hoặc được hoàn tiền; không còn thời gian chờ.';
+
 /** Thông điệp giải thích trạng thái tài khoản cho người nhận (không lộ chi tiết nhà cung cấp). */
-export function bankHelpText(bank, now = Date.now()) {
-  if (!bank || !bank.accountNumberMasked) return 'Bạn chưa nhập tài khoản nhận tiền. Cần nhập để được chi tiền.';
-  const hold = bank.holdUntil ? Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(bank.holdUntil) ? bank.holdUntil : `${bank.holdUntil}Z`) : null;
-  if (hold && hold > now) return 'Tài khoản mới đổi nên đang trong thời gian giữ chi để an toàn.';
-  if (bank.status === 'VERIFIED') return 'Tài khoản đã được xác minh, sẵn sàng nhận tiền.';
-  return 'Tài khoản đang chờ Admin xác minh. Tên chủ tài khoản trùng họ tên của bạn thì hệ thống tự xác minh.';
+export function bankHelpText(bank) {
+  if (!bank || !bank.accountNumberMasked) return 'Bạn chưa nhập tài khoản nhận tiền. Cần nhập và được Admin duyệt để nhận tiền hoặc được hoàn tiền.';
+  switch (bank.status) {
+    case 'VERIFIED': return 'Tài khoản đã được Admin duyệt, sẵn sàng nhận tiền.';
+    case 'REJECTED': return 'Tài khoản bị Admin từ chối. Hãy kiểm tra và nhập lại đúng thông tin để được duyệt lại.';
+    default: return 'Tài khoản đang chờ Admin duyệt. Khi được duyệt, các khoản đang giữ sẽ được chi.';
+  }
 }
+
+/** Thông báo sau khi lưu: không bao giờ tự duyệt. */
+export const BANK_SAVED_TEXT = 'Đã lưu tài khoản, đang chờ Admin duyệt';
