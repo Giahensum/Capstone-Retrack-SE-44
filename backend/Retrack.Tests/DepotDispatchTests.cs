@@ -31,10 +31,66 @@ public sealed class DepotDispatchTests : IAsyncLifetime
     {
         await using var db = Open(); await db.Notifications.Where(x => x.DepotId == depot).ExecuteDeleteAsync();
         await db.EmployeeDispatchEvents.Where(x => db.PickupRequests.Any(p => p.Id == x.PickupId && p.TargetDepotId == depot)).ExecuteDeleteAsync(); await db.PickupRequests.Where(x => x.TargetDepotId == depot).ExecuteDeleteAsync();
-        await db.EmployeeDispatchShifts.Where(x => x.EmployeeId == employee).ExecuteDeleteAsync(); await db.EmployeeCollectionAreas.Where(x => x.DepotId == depot).ExecuteDeleteAsync();
+        await db.EmployeeDispatchShifts.Where(x => x.EmployeeId == employee).ExecuteDeleteAsync(); await db.EmployeeCollectionAreas.Where(x => x.DepotId == depot || x.DepotId == foreign).ExecuteDeleteAsync();
         await db.DepotStaffs.Where(x => x.DepotId == depot).ExecuteDeleteAsync(); await db.Depots.Where(x => x.Id == depot || x.Id == foreign).ExecuteDeleteAsync(); await db.Users.Where(x => x.Id == owner || x.Id == other || x.Id == seller || x.Id == employee).ExecuteDeleteAsync();
     }
     private DispatchShiftInput Input() => new(area, employee, DateTimeOffset.FromUnixTimeSeconds(DateTimeOffset.UtcNow.AddHours(-1).ToUnixTimeSeconds()), DateTimeOffset.FromUnixTimeSeconds(DateTimeOffset.UtcNow.AddHours(2).ToUnixTimeSeconds()), "motorcycle", 100, 10, Guid.NewGuid());
+    [Fact]
+    public async Task Shared_catalog_is_available_to_new_depots_but_creates_no_areas_or_shifts_on_read()
+    {
+        await using var db = Open(); var service = Service(db);
+        var catalog = await service.CatalogAsync(owner, depot);
+        Assert.Equal(catalog, await service.CatalogAsync(other, foreign));
+        Assert.Equal(15, catalog.Count);
+        Assert.Equal(catalog.Count, catalog.Select(r => r.Code).Distinct().Count());
+        Assert.Empty(await db.EmployeeCollectionAreas.Where(a => a.DepotId == foreign).ToListAsync());
+        Assert.Empty(await db.EmployeeDispatchShifts.Where(s => s.EmployeeId == employee).ToListAsync());
+        await Assert.ThrowsAsync<DepotForbiddenException>(() => service.CatalogAsync(other, depot));
+        var first = await service.UseCatalogAreaAsync(owner, depot, "DN-HOAQUY");
+        var second = await service.UseCatalogAreaAsync(other, foreign, "DN-HOAQUY");
+        Assert.NotEqual(first.Id, second.Id); Assert.Equal(first.Latitude, second.Latitude);
+        Assert.Equal(first.Id, (await service.UseCatalogAreaAsync(owner, depot, "DN-HOAQUY")).Id);
+    }
+
+    [Fact]
+    public async Task Catalog_reuses_existing_center_and_never_reactivates_or_overwrites_owner_area()
+    {
+        await using var db = Open(); var service = Service(db);
+        var region = DanangCollectionCatalog.Find("DN-HAN");
+        var existing = await db.EmployeeCollectionAreas.SingleAsync(a => a.Id == area);
+        existing.Latitude = region.Latitude; existing.Longitude = region.Longitude;
+        existing.Name = "Vùng đã điều chỉnh"; existing.RadiusMeters = 1700; existing.IsActive = false;
+        await db.SaveChangesAsync();
+        var selected = await service.UseCatalogAreaAsync(owner, depot, region.Code);
+        Assert.Equal(area, selected.Id); Assert.False(selected.IsActive); Assert.Equal(1700, selected.RadiusMeters);
+        Assert.Equal(existing.Name, selected.Name);
+        await Assert.ThrowsAsync<ArgumentException>(() => service.CreateShiftAsync(owner, depot, Input() with { AreaId = Guid.Empty, CatalogCode = region.Code }));
+        await Assert.ThrowsAsync<ArgumentException>(() => service.UseCatalogAreaAsync(owner, depot, "UNKNOWN"));
+        await Assert.ThrowsAsync<DepotForbiddenException>(() => service.UseCatalogAreaAsync(other, depot, region.Code));
+    }
+
+    [Fact]
+    public async Task Shift_can_select_shared_region_atomically_and_retry_without_duplicates()
+    {
+        await using var db = Open(); var service = Service(db);
+        var input = Input() with { AreaId = Guid.Empty, CatalogCode = "DN-MYKHE" };
+        var shift = await service.CreateShiftAsync(owner, depot, input);
+        Assert.Equal(shift.Id, (await service.CreateShiftAsync(owner, depot, input)).Id);
+        var selected = await db.EmployeeCollectionAreas.SingleAsync(a => a.Id == shift.AreaId);
+        Assert.Equal(depot, selected.DepotId); Assert.Equal(DanangCollectionCatalog.Find("DN-MYKHE").Latitude, selected.Latitude);
+        Assert.Single(await db.EmployeeDispatchShifts.Where(s => s.EmployeeId == employee).ToListAsync());
+        await Assert.ThrowsAsync<ArgumentException>(() => service.CreateShiftAsync(owner, depot, input with { AreaId = area }));
+    }
+
+    [Fact]
+    public async Task Invalid_employee_does_not_persist_catalog_area_or_create_cross_depot_shift()
+    {
+        await using var db = Open(); var service = Service(db);
+        var input = Input() with { AreaId = Guid.Empty, CatalogCode = "DN-NAMO" };
+        await Assert.ThrowsAsync<ArgumentException>(() => service.CreateShiftAsync(other, foreign, input));
+        Assert.False(await db.EmployeeCollectionAreas.AnyAsync(a => a.DepotId == foreign));
+        Assert.False(await db.EmployeeDispatchShifts.AnyAsync(s => s.EmployeeId == employee));
+    }
     [Fact]
     public async Task Exception_filter_only_returns_due_unassigned_orders_with_queue_reason()
     {

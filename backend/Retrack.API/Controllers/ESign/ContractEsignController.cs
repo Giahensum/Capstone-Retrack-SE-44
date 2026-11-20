@@ -45,7 +45,7 @@ public class ContractEsignController(IContractEsignService service) : Controller
 /// rồi hệ thống tự hỏi lại DocuSign bằng khóa của mình. Luôn trả 200 để DocuSign không gửi lại liên tục.
 /// </summary>
 [ApiController]
-public class DocuSignWebhookController(IContractEsignService service, ILiquidationEsignService liquidation, ILogger<DocuSignWebhookController> logger) : ControllerBase
+public class DocuSignWebhookController(IServiceScopeFactory scopes, ILogger<DocuSignWebhookController> logger) : ControllerBase
 {
     [HttpPost("api/esign/docusign/webhook"), AllowAnonymous]
     public async Task<IActionResult> Webhook(CancellationToken ct)
@@ -53,12 +53,12 @@ public class DocuSignWebhookController(IContractEsignService service, ILiquidati
         using var reader = new StreamReader(Request.Body, Encoding.UTF8);
         var body = await reader.ReadToEndAsync(ct);
         // Mã envelope chỉ thuộc về một loại hợp đồng; hai dịch vụ tự bỏ qua mã không phải của mình.
-        try { await service.HandleWebhookAsync(body, ct); }
+        try { await using var scope = scopes.CreateAsyncScope(); await scope.ServiceProvider.GetRequiredService<IContractEsignService>().HandleWebhookAsync(body, ct); }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogWarning(ex, "Xử lý webhook DocuSign (hợp đồng đối tác) lỗi");
         }
-        try { await liquidation.HandleWebhookAsync(body, ct); }
+        try { await using var scope = scopes.CreateAsyncScope(); await scope.ServiceProvider.GetRequiredService<ILiquidationEsignService>().HandleWebhookAsync(body, ct); }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogWarning(ex, "Xử lý webhook DocuSign (hợp đồng thanh lý) lỗi");

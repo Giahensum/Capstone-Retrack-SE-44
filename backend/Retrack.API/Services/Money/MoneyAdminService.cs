@@ -224,7 +224,7 @@ public sealed class MoneyAdminService(AppDbContext db, MoneyConfigReader configR
 
     // ============================ THU VÀ SỔ CÁI ============================
 
-    public async Task<PagedResult<MoneyCollectionDto>> ListCollectionsAsync(string? status, string? flow, Guid? payeeId, int page, int pageSize, CancellationToken ct = default)
+    public async Task<PagedResult<AdminMoneyCollectionDto>> ListCollectionsAsync(string? status, string? flow, Guid? payeeId, int page, int pageSize, CancellationToken ct = default)
     {
         (page, pageSize) = Paging(page, pageSize);
         var q = db.MoneyCollections.AsNoTracking().AsQueryable();
@@ -234,7 +234,7 @@ public sealed class MoneyAdminService(AppDbContext db, MoneyConfigReader configR
         var total = await q.CountAsync(ct);
         var rows = await q.OrderByDescending(c => c.CreatedAt).ThenBy(c => c.Id).Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(ct);
         var names = await NamesAsync(rows.SelectMany(c => new[] { c.PayerId, c.PayeeId }), ct);
-        return new() { Items = rows.Select(c => new MoneyCollectionDto(c.Id, c.Flow, c.SourceType, c.SourceId, c.PayerId, names.GetValueOrDefault(c.PayerId, ""), c.PayeeId,
+        return new() { Items = rows.Select(c => new AdminMoneyCollectionDto(c.Id, c.Flow, c.SourceType, c.SourceId, c.PayerId, names.GetValueOrDefault(c.PayerId, ""), c.PayeeId,
             names.GetValueOrDefault(c.PayeeId, ""), c.Amount, c.Status, c.PaidAt, c.ReceivedAmount, c.CreatedAt)).ToList(), TotalCount = total, Page = page, PageSize = pageSize };
     }
 

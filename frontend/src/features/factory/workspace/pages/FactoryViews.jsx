@@ -522,20 +522,16 @@ export function Demands() {
                       </span>
                     </td>
                     <td>
-                      <div className="actions">
-                        <Button secondary onClick={() => setEditing(d)}>
-                          Sửa
-                        </Button>
-                        <Button
-                          secondary
-                          onClick={() => void act("TOGGLE_DEMAND", { id: d.id, isActive: !d.active })}
-                        >
-                          {d.active ? "Tạm dừng" : "Mở lại"}
-                        </Button>
-                        <Button danger onClick={() => setRemove(d)}>
-                          Xóa
-                        </Button>
-                      </div>
+                      <details className="demand-actions">
+                        <summary>Thao tác <span aria-hidden="true">⌄</span></summary>
+                        <div className="demand-actions-menu">
+                          <Button secondary onClick={() => setEditing(d)}>Sửa</Button>
+                          <Button secondary onClick={() => void act("TOGGLE_DEMAND", { id: d.id, isActive: !d.active })}>
+                            {d.active ? "Tạm dừng" : "Mở lại"}
+                          </Button>
+                          <Button danger onClick={() => setRemove(d)}>Xóa</Button>
+                        </div>
+                      </details>
                     </td>
                   </tr>
                 ))}

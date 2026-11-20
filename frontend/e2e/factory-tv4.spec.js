@@ -32,6 +32,7 @@ function apiFixture() {
     loginRole: "FACTORY",
     failProfileOnce: false,
     failPrices: false,
+    payosAvailable: false,
     priceCalls: 0,
     demandPostCount: 0,
     demandDelayMs: 0,
@@ -118,6 +119,9 @@ async function useFactoryApi(page, fixture) {
       data = state.prices;
     }
     else if (path === "/api/factory/partners" && method === "GET") data = paged(state.partners);
+    else if (path === "/api/factory/platform-fees/payos-availability" && method === "GET") data = state.payosAvailable;
+    else if (path === "/api/factory/platform-fees/payment-account" && method === "GET") data = { bankName: "Ngân hàng thử nghiệm", accountNumber: "0000000000", accountHolder: "RETRACK DEMO", isConfigured: true };
+    else if (path === "/api/factory/platform-fees/invoices" && method === "GET") data = paged([{ id: "50000000-0000-0000-0000-000000000001", periodStart: "2026-10-01", amount: 60000, status: "UNPAID", revision: 0 }]);
     else if (path === `/api/factory/partners/${depotId}/contract` && method === "POST") {
       state.calls.push({ path, body });
       state.partners = state.partners.map((partner) => partner.depotId === depotId
@@ -152,6 +156,16 @@ async function login(page) {
 }
 
 test.describe("Factory TV4 browser flow", () => {
+  test("shows the bank transfer path while PayOS has no server keys", async ({ page }) => {
+    const fixture = apiFixture();
+    await useFactoryApi(page, fixture);
+    await login(page);
+    await page.getByRole("button", { name: "Phí nền tảng" }).click();
+    await expect(page.getByText("PayOS chưa được cấu hình trên máy chủ.")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Thanh toán PayOS" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Gửi chứng từ chuyển khoản" })).toBeVisible();
+  });
+
   test("redirects unauthenticated and non-Factory accounts away from Factory", async ({ page }) => {
     await page.goto("/factory");
     await expect(page).toHaveURL(/\/login/);
@@ -259,7 +273,7 @@ test.describe("Factory TV4 browser flow", () => {
     await expect(page.getByRole("button", { name: "Xem giấy phép kinh doanh" })).toBeVisible();
   });
 
-  test("receives Depot delivery, records weighing and QC, then settles once", async ({ page }) => {
+  test("receives Depot delivery, records weighing and QC, then records settlement once", async ({ page }) => {
     const fixture = apiFixture();
     await useFactoryApi(page, fixture);
     await login(page);
@@ -286,31 +300,24 @@ test.describe("Factory TV4 browser flow", () => {
     await page.getByRole("button", { name: "Chi tiết" }).click();
     await page.getByRole("button", { name: "Thỏa thuận giá & Quyết toán" }).click();
     await page.getByLabel(/Đơn giá đã thỏa thuận sau KCS/).fill("1200");
-    await page.getByLabel("Mã tham chiếu chuyển khoản").fill("BANK-TEST-001");
     await page.getByLabel("VAT theo hóa đơn của vựa").selectOption("TAXABLE:10");
     await page.getByLabel("Số hóa đơn điện tử").fill("HD-E2E-001");
     await page.getByLabel("Ngày hóa đơn").fill("2026-10-18");
     await page.getByLabel("Mã số thuế bên bán (vựa)").fill("0314892841");
     await expect(page.getByText("Tổng giá trị hóa đơn")).toBeVisible();
-    await page.getByLabel(/Tôi xác nhận giá đã thống nhất/).check();
-    await page.getByRole("button", { name: "Ghi nhận quyết toán" }).click();
-    await expect(page.getByText("Đã ghi nhận quyết toán. Có thể đánh giá lô hàng.")).toBeVisible();
+    await page.getByLabel(/Tôi xác nhận giá và số tiền quyết toán/).check();
+    await page.getByRole("button", { name: "Chốt quyết toán" }).click();
+    await expect(page.getByText("Đã chốt quyết toán. Bước tiếp theo: xác nhận đã chuyển tiền và gửi chứng từ.")).toBeVisible();
     expect(fixture.state.orders[0].status).toBe("COMPLETED");
     expect(fixture.state.orders[0].vatPercentage).toBe(10);
-    await page.getByRole("button", { name: "Đánh giá lô & Hợp tác" }).click();
-    await page.getByLabel("Nhận xét").fill("Hàng đạt chất lượng");
-    await page.getByRole("button", { name: "Lưu đánh giá" }).click();
-    await expect(page.getByText("Đã lưu đánh giá lô hàng.")).toBeVisible();
-    expect(fixture.state.partners[0].status).toBe("APPROVED");
     expect(fixture.state.calls.map((call) => call.path)).toEqual([
       `/api/factory/qc/orders/${orderId}/weigh`,
       `/api/factory/qc/orders/${orderId}/quality`,
       `/api/factory/orders/${orderId}/settle`,
-      `/api/factory/partners/orders/${orderId}/rating`,
     ]);
     await page.reload();
     await page.getByRole("button", { name: "Quyết toán", exact: true }).click();
-    await expect(page.getByRole("table").getByText("Đã quyết toán", { exact: true })).toBeVisible();
+    await expect(page.getByRole("table").getByText("Đã quyết toán, chờ chuyển tiền", { exact: true })).toBeVisible();
   });
 
   test("accepts an available Depot batch and creates a demand", async ({ page }) => {

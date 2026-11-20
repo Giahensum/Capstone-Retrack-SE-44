@@ -45,7 +45,7 @@ public sealed class EmployeeDispatchPostgresTests
             var fixtureOrders = db.PickupRequests.Where(p => p.TargetDepotId == depotId || p.TargetDepotId == otherDepotId);
             Assert.Equal(12, await fixtureOrders.Select(p => new { p.Latitude, p.Longitude }).Distinct().CountAsync());
             Assert.False(await db.Users.AnyAsync(u => u.Email == "employee@retrack.vn" || u.Email == "employee2@retrack.vn"));
-            Assert.Equal(6, await db.Users.CountAsync(u => u.Role == "DEPOT_EMPLOYEE" && u.IsActive));
+            Assert.Equal(14, await db.Users.CountAsync(u => u.Role == "DEPOT_EMPLOYEE" && u.IsActive));
 
             var completed = await db.PickupRequests.AsNoTracking().Where(p => p.Status == "DONE")
                 .Select(p => new {p.Id,p.AcceptedCollectorId,p.GrossAmount,p.NetAmount}).OrderBy(p => p.Id).ToListAsync();
@@ -63,6 +63,27 @@ public sealed class EmployeeDispatchPostgresTests
             await StaffTestServices.Dispatch(db).DispatchAsync(default);
             Assert.Equal(count,await db.EmployeeDispatchEvents.CountAsync());
             Assert.Equal(6,await db.PickupRequests.CountAsync(p => p.TargetDepotId == depotId));
+            // Bộ tải lớn không có ca/vùng seed: hai planner đồng thời vẫn chỉ tạo một kế hoạch.
+            async Task Plan()
+            {
+                await using var context = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(scoped).Options);
+                await new Retrack.API.Services.Employee.EmployeeDailyPlanService(new(context),
+                    new Retrack.API.Repositories.EmployeeDispatchRepository(context), new Retrack.API.Repositories.StaffUnitOfWork(context))
+                    .PrepareAsync(DateTime.UtcNow, default);
+            }
+            await Task.WhenAll(Plan(), Plan());
+            await StaffTestServices.Dispatch(db).DispatchAsync(default);
+            var bulkDepots = new[] { Guid.Parse("fa100000-0000-4000-8000-000000000001"), Guid.Parse("fa100000-0000-4000-8000-000000000002") };
+            foreach (var bulkDepot in bulkDepots)
+            {
+                Assert.Equal(15, await db.EmployeeCollectionAreas.CountAsync(a => a.DepotId == bulkDepot));
+                Assert.Equal(5, await db.PickupRequests.CountAsync(p => p.TargetDepotId == bulkDepot && p.Status == "SCHEDULED"));
+                Assert.Equal(1, await db.PickupRequests.CountAsync(p => p.TargetDepotId == bulkDepot && p.Status == "PENDING"));
+                Assert.Equal(6, await db.PickupRequests.Where(p => p.TargetDepotId == bulkDepot).Select(p => new { p.Latitude, p.Longitude }).Distinct().CountAsync());
+                Assert.Equal(2, await db.EmployeeDispatchShifts.CountAsync(s => s.IsAutomatic && db.EmployeeCollectionAreas.Any(a => a.Id == s.AreaId && a.DepotId == bulkDepot)));
+                Assert.False(await db.PickupRequests.AnyAsync(p => p.TargetDepotId == bulkDepot && p.AcceptedCollectorId != null
+                    && !db.DepotStaffs.Any(st => st.DepotId == bulkDepot && st.UserId == p.AcceptedCollectorId)));
+            }
         }
         finally
         {
