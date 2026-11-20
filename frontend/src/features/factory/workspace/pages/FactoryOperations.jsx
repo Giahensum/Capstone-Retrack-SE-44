@@ -22,6 +22,7 @@ import {
 } from "../data/factoryState";
 import { useFactoryOrder, useFactoryPage } from "../data/useFactoryData";
 import { downloadFactoryAttachment, uploadFactoryFeeProof } from "../data/factoryApi";
+import PayCollectionButton, { usePlatformCollection } from "@/features/money/PayCollectionButton";
 
 const modes = {
   orders: {
@@ -53,6 +54,9 @@ export function Operations({ mode, focusId, navigate }) {
   const { data, isPending, error } = useFactoryPage("orders", { page, stage: mode, displayStatus: filter, search });
   const orders = data?.items || [];
   const { data: order } = useFactoryOrder(selectedId);
+  // Chế độ PLATFORM: Factory trả vào sàn qua PayOS (flow BATCH, sourceId = id lô); luồng cũ giữ nguyên khi LEGACY.
+  const batchPay = usePlatformCollection("BATCH", order?.id, { enabled: ["SETTLEMENT_ACCEPTED", "SETTLEMENT_RECORDED", "PAID"].includes(order?.status) });
+  const platformPay = batchPay.platform && (order?.status !== "PAID" || batchPay.query.data?.status === "PAID");
   const depot = order && { name: order.depotName, address: order.depotAddress, phone: order.depotPhone };
   return (
     <>
@@ -259,7 +263,7 @@ export function Operations({ mode, focusId, navigate }) {
                     {order.settlementWorkflowVersion ? "Gửi đề xuất giá cho vựa" : "Thỏa thuận giá & Quyết toán"}
                   </Button>
                 )}
-                {["SETTLEMENT_RECORDED", "SETTLEMENT_ACCEPTED"].includes(order.status) && (
+                {["SETTLEMENT_RECORDED", "SETTLEMENT_ACCEPTED"].includes(order.status) && !platformPay && (
                   <Button onClick={() => setAction("payment-proof")}>Xác nhận đã chuyển tiền</Button>
                 )}
                 {order.status === "PAID" && !order.rating && (
@@ -268,6 +272,7 @@ export function Operations({ mode, focusId, navigate }) {
                   </Button>
                 )}
               </div>
+              {platformPay && <PayCollectionButton flow="BATCH" sourceId={order.id} title="Thanh toán lô qua sàn (PayOS)" />}
               {["ACCEPTED", "IN_TRANSIT"].includes(order.status) && (
                 <div className="simulation-box">
                   <strong>Đang chờ cập nhật vận chuyển</strong>

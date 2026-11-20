@@ -59,6 +59,25 @@ namespace Retrack.API.Models
         [MaxLength(2048)]
         public string? BankQrUrl { get; set; }
 
+        // Thu/chi qua sàn: mã BIN ngân hàng nhận (payOS bắt buộc) và trạng thái xác minh.
+        [Column("bank_bin")]
+        [MaxLength(6)]
+        public string? BankBin { get; set; }
+
+        [Column("bank_status")]
+        [MaxLength(30)]
+        public string? BankStatus { get; set; } // PENDING_VERIFICATION, VERIFIED, REJECTED
+
+        [Column("bank_verified_at")]
+        public DateTime? BankVerifiedAt { get; set; }
+
+        [Column("bank_changed_at")]
+        public DateTime? BankChangedAt { get; set; }
+
+        /// <summary>Lý do Admin từ chối tài khoản ngân hàng (RETRACK_MONEY_V4); xóa khi người dùng đổi tài khoản hoặc Admin duyệt.</summary>
+        [Column("bank_reject_reason")]
+        public string? BankRejectReason { get; set; }
+
         // Navigation
         [Column("avatar_url")]
         [MaxLength(2048)]

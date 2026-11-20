@@ -13,6 +13,7 @@ import ContractViewer from '@/components/liquidation/ContractViewer';
 import { toContract } from '@/components/liquidation/ContractDocument';
 import { Modal, Section, Tile, Notice, Steps, Badge } from '@/components/liquidation/LiquidationUI';
 import { useLiquidationQuery, useLiquidationMutation, useLiquidationScope, localTime } from '../liquidationApi';
+import PayCollectionButton, { usePlatformCollection } from '@/features/money/PayCollectionButton';
 import { LiquidationEsignPanel, LiquidationEsignSignButton, isEsignActive, useLiquidationEsign } from '@/features/esign/LiquidationEsign';
 
 const primaryBtn = 'inline-flex items-center justify-center gap-2 rounded-full bg-d-primary px-6 py-2.5 text-sm font-bold text-white shadow-sm transition active:scale-95 disabled:opacity-50';
@@ -44,6 +45,10 @@ export default function LiquidationAgreement({ id, onClose }) {
   const depositOk = !hasDeposit || !!d?.depositConfirmedAt;
   const collected = !!(d?.paymentConfirmedAt && d?.sellerHandedOverAt && d?.ownerCollectedAt);
   const posted = d?.receiptStatus === 'POSTED';
+  // Chế độ PLATFORM: trả cọc / phần còn lại qua PayOS vào sàn; luồng "báo đã chuyển" thủ công chỉ dùng khi LEGACY.
+  const depositPay = usePlatformCollection('LIQUIDATION_DEPOSIT', id, { enabled: !!d && hasDeposit && bothSigned && !d.depositConfirmedAt });
+  const balancePay = usePlatformCollection('LIQUIDATION_BALANCE', id, { enabled: !!d && depositOk && !d.paymentConfirmedAt });
+  const platformMode = depositPay.platform || balancePay.platform;
   const receiptLabel = posted ? 'Đã ghi sổ' : d?.receiptStatus === 'SUBMITTED' ? 'Chờ duyệt phiếu nhập'
     : d?.receiptId ? 'Phiếu nháp · chờ ghi sổ' : 'Chưa lập';
 
@@ -73,6 +78,10 @@ export default function LiquidationAgreement({ id, onClose }) {
       );
     } else if (hasDeposit && !d.sellerSignedAt) {
       waiting = 'Bạn đã ký. Đang chờ Seller ký hợp đồng.';
+    } else if (hasDeposit && bothSigned && !d.depositReportedAt && depositPay.pending) {
+      waiting = 'Đang kiểm tra hình thức thanh toán…';
+    } else if (hasDeposit && bothSigned && !d.depositReportedAt && depositPay.platform) {
+      action = <PayCollectionButton flow="LIQUIDATION_DEPOSIT" sourceId={id} title={`Đặt cọc ${money(d.depositAmount)} qua sàn (PayOS)`} />;
     } else if (hasDeposit && bothSigned && !d.depositReportedAt) {
       action = (
         <form className="space-y-2.5" onSubmit={(e) => { e.preventDefault(); reportDeposit.mutate({ reference: depositRef }); }}>
@@ -86,6 +95,10 @@ export default function LiquidationAgreement({ id, onClose }) {
       );
     } else if (hasDeposit && d.depositReportedAt && !d.depositConfirmedAt) {
       waiting = `Đã báo chuyển cọc (${d.depositReference}). Chờ Seller xác nhận nhận cọc.`;
+    } else if (depositOk && !d.paymentReportedAt && balancePay.pending) {
+      waiting = 'Đang kiểm tra hình thức thanh toán…';
+    } else if (depositOk && !d.paymentReportedAt && balancePay.platform) {
+      action = <PayCollectionButton flow="LIQUIDATION_BALANCE" sourceId={id} title={`${hasDeposit ? `Phần còn lại ${money(d.remainingAmount)}` : `Thanh toán ${money(d.amount)}`} qua sàn (PayOS)`} />;
     } else if (depositOk && !d.paymentReportedAt) {
       action = (
         <form className="space-y-2.5" onSubmit={(e) => { e.preventDefault(); report.mutate({ reference }); }}>
@@ -148,7 +161,9 @@ export default function LiquidationAgreement({ id, onClose }) {
 
             <Section icon={Layers} title="Tiến trình thỏa thuận"><Steps steps={steps} /></Section>
             {overdue && <Notice tone="red" icon={AlertTriangle}>Đã qua hạn thu gom. Hai bên cần đối soát việc còn lại; hệ thống không tự gán lô cho người trả giá thứ hai.</Notice>}
-            <Notice tone="blue" icon={FileText}>Tiền chuyển và giao nhận ngoài app; RETRACK ghi nhận xác nhận của hai bên, chưa tự xác minh giao dịch ngân hàng. Không tính lại giá trúng theo kg cân về.</Notice>
+            <Notice tone="blue" icon={FileText}>{platformMode
+              ? 'Tiền cọc và phần còn lại được thanh toán vào nền tảng qua PayOS; hệ thống tự ghi nhận khi PayOS xác nhận. Giao nhận hàng vẫn do hai bên thực hiện. Không tính lại giá trúng theo kg cân về.'
+              : 'Tiền chuyển và giao nhận ngoài app; RETRACK ghi nhận xác nhận của hai bên, chưa tự xác minh giao dịch ngân hàng. Không tính lại giá trúng theo kg cân về.'}</Notice>
 
             {hasDeposit && (
               <DepositContract

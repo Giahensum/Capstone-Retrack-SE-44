@@ -280,6 +280,9 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
     public async Task<ServiceResult<OrderResponse>> ReportPaymentAsync(Guid userId, Guid id, BatchPaymentProofRequest request, CancellationToken ct)
     {
         var factory = await CurrentFactory(userId, ct);
+        // PLATFORM (money.mode): Factory trả tiền cho lô qua PayOS vào sàn, không nộp chứng từ chuyển khoản tay. LEGACY: không đổi.
+        if ((await new Retrack.API.Services.Money.MoneyConfigReader(Db).GetAsync(ct)).IsPlatformMode)
+            return ServiceResult<OrderResponse>.Conflict("Thanh toán qua sàn đang bật: vui lòng thanh toán lô bằng PayOS thay vì tải chứng từ chuyển khoản.");
         if (string.IsNullOrWhiteSpace(request.PaymentReference) || string.IsNullOrWhiteSpace(request.PaymentProofUrl) ||
             (attachments is not null && !attachments.IsOwnedUrl(request.PaymentProofUrl, userId)))
             return ServiceResult<OrderResponse>.Invalid("Cần mã tham chiếu và chứng từ chuyển khoản hợp lệ.");

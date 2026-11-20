@@ -6,6 +6,7 @@ import ProofUpload from './ProofUpload';
 import { MaterialIcon } from './DepotIcon';
 import { Dialog, buttonClass, inputClass } from './DepotUI';
 import { depotError, useDepot } from '../DepotContext';
+import PayCollectionButton, { usePlatformCollection } from '@/features/money/PayCollectionButton';
 import { PICKUP_STATUS_LABEL } from '@/lib/utils';
 
 const money = (value) => Number(value ?? 0).toLocaleString('vi-VN') + ' đ';
@@ -23,6 +24,8 @@ export default function PaymentDrawer({ payment, onClose }) {
     enabled: !!depotId,
   });
   const item = detail.data;
+  // Chế độ PLATFORM: thanh toán PayOS vào sàn, ẩn biểu mẫu chứng từ thủ công (backend từ chối với 409).
+  const collection = usePlatformCollection('PICKUP', payment.id, { enabled: item?.status === 'AWAITING_PAYMENT' || item?.status === 'PAYMENT_SENT' });
   const canSubmit = item?.status === 'AWAITING_PAYMENT' && safeUrl(proof.trim()) && confirmed && !uploading && item.items.length > 0;
   const save = useMutation({
     mutationFn: () => api.patch(`/depot/pickup-requests/${payment.id}/payment-sent`, { paymentProofUrl: proof.trim() }),
@@ -55,8 +58,8 @@ export default function PaymentDrawer({ payment, onClose }) {
         </section>
         <section aria-label="Số tiền cần thanh toán" className="space-y-2 rounded-2xl bg-d-surface-accent p-4">
           <div className="flex justify-between gap-4"><span>Giá trị vật liệu</span><strong>{money(item.grossAmount)}</strong></div>
-          <div className="flex justify-between gap-4 text-d-on-surface-variant"><span>{item.feePolicy === 'BUYER_SEPARATE_V1' ? 'Phí kho trả riêng' : 'Phí khấu trừ — đơn cũ'} ({item.platformFeePercentage}%)</span><span>{item.feePolicy === 'BUYER_SEPARATE_V1' ? '+ ' : '− '}{money(item.platformFeeAmount)}</span></div>
-          <div className="flex justify-between gap-4 border-t border-d-border-subtle pt-3 text-lg font-bold text-d-primary"><span>Chuyển cho người bán</span><span>{money(item.netAmount)}</span></div>
+          {!collection.platform && <div className="flex justify-between gap-4 text-d-on-surface-variant"><span>{item.feePolicy === 'BUYER_SEPARATE_V1' ? 'Phí kho trả riêng' : 'Phí khấu trừ — đơn cũ'} ({item.platformFeePercentage}%)</span><span>{item.feePolicy === 'BUYER_SEPARATE_V1' ? '+ ' : '− '}{money(item.platformFeeAmount)}</span></div>}
+          <div className="flex justify-between gap-4 border-t border-d-border-subtle pt-3 text-lg font-bold text-d-primary"><span>{collection.platform ? 'Thanh toán vào sàn' : 'Chuyển cho người bán'}</span><span>{money(collection.platform ? item.grossAmount : item.netAmount)}</span></div>
           {item.feePolicy === 'BUYER_SEPARATE_V1' && <p className="mt-3 text-sm text-d-on-surface-variant">Tổng chi của kho: <strong>{money(item.buyerTotalAmount)}</strong>. Phí trả nền tảng qua hóa đơn riêng, không trừ tiền Seller.</p>}
         </section>
         {safeUrl(item.checkinImageUrl) && <a className="inline-flex items-center gap-2 rounded-full border border-d-border-subtle px-4 py-2 text-d-primary hover:bg-d-surface-container-low" href={item.checkinImageUrl} target="_blank" rel="noreferrer"><MaterialIcon name="visibility" />Xem ảnh check-in</a>}
@@ -64,6 +67,10 @@ export default function PaymentDrawer({ payment, onClose }) {
           <h3 className="font-semibold">Chờ nhân viên bàn giao</h3>
           <p className="mt-2 text-sm text-d-on-surface-variant">Người bán đã đồng ý kết quả cân. Nhân viên thu gom cần mở đơn và chọn “Bàn giao chủ kho” để gửi đơn sang bước chờ thanh toán.</p>
           <p className="mt-2 text-sm text-d-on-surface-variant">Chủ kho chỉ chuyển tiền sau khi hoàn tất bàn giao. Đơn này chưa được tính vào tổng nợ cần trả.</p>
+        </div> : collection.platform && ['AWAITING_PAYMENT', 'PAYMENT_SENT'].includes(item.status) ? <div className="space-y-4">
+          <PayCollectionButton flow="PICKUP" sourceId={payment.id} title="Thanh toán qua sàn (PayOS)" />
+          <p className="text-sm text-d-on-surface-variant">Chủ kho thanh toán vào nền tảng; nền tảng giữ tiền và chi cho người bán sau khi đơn hoàn tất. Không cần tải chứng từ chuyển khoản.</p>
+          <div className="flex justify-end border-t border-d-border-subtle pt-4"><button type="button" onClick={onClose} className="rounded-full border border-d-border-subtle px-5 py-2.5 font-semibold hover:bg-d-surface-container-low">Đóng</button></div>
         </div> : item.status === 'AWAITING_PAYMENT' ? <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); if (canSubmit && !save.isPending) save.mutate(); }}>
           <div className="rounded-2xl border border-d-border-subtle p-4"><h3 className="font-semibold">Chứng từ chuyển khoản</h3>
             <p className="mt-1 text-sm text-d-on-surface-variant">Chuyển đúng số tiền thực trả ở trên, rồi tải ảnh chứng từ hoặc nhập đường dẫn HTTPS.</p>

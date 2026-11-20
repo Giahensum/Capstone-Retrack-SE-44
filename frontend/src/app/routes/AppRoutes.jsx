@@ -30,6 +30,8 @@ const DepotNotifications = lazy(() => import('@/features/depot/Notifications'));
 const DepotDispatch = lazy(() => import('@/features/depot/dispatch/DispatchPage'));
 const DepotBuyingPrices = lazy(() => import('@/features/depot/BuyingPrices'));
 import { DepotProvider } from '@/features/depot/DepotContext';
+// Thu nhập & chi trả của người nhận (Seller, Chủ kho, Nhà máy dùng chung một trang)
+const MoneyEarnings = lazy(() => import('@/features/money-payee/EarningsPage'));
 // Employee
 const StaffMobilePage = lazy(() => import('@/features/auth/pages/StaffMobilePage'));
 // Driver
@@ -37,6 +39,7 @@ const StaffMobilePage = lazy(() => import('@/features/auth/pages/StaffMobilePage
 const FactoryDashboard = lazy(() => import('@/features/factory/workspace/FactoryApp'));
 // Admin
 const AdminDashboard = lazy(() => import('@/features/admin/pages/AdminDashboard'));
+const PayReturnPage = lazy(() => import('@/features/money/PayReturnPage'));
 // Loading fallback
 const PageLoader = () => (<div className="flex items-center justify-center min-h-screen bg-slate-900">
     <div className="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"/>
@@ -66,6 +69,7 @@ export function AppRoutes() {
               <Route path="partners" element={<DepotPartners />} />
               <Route path="payments" element={<DepotPayments />} />
               <Route path="payments/fees" element={<DepotPlatformFees />} />
+              <Route path="earnings" element={<MoneyEarnings />} />
               <Route path="reports" element={<DepotRevenueReport />} />
               <Route path="staff" element={<DepotStaff />} />
               <Route path="staff/performance" element={<DepotStaffPerformance />} />
@@ -94,6 +98,9 @@ export function AppRoutes() {
           <Route path="/admin/*" element={<PrivateRoute allowedRoles={[ROLES.ADMIN]}>
                 <AdminDashboard />
               </PrivateRoute>}/>
+
+          {/* Kết quả thanh toán PayOS: mọi vai trò đã đăng nhập, không giới hạn vai trò */}
+          <Route path="/pay/return" element={<PrivateRoute><PayReturnPage /></PrivateRoute>}/>
 
           {/* Fallback */}
           <Route path="/unauthorized" element={<div className="flex items-center justify-center min-h-screen text-red-400 text-xl">

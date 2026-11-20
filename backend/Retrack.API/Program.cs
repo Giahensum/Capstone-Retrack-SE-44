@@ -163,6 +163,10 @@ builder.Services.AddScoped<IAdminService, AdminService>();
 // PayOS thanh toán phí nền tảng (cấu hình qua PayOS__* trong .env / biến môi trường)
 builder.Services.Configure<Retrack.API.Services.Depot.PayOsOptions>(builder.Configuration.GetSection("PayOS"));
 builder.Services.AddHttpClient<Retrack.API.Services.Depot.IPayOsClient, Retrack.API.Services.Depot.PayOsClient>(c => c.Timeout = TimeSpan.FromSeconds(20));
+// payOS kênh CHI (Lệnh chi), khóa riêng PayOSPayout__*; client độc lập, chưa nối vào service nào
+builder.Services.Configure<Retrack.API.Services.Money.PayOsPayoutOptions>(builder.Configuration.GetSection("PayOSPayout"));
+builder.Services.AddHttpClient<Retrack.API.Services.Money.IPayOsPayoutClient, Retrack.API.Services.Money.PayOsPayoutClient>((sp, c) =>
+    c.Timeout = TimeSpan.FromSeconds(Math.Clamp(sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<Retrack.API.Services.Money.PayOsPayoutOptions>>().Value.TimeoutSeconds, 1, 120)));
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IDepotPayOsService, Retrack.API.Services.Depot.DepotPayOsService>();
 builder.Services.AddHostedService<Retrack.API.Services.Depot.PayOsReconciliationWorker>();
 // Ký điện tử hợp đồng bằng DocuSign sandbox (cấu hình qua DocuSign__* trong .env / biến môi trường; để trống thì tắt tính năng)
@@ -183,6 +187,31 @@ builder.Services.AddScoped<Retrack.API.Services.Interfaces.IFactoryProfileServic
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IQCService, Retrack.API.Services.Factory.FactoryQCService>();
 builder.Services.AddScoped<Retrack.API.Services.Factory.FactoryAttachmentService>();
 builder.Services.AddScoped<Retrack.API.Services.Factory.FactoryPlatformFeeService>();
+// Thu/chi qua sàn (giai đoạn 1: nền móng, chưa nối vào luồng nào). Nhà cung cấp chi mặc định là mô phỏng.
+builder.Services.AddSingleton(new Retrack.API.Services.Money.SimulatedPayoutOptions
+{
+    Delay = TimeSpan.FromSeconds(builder.Configuration.GetValue("Money:SimulatedPayoutDelaySeconds", 5)),
+    InitialBalance = builder.Configuration.GetValue("Money:SimulatedPayoutBalance", 100_000_000m),
+});
+builder.Services.AddSingleton<Retrack.API.Services.Money.SimulatedPayoutProvider>();
+builder.Services.AddSingleton<Retrack.API.Services.Money.IPayoutProvider>(sp => sp.GetRequiredService<Retrack.API.Services.Money.SimulatedPayoutProvider>());
+builder.Services.AddScoped<Retrack.API.Services.Money.MoneyConfigReader>();
+builder.Services.AddScoped<Retrack.API.Services.Money.PayableLedgerService>();
+// Thu vào sàn qua PayOS (giai đoạn 2): khoản thu, móc nối luồng cũ (chỉ hoạt động khi money.mode = PLATFORM), worker đối soát
+builder.Services.AddScoped<Retrack.API.Services.Money.IMoneyCollectionService, Retrack.API.Services.Money.MoneyCollectionService>();
+builder.Services.AddScoped<Retrack.API.Services.Money.PlatformMoneyHooks>();
+builder.Services.AddHostedService<Retrack.API.Services.Money.MoneyCollectionReconciliationWorker>();
+// --- Thu/chi qua sàn: engine chi (giai đoạn 3 và 5) ---
+builder.Services.AddTransient<Retrack.API.Services.Money.PayOsPayoutProvider>();
+builder.Services.AddScoped<Retrack.API.Services.Money.IPayoutProviderResolver, Retrack.API.Services.Money.PayoutProviderResolver>();
+builder.Services.AddScoped<Retrack.API.Services.Money.PayoutEngine>();
+builder.Services.AddScoped<Retrack.API.Services.Money.RefundEngine>();
+builder.Services.AddScoped<Retrack.API.Services.Money.MoneyAdminService>();
+builder.Services.AddScoped<Retrack.API.Services.Money.MyMoneyService>();
+builder.Services.Configure<Retrack.API.Services.Money.PayoutWorkerOptions>(builder.Configuration.GetSection("Money:PayoutWorker"));
+builder.Services.AddHostedService<Retrack.API.Services.Money.AutoPayoutWorker>();
+builder.Services.AddHostedService<Retrack.API.Services.Money.PayoutReconcileWorker>();
+builder.Services.AddHostedService<Retrack.API.Services.Money.RefundReconcileWorker>();
 builder.Services.AddScoped<Retrack.API.Services.Factory.FactoryNotificationService>();
 
 // ===== CONTROLLERS & SWAGGER =====

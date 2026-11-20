@@ -1,4 +1,4 @@
--- ============================================================
+-- =====================================================
 -- RETRACK — KHỞI TẠO TOÀN HỆ THỐNG VÀ DỮ LIỆU DEMO
 -- Máy mới: tạo database rỗng bằng pgAdmin, mở Query Tool của đúng DB,
 -- mở file này và nhấn F5 để chạy TOÀN BỘ, không cần lệnh terminal.
@@ -8,7 +8,7 @@
 -- Không thay kết nối/mật khẩu PostgreSQL; cấu hình backend bằng .env local.
 -- File khởi tạo không thay thế quy trình nâng cấp database có dữ liệu thật.
 -- Nếu lỗi: toàn bộ transaction chưa được ghi; chạy ROLLBACK; trước khi thử lại.
--- ============================================================
+-- =====================================================
 
 BEGIN;
 SET LOCAL retrack.seed_demo = 'on';
@@ -16,9 +16,9 @@ SET LOCAL retrack.seed_demo = 'on';
 -- RETRACK_SCHEMA_BEGIN
 -- UUID dùng hàm lõi của PostgreSQL, không phụ thuộc extension hoặc schema cài đặt.
 
--- ==========================================
+-- ===================================
 -- MODULE 1: HỆ THỐNG & TÀI KHOẢN (ROLES)
--- ==========================================
+-- ===================================
 
 -- Bảng cấu hình hệ thống (Admin quản lý phí)
 CREATE TABLE IF NOT EXISTS system_configs (
@@ -106,9 +106,9 @@ CREATE TABLE IF NOT EXISTS depot_staffs (
     is_active       BOOLEAN      DEFAULT TRUE
 );
 
--- ==========================================
+-- ===================================
 -- MODULE 2: GIAI ĐOẠN 1 - THU GOM PHẾ LIỆU & PHÍ MẶC ĐỊNH 5%
--- ==========================================
+-- ===================================
 
 -- Yêu cầu thu gom của Seller
 CREATE TABLE IF NOT EXISTS pickup_requests (
@@ -170,9 +170,9 @@ CREATE TABLE IF NOT EXISTS seller_depot_reviews (
     created_at          TIMESTAMPTZ  DEFAULT NOW()
 );
 
--- ==========================================
+-- ===================================
 -- MODULE 3: DEMAND BOARD & LÔ HÀNG (GIAI ĐOẠN 2)
--- ==========================================
+-- ===================================
 
 -- Bảng nhu cầu nhà máy (Demand Board)
 CREATE TABLE IF NOT EXISTS factory_demands (
@@ -287,9 +287,9 @@ ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS depot_payment_confirmed_b
 CREATE SEQUENCE IF NOT EXISTS depot_batch_number START WITH 1 INCREMENT BY 1 NO MINVALUE NO MAXVALUE NO CYCLE;
 CREATE UNIQUE INDEX IF NOT EXISTS ix_inventory_batches_code ON inventory_batches(code);
 
--- ==========================================
+-- ===================================
 -- MODULE 4: VẬN CHUYỂN & QC & QUYẾT TOÁN CÓ PHÍ (GIAI ĐOẠN 3)
--- ==========================================
+-- ===================================
 
 -- Công việc vận chuyển
 CREATE TABLE IF NOT EXISTS transport_jobs (
@@ -371,9 +371,9 @@ CREATE TABLE IF NOT EXISTS factory_depot_reviews (
     created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
--- ==========================================
+-- ===================================
 -- MODULE 5: REVENUE - DOANH THU NỀN TẢNG
--- ==========================================
+-- ===================================
 
 -- Bảng lưu vết doanh thu của nền tảng để hiển thị cho Admin
 CREATE TABLE IF NOT EXISTS platform_transactions (
@@ -391,9 +391,9 @@ ALTER TABLE platform_transactions ADD COLUMN IF NOT EXISTS payer_id UUID;
 ALTER TABLE platform_transactions ADD COLUMN IF NOT EXISTS transaction_amount DECIMAL(18, 2);
 ALTER TABLE platform_transactions ADD COLUMN IF NOT EXISTS fee_percentage DECIMAL(5, 2);
 
--- ==========================================
+-- ===================================
 -- MODULE 6: ADMIN - AUDIT LOG, HÓA ĐƠN PHÍ, THÔNG BÁO
--- ==========================================
+-- ===================================
 
 -- Nhật ký hành động của Admin trên hệ thống (tạo/sửa/xóa user, giá tham khảo, cấu hình phí, hóa đơn...)
 CREATE TABLE IF NOT EXISTS audit_logs (
@@ -487,9 +487,9 @@ DO $$ BEGIN
 END $$;
 -- RETRACK_CLOSED_PERIOD_BILLING_V1_END
 
--- ==========================================
+-- ===================================
 -- FUNCTIONS & TRIGGERS (updated_at tự động)
--- ==========================================
+-- ===================================
 
 -- Function dùng chung cho trigger updated_at
 CREATE OR REPLACE FUNCTION set_updated_at()
@@ -536,9 +536,9 @@ CREATE TRIGGER trg_partnerships_upd
     BEFORE UPDATE ON factory_depot_partnerships
     FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
--- ==========================================
+-- ===================================
 -- INDEX GỢI Ý (Performance)
--- ==========================================
+-- ===================================
 CREATE INDEX IF NOT EXISTS idx_users_email     ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_role      ON users(role);
 CREATE INDEX IF NOT EXISTS idx_pr_seller       ON pickup_requests(seller_id);
@@ -602,9 +602,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS ix_driver_delivery_operation
 CREATE INDEX IF NOT EXISTS ix_driver_delivery_history
     ON driver_delivery_events(job_id, driver_id, created_at DESC);
 
--- ==========================================
+-- ===================================
 -- MODULE 8: XÁC THỰC OTP & QUÊN MẬT KHẨU
--- ==========================================
+-- ===================================
 CREATE TABLE IF NOT EXISTS password_reset_otps (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     email       VARCHAR(255) NOT NULL,
@@ -1065,6 +1065,252 @@ ALTER TABLE inventory_batches DROP CONSTRAINT IF EXISTS ck_batch_return_receipt;
 ALTER TABLE inventory_batches ADD CONSTRAINT ck_batch_return_receipt CHECK
     (return_received_at IS NULL OR (return_handed_over_at IS NOT NULL AND return_handover_proof_url IS NOT NULL AND return_received_by IS NOT NULL AND return_receipt_reference IS NOT NULL));
 -- RETRACK_BATCH_QUALITY_RESOLUTION_V1_END
+
+-- RETRACK_MONEY_V1_BEGIN
+-- Thu - chi qua sàn (giai đoạn 1: chỉ nền móng, chưa nối vào luồng hiện có). Xem docs/thiet-ke-thu-chi-qua-san.md.
+-- Chạy lại nhiều lần an toàn. Tiền VND dùng DECIMAL(18,0).
+-- Quy ước dòng REFUND: gross và commission luôn >= 0 (độ lớn). Khi tính kỳ chi, dòng REFUND bị TRỪ khỏi gross
+-- và commission của nó được CỘNG LẠI (sàn hoàn hoa hồng tương ứng). Mỗi lần hoàn một phần có refund_key riêng.
+
+-- Cấu hình ngân hàng cho chi tiền: payOS bắt buộc mã BIN 6 số của ngân hàng nhận.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS bank_bin VARCHAR(6);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS bank_status VARCHAR(30);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS bank_verified_at TIMESTAMPTZ;
+ALTER TABLE users DROP CONSTRAINT IF EXISTS ck_users_bank_status;
+ALTER TABLE users ADD CONSTRAINT ck_users_bank_status CHECK (bank_status IS NULL OR bank_status IN ('PENDING_VERIFICATION', 'VERIFIED', 'REJECTED'));
+
+-- Khoản thu vào sàn: mỗi nguồn chỉ có tối đa một khoản thu PENDING/PAID.
+CREATE TABLE IF NOT EXISTS money_collections (
+    id                 UUID           PRIMARY KEY DEFAULT gen_random_uuid(),
+    flow               VARCHAR(30)    NOT NULL,
+    source_type        VARCHAR(40)    NOT NULL,
+    source_id          UUID           NOT NULL,
+    payer_id           UUID           NOT NULL REFERENCES users(id),
+    payee_id           UUID           NOT NULL REFERENCES users(id),
+    amount             DECIMAL(18, 0) NOT NULL,
+    status             VARCHAR(20)    NOT NULL DEFAULT 'PENDING',
+    payos_order_code   BIGINT,
+    payos_checkout_url TEXT,
+    payos_link_id      TEXT,
+    paid_at            TIMESTAMPTZ,
+    received_amount    DECIMAL(18, 0),
+    created_at         TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
+    updated_at         TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
+    CONSTRAINT ck_money_collections_flow CHECK (flow IN ('PICKUP', 'BATCH', 'LIQUIDATION_DEPOSIT', 'LIQUIDATION_BALANCE')),
+    CONSTRAINT ck_money_collections_source CHECK (source_type IN ('PICKUP_REQUEST', 'INVENTORY_BATCH', 'LIQUIDATION_AGREEMENT')),
+    CONSTRAINT ck_money_collections_status CHECK (status IN ('PENDING', 'PAID', 'EXPIRED', 'CANCELLED', 'REFUNDING', 'REFUNDED')),
+    CONSTRAINT ck_money_collections_amount CHECK (amount > 0 AND (received_amount IS NULL OR received_amount >= 0))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_money_collections_order_code ON money_collections(payos_order_code) WHERE payos_order_code IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS ux_money_collections_active_source ON money_collections(flow, source_id) WHERE status IN ('PENDING', 'PAID');
+CREATE INDEX IF NOT EXISTS ix_money_collections_payer ON money_collections(payer_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS ix_money_collections_payee ON money_collections(payee_id, created_at DESC);
+
+-- Kỳ chi trả cho một người nhận (tạo trước payable_lines vì dòng sổ cái tham chiếu tới đây).
+CREATE TABLE IF NOT EXISTS payout_runs (
+    id             UUID           PRIMARY KEY DEFAULT gen_random_uuid(),
+    code           VARCHAR(40)    NOT NULL,
+    payee_id       UUID           NOT NULL REFERENCES users(id),
+    period_start   TIMESTAMPTZ    NOT NULL,
+    period_end     TIMESTAMPTZ    NOT NULL,
+    gross          DECIMAL(18, 0) NOT NULL DEFAULT 0,
+    commission     DECIMAL(18, 0) NOT NULL DEFAULT 0,
+    refund_amount  DECIMAL(18, 0) NOT NULL DEFAULT 0,
+    carried_debt   DECIMAL(18, 0) NOT NULL DEFAULT 0,
+    net            DECIMAL(18, 0) NOT NULL DEFAULT 0,   -- có thể âm: kỳ CARRIED mang nợ sang kỳ sau
+    status         VARCHAR(20)    NOT NULL DEFAULT 'PENDING',
+    provider       VARCHAR(20)    NOT NULL DEFAULT 'SIMULATED',
+    provider_ref   VARCHAR(100),
+    gateway_status VARCHAR(40),
+    fail_reason    TEXT,
+    bank_snapshot  JSONB,
+    approved_by    UUID           REFERENCES users(id),
+    approved_at    TIMESTAMPTZ,
+    created_by     UUID           REFERENCES users(id),   -- NULL nếu do hệ thống tự chạy
+    created_at     TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
+    paid_at        TIMESTAMPTZ,
+    version        INT            NOT NULL DEFAULT 0,
+    CONSTRAINT ck_payout_runs_period CHECK (period_start < period_end),
+    CONSTRAINT ck_payout_runs_amounts CHECK (gross >= 0 AND commission >= 0 AND refund_amount >= 0 AND carried_debt >= 0),
+    CONSTRAINT ck_payout_runs_status CHECK (status IN ('PENDING', 'AWAITING_APPROVAL', 'PROCESSING', 'PAID', 'FAILED', 'UNKNOWN', 'HELD', 'DEFERRED', 'CARRIED', 'SETTLED')),
+    CONSTRAINT ck_payout_runs_provider CHECK (provider IN ('SIMULATED', 'PAYOS')),
+    CONSTRAINT uq_payout_runs_code UNIQUE (code),
+    CONSTRAINT uq_payout_runs_period UNIQUE (payee_id, period_start, period_end)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_payout_runs_provider_ref ON payout_runs(provider_ref) WHERE provider_ref IS NOT NULL AND provider_ref <> '';
+CREATE INDEX IF NOT EXISTS ix_payout_runs_status ON payout_runs(status, created_at DESC);
+
+-- Sổ cái phải chi. Duy nhất (source_type, source_id, kind, COALESCE(refund_key, '')):
+--   SALE: refund_key NULL  => mỗi nguồn đúng một dòng bán trong toàn hệ thống.
+--   REFUND: refund_key bắt buộc => nhiều lần hoàn một phần, mỗi lần một khóa (retry cùng khóa là no-op).
+CREATE TABLE IF NOT EXISTS payable_lines (
+    id              UUID           PRIMARY KEY DEFAULT gen_random_uuid(),
+    collection_id   UUID           NOT NULL REFERENCES money_collections(id),
+    payee_id        UUID           NOT NULL REFERENCES users(id),
+    flow            VARCHAR(30)    NOT NULL,
+    source_type     VARCHAR(40)    NOT NULL,
+    source_id       UUID           NOT NULL,
+    kind            VARCHAR(10)    NOT NULL DEFAULT 'SALE',
+    refund_key      VARCHAR(100),
+    gross           DECIMAL(18, 0) NOT NULL,
+    commission_rate DECIMAL(7, 4)  NOT NULL,
+    commission      DECIMAL(18, 0) NOT NULL,
+    state           VARCHAR(20)    NOT NULL DEFAULT 'HELD',
+    available_at    TIMESTAMPTZ    NOT NULL,
+    payout_id       UUID           REFERENCES payout_runs(id),
+    created_at      TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
+    CONSTRAINT ck_payable_lines_flow CHECK (flow IN ('PICKUP', 'BATCH', 'LIQUIDATION')),
+    CONSTRAINT ck_payable_lines_source CHECK (source_type IN ('PICKUP_REQUEST', 'INVENTORY_BATCH', 'LIQUIDATION_AGREEMENT')),
+    CONSTRAINT ck_payable_lines_kind CHECK (kind IN ('SALE', 'REFUND')),
+    CONSTRAINT ck_payable_lines_refund_key CHECK ((kind = 'REFUND' AND refund_key IS NOT NULL AND refund_key <> '') OR (kind = 'SALE' AND refund_key IS NULL)),
+    CONSTRAINT ck_payable_lines_amounts CHECK (gross >= 0 AND commission >= 0 AND commission <= gross),
+    CONSTRAINT ck_payable_lines_rate CHECK (commission_rate >= 0 AND commission_rate <= 100),
+    CONSTRAINT ck_payable_lines_state CHECK (state IN ('HELD', 'AVAILABLE', 'IN_PAYOUT', 'PAID', 'REVERSED')),
+    CONSTRAINT ck_payable_lines_payout CHECK (payout_id IS NULL OR state IN ('IN_PAYOUT', 'PAID'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_payable_lines_source_kind ON payable_lines(source_type, source_id, kind, COALESCE(refund_key, ''));
+CREATE INDEX IF NOT EXISTS ix_payable_lines_payee_state ON payable_lines(payee_id, state, available_at);
+CREATE INDEX IF NOT EXISTS ix_payable_lines_collection ON payable_lines(collection_id);
+CREATE INDEX IF NOT EXISTS ix_payable_lines_payout ON payable_lines(payout_id) WHERE payout_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS ix_payable_lines_held_due ON payable_lines(available_at) WHERE state = 'HELD';
+
+-- Hoa hồng riêng theo người nhận và dòng tiền (ghi đè mặc định commission.default.<FLOW> trong system_configs).
+CREATE TABLE IF NOT EXISTS payee_commissions (
+    user_id    UUID          NOT NULL REFERENCES users(id),
+    flow       VARCHAR(30)   NOT NULL,
+    rate       DECIMAL(7, 4) NOT NULL,
+    updated_by UUID          REFERENCES users(id),
+    updated_at TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (user_id, flow),
+    CONSTRAINT ck_payee_commissions_flow CHECK (flow IN ('PICKUP', 'BATCH', 'LIQUIDATION')),
+    CONSTRAINT ck_payee_commissions_rate CHECK (rate >= 0 AND rate <= 100)
+);
+
+-- Công tắc tự chi từng người nhận.
+CREATE TABLE IF NOT EXISTS payee_payout_settings (
+    user_id      UUID        PRIMARY KEY REFERENCES users(id),
+    auto_enabled BOOLEAN     NOT NULL DEFAULT TRUE,
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Cấu hình mặc định (không ghi đè giá trị Admin đã đặt). money.mode = LEGACY: chưa đổi luồng hiện có.
+-- Tỷ lệ hoa hồng mặc định dưới đây là GIÁ TRỊ TẠM, nhóm cần chốt (docs mục 11).
+INSERT INTO system_configs (config_key, config_value, description) VALUES
+    ('money.mode', 'LEGACY', 'LEGACY = luồng chuyển khoản hiện có; PLATFORM = thu/chi qua sàn'),
+    ('commission.default.PICKUP', '3', 'Hoa hồng mặc định (%) dòng thu mua phế liệu (tạm)'),
+    ('commission.default.BATCH', '2', 'Hoa hồng mặc định (%) dòng bán lô cho nhà máy (tạm)'),
+    ('commission.default.LIQUIDATION', '5', 'Hoa hồng mặc định (%) dòng thanh lý (tạm)'),
+    ('payout.auto_enabled', 'false', 'Bật chi tự động theo lịch'),
+    ('payout.schedule', 'DAILY', 'DAILY hoặc WEEKLY'),
+    ('payout.hold_minutes', '1440', 'Thời gian giữ tiền trước khi được chi (phút)'),
+    ('payout.min_amount', '50000', 'Số chi tối thiểu mỗi kỳ (VND)'),
+    ('payout.auto_max_amount', '5000000', 'Trên mức này kỳ chi cần Admin duyệt (VND)'),
+    ('payout.provider', 'SIMULATED', 'SIMULATED hoặc PAYOS'),
+    ('payout.test_enabled', 'false', 'Cho phép Admin chuyển thử số nhỏ'),
+    ('payout.test_max_amount', '10000', 'Số tiền tối đa mỗi lần chuyển thử (VND)')
+ON CONFLICT (config_key) DO NOTHING;
+-- RETRACK_MONEY_V1_END
+
+-- RETRACK_MONEY_V3_BEGIN
+-- Thu vào sàn (giai đoạn 2): lịch sử mã đơn PayOS của khoản thu, bất thường khi thu tiền, mã đơn đã thanh toán.
+-- Chạy lại nhiều lần an toàn. Chỉ THÊM cột/bảng, không đổi ràng buộc của khối V1.
+ALTER TABLE money_collections ADD COLUMN IF NOT EXISTS paid_order_code BIGINT;
+
+-- Mọi mã đơn PayOS từng cấp cho một khoản thu (kể cả link đã hết hạn): tiền về muộn trên link cũ vẫn truy ra khoản thu.
+-- Mã đơn không trùng platform_invoices.payos_order_code (kiểm tra ở tầng ứng dụng khi cấp mã).
+CREATE TABLE IF NOT EXISTS money_collection_orders (
+    order_code    BIGINT      PRIMARY KEY,
+    collection_id UUID        NOT NULL REFERENCES money_collections(id),
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS ix_money_collection_orders_collection ON money_collection_orders(collection_id);
+
+-- Bất thường khi thu tiền cần Admin hoàn tay: trả thiếu, trả dư, tiền về muộn sau khi hết hạn/hủy, trả trùng, nguồn đã đổi trạng thái.
+-- Duy nhất (collection_id, kind, reference): webhook/đối soát gửi lại không tạo thêm dòng.
+CREATE TABLE IF NOT EXISTS money_collection_anomalies (
+    id              UUID           PRIMARY KEY DEFAULT gen_random_uuid(),
+    collection_id   UUID           NOT NULL REFERENCES money_collections(id),
+    order_code      BIGINT,
+    kind            VARCHAR(30)    NOT NULL,
+    received_amount DECIMAL(18, 0) NOT NULL,
+    expected_amount DECIMAL(18, 0) NOT NULL,
+    refund_amount   DECIMAL(18, 0) NOT NULL DEFAULT 0,
+    reference       VARCHAR(100)   NOT NULL,
+    status          VARCHAR(20)    NOT NULL DEFAULT 'OPEN',
+    note            TEXT,
+    created_at      TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
+    resolved_at     TIMESTAMPTZ,
+    resolved_by     UUID           REFERENCES users(id),
+    CONSTRAINT ck_money_anomalies_kind CHECK (kind IN ('UNDERPAID', 'OVERPAID', 'LATE_PAYMENT', 'DUPLICATE_PAYMENT', 'SOURCE_MISMATCH')),
+    CONSTRAINT ck_money_anomalies_status CHECK (status IN ('OPEN', 'RESOLVED')),
+    CONSTRAINT ck_money_anomalies_amounts CHECK (received_amount >= 0 AND expected_amount >= 0 AND refund_amount >= 0),
+    CONSTRAINT uq_money_anomalies_ref UNIQUE (collection_id, kind, reference)
+);
+CREATE INDEX IF NOT EXISTS ix_money_anomalies_open ON money_collection_anomalies(created_at DESC) WHERE status = 'OPEN';
+-- RETRACK_MONEY_V3_END
+
+-- RETRACK_MONEY_V2_BEGIN
+-- Thu - chi qua sàn (giai đoạn 3 và 5: engine chi). Chạy lại nhiều lần an toàn. Xem docs/thiet-ke-thu-chi-qua-san.md.
+-- Thời điểm đổi tài khoản ngân hàng gần nhất: kỳ chi bị giữ (HELD) trong payout.bank_change_hold_hours sau khi đổi.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS bank_changed_at TIMESTAMPTZ;
+-- Số lần gửi lệnh chi của kỳ: khóa idempotency là code (lần 1) hoặc code-N (lần N, chỉ tăng sau lỗi rõ ràng).
+ALTER TABLE payout_runs ADD COLUMN IF NOT EXISTS attempt INT NOT NULL DEFAULT 1;
+ALTER TABLE payout_runs ADD COLUMN IF NOT EXISTS last_attempt_at TIMESTAMPTZ;
+ALTER TABLE payout_runs DROP CONSTRAINT IF EXISTS ck_payout_runs_attempt;
+ALTER TABLE payout_runs ADD CONSTRAINT ck_payout_runs_attempt CHECK (attempt >= 1);
+CREATE INDEX IF NOT EXISTS ix_payout_runs_payee_period ON payout_runs(payee_id, period_end DESC);
+INSERT INTO system_configs (config_key, config_value, description) VALUES
+    ('payout.bank_change_hold_hours', '24', 'Giữ kỳ chi sau khi người nhận đổi tài khoản ngân hàng (giờ)')
+ON CONFLICT (config_key) DO NOTHING;
+-- RETRACK_MONEY_V2_END
+
+-- RETRACK_MONEY_V4_BEGIN
+-- Hoàn tiền cho người trả vào sàn + Admin duyệt/từ chối tài khoản ngân hàng. Chạy lại nhiều lần an toàn. Không xóa/đổi đối tượng cũ.
+-- Tài khoản ngân hàng: không còn thời gian giữ; mọi thay đổi chờ Admin duyệt (PENDING_VERIFICATION), Admin có thể từ chối (REJECTED) kèm lý do.
+-- (Cột users.bank_changed_at và khóa system_configs payout.bank_change_hold_hours của V2 được giữ nguyên nhưng không còn được đọc.)
+ALTER TABLE users ADD COLUMN IF NOT EXISTS bank_reject_reason TEXT;
+ALTER TABLE users DROP CONSTRAINT IF EXISTS ck_users_bank_status;
+ALTER TABLE users ADD CONSTRAINT ck_users_bank_status CHECK (bank_status IS NULL OR bank_status IN ('PENDING_VERIFICATION', 'VERIFIED', 'REJECTED'));
+
+-- Lệnh hoàn tiền: tiền đi từ tài khoản chi của sàn về tài khoản ngân hàng của người trả (payer).
+CREATE TABLE IF NOT EXISTS money_refunds (
+    id              UUID           PRIMARY KEY DEFAULT gen_random_uuid(),
+    code            VARCHAR(40)    NOT NULL,
+    collection_id   UUID           NOT NULL REFERENCES money_collections(id),
+    anomaly_id      UUID           REFERENCES money_collection_anomalies(id),
+    payer_id        UUID           NOT NULL REFERENCES users(id),
+    kind            VARCHAR(20)    NOT NULL,
+    amount          DECIMAL(18, 0) NOT NULL,
+    reason          TEXT           NOT NULL DEFAULT '',
+    status          VARCHAR(20)    NOT NULL DEFAULT 'PENDING',
+    provider        VARCHAR(20)    NOT NULL DEFAULT 'SIMULATED',
+    provider_ref    VARCHAR(100),
+    gateway_status  VARCHAR(40),
+    fail_reason     TEXT,
+    attempt         INT            NOT NULL DEFAULT 1,
+    last_attempt_at TIMESTAMPTZ,
+    bank_snapshot   JSONB,
+    created_by      UUID           REFERENCES users(id),
+    approved_by     UUID           REFERENCES users(id),
+    approved_at     TIMESTAMPTZ,
+    paid_at         TIMESTAMPTZ,
+    version         INT            NOT NULL DEFAULT 0,
+    created_at      TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
+    CONSTRAINT ck_money_refunds_kind CHECK (kind IN ('EXCESS', 'DUPLICATE', 'LATE', 'FULL', 'PARTIAL')),
+    CONSTRAINT ck_money_refunds_status CHECK (status IN ('PENDING', 'AWAITING_APPROVAL', 'PROCESSING', 'PAID', 'FAILED', 'UNKNOWN', 'MANUAL_PAID', 'CANCELLED')),
+    CONSTRAINT ck_money_refunds_amount CHECK (amount > 0),
+    CONSTRAINT ck_money_refunds_attempt CHECK (attempt >= 1),
+    CONSTRAINT ck_money_refunds_provider CHECK (provider IN ('SIMULATED', 'PAYOS'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_money_refunds_code ON money_refunds(code);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_money_refunds_provider_ref ON money_refunds(provider_ref) WHERE provider_ref IS NOT NULL AND provider_ref <> '';
+-- Một bất thường chỉ có một lệnh hoàn còn hiệu lực (bị hủy hoặc thất bại thì được tạo lại).
+CREATE UNIQUE INDEX IF NOT EXISTS ux_money_refunds_anomaly_active ON money_refunds(anomaly_id) WHERE anomaly_id IS NOT NULL AND status NOT IN ('CANCELLED', 'FAILED');
+CREATE INDEX IF NOT EXISTS ix_money_refunds_collection ON money_refunds(collection_id);
+CREATE INDEX IF NOT EXISTS ix_money_refunds_payer ON money_refunds(payer_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS ix_money_refunds_status ON money_refunds(status, created_at DESC);
+-- RETRACK_MONEY_V4_END
 
 -- RETRACK_SCHEMA_END
 

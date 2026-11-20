@@ -56,11 +56,23 @@ namespace Retrack.API.Data
         public DbSet<LiquidationBid> LiquidationBids { get; set; }
         public DbSet<LiquidationAgreement> LiquidationAgreements { get; set; }
 
+        // Thu/chi qua sàn (RETRACK_MONEY_V1)
+        public DbSet<MoneyCollection> MoneyCollections { get; set; }
+        public DbSet<PayableLine> PayableLines { get; set; }
+        public DbSet<PayoutRun> PayoutRuns { get; set; }
+        public DbSet<MoneyRefund> MoneyRefunds { get; set; }
+        public DbSet<PayeeCommission> PayeeCommissions { get; set; }
+        public DbSet<PayeePayoutSetting> PayeePayoutSettings { get; set; }
+        // Thu vào sàn giai đoạn 2 (RETRACK_MONEY_V3)
+        public DbSet<MoneyCollectionOrder> MoneyCollectionOrders { get; set; }
+        public DbSet<MoneyCollectionAnomaly> MoneyCollectionAnomalies { get; set; }
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             modelBuilder.Entity<BatchWorkflowEvent>().HasIndex(x => new { x.BatchId, x.CreatedAt });
             modelBuilder.Entity<BatchWorkflowEvent>().HasOne(x => x.Batch).WithMany().HasForeignKey(x => x.BatchId).OnDelete(DeleteBehavior.Restrict);
             base.OnModelCreating(modelBuilder);
+            modelBuilder.Entity<PayeeCommission>().HasKey(x => new { x.UserId, x.Flow });
             modelBuilder.Entity<DepotBuyingPrice>().HasKey(x => new { x.DepotId, x.MaterialType });
             modelBuilder.Entity<DepotBuyingPrice>().HasOne(x => x.Depot).WithMany().HasForeignKey(x => x.DepotId).OnDelete(DeleteBehavior.Cascade);
             modelBuilder.Entity<EmployeeCollectionArea>().HasOne<Depot>().WithMany().HasForeignKey(a => a.DepotId).OnDelete(DeleteBehavior.Restrict);

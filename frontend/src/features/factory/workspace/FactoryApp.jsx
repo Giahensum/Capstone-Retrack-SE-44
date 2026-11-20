@@ -12,6 +12,7 @@ import {
 import { Operations } from "./pages/FactoryOperations";
 import FactoryPlatformFees from "./pages/FactoryPlatformFees";
 import FactoryNotifications, { FactoryNotificationBell } from "./pages/FactoryNotifications";
+import MoneyEarnings from "@/features/money-payee/EarningsPage";
 import "./factory.css";
 
 const tabs = [
@@ -22,6 +23,7 @@ const tabs = [
   ["qc", "Trạm cân & KCS", "⚖"],
   ["settlements", "Quyết toán", "▣"],
   ["platform-fees", "Phí nền tảng", "₫"],
+  ["earnings", "Thu nhập & chi trả", "₫"],
   ["notifications", "Thông báo", "♧"],
   ["partners", "Vựa đối tác", "♧"],
   ["prices", "Giá tham khảo", "↗"],
@@ -111,6 +113,7 @@ function Workspace() {
           )}
           {tab === "partners" && <Partners navigate={navigate} />}
           {tab === "platform-fees" && <FactoryPlatformFees />}
+          {tab === "earnings" && <MoneyEarnings />}
           {tab === "notifications" && <FactoryNotifications navigate={navigate} />}
           {tab === "profile" && <Profile />}
           {tab === "prices" && <Prices />}
