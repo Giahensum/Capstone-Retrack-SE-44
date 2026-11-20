@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Receipt, BookOpen } from 'lucide-react';
+import { Receipt, BookOpen, Undo2 } from 'lucide-react';
 import { Panel, Field, inputClass, DataTable, Th, Td, TableMessage, Pagination, GhostButton } from '@/features/admin/components/AdminUI';
 import { Badge } from '@/components/liquidation/LiquidationUI';
 import { moneyAdminApi } from '../moneyAdminApi';
@@ -8,6 +8,7 @@ import {
   vnd, pct, fmtDateTime, flowLabel, sourceLabel, kindLabel, apiError, COLLECTION_STATUS, LINE_STATE, collectionStatusMeta, lineStateMeta, FLOW_LABEL,
 } from '../moneyLabels';
 import PayeeFilter from './PayeeFilter';
+import { CollectionRefundDialog } from './RefundDialogs';
 
 const PAGE_SIZE = 20;
 const FLOWS = ['PICKUP', 'BATCH', 'LIQUIDATION'];
@@ -23,7 +24,8 @@ function FlowSelect({ value, onChange, options = FLOWS }) {
   );
 }
 
-function CollectionsPanel() {
+function CollectionsPanel({ onGoPayees }) {
+  const [refunding, setRefunding] = useState(null);
   const [f, setF] = useState({ status: '', flow: '', payeeId: '' });
   const [page, setPage] = useState(1);
   const set = (patch) => { setF((x) => ({ ...x, ...patch })); setPage(1); };
@@ -31,7 +33,7 @@ function CollectionsPanel() {
   const q = useQuery({ queryKey: ['money-admin', 'collections', params], queryFn: () => moneyAdminApi.listCollections(params), placeholderData: (p) => p });
   const items = q.data?.items ?? [];
   return (
-    <Panel icon={Receipt} title="Khoản thu vào sàn (chỉ đọc)">
+    <Panel icon={Receipt} title="Khoản thu vào sàn">
       <div className="flex flex-wrap items-end gap-4 border-b border-d-border-subtle p-5">
         <Field label="Trạng thái">
           <select value={f.status} onChange={(e) => set({ status: e.target.value })} className={`${inputClass} w-48 cursor-pointer`}>
@@ -43,8 +45,8 @@ function CollectionsPanel() {
         <PayeeFilter value={f.payeeId} onChange={(payeeId) => set({ payeeId })} />
         <GhostButton onClick={() => { setF({ status: '', flow: '', payeeId: '' }); setPage(1); }}>Xóa lọc</GhostButton>
       </div>
-      <DataTable minWidth={1000} head={<><Th>Dòng tiền</Th><Th>Nguồn</Th><Th>Người trả</Th><Th>Người nhận</Th><Th className="text-right">Số tiền</Th><Th className="text-right">Đã nhận</Th><Th>Trạng thái</Th><Th>Thu lúc</Th></>}>
-        <TableMessage cols={8} loading={q.isLoading} error={q.isError} empty={!q.isLoading && !q.isError && items.length === 0}>
+      <DataTable minWidth={1100} head={<><Th>Dòng tiền</Th><Th>Nguồn</Th><Th>Người trả</Th><Th>Người nhận</Th><Th className="text-right">Số tiền</Th><Th className="text-right">Đã nhận</Th><Th>Trạng thái</Th><Th>Thu lúc</Th><Th className="text-right">Thao tác</Th></>}>
+        <TableMessage cols={9} loading={q.isLoading} error={q.isError} empty={!q.isLoading && !q.isError && items.length === 0}>
           {q.isError ? apiError(q.error, 'Không tải được khoản thu.') : 'Chưa có khoản thu nào phù hợp.'}
         </TableMessage>
         {items.map((c) => {
@@ -57,11 +59,13 @@ function CollectionsPanel() {
               <Td className="text-right">{c.receivedAmount == null ? '—' : vnd(c.receivedAmount)}</Td>
               <Td><Badge tone={m.tone}>{m.label}</Badge></Td>
               <Td>{fmtDateTime(c.paidAt ?? c.createdAt)}</Td>
+              <Td className="text-right">{c.status === 'PAID' && <GhostButton onClick={() => setRefunding(c)} className="!px-3 !py-1.5"><Undo2 size={14} className="mr-1 inline" aria-hidden="true" />Hoàn tiền</GhostButton>}</Td>
             </tr>
           );
         })}
       </DataTable>
       {q.data && <Pagination page={page} pageSize={q.data.pageSize} totalCount={q.data.totalCount} onPageChange={setPage} />}
+      {refunding && <CollectionRefundDialog collection={refunding} onClose={() => setRefunding(null)} onGoPayees={onGoPayees} />}
     </Panel>
   );
 }
@@ -107,10 +111,10 @@ function LedgerPanel() {
   );
 }
 
-export default function LedgerTab() {
+export default function LedgerTab({ onGoPayees }) {
   return (
     <div className="flex flex-col gap-6">
-      <CollectionsPanel />
+      <CollectionsPanel onGoPayees={onGoPayees} />
       <LedgerPanel />
     </div>
   );
