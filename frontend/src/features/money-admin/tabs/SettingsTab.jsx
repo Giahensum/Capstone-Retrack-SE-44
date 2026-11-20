@@ -230,7 +230,6 @@ export default function SettingsTab({ settings, settingsQuery }) {
             {num('payoutHoldMinutes', 'Giữ tiền trước khi chi (phút)', 'Từ 0 đến 525.600. Khoản thu chỉ sẵn sàng chi sau thời gian này.')}
             {num('payoutMinAmount', 'Số chi tối thiểu (đ)', 'Kỳ thực chi thấp hơn mức này sẽ dồn sang kỳ sau.')}
             {num('payoutAutoMaxAmount', 'Hạn mức tự chi (đ)', 'Kỳ thực chi vượt mức này cần Admin duyệt.')}
-            {num('payoutBankChangeHoldHours', 'Giữ chi sau khi đổi tài khoản (giờ)', 'Từ 0 đến 720. Chống đổi số tài khoản để chiếm tiền.')}
           </div>
         </Panel>
 

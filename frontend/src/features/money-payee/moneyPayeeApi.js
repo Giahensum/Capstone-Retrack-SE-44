@@ -8,5 +8,6 @@ export const moneyPayeeApi = {
   listPayouts: (params) => unwrap(api.get('/money/my/payouts', { params })),
   getBank: () => unwrap(api.get('/money/my/bank')),
   updateBank: (body) => unwrap(api.put('/money/my/bank', body)),
+  listMyRefunds: (params) => unwrap(api.get('/money/my/refunds', { params })),
   getBanks: () => unwrap(api.get('/money/banks')),
 };
