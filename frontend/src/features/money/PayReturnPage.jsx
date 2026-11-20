@@ -55,7 +55,8 @@ export default function PayReturnPage() {
     {!valid && <p role="alert" className="rounded-xl border border-red-300 bg-red-50 p-4 text-red-800">Đường dẫn quay về không hợp lệ hoặc thiếu thông tin khoản thanh toán.</p>}
     {valid && <p className="text-sm text-d-on-surface-variant">{FLOW_LABEL[flow]}</p>}
     {valid && sync.isPending && <p role="status" className="rounded-xl border border-d-border-subtle bg-white p-4">Đang xác nhận thanh toán với PayOS…</p>}
-    {valid && sync.isError && <div role="alert" className="space-y-3 rounded-xl border border-red-300 bg-red-50 p-4 text-red-800">
+    {valid && sync.isError && cancelled && <p role="status" className="rounded-xl border border-slate-300 bg-slate-50 p-4 text-slate-800">Bạn đã hủy thanh toán. Khoản thanh toán chưa được ghi nhận.</p>}
+    {valid && sync.isError && !cancelled && <div role="alert" className="space-y-3 rounded-xl border border-red-300 bg-red-50 p-4 text-red-800">
       <p>{depotError(sync.error)}</p>
       <button type="button" className="rounded-full border border-red-400 bg-white px-5 py-2 font-semibold" disabled={sync.isPending} onClick={() => sync.mutate()}>Thử lại</button></div>}
     {outcome && <div role="status" className={`space-y-2 rounded-xl border p-4 ${outcome.tone}`}>
