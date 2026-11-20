@@ -214,7 +214,7 @@ public sealed partial class PayoutEngine(AppDbContext db, MoneyConfigReader conf
         }
         if (balance < run.Net)
         {
-            await ToPendingAsync(run, $"Số dư tài khoản chi ({balance.ToString("N0", CultureInfo.InvariantCulture)}) không đủ cho kỳ {run.Code} ({run.Net.ToString("N0", CultureInfo.InvariantCulture)}). Chưa gửi lệnh.", notifyAdmins: true, ct);
+            await ToPendingAsync(run, $"Số dư tài khoản chi ({MoneyFormat.Vnd(balance)}) không đủ cho kỳ {run.Code} ({MoneyFormat.Vnd(run.Net)}). Chưa gửi lệnh.", notifyAdmins: true, ct);
             return await LoadRunAsync(runId, ct);
         }
 
@@ -298,7 +298,7 @@ public sealed partial class PayoutEngine(AppDbContext db, MoneyConfigReader conf
         await db.PayableLines.Where(l => l.PayoutId == run.Id && l.State == PayableStates.InPayout)
             .ExecuteUpdateAsync(s => s.SetProperty(l => l.State, PayableStates.Paid), ct);
         db.AuditLogs.Add(Audit(actor, manualNote == null ? "PAYOUT_PAID" : "PAYOUT_MARKED_PAID", run.Id, new { status = fromStatus, providerRef = oldRef }, new { run.Code, run.Net, providerRef, gateway, note = manualNote }));
-        db.Notifications.Add(Notify(run.PayeeId, run, "Đã chi tiền", $"Kỳ chi {run.Code}: sàn đã chuyển {run.Net.ToString("N0", CultureInfo.InvariantCulture)} đồng tới tài khoản ngân hàng của bạn."));
+        db.Notifications.Add(Notify(run.PayeeId, run, "Đã chi tiền", $"Kỳ chi {run.Code}: sàn đã chuyển {MoneyFormat.Vnd(run.Net)} đồng tới tài khoản ngân hàng của bạn."));
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
         db.ChangeTracker.Clear();
@@ -347,7 +347,7 @@ public sealed partial class PayoutEngine(AppDbContext db, MoneyConfigReader conf
         if (!bank.Ready) throw new DepotConflictException(bank.Reason ?? "Lý do giữ chưa hết.");
         var cfg = await configReader.GetAsync(ct);
         var to = run.Net > cfg.PayoutAutoMaxAmount && run.ApprovedBy == null ? PayoutStatuses.AwaitingApproval : PayoutStatuses.Processing;
-        var reason = to == PayoutStatuses.AwaitingApproval ? $"Vượt hạn mức tự chi {cfg.PayoutAutoMaxAmount.ToString("N0", CultureInfo.InvariantCulture)} đồng: cần Admin duyệt." : null;
+        var reason = to == PayoutStatuses.AwaitingApproval ? $"Vượt hạn mức tự chi {MoneyFormat.Vnd(cfg.PayoutAutoMaxAmount)} đồng: cần Admin duyệt." : null;
         if (!await CasAsync(run, to, reason, snapshot: snapshot))
             throw new DepotConflictException("Kỳ chi vừa được xử lý bởi thao tác khác. Hãy tải lại.");
         await AuditAsync(actorId, "PAYOUT_RELEASED", run.Id, new { run.Code, to }, ct);
@@ -410,7 +410,7 @@ public sealed partial class PayoutEngine(AppDbContext db, MoneyConfigReader conf
         var cfg = await configReader.GetAsync(ct);
         if (!cfg.PayoutTestEnabled) throw new InvalidOperationException("Chuyển thử đang tắt. Bật payout.test_enabled trong cấu hình thu/chi trước.");
         if (request.Amount != decimal.Truncate(request.Amount) || request.Amount < 1000 || request.Amount > cfg.PayoutTestMaxAmount)
-            throw new ArgumentException($"Số tiền chuyển thử phải là số nguyên từ 1.000 đến {cfg.PayoutTestMaxAmount.ToString("N0", CultureInfo.InvariantCulture)} đồng.");
+            throw new ArgumentException($"Số tiền chuyển thử phải là số nguyên từ 1.000 đến {MoneyFormat.Vnd(cfg.PayoutTestMaxAmount)} đồng.");
         if (!PayoutBankRules.IsValidBin(request.ToBin)) throw new ArgumentException("Mã BIN phải gồm đúng 6 chữ số.");
         if (!PayoutBankRules.IsValidAccountNumber(request.ToAccountNumber)) throw new ArgumentException("Số tài khoản phải gồm 6 đến 20 chữ số.");
         var key = TestKey(request.ClientKey);
@@ -575,7 +575,7 @@ public sealed partial class PayoutEngine(AppDbContext db, MoneyConfigReader conf
     };
 
     private static string CreatedMessage(PayoutRun run, string? reason) =>
-        $"Kỳ chi {run.Code}: số tiền sau hoa hồng {run.Net.ToString("N0", CultureInfo.InvariantCulture)} đồng." + (string.IsNullOrWhiteSpace(reason) ? "" : " " + reason);
+        $"Kỳ chi {run.Code}: số tiền sau hoa hồng {MoneyFormat.Vnd(run.Net)} đồng." + (string.IsNullOrWhiteSpace(reason) ? "" : " " + reason);
 
     private static string Trim(string? s) => s is { Length: > 500 } ? s[..500] : s ?? "";
 

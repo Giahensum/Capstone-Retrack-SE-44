@@ -45,7 +45,7 @@ public sealed partial class PayoutApiTests
 
         Assert.Equal(1, Data((await AsAdmin("GET", "/api/admin/money/payees?bankStatus=PENDING_VERIFICATION")).Body).GetProperty("totalCount").GetInt32());
         Assert.Equal(0, Data((await AsAdmin("GET", "/api/admin/money/payees?bankStatus=VERIFIED")).Body).GetProperty("totalCount").GetInt32());
-        var none = await AsAdmin("GET", "/api/admin/money/payees?bankStatus=none");
+        var none = await AsAdmin("GET", "/api/admin/money/payees?bankStatus=none&search=Ng%C6%B0%E1%BB%9Di%20B");
         Assert.Equal(1, Data(none.Body).GetProperty("totalCount").GetInt32());
         Assert.Equal("NONE", Data(none.Body).GetProperty("items")[0].GetProperty("bank").GetProperty("status").GetString());
         Assert.Equal(HttpStatusCode.BadRequest, (await AsAdmin("GET", "/api/admin/money/payees?bankStatus=BOGUS")).Status);

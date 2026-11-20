@@ -561,7 +561,7 @@ public sealed class RefundEngineTests : RefundTestBase
         s.AddScoped<MoneyConfigReader>(); s.AddScoped<IPayoutProviderResolver>(_ => new FixedResolver(Fake)); s.AddScoped<RefundEngine>();
         await using var sp = s.BuildServiceProvider();
         var worker = new RefundReconcileWorker(sp.GetRequiredService<IServiceScopeFactory>(), Options.Create(new PayoutWorkerOptions()), NullLogger<RefundReconcileWorker>.Instance);
-        Clock.Advance(TimeSpan.FromSeconds(30));
+        Clock.Advance(TimeSpan.FromSeconds(20));
         Assert.Equal(1, await worker.RunOnceAsync(default));
         Assert.Equal("PAID", (await RefundOf(oldOne.Id)).Status);
         Assert.Equal("PROCESSING", (await RefundOf(freshOne.Id)).Status);

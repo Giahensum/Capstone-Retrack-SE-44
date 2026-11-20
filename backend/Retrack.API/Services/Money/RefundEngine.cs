@@ -127,10 +127,10 @@ public sealed class RefundEngine(AppDbContext db, MoneyConfigReader configReader
         decimal value;
         if (kind == RefundKinds.Full)
         {
-            if (amount != null && amount != remaining) throw new ArgumentException($"Hoàn toàn phần phải hoàn đúng số còn lại {remaining.ToString("N0", CultureInfo.InvariantCulture)} đồng (bỏ trống số tiền).");
+            if (amount != null && amount != remaining) throw new ArgumentException($"Hoàn toàn phần phải hoàn đúng số còn lại {MoneyFormat.Vnd(remaining)} đồng (bỏ trống số tiền).");
             value = remaining;
         }
-        else value = ValidateAmount(amount!.Value, remaining, "Số tiền hoàn một phần", $"Tổng số tiền hoàn không được vượt số tiền khoản thu: còn tối đa {remaining.ToString("N0", CultureInfo.InvariantCulture)} đồng.");
+        else value = ValidateAmount(amount!.Value, remaining, "Số tiền hoàn một phần", $"Tổng số tiền hoàn không được vượt số tiền khoản thu: còn tối đa {MoneyFormat.Vnd(remaining)} đồng.");
         var payer = await RequirePayerAsync(c.PayerId, ct);
 
         // Sổ cái: dòng SALE đã vào kỳ chi hoặc đã chi thì không hoàn ở đây (thu hồi từ người nhận nằm ngoài phạm vi).
@@ -175,12 +175,12 @@ public sealed class RefundEngine(AppDbContext db, MoneyConfigReader configReader
         {
             Code = await NextCodeAsync(ct), CollectionId = c.Id, AnomalyId = anomalyId, PayerId = c.PayerId, Kind = kind, Amount = amount, Reason = reason, Status = status,
             Provider = providerName, FailReason = status == RefundStatuses.AwaitingApproval
-                ? $"Vượt hạn mức tự chi {cfg.PayoutAutoMaxAmount.ToString("N0", CultureInfo.InvariantCulture)} đồng: cần Admin duyệt." : null,
+                ? $"Vượt hạn mức tự chi {MoneyFormat.Vnd(cfg.PayoutAutoMaxAmount)} đồng: cần Admin duyệt." : null,
             Attempt = 1, BankSnapshot = SnapshotJson(payer), CreatedBy = actorId, CreatedAt = now, UpdatedAt = now,
         };
         db.MoneyRefunds.Add(refund);
         db.Notifications.Add(Notify(c.PayerId, refund, "Sàn sẽ hoàn tiền cho bạn",
-            $"Lệnh hoàn {refund.Code}: sàn sẽ hoàn {amount.ToString("N0", CultureInfo.InvariantCulture)} đồng về tài khoản ngân hàng của bạn. Lý do: {reason}"));
+            $"Lệnh hoàn {refund.Code}: sàn sẽ hoàn {MoneyFormat.Vnd(amount)} đồng về tài khoản ngân hàng của bạn. Lý do: {reason}"));
         await db.SaveChangesAsync(ct);
         return refund;
     }
@@ -230,7 +230,7 @@ public sealed class RefundEngine(AppDbContext db, MoneyConfigReader configReader
     private static decimal ValidateAmount(decimal v, decimal max, string label, string? overMessage = null)
     {
         if (v != decimal.Truncate(v) || v <= 0) throw new ArgumentException($"{label} phải là số nguyên đồng lớn hơn 0.");
-        if (v > max) throw new ArgumentException(overMessage ?? $"{label} không được vượt {max.ToString("N0", CultureInfo.InvariantCulture)} đồng.");
+        if (v > max) throw new ArgumentException(overMessage ?? $"{label} không được vượt {MoneyFormat.Vnd(max)} đồng.");
         return v;
     }
 
@@ -290,8 +290,8 @@ public sealed class RefundEngine(AppDbContext db, MoneyConfigReader configReader
         }
         if (balance < r.Amount)
         {
-            await CasAsync(r, RefundStatuses.Pending, $"Số dư tài khoản chi ({balance.ToString("N0", CultureInfo.InvariantCulture)}) không đủ cho lệnh hoàn {r.Code} ({r.Amount.ToString("N0", CultureInfo.InvariantCulture)}). Chưa gửi lệnh.");
-            await NotifyAdminsAsync(r, "Lệnh hoàn chờ do thiếu số dư", $"Lệnh hoàn {r.Code} ({r.Amount.ToString("N0", CultureInfo.InvariantCulture)} đồng) chưa gửi được vì số dư tài khoản chi không đủ.", ct);
+            await CasAsync(r, RefundStatuses.Pending, $"Số dư tài khoản chi ({MoneyFormat.Vnd(balance)}) không đủ cho lệnh hoàn {r.Code} ({MoneyFormat.Vnd(r.Amount)}). Chưa gửi lệnh.");
+            await NotifyAdminsAsync(r, "Lệnh hoàn chờ do thiếu số dư", $"Lệnh hoàn {r.Code} ({MoneyFormat.Vnd(r.Amount)} đồng) chưa gửi được vì số dư tài khoản chi không đủ.", ct);
             return await LoadAsync(refundId, ct);
         }
 
@@ -379,7 +379,7 @@ public sealed class RefundEngine(AppDbContext db, MoneyConfigReader configReader
         }
         db.AuditLogs.Add(Audit(actor, manualNote == null ? "REFUND_PAID" : "REFUND_MARKED_PAID", r.Id, new { status = fromStatus, providerRef = oldRef },
             new { r.Code, r.Amount, providerRef, gateway, note = manualNote, r.CollectionId, r.AnomalyId }));
-        db.Notifications.Add(Notify(r.PayerId, r, "Đã hoàn tiền", $"Lệnh hoàn {r.Code}: sàn đã hoàn {r.Amount.ToString("N0", CultureInfo.InvariantCulture)} đồng về tài khoản ngân hàng của bạn."));
+        db.Notifications.Add(Notify(r.PayerId, r, "Đã hoàn tiền", $"Lệnh hoàn {r.Code}: sàn đã hoàn {MoneyFormat.Vnd(r.Amount)} đồng về tài khoản ngân hàng của bạn."));
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
         db.ChangeTracker.Clear();
@@ -389,7 +389,7 @@ public sealed class RefundEngine(AppDbContext db, MoneyConfigReader configReader
     private async Task OnFailedAsync(MoneyRefund r, CancellationToken ct)
     {
         await NotifyPayerAsync(r, "Hoàn tiền chưa thành công", $"Lệnh hoàn {r.Code} chưa chuyển được. Sàn sẽ kiểm tra và xử lý lại, bạn không cần làm gì thêm.");
-        await NotifyAdminsAsync(r, "Lệnh hoàn thất bại", $"Lệnh hoàn {r.Code} ({r.Amount.ToString("N0", CultureInfo.InvariantCulture)} đồng) bị từ chối: hãy kiểm tra tài khoản người trả rồi gửi lại.", ct);
+        await NotifyAdminsAsync(r, "Lệnh hoàn thất bại", $"Lệnh hoàn {r.Code} ({MoneyFormat.Vnd(r.Amount)} đồng) bị từ chối: hãy kiểm tra tài khoản người trả rồi gửi lại.", ct);
     }
 
     // ============================ THAO TÁC CỦA ADMIN ============================

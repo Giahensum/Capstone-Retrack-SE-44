@@ -407,7 +407,7 @@ public sealed class MoneyCollectionService(AppDbContext db, Retrack.API.Services
 
         Audit(actor, "COLLECTION_PAID", c, before, new { c.Status, c.ReceivedAmount, orderCode, c.Flow });
         db.Notifications.Add(new Notification { UserId = c.PayerId, Category = "PAYMENT", TargetType = "MONEY_COLLECTION", TargetId = c.Id,
-            Title = "Sàn đã nhận thanh toán PayOS", Message = $"Sàn đã nhận {paidAmount:N0}đ cho khoản thanh toán {FlowLabel(c.Flow)}." });
+            Title = "Sàn đã nhận thanh toán PayOS", Message = $"Sàn đã nhận {MoneyFormat.Vnd(paidAmount)}đ cho khoản thanh toán {FlowLabel(c.Flow)}." });
         if (paidAmount > c.Amount)
         {
             // Trả dư: vẫn PAID, phần dư ghi nhận để Admin hoàn tay.
@@ -443,9 +443,9 @@ public sealed class MoneyCollectionService(AppDbContext db, Retrack.API.Services
         b.PaymentReference = payRef; b.UpdatedAt = now;
         db.BatchWorkflowEvents.Add(BatchSettlementService.Event(b, c.PayerId, "PAYMENT_CONFIRMED", from, "Sàn đã nhận tiền của nhà máy qua PayOS."));
         db.Notifications.Add(Notification.ForDepot(c.PayeeId, b.DepotId, "FACTORY", "Nhà máy đã thanh toán lô qua sàn",
-            $"Lô {b.Code}: sàn đã nhận {c.Amount:N0}đ từ nhà máy. Tiền sẽ được chi cho kho theo kỳ chi sau thời gian giữ.", b.Id));
+            $"Lô {b.Code}: sàn đã nhận {MoneyFormat.Vnd(c.Amount)}đ từ nhà máy. Tiền sẽ được chi cho kho theo kỳ chi sau thời gian giữ.", b.Id));
         db.Notifications.Add(new Notification { UserId = c.PayerId, BatchId = b.Id, Category = "PAYMENT", TargetType = "MONEY_COLLECTION", TargetId = c.Id,
-            Title = "Đã thanh toán lô qua sàn", Message = $"Lô {b.Code}: sàn đã nhận {c.Amount:N0}đ. Lô chuyển sang đã thanh toán." });
+            Title = "Đã thanh toán lô qua sàn", Message = $"Lô {b.Code}: sàn đã nhận {MoneyFormat.Vnd(c.Amount)}đ. Lô chuyển sang đã thanh toán." });
         return true;
     }
 
@@ -491,9 +491,9 @@ public sealed class MoneyCollectionService(AppDbContext db, Retrack.API.Services
         if (inserted == 0) return; // đã ghi nhận lần trước (webhook gửi lại)
         logger.LogWarning("Thu tiền bất thường {Kind} cho khoản thu {CollectionId}: nhận {Received}, cần {Expected}.", kind, c.Id, received, c.Amount);
         Audit(actor, "COLLECTION_" + kind, c, new { c.Status, c.Amount }, new { kind, orderCode, received, refund, c.Status });
-        await NotifyAdminsAsync("Tiền thanh toán PayOS bất thường", $"{kind}: khoản thu {c.Id} ({FlowLabel(c.Flow)}) nhận {received:N0}đ, cần {c.Amount:N0}đ, cần hoàn {refund:N0}đ. Vui lòng xử lý hoàn tiền thủ công.", c.Id, ct);
+        await NotifyAdminsAsync("Tiền thanh toán PayOS bất thường", $"{kind}: khoản thu {c.Id} ({FlowLabel(c.Flow)}) nhận {MoneyFormat.Vnd(received)}đ, cần {MoneyFormat.Vnd(c.Amount)}đ, cần hoàn {MoneyFormat.Vnd(refund)}đ. Vui lòng xử lý hoàn tiền thủ công.", c.Id, ct);
         db.Notifications.Add(new Notification { UserId = c.PayerId, Category = "PAYMENT", TargetType = "MONEY_COLLECTION", TargetId = c.Id,
-            Title = "Thanh toán PayOS cần đối soát", Message = $"Sàn ghi nhận {received:N0}đ khác số cần thanh toán {c.Amount:N0}đ. Admin sẽ hoàn lại phần chênh lệch cho bạn." });
+            Title = "Thanh toán PayOS cần đối soát", Message = $"Sàn ghi nhận {MoneyFormat.Vnd(received)}đ khác số cần thanh toán {MoneyFormat.Vnd(c.Amount)}đ. Admin sẽ hoàn lại phần chênh lệch cho bạn." });
     }
 
     private async Task NotifyAdminsAsync(string title, string message, Guid collectionId, CancellationToken ct)
@@ -514,7 +514,7 @@ public sealed class MoneyCollectionService(AppDbContext db, Retrack.API.Services
         if (c.Status != CollectionStates.Paid) { if (tx != null) await tx.CommitAsync(ct); return false; }
         c.Status = CollectionStates.Refunding; c.UpdatedAt = Now;
         Audit(actorId, "COLLECTION_REFUNDING", c, new { Status = CollectionStates.Paid }, new { c.Status, reason });
-        await NotifyAdminsAsync("Cần hoàn tiền cho người trả", $"Khoản thu {c.Id} ({FlowLabel(c.Flow)}) chuyển sang hoàn tiền: {reason}. Số tiền {c.ReceivedAmount ?? c.Amount:N0}đ. Vui lòng hoàn thủ công.", c.Id, ct);
+        await NotifyAdminsAsync("Cần hoàn tiền cho người trả", $"Khoản thu {c.Id} ({FlowLabel(c.Flow)}) chuyển sang hoàn tiền: {reason}. Số tiền {MoneyFormat.Vnd(c.ReceivedAmount ?? c.Amount)}đ. Vui lòng hoàn thủ công.", c.Id, ct);
         db.Notifications.Add(new Notification { UserId = c.PayerId, Category = "PAYMENT", TargetType = "MONEY_COLLECTION", TargetId = c.Id,
             Title = "Khoản thanh toán sẽ được hoàn", Message = $"Khoản thanh toán {FlowLabel(c.Flow)} sẽ được Admin hoàn lại. Lý do: {reason}." });
         await db.SaveChangesAsync(ct);

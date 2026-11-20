@@ -100,10 +100,10 @@ public static class PayoutRules
     {
         if (net < 0) return (PayoutStatuses.Carried, "Số âm: mang nợ sang kỳ sau, không chuyển tiền.");
         if (net == 0) return (PayoutStatuses.Settled, "Cấn trừ hết, không phải chuyển tiền.");
-        if (net < cfg.PayoutMinAmount) return (PayoutStatuses.Deferred, $"Dưới mức chi tối thiểu {cfg.PayoutMinAmount.ToString("N0", CultureInfo.InvariantCulture)} đồng: dồn sang kỳ sau.");
+        if (net < cfg.PayoutMinAmount) return (PayoutStatuses.Deferred, $"Dưới mức chi tối thiểu {MoneyFormat.Vnd(cfg.PayoutMinAmount)} đồng: dồn sang kỳ sau.");
         if (!bank.Ready) return (PayoutStatuses.Held, bank.Reason);
         if (net > cfg.PayoutAutoMaxAmount && !alreadyApproved)
-            return (PayoutStatuses.AwaitingApproval, $"Vượt hạn mức tự chi {cfg.PayoutAutoMaxAmount.ToString("N0", CultureInfo.InvariantCulture)} đồng: cần Admin duyệt.");
+            return (PayoutStatuses.AwaitingApproval, $"Vượt hạn mức tự chi {MoneyFormat.Vnd(cfg.PayoutAutoMaxAmount)} đồng: cần Admin duyệt.");
         return (PayoutStatuses.Processing, null);
     }
 
