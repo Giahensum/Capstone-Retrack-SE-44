@@ -188,6 +188,10 @@ export function validateSettings(form) {
   checkWhole(errors, 'payoutAutoMaxAmount', form.payoutAutoMaxAmount, 'Hạn mức tự chi');
   if (!errors.payoutMinAmount && !errors.payoutAutoMaxAmount && Number(form.payoutAutoMaxAmount) < Number(form.payoutMinAmount)) errors.payoutAutoMaxAmount = 'Hạn mức tự chi phải lớn hơn hoặc bằng số chi tối thiểu.';
   checkWhole(errors, 'payoutTestMaxAmount', form.payoutTestMaxAmount, 'Số tiền chuyển thử tối đa');
+  const hour = Number(form.payoutScheduleHour);
+  if (form.payoutScheduleHour === '' || !Number.isInteger(hour) || hour < 0 || hour > 23) errors.payoutScheduleHour = 'Giờ chạy phải là số nguyên từ 0 đến 23.';
+  const weekday = Number(form.payoutScheduleWeekday);
+  if (!Number.isInteger(weekday) || weekday < 1 || weekday > 7) errors.payoutScheduleWeekday = 'Chọn ngày chạy trong tuần.';
   if (!['DAILY', 'WEEKLY'].includes(form.payoutSchedule)) errors.payoutSchedule = 'Chọn lịch chi hằng ngày hoặc hằng tuần.';
   if (!['LEGACY', 'PLATFORM'].includes(form.mode)) errors.mode = 'Chọn chế độ thu chi.';
   if (!['SIMULATED', 'PAYOS'].includes(form.payoutProvider)) errors.payoutProvider = 'Chọn nhà cung cấp chi.';
@@ -202,6 +206,8 @@ export function settingsToForm(s) {
     defaultCommission: Object.fromEntries(COMMISSION_FLOWS.map((f) => [f, str(s.defaultCommission?.[f])])),
     payoutAutoEnabled: !!s.payoutAutoEnabled,
     payoutSchedule: s.payoutSchedule,
+    payoutScheduleHour: str(s.payoutScheduleHour ?? 2),
+    payoutScheduleWeekday: str(s.payoutScheduleWeekday ?? 1),
     payoutHoldMinutes: str(s.payoutHoldMinutes),
     payoutMinAmount: str(s.payoutMinAmount),
     payoutAutoMaxAmount: str(s.payoutAutoMaxAmount),
@@ -218,6 +224,8 @@ export function formToSettingsPatch(f) {
     defaultCommission: Object.fromEntries(COMMISSION_FLOWS.map((k) => [k, Number(f.defaultCommission[k])])),
     payoutAutoEnabled: f.payoutAutoEnabled,
     payoutSchedule: f.payoutSchedule,
+    payoutScheduleHour: Number(f.payoutScheduleHour),
+    payoutScheduleWeekday: Number(f.payoutScheduleWeekday),
     payoutHoldMinutes: Number(f.payoutHoldMinutes),
     payoutMinAmount: Number(f.payoutMinAmount),
     payoutAutoMaxAmount: Number(f.payoutAutoMaxAmount),

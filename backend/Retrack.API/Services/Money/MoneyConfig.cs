@@ -15,6 +15,8 @@ public static class MoneyConfigKeys
     public const string CommissionDefaultLiquidation = "commission.default.LIQUIDATION";
     public const string PayoutAutoEnabled = "payout.auto_enabled";
     public const string PayoutSchedule = "payout.schedule";
+    public const string PayoutScheduleHour = "payout.schedule_hour";
+    public const string PayoutScheduleWeekday = "payout.schedule_weekday";
     public const string PayoutHoldMinutes = "payout.hold_minutes";
     public const string PayoutMinAmount = "payout.min_amount";
     public const string PayoutAutoMaxAmount = "payout.auto_max_amount";
@@ -29,7 +31,7 @@ public static class MoneyConfigKeys
 
     public static readonly string[] All =
     [
-        Mode, CommissionDefaultPickup, CommissionDefaultBatch, CommissionDefaultLiquidation, PayoutAutoEnabled, PayoutSchedule,
+        Mode, CommissionDefaultPickup, CommissionDefaultBatch, CommissionDefaultLiquidation, PayoutAutoEnabled, PayoutSchedule, PayoutScheduleHour, PayoutScheduleWeekday,
         PayoutHoldMinutes, PayoutMinAmount, PayoutAutoMaxAmount, PayoutProvider, PayoutTestEnabled, PayoutTestMaxAmount
     ];
 }
@@ -38,7 +40,7 @@ public static class MoneyConfigKeys
 public sealed record MoneyConfig(
     string Mode, IReadOnlyDictionary<string, decimal> DefaultCommission, bool PayoutAutoEnabled, string PayoutSchedule,
     int PayoutHoldMinutes, decimal PayoutMinAmount, decimal PayoutAutoMaxAmount, string PayoutProvider,
-    bool PayoutTestEnabled, decimal PayoutTestMaxAmount)
+    bool PayoutTestEnabled, decimal PayoutTestMaxAmount, int PayoutScheduleHour = 2, int PayoutScheduleWeekday = 1)
 {
     public bool IsPlatformMode => Mode == MoneyConfigKeys.ModePlatform;
 
@@ -62,7 +64,7 @@ public sealed record MoneyConfig(
         return new(mode, rates, Bool(MoneyConfigKeys.PayoutAutoEnabled, false), schedule,
             (int)Dec(MoneyConfigKeys.PayoutHoldMinutes, 1440m, 0m, 525600m), Dec(MoneyConfigKeys.PayoutMinAmount, 50000m),
             Dec(MoneyConfigKeys.PayoutAutoMaxAmount, 5000000m), provider, Bool(MoneyConfigKeys.PayoutTestEnabled, false),
-            Dec(MoneyConfigKeys.PayoutTestMaxAmount, 10000m));
+            Dec(MoneyConfigKeys.PayoutTestMaxAmount, 10000m), (int)Dec(MoneyConfigKeys.PayoutScheduleHour, 2m, 0m, 23m), (int)Dec(MoneyConfigKeys.PayoutScheduleWeekday, 1m, 1m, 7m));
     }
 }
 

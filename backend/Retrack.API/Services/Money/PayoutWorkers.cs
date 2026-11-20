@@ -7,7 +7,7 @@ using Retrack.API.Models;
 namespace Retrack.API.Services.Money;
 
 /// <summary>
-/// Chi tự động theo lịch (payout.schedule: DAILY 02:00 hoặc WEEKLY thứ Hai 02:00, giờ Việt Nam). Mốc đã xử lý được lưu trong
+/// Chi tự động theo lịch (payout.schedule DAILY hoặc WEEKLY; giờ chạy payout.schedule_hour và ngày chạy payout.schedule_weekday do Admin đặt, giờ Việt Nam). Mốc đã xử lý được lưu trong
 /// system_configs (payout.auto_last_boundary) nên khởi động lại không chạy trùng; chạy lại cũng idempotent theo từng người nhận.
 /// </summary>
 public sealed class AutoPayoutWorker(IServiceScopeFactory scopes, IOptions<PayoutWorkerOptions> options, TimeProvider clock, ILogger<AutoPayoutWorker> logger) : BackgroundService
@@ -36,7 +36,7 @@ public sealed class AutoPayoutWorker(IServiceScopeFactory scopes, IOptions<Payou
         var cfg = await scope.ServiceProvider.GetRequiredService<MoneyConfigReader>().GetAsync(ct);
         if (!cfg.PayoutAutoEnabled) return 0;
         var now = clock.GetUtcNow().UtcDateTime;
-        var boundary = PayoutRules.ScheduleBoundaryUtc(now, cfg.PayoutSchedule);
+        var boundary = PayoutRules.ScheduleBoundaryUtc(now, cfg.PayoutSchedule, cfg.PayoutScheduleHour, cfg.PayoutScheduleWeekday);
         var marker = await db.SystemConfigs.AsNoTracking().Where(c => c.ConfigKey == PayoutConfigKeys.AutoLastBoundary).Select(c => c.ConfigValue).FirstOrDefaultAsync(ct);
         if (DateTime.TryParse(marker, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var last) && last >= boundary) return 0;
 

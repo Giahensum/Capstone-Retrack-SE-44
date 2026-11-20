@@ -5,7 +5,7 @@ namespace Retrack.API.DTOs.Money;
 // ===== Cấu hình =====
 public sealed record MoneySettingsDto(string Mode, Dictionary<string, decimal> DefaultCommission, bool PayoutAutoEnabled, string PayoutSchedule,
     int PayoutHoldMinutes, decimal PayoutMinAmount, decimal PayoutAutoMaxAmount, string PayoutProvider,
-    bool PayoutTestEnabled, decimal PayoutTestMaxAmount, bool PayosPayoutConfigured);
+    bool PayoutTestEnabled, decimal PayoutTestMaxAmount, bool PayosPayoutConfigured, int PayoutScheduleHour = 2, int PayoutScheduleWeekday = 1);
 
 /// <summary>Cập nhật từng phần: trường null là giữ nguyên.</summary>
 public sealed class UpdateMoneySettingsDto
@@ -15,6 +15,10 @@ public sealed class UpdateMoneySettingsDto
     public Dictionary<string, decimal>? DefaultCommission { get; set; }
     public bool? PayoutAutoEnabled { get; set; }
     public string? PayoutSchedule { get; set; }
+    /// <summary>Giờ chạy chi tự động (0 đến 23, giờ Việt Nam).</summary>
+    public int? PayoutScheduleHour { get; set; }
+    /// <summary>Ngày chạy khi lịch hằng tuần: 1 = thứ Hai … 7 = Chủ nhật.</summary>
+    public int? PayoutScheduleWeekday { get; set; }
     public int? PayoutHoldMinutes { get; set; }
     public decimal? PayoutMinAmount { get; set; }
     public decimal? PayoutAutoMaxAmount { get; set; }

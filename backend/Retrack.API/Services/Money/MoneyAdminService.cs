@@ -30,7 +30,7 @@ public sealed class MoneyAdminService(AppDbContext db, MoneyConfigReader configR
     {
         var cfg = await configReader.GetAsync(ct);
         return new(cfg.Mode, cfg.DefaultCommission.ToDictionary(k => k.Key, k => k.Value), cfg.PayoutAutoEnabled, cfg.PayoutSchedule, cfg.PayoutHoldMinutes,
-            cfg.PayoutMinAmount, cfg.PayoutAutoMaxAmount, cfg.PayoutProvider, cfg.PayoutTestEnabled, cfg.PayoutTestMaxAmount, payoutOptions.Value.IsConfigured);
+            cfg.PayoutMinAmount, cfg.PayoutAutoMaxAmount, cfg.PayoutProvider, cfg.PayoutTestEnabled, cfg.PayoutTestMaxAmount, payoutOptions.Value.IsConfigured, cfg.PayoutScheduleHour, cfg.PayoutScheduleWeekday);
     }
 
     public async Task<MoneySettingsDto> UpdateSettingsAsync(UpdateMoneySettingsDto dto, Guid actorId, CancellationToken ct = default)
@@ -55,6 +55,16 @@ public sealed class MoneyAdminService(AppDbContext db, MoneyConfigReader configR
             var s = dto.PayoutSchedule.Trim().ToUpperInvariant();
             if (s is not ("DAILY" or "WEEKLY")) throw new ArgumentException("Lịch chi phải là DAILY hoặc WEEKLY.");
             changes[MoneyConfigKeys.PayoutSchedule] = s;
+        }
+        if (dto.PayoutScheduleHour != null)
+        {
+            if (dto.PayoutScheduleHour is < 0 or > 23) throw new ArgumentException("Giờ chạy chi tự động phải từ 0 đến 23.");
+            changes[MoneyConfigKeys.PayoutScheduleHour] = dto.PayoutScheduleHour.Value.ToString(CultureInfo.InvariantCulture);
+        }
+        if (dto.PayoutScheduleWeekday != null)
+        {
+            if (dto.PayoutScheduleWeekday is < 1 or > 7) throw new ArgumentException("Ngày chạy hằng tuần phải từ 1 (thứ Hai) đến 7 (Chủ nhật).");
+            changes[MoneyConfigKeys.PayoutScheduleWeekday] = dto.PayoutScheduleWeekday.Value.ToString(CultureInfo.InvariantCulture);
         }
         if (dto.PayoutHoldMinutes != null)
         {

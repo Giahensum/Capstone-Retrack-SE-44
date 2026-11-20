@@ -49,17 +49,18 @@ public static class PayoutRules
     /// DAILY: chạy lúc 02:00 hằng ngày, mốc là 0 giờ hôm nay (hoặc hôm qua nếu chưa tới 02:00).
     /// WEEKLY: chạy 02:00 thứ Hai, mốc là 0 giờ thứ Hai gần nhất đã qua 02:00.
     /// </summary>
-    public static DateTime ScheduleBoundaryUtc(DateTime nowUtc, string schedule)
+    public static DateTime ScheduleBoundaryUtc(DateTime nowUtc, string schedule, int hour = 2, int weekday = 1)
     {
         var vn = ToVn(nowUtc);
         var day = vn.Date;
         if (string.Equals(schedule, "WEEKLY", StringComparison.OrdinalIgnoreCase))
         {
-            day = day.AddDays(-(((int)day.DayOfWeek + 6) % 7)); // về thứ Hai
-            if (vn < day.AddHours(2)) day = day.AddDays(-7);
+            var iso = day.DayOfWeek == DayOfWeek.Sunday ? 7 : (int)day.DayOfWeek;
+            day = day.AddDays(-((iso - weekday + 7) % 7)); // về ngày chạy trong tuần
+            if (vn < day.AddHours(hour)) day = day.AddDays(-7);
         }
-        else if (vn < day.AddHours(2)) day = day.AddDays(-1);
-        return DateTime.SpecifyKind(day - VnOffset, DateTimeKind.Utc);
+        else if (vn < day.AddHours(hour)) day = day.AddDays(-1);
+        return DateTime.SpecifyKind(day.AddHours(hour) - VnOffset, DateTimeKind.Utc);
     }
 
     /// <summary>Dòng SALE cộng (gross - hoa hồng); dòng REFUND (độ lớn dương) trừ (gross - hoa hồng hoàn lại).</summary>
