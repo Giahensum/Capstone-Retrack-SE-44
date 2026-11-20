@@ -28,7 +28,7 @@ export const FLOW_LABEL = {
 export const statusLabel = (status) => COLLECTION_STATUS_LABEL[status] ?? status ?? 'Chưa thanh toán';
 export const statusTone = (status) => COLLECTION_STATUS_TONE[status] ?? 'neutral';
 
-export const formatVnd = (value) => Number(value ?? 0).toLocaleString('vi-VN') + ' đ';
+export const formatVnd = (value) => Number(value ?? 0).toLocaleString('vi-VN') + ' đ';
 
 /** Chỉ khi máy chủ báo PLATFORM mới dùng giao diện thanh toán mới; mọi trường hợp khác giữ giao diện cũ. */
 export const isPlatformCollection = (dto) => dto?.moneyMode === 'PLATFORM';

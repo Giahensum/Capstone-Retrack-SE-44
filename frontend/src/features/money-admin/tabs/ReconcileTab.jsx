@@ -6,7 +6,7 @@ import { ConfirmModal, Notice } from '@/components/liquidation/LiquidationUI';
 import { Panel, Field, inputClass, PrimaryButton, GhostButton, SearchBox, DataTable, Th, Td } from '@/features/admin/components/AdminUI';
 import { moneyAdminApi } from '../moneyAdminApi';
 import {
-  vnd, pct, fmtDateTime, flowLabel, kindLabel, roleLabel, apiError, vnToday, addDays, vnStartOfDayIso, validatePeriod, summarizePlan, payoutStatusMeta,
+  vnd, pct, fmtDateTime, flowLabel, kindLabel, signedForKind, deduct, roleLabel, apiError, vnToday, addDays, vnStartOfDayIso, validatePeriod, summarizePlan, payoutStatusMeta,
 } from '../moneyLabels';
 import { PayoutStatusChip, BankStatusChip, OutcomeChip, FieldError, useDebounced } from '../moneyUi';
 
@@ -43,9 +43,9 @@ function PlanCard({ plan, onOpenRun }) {
             <tr key={l.lineId}>
               <Td>{flowLabel(l.flow)}</Td>
               <Td>{kindLabel(l.kind)}</Td>
-              <Td className="text-right">{vnd(l.gross)}</Td>
+              <Td className="text-right">{vnd(signedForKind(l.kind, l.gross))}</Td>
               <Td className="text-right">{pct(l.rate)}</Td>
-              <Td className="text-right">{vnd(l.commission)}</Td>
+              <Td className="text-right">{vnd(signedForKind(l.kind, l.commission))}</Td>
               <Td className="text-right font-semibold">{vnd(l.net)}</Td>
               <Td>{fmtDateTime(l.availableAt)}</Td>
             </tr>
@@ -53,7 +53,7 @@ function PlanCard({ plan, onOpenRun }) {
         </DataTable>
       )}
       <dl className="grid gap-3 border-t border-d-border-subtle px-5 py-4 text-sm sm:grid-cols-5">
-        {[['Tổng gộp', plan.gross], ['Hoa hồng', plan.commission], ['Hoàn tiền', plan.refundAmount], ['Nợ mang sang', plan.carriedDebt]].map(([k, v]) => (
+        {[['Tổng gộp', plan.gross], ['Hoa hồng', plan.commission], ['Hoàn tiền', deduct(plan.refundAmount)], ['Nợ mang sang', deduct(plan.carriedDebt)]].map(([k, v]) => (
           <div key={k}><dt className="text-xs font-semibold text-d-on-surface-variant">{k}</dt><dd className="font-bold">{vnd(v)}</dd></div>
         ))}
         <div className="rounded-xl bg-d-primary/10 px-3 py-2">

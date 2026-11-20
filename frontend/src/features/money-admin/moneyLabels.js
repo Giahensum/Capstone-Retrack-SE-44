@@ -102,9 +102,15 @@ export function payoutActions(status) {
 
 // ---- Định dạng ----
 const nf = new Intl.NumberFormat('vi-VN');
+/** Dòng hoàn tiền hiển thị số âm cho gộp và hoa hồng (giảm khoản phải trả), dòng bán giữ nguyên. */
+export const signedForKind = (kind, n) => (kind === 'REFUND' && n !== null && n !== undefined && n !== '' ? -Math.abs(Number(n)) : n);
+
+/** Khoản bị trừ (hoàn tiền, nợ mang sang) hiển thị số âm; bằng 0 thì giữ 0 đ. */
+export const deduct = (n) => (n === null || n === undefined || n === '' || Number(n) === 0 ? n : -Math.abs(Number(n)));
+
 export function vnd(n) {
   if (n === null || n === undefined || n === '' || Number.isNaN(Number(n))) return '—';
-  return `${nf.format(Math.round(Number(n)))} đ`;
+  return `${nf.format(Math.round(Number(n)))} đ`; // dấu cách không ngắt dòng: chữ đ không bị tách xuống dòng riêng
 }
 
 export function pct(n) {

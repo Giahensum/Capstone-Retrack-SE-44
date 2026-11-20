@@ -6,7 +6,7 @@ import { Modal, ConfirmModal, Notice } from '@/components/liquidation/Liquidatio
 import { Panel, Field, inputClass, DataTable, Th, Td, TableMessage, Pagination, PrimaryButton, GhostButton, DetailList } from '@/features/admin/components/AdminUI';
 import { moneyAdminApi } from '../moneyAdminApi';
 import {
-  vnd, pct, fmtDateTime, fmtDate, flowLabel, kindLabel, apiError, payoutActions, PAYOUT_STATUS_OPTIONS, payoutStatusMeta, addDays, vnStartOfDayIso, PROVIDER_LABEL,
+  vnd, pct, fmtDateTime, fmtDate, flowLabel, kindLabel, signedForKind, deduct, apiError, payoutActions, PAYOUT_STATUS_OPTIONS, payoutStatusMeta, addDays, vnStartOfDayIso, PROVIDER_LABEL,
 } from '../moneyLabels';
 import { PayoutStatusChip, FieldError } from '../moneyUi';
 import PayeeFilter from './PayeeFilter';
@@ -115,8 +115,8 @@ function RunDetail({ id, onClose }) {
             { label: 'Kỳ', value: `${fmtDate(run.periodStart)} đến ${fmtDate(run.periodEnd)}` },
             { label: 'Tổng gộp', value: vnd(run.gross) },
             { label: 'Hoa hồng', value: vnd(run.commission) },
-            { label: 'Hoàn tiền', value: vnd(run.refundAmount) },
-            { label: 'Nợ mang sang', value: vnd(run.carriedDebt) },
+            { label: 'Hoàn tiền', value: vnd(deduct(run.refundAmount)) },
+            { label: 'Nợ mang sang', value: vnd(deduct(run.carriedDebt)) },
             { label: 'THỰC CHI', value: vnd(run.net) },
             { label: 'Nhà cung cấp', value: PROVIDER_LABEL[run.provider] ?? run.provider },
             { label: 'Mã tham chiếu nhà cung cấp', value: run.providerRef },
@@ -147,8 +147,8 @@ function RunDetail({ id, onClose }) {
                 {d.lines.map((l) => (
                   <tr key={l.lineId}>
                     <Td>{flowLabel(l.flow)}</Td><Td>{kindLabel(l.kind)}</Td>
-                    <Td className="text-right">{vnd(l.gross)}</Td><Td className="text-right">{pct(l.rate)}</Td>
-                    <Td className="text-right">{vnd(l.commission)}</Td><Td className="text-right font-semibold">{vnd(l.net)}</Td>
+                    <Td className="text-right">{vnd(signedForKind(l.kind, l.gross))}</Td><Td className="text-right">{pct(l.rate)}</Td>
+                    <Td className="text-right">{vnd(signedForKind(l.kind, l.commission))}</Td><Td className="text-right font-semibold">{vnd(l.net)}</Td>
                     <Td>{fmtDateTime(l.availableAt)}</Td>
                   </tr>
                 ))}
