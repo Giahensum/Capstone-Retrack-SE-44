@@ -140,21 +140,27 @@ export default function ReconcileTab({ settings, onOpenRun }) {
   const [selected, setSelected] = useState(() => new Map());
   const [start, setStart] = useState(addDays(today, -7));
   const [end, setEnd] = useState(today);
+  // Chế độ thử: chốt kỳ tại thời điểm hiện tại (lùi 1 phút để không vượt giờ máy chủ), gồm cả tiền phát sinh trong ngày hôm nay.
+  const [untilNow, setUntilNow] = useState(false);
+  const [nowIso, setNowIso] = useState('');
+  const stampNow = () => { const d = new Date(Date.now() - 60_000); d.setUTCSeconds(0, 0); const iso = d.toISOString(); setNowIso(iso); return iso; };
   const [preview, setPreview] = useState(null); // { key, items }
   const [result, setResult] = useState(null);
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState('');
 
   const ids = useMemo(() => [...selected.keys()].sort(), [selected]);
-  const paramKey = `${ids.join(',')}|${start}|${end}`;
-  const periodError = validatePeriod(start, end, today);
-  const body = () => ({ payeeIds: ids, periodStart: vnStartOfDayIso(start), periodEnd: vnStartOfDayIso(end) });
+  const paramKey = `${ids.join(',')}|${start}|${untilNow ? `now:${nowIso}` : end}`;
+  const periodError = untilNow
+    ? (!start ? 'Chọn ngày bắt đầu.' : start > today ? 'Ngày bắt đầu không được ở tương lai.' : null)
+    : validatePeriod(start, end, today);
+  const body = (endIso) => ({ payeeIds: ids, periodStart: vnStartOfDayIso(start), periodEnd: untilNow ? (endIso ?? nowIso) : vnStartOfDayIso(end) });
   const fresh = preview && preview.key === paramKey;
   const real = settings?.payoutProvider === 'PAYOS';
 
   const previewMut = useMutation({
-    mutationFn: () => moneyAdminApi.previewPayouts(body()),
-    onSuccess: (data) => { setPreview({ key: paramKey, items: data.items }); setResult(null); setError(''); },
+    mutationFn: (endIso) => moneyAdminApi.previewPayouts(body(endIso)),
+    onSuccess: (data, endIso) => { setPreview({ key: `${ids.join(',')}|${start}|${untilNow ? `now:${endIso}` : end}`, items: data.items }); setResult(null); setError(''); },
     onError: (e) => setError(apiError(e, 'Không xem trước được.')),
   });
   const runMut = useMutation({
@@ -181,9 +187,13 @@ export default function ReconcileTab({ settings, onOpenRun }) {
         <div className="flex flex-wrap items-end gap-4 p-5">
           <Field label="Từ ngày (00:00)"><input type="date" value={start} max={today} onChange={(e) => setStart(e.target.value)} className={`${inputClass} w-48`} /></Field>
           <Field label="Đến ngày (00:00, không gồm ngày này)">
-            <input type="date" value={end} max={today} onChange={(e) => setEnd(e.target.value)} className={`${inputClass} w-48`} />
+            <input type="date" value={end} max={today} disabled={untilNow} onChange={(e) => setEnd(e.target.value)} className={`${inputClass} w-48`} />
           </Field>
-          <PrimaryButton icon={Eye} onClick={() => previewMut.mutate()} disabled={!canPreview}>{previewMut.isPending ? 'Đang xem trước…' : 'Xem trước'}</PrimaryButton>
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={untilNow} onChange={(e) => { setUntilNow(e.target.checked); setPreview(null); if (e.target.checked) stampNow(); }} className="size-4 accent-d-primary" />
+            <span><strong>Gồm cả hôm nay</strong> (chốt kỳ tại thời điểm hiện tại, dùng khi test)</span>
+          </label>
+          <PrimaryButton icon={Eye} onClick={() => previewMut.mutate(untilNow ? stampNow() : undefined)} disabled={!canPreview}>{previewMut.isPending ? 'Đang xem trước…' : 'Xem trước'}</PrimaryButton>
         </div>
         <p className="px-5 pb-3 text-xs text-d-on-surface-variant">Tối đa là hôm nay. Muốn gồm cả hôm qua, chọn hôm nay.</p>
         <div className="px-5 pb-4"><FieldError>{periodError && (start || end) ? periodError : ''}</FieldError></div>
