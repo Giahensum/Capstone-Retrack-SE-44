@@ -205,11 +205,13 @@ builder.Services.AddHostedService<Retrack.API.Services.Money.MoneyCollectionReco
 builder.Services.AddTransient<Retrack.API.Services.Money.PayOsPayoutProvider>();
 builder.Services.AddScoped<Retrack.API.Services.Money.IPayoutProviderResolver, Retrack.API.Services.Money.PayoutProviderResolver>();
 builder.Services.AddScoped<Retrack.API.Services.Money.PayoutEngine>();
+builder.Services.AddScoped<Retrack.API.Services.Money.RefundEngine>();
 builder.Services.AddScoped<Retrack.API.Services.Money.MoneyAdminService>();
 builder.Services.AddScoped<Retrack.API.Services.Money.MyMoneyService>();
 builder.Services.Configure<Retrack.API.Services.Money.PayoutWorkerOptions>(builder.Configuration.GetSection("Money:PayoutWorker"));
 builder.Services.AddHostedService<Retrack.API.Services.Money.AutoPayoutWorker>();
 builder.Services.AddHostedService<Retrack.API.Services.Money.PayoutReconcileWorker>();
+builder.Services.AddHostedService<Retrack.API.Services.Money.RefundReconcileWorker>();
 builder.Services.AddScoped<Retrack.API.Services.Factory.FactoryNotificationService>();
 
 // ===== CONTROLLERS & SWAGGER =====

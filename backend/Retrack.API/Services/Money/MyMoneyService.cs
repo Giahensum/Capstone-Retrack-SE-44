@@ -67,12 +67,13 @@ public sealed class MyMoneyService(AppDbContext db, TimeProvider clock)
     public async Task<PayeeBankDto> GetBankAsync(Guid userId, CancellationToken ct = default)
     {
         var u = await RequirePayeeAsync(userId, ct);
-        return MoneyAdminService.BankDto(u, await BankHoldHoursAsync(ct));
+        return MoneyAdminService.BankDto(u);
     }
 
     /// <summary>
-    /// Lưu tài khoản ngân hàng. Tên chủ tài khoản khớp họ tên (không phân biệt dấu/hoa thường) thì VERIFIED, ngược lại PENDING_VERIFICATION chờ Admin.
-    /// Mọi thay đổi ghi bank_changed_at (kỳ chi bị giữ theo payout.bank_change_hold_hours) và xóa trạng thái xác minh cũ; lưu lại y nguyên thì không đổi gì.
+    /// Lưu tài khoản ngân hàng. MỌI thay đổi (kể cả lần nhập đầu) đặt bank_status = PENDING_VERIFICATION, xóa bank_verified_at và lý do từ chối cũ:
+    /// chỉ Admin duyệt mới thành VERIFIED, KHÔNG tự xác minh theo khớp tên, KHÔNG có thời gian giữ. Lưu lại y nguyên thì không đổi gì.
+    /// Kỳ chi tạo ra khi tài khoản chưa VERIFIED sẽ HELD cho tới khi Admin duyệt.
     /// </summary>
     public async Task<PayeeBankDto> UpdateBankAsync(Guid userId, UpdateBankRequest req, CancellationToken ct = default)
     {
@@ -87,27 +88,32 @@ public sealed class MyMoneyService(AppDbContext db, TimeProvider clock)
         if (name.Length == 0) name = VietnameseBanks.All.FirstOrDefault(b => b.Bin == bin)?.Name ?? "";
         if (name.Length is < 2 or > 100) throw new ArgumentException("Cần nhập tên ngân hàng (tối đa 100 ký tự).");
 
-        var hold = await BankHoldHoursAsync(ct);
         var changed = u.BankBin != bin || u.BankAccountNumber != account || u.BankAccountName != holder || u.BankName != name;
-        if (!changed) return MoneyAdminService.BankDto(u, hold);
+        if (!changed) return MoneyAdminService.BankDto(u);
         var now = Now;
         var old = new { bin = u.BankBin, account = PayoutBankRules.Mask(u.BankAccountNumber), status = u.BankStatus };
-        var verified = PayoutBankRules.NamesMatch(holder, u.FullName);
         u.BankName = name; u.BankBin = bin; u.BankAccountNumber = account; u.BankAccountName = holder;
         u.BankChangedAt = now;
-        u.BankStatus = verified ? "VERIFIED" : "PENDING_VERIFICATION";
-        u.BankVerifiedAt = verified ? now : null;
+        u.BankStatus = "PENDING_VERIFICATION";
+        u.BankVerifiedAt = null;
+        u.BankRejectReason = null;
         db.AuditLogs.Add(new() { UserId = userId, Action = "PAYEE_BANK_UPDATED", EntityName = "users", EntityId = userId, OldData = JsonSerializer.Serialize(old, Json),
             NewData = JsonSerializer.Serialize(new { bin, account = PayoutBankRules.Mask(account), status = u.BankStatus }, Json), CreatedAt = now });
         await db.SaveChangesAsync(ct);
-        var dto = MoneyAdminService.BankDto(u, hold);
+        var dto = MoneyAdminService.BankDto(u);
         db.ChangeTracker.Clear();
         return dto;
     }
 
-    private async Task<int> BankHoldHoursAsync(CancellationToken ct)
+    /// <summary>Các lệnh hoàn tiền của CHÍNH người trả (mới nhất trước). Không trả thông tin nhà cung cấp, lý do nội bộ hay tài khoản.</summary>
+    public async Task<PagedResult<MyRefundDto>> ListRefundsAsync(Guid userId, int page, int pageSize, CancellationToken ct = default)
     {
-        var v = await db.SystemConfigs.AsNoTracking().Where(c => c.ConfigKey == PayoutConfigKeys.BankChangeHoldHours).Select(c => c.ConfigValue).FirstOrDefaultAsync(ct);
-        return int.TryParse(v, NumberStyles.Integer, CultureInfo.InvariantCulture, out var h) && h is >= 0 and <= 720 ? h : PayoutConfigKeys.DefaultBankChangeHoldHours;
+        await RequirePayeeAsync(userId, ct);
+        (page, pageSize) = MoneyAdminService.Paging(page, pageSize);
+        var q = db.MoneyRefunds.AsNoTracking().Where(r => r.PayerId == userId);
+        var total = await q.CountAsync(ct);
+        var rows = await q.OrderByDescending(r => r.CreatedAt).ThenBy(r => r.Id).Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(ct);
+        return new() { Items = rows.Select(r => new MyRefundDto(r.Id, r.Code, r.Amount, r.Status, RefundRules.StatusNote(r.Status), PayoutRules.Utc(r.CreatedAt),
+            r.PaidAt == null ? null : PayoutRules.Utc(r.PaidAt.Value))).ToList(), TotalCount = total, Page = page, PageSize = pageSize };
     }
 }

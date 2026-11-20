@@ -6,10 +6,8 @@ namespace Retrack.API.Services.Money;
 /// <summary>Khóa cấu hình riêng của engine chi (ngoài MoneyConfigKeys để không đụng file dùng chung).</summary>
 public static class PayoutConfigKeys
 {
-    public const string BankChangeHoldHours = "payout.bank_change_hold_hours";
     /// <summary>Mốc lịch tự chi gần nhất đã xử lý (ISO UTC). Bền vững trong system_configs, không dùng cờ trong bộ nhớ.</summary>
     public const string AutoLastBoundary = "payout.auto_last_boundary";
-    public const int DefaultBankChangeHoldHours = 24;
 }
 
 public sealed record BankCheck(bool Ready, string? Reason);
@@ -80,14 +78,16 @@ public static class PayoutRules
         return new(gross, commission, refund, carriedDebt, gross - commission - refund - carriedDebt);
     }
 
-    /// <summary>Tài khoản đủ điều kiện nhận chi: đủ thông tin, đã xác minh và không mới đổi trong thời gian giữ.</summary>
-    public static BankCheck CheckBank(string? bin, string? account, string? holder, string? status, DateTime? changedAtUtc, DateTime nowUtc, int holdHours)
+    /// <summary>
+    /// Tài khoản đủ điều kiện nhận tiền: đủ thông tin (BIN 6 số, số tài khoản 6-20 số, tên chủ tài khoản) VÀ bank_status = VERIFIED
+    /// (Admin đã duyệt). Không còn thời gian giữ sau khi đổi: đổi tài khoản thì trạng thái về PENDING_VERIFICATION cho tới khi Admin duyệt lại.
+    /// </summary>
+    public static BankCheck CheckBank(string? bin, string? account, string? holder, string? status)
     {
         if (!PayoutBankRules.IsValidBin(bin) || !PayoutBankRules.IsValidAccountNumber(account) || string.IsNullOrWhiteSpace(holder))
             return new(false, "Người nhận chưa có đủ thông tin tài khoản ngân hàng (mã BIN, số tài khoản, tên chủ tài khoản).");
-        if (status != "VERIFIED") return new(false, "Tài khoản ngân hàng của người nhận chưa được xác minh.");
-        if (changedAtUtc != null && holdHours > 0 && Utc(nowUtc) < Utc(changedAtUtc.Value).AddHours(holdHours))
-            return new(false, $"Người nhận vừa đổi tài khoản ngân hàng, giữ kỳ chi {holdHours} giờ để tránh chi nhầm.");
+        if (status == "REJECTED") return new(false, "Tài khoản ngân hàng đã bị Admin từ chối: cần nhập lại tài khoản khác.");
+        if (status != "VERIFIED") return new(false, "Tài khoản ngân hàng chưa được Admin duyệt.");
         return new(true, null);
     }
 

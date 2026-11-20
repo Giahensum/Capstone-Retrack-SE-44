@@ -29,9 +29,8 @@ public sealed class MoneyAdminService(AppDbContext db, MoneyConfigReader configR
     public async Task<MoneySettingsDto> GetSettingsAsync(CancellationToken ct = default)
     {
         var cfg = await configReader.GetAsync(ct);
-        var hold = await BankHoldHoursAsync(ct);
         return new(cfg.Mode, cfg.DefaultCommission.ToDictionary(k => k.Key, k => k.Value), cfg.PayoutAutoEnabled, cfg.PayoutSchedule, cfg.PayoutHoldMinutes,
-            cfg.PayoutMinAmount, cfg.PayoutAutoMaxAmount, hold, cfg.PayoutProvider, cfg.PayoutTestEnabled, cfg.PayoutTestMaxAmount, payoutOptions.Value.IsConfigured);
+            cfg.PayoutMinAmount, cfg.PayoutAutoMaxAmount, cfg.PayoutProvider, cfg.PayoutTestEnabled, cfg.PayoutTestMaxAmount, payoutOptions.Value.IsConfigured);
     }
 
     public async Task<MoneySettingsDto> UpdateSettingsAsync(UpdateMoneySettingsDto dto, Guid actorId, CancellationToken ct = default)
@@ -64,11 +63,6 @@ public sealed class MoneyAdminService(AppDbContext db, MoneyConfigReader configR
         }
         if (dto.PayoutMinAmount != null) changes[MoneyConfigKeys.PayoutMinAmount] = Whole(dto.PayoutMinAmount.Value, "Số chi tối thiểu", 0, 1_000_000_000m);
         if (dto.PayoutAutoMaxAmount != null) changes[MoneyConfigKeys.PayoutAutoMaxAmount] = Whole(dto.PayoutAutoMaxAmount.Value, "Hạn mức tự chi", 0, 100_000_000_000m);
-        if (dto.PayoutBankChangeHoldHours != null)
-        {
-            if (dto.PayoutBankChangeHoldHours is < 0 or > 720) throw new ArgumentException("Thời gian giữ sau khi đổi ngân hàng phải từ 0 đến 720 giờ.");
-            changes[PayoutConfigKeys.BankChangeHoldHours] = dto.PayoutBankChangeHoldHours.Value.ToString(CultureInfo.InvariantCulture);
-        }
         if (dto.PayoutProvider != null)
         {
             var p = dto.PayoutProvider.Trim().ToUpperInvariant();
@@ -102,12 +96,6 @@ public sealed class MoneyAdminService(AppDbContext db, MoneyConfigReader configR
         if (v != decimal.Truncate(v) || v < min || v > max)
             throw new ArgumentException($"{label} phải là số nguyên đồng từ {min.ToString("N0", CultureInfo.InvariantCulture)} đến {max.ToString("N0", CultureInfo.InvariantCulture)}.");
         return v.ToString(CultureInfo.InvariantCulture);
-    }
-
-    private async Task<int> BankHoldHoursAsync(CancellationToken ct)
-    {
-        var v = await db.SystemConfigs.AsNoTracking().Where(c => c.ConfigKey == PayoutConfigKeys.BankChangeHoldHours).Select(c => c.ConfigValue).FirstOrDefaultAsync(ct);
-        return int.TryParse(v, NumberStyles.Integer, CultureInfo.InvariantCulture, out var h) && h is >= 0 and <= 720 ? h : PayoutConfigKeys.DefaultBankChangeHoldHours;
     }
 
     // ============================ HOA HỒNG ============================
@@ -256,12 +244,18 @@ public sealed class MoneyAdminService(AppDbContext db, MoneyConfigReader configR
     // ============================ NGƯỜI NHẬN ============================
 
     /// <summary>Người dùng nhận tiền có dòng chưa chi hoặc đã nhập ngân hàng. Số tài khoản luôn được che.</summary>
-    public async Task<PagedResult<PayeeSummaryDto>> ListPayeesAsync(string? search, int page, int pageSize, CancellationToken ct = default)
+    public async Task<PagedResult<PayeeSummaryDto>> ListPayeesAsync(string? search, string? bankStatus, int page, int pageSize, CancellationToken ct = default)
     {
         (page, pageSize) = Paging(page, pageSize);
         var roles = PayeeRoles.All;
+        var bankFilter = string.IsNullOrWhiteSpace(bankStatus) ? null : bankStatus.Trim().ToUpperInvariant();
+        if (bankFilter != null && bankFilter is not ("VERIFIED" or "PENDING_VERIFICATION" or "REJECTED" or "NONE"))
+            throw new ArgumentException("Bộ lọc bankStatus phải là VERIFIED, PENDING_VERIFICATION, REJECTED hoặc NONE.");
         var q = db.Users.AsNoTracking().Where(u => roles.Contains(u.Role)
             && (u.BankAccountNumber != null || db.PayableLines.Any(l => l.PayeeId == u.Id && (l.State == PayableStates.Held || l.State == PayableStates.Available || l.State == PayableStates.InPayout))));
+        if (bankFilter == "NONE") q = q.Where(u => u.BankAccountNumber == null);
+        else if (bankFilter == "PENDING_VERIFICATION") q = q.Where(u => u.BankAccountNumber != null && (u.BankStatus == null || u.BankStatus == "PENDING_VERIFICATION"));
+        else if (bankFilter != null) q = q.Where(u => u.BankAccountNumber != null && u.BankStatus == bankFilter);
         if (!string.IsNullOrWhiteSpace(search))
         {
             var like = "%" + search.Trim().Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_") + "%";
@@ -274,45 +268,86 @@ public sealed class MoneyAdminService(AppDbContext db, MoneyConfigReader configR
             .GroupBy(l => new { l.PayeeId, l.State })
             .Select(g => new { g.Key.PayeeId, g.Key.State, Net = g.Sum(l => l.Kind == PayableKinds.Refund ? -(l.Gross - l.Commission) : l.Gross - l.Commission) }).ToListAsync(ct);
         var auto = await db.PayeePayoutSettings.AsNoTracking().Where(s => ids.Contains(s.UserId)).ToDictionaryAsync(s => s.UserId, s => s.AutoEnabled, ct);
-        var hold = await BankHoldHoursAsync(ct);
         decimal Sum(Guid id, string state) => sums.Where(s => s.PayeeId == id && s.State == state).Sum(s => s.Net);
         return new() { Items = users.Select(u => new PayeeSummaryDto(u.Id, u.FullName, u.Role, u.IsActive, Sum(u.Id, PayableStates.Held), Sum(u.Id, PayableStates.Available),
-            Sum(u.Id, PayableStates.InPayout), auto.GetValueOrDefault(u.Id, true), BankDto(u, hold))).ToList(), TotalCount = total, Page = page, PageSize = pageSize };
+            Sum(u.Id, PayableStates.InPayout), auto.GetValueOrDefault(u.Id, true), BankDto(u))).ToList(), TotalCount = total, Page = page, PageSize = pageSize };
     }
 
-    public static PayeeBankDto BankDto(User u, int holdHours)
+    /// <summary>Trạng thái hiển thị: NONE khi chưa nhập tài khoản; còn lại là bank_status (PENDING_VERIFICATION, VERIFIED, REJECTED).</summary>
+    public static string BankStatusOf(User u) => string.IsNullOrWhiteSpace(u.BankAccountNumber) ? "NONE" : u.BankStatus ?? "PENDING_VERIFICATION";
+
+    public static PayeeBankDto BankDto(User u) =>
+        new(u.BankName, u.BankBin, PayoutBankRules.Mask(u.BankAccountNumber), u.BankAccountName, BankStatusOf(u),
+            u.BankVerifiedAt == null ? null : PayoutRules.Utc(u.BankVerifiedAt.Value), u.BankChangedAt == null ? null : PayoutRules.Utc(u.BankChangedAt.Value),
+            u.BankStatus == "REJECTED" ? u.BankRejectReason : null);
+
+    /// <summary>Số người nhận tiền đã nhập đủ tài khoản ngân hàng và đang chờ Admin duyệt (huy hiệu trên màn hình Admin).</summary>
+    public async Task<int> CountPendingBankAsync(CancellationToken ct = default)
     {
-        DateTime? holdUntil = u.BankChangedAt != null && holdHours > 0 ? PayoutRules.Utc(u.BankChangedAt.Value).AddHours(holdHours) : null;
-        return new(u.BankName, u.BankBin, PayoutBankRules.Mask(u.BankAccountNumber), u.BankAccountName, u.BankStatus ?? "PENDING_VERIFICATION",
-            u.BankVerifiedAt == null ? null : PayoutRules.Utc(u.BankVerifiedAt.Value), u.BankChangedAt == null ? null : PayoutRules.Utc(u.BankChangedAt.Value), holdUntil);
+        var roles = PayeeRoles.All;
+        return await db.Users.AsNoTracking().CountAsync(u => roles.Contains(u.Role) && u.IsActive && u.BankAccountNumber != null && (u.BankStatus == null || u.BankStatus == "PENDING_VERIFICATION"), ct);
     }
 
-    /// <summary>Chi tiết ngân hàng cho Admin đối chiếu trước khi xác minh (có số tài khoản đầy đủ; chỉ Admin gọi).</summary>
+    /// <summary>Chi tiết ngân hàng cho Admin đối chiếu trước khi duyệt/từ chối (có số tài khoản đầy đủ; chỉ Admin gọi). NameMatchesFullName chỉ là gợi ý.</summary>
     public async Task<PayeeBankAdminDto> GetPayeeBankAsync(Guid userId, CancellationToken ct = default)
     {
         var u = await LoadPayeeAsync(userId, ct);
-        return new(u.Id, u.FullName, u.BankName, u.BankBin, u.BankAccountNumber, u.BankAccountName, u.BankStatus ?? "PENDING_VERIFICATION",
-            u.BankVerifiedAt, u.BankChangedAt, PayoutBankRules.NamesMatch(u.BankAccountName, u.FullName));
+        return new(u.Id, u.FullName, u.BankName, u.BankBin, u.BankAccountNumber, u.BankAccountName, BankStatusOf(u),
+            u.BankVerifiedAt, u.BankChangedAt, PayoutBankRules.NamesMatch(u.BankAccountName, u.FullName), u.BankStatus == "REJECTED" ? u.BankRejectReason : null);
+    }
+
+    private async Task<User> LoadBankForReviewAsync(Guid userId, string expectedAccountNumber, CancellationToken ct)
+    {
+        var u = await db.Users.FirstOrDefaultAsync(x => x.Id == userId, ct) ?? throw new KeyNotFoundException("Không tìm thấy người dùng.");
+        if (!PayeeRoles.All.Contains(u.Role)) throw new ArgumentException("Chỉ duyệt tài khoản của Seller, Chủ kho hoặc Factory.");
+        if (!PayoutBankRules.IsValidBin(u.BankBin) || !PayoutBankRules.IsValidAccountNumber(u.BankAccountNumber) || string.IsNullOrWhiteSpace(u.BankAccountName))
+            throw new InvalidOperationException("Người dùng chưa nhập đủ thông tin ngân hàng (mã BIN, số tài khoản, tên chủ tài khoản).");
+        if (string.IsNullOrWhiteSpace(expectedAccountNumber) || !string.Equals(u.BankAccountNumber, expectedAccountNumber.Trim(), StringComparison.Ordinal))
+            throw new DepotConflictException("Số tài khoản đã thay đổi so với lúc bạn xem. Hãy tải lại và đối chiếu lại trước khi duyệt hoặc từ chối.");
+        return u;
     }
 
     /// <summary>
-    /// Admin xác minh tài khoản ngân hàng. expectedAccountNumber là số tài khoản Admin đã xem: nếu người nhận vừa đổi thì 409,
-    /// tránh xác minh nhầm một tài khoản khác với tài khoản đã đối chiếu.
+    /// Admin duyệt tài khoản ngân hàng. expectedAccountNumber là số tài khoản Admin đã xem: nếu người dùng vừa đổi thì 409,
+    /// tránh duyệt nhầm một tài khoản khác với tài khoản đã đối chiếu. Thông báo cho người dùng. Việc giải phóng các kỳ chi đang HELD do chưa duyệt
+    /// được làm ngay sau đó bởi <see cref="PayoutEngine.ReleaseHeldForPayeeAsync"/> (ngoài transaction này, vì có thể gọi nhà cung cấp chi).
     /// </summary>
     public async Task<PayeeBankDto> VerifyBankAsync(Guid userId, string expectedAccountNumber, Guid actorId, CancellationToken ct = default)
     {
-        var u = await db.Users.FirstOrDefaultAsync(x => x.Id == userId, ct) ?? throw new KeyNotFoundException("Không tìm thấy người dùng.");
-        if (!PayeeRoles.All.Contains(u.Role)) throw new ArgumentException("Chỉ xác minh tài khoản của Seller, Chủ kho hoặc Factory.");
-        if (!PayoutBankRules.IsValidBin(u.BankBin) || !PayoutBankRules.IsValidAccountNumber(u.BankAccountNumber) || string.IsNullOrWhiteSpace(u.BankAccountName))
-            throw new InvalidOperationException("Người nhận chưa nhập đủ thông tin ngân hàng (mã BIN, số tài khoản, tên chủ tài khoản).");
-        if (string.IsNullOrWhiteSpace(expectedAccountNumber) || !string.Equals(u.BankAccountNumber, expectedAccountNumber.Trim(), StringComparison.Ordinal))
-            throw new DepotConflictException("Số tài khoản đã thay đổi so với lúc bạn xem. Hãy tải lại và đối chiếu lại trước khi xác minh.");
+        var u = await LoadBankForReviewAsync(userId, expectedAccountNumber, ct);
         var now = Now;
+        var was = u.BankStatus;
         u.BankStatus = "VERIFIED";
         u.BankVerifiedAt = now;
-        db.AuditLogs.Add(new() { UserId = actorId, Action = "PAYEE_BANK_VERIFIED", EntityName = "users", EntityId = u.Id, NewData = JsonSerializer.Serialize(new { bin = u.BankBin, account = PayoutBankRules.Mask(u.BankAccountNumber) }, Json), CreatedAt = now });
+        u.BankRejectReason = null;
+        db.AuditLogs.Add(new() { UserId = actorId, Action = "PAYEE_BANK_VERIFIED", EntityName = "users", EntityId = u.Id,
+            OldData = JsonSerializer.Serialize(new { status = was }, Json), NewData = JsonSerializer.Serialize(new { bin = u.BankBin, account = PayoutBankRules.Mask(u.BankAccountNumber) }, Json), CreatedAt = now });
+        if (was != "VERIFIED")
+            db.Notifications.Add(new() { UserId = u.Id, Category = "PAYOUT", TargetType = "BANK_ACCOUNT", TargetId = u.Id, Title = "Tài khoản ngân hàng đã được duyệt",
+                Message = $"Tài khoản ngân hàng {PayoutBankRules.Mask(u.BankAccountNumber)} của bạn đã được Admin duyệt. Sàn có thể chi và hoàn tiền vào tài khoản này.", CreatedAt = now });
         await db.SaveChangesAsync(ct);
-        var dto = BankDto(u, await BankHoldHoursAsync(ct));
+        var dto = BankDto(u);
+        db.ChangeTracker.Clear();
+        return dto;
+    }
+
+    /// <summary>Admin từ chối tài khoản ngân hàng kèm lý do 5-255 ký tự: bank_status = REJECTED, người dùng được thông báo và phải nhập lại.</summary>
+    public async Task<PayeeBankDto> RejectBankAsync(Guid userId, string expectedAccountNumber, string? reason, Guid actorId, CancellationToken ct = default)
+    {
+        var text = (reason ?? "").Trim();
+        if (text.Length is < 5 or > 255) throw new ArgumentException("Lý do từ chối phải từ 5 đến 255 ký tự.");
+        var u = await LoadBankForReviewAsync(userId, expectedAccountNumber, ct);
+        var now = Now;
+        var was = u.BankStatus;
+        u.BankStatus = "REJECTED";
+        u.BankVerifiedAt = null;
+        u.BankRejectReason = text;
+        db.AuditLogs.Add(new() { UserId = actorId, Action = "PAYEE_BANK_REJECTED", EntityName = "users", EntityId = u.Id,
+            OldData = JsonSerializer.Serialize(new { status = was }, Json), NewData = JsonSerializer.Serialize(new { bin = u.BankBin, account = PayoutBankRules.Mask(u.BankAccountNumber), reason = text }, Json), CreatedAt = now });
+        db.Notifications.Add(new() { UserId = u.Id, Category = "PAYOUT", TargetType = "BANK_ACCOUNT", TargetId = u.Id, Title = "Tài khoản ngân hàng bị từ chối",
+            Message = $"Tài khoản ngân hàng {PayoutBankRules.Mask(u.BankAccountNumber)} chưa được duyệt. Lý do: {text}. Hãy nhập lại tài khoản đúng để nhận tiền.", CreatedAt = now });
+        await db.SaveChangesAsync(ct);
+        var dto = BankDto(u);
         db.ChangeTracker.Clear();
         return dto;
     }
@@ -335,4 +370,114 @@ public sealed class MoneyAdminService(AppDbContext db, MoneyConfigReader configR
         if (!PayeeRoles.All.Contains(u.Role)) throw new ArgumentException("Người dùng này không phải người nhận tiền (Seller, Chủ kho, Factory).");
         return u;
     }
+
+    // ============================ BẤT THƯỜNG THU TIỀN ============================
+
+    public async Task<PagedResult<AdminAnomalyDto>> ListAnomaliesAsync(string? status, string? kind, string? flow, int page, int pageSize, CancellationToken ct = default)
+    {
+        (page, pageSize) = Paging(page, pageSize);
+        var q = from a in db.MoneyCollectionAnomalies.AsNoTracking() join c in db.MoneyCollections.AsNoTracking() on a.CollectionId equals c.Id select new { a, c };
+        if (!string.IsNullOrWhiteSpace(status)) { var v = status.Trim().ToUpperInvariant(); q = q.Where(x => x.a.Status == v); }
+        if (!string.IsNullOrWhiteSpace(kind)) { var v = kind.Trim().ToUpperInvariant(); q = q.Where(x => x.a.Kind == v); }
+        if (!string.IsNullOrWhiteSpace(flow)) { var v = flow.Trim().ToUpperInvariant(); q = q.Where(x => x.c.Flow == v); }
+        var total = await q.CountAsync(ct);
+        var rows = await q.OrderByDescending(x => x.a.CreatedAt).ThenBy(x => x.a.Id).Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(ct);
+        return new() { Items = await ToAnomalyDtosAsync(rows.Select(x => (x.a, x.c)).ToList(), ct), TotalCount = total, Page = page, PageSize = pageSize };
+    }
+
+    public async Task<AdminAnomalyDto> GetAnomalyAsync(Guid id, CancellationToken ct = default)
+    {
+        var a = await db.MoneyCollectionAnomalies.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct) ?? throw new KeyNotFoundException("Không tìm thấy bất thường thu tiền.");
+        var c = await db.MoneyCollections.AsNoTracking().SingleAsync(x => x.Id == a.CollectionId, ct);
+        return (await ToAnomalyDtosAsync([(a, c)], ct)).Single();
+    }
+
+    private async Task<List<AdminAnomalyDto>> ToAnomalyDtosAsync(List<(MoneyCollectionAnomaly A, MoneyCollection C)> rows, CancellationToken ct)
+    {
+        var userIds = rows.SelectMany(r => new[] { r.C.PayerId, r.C.PayeeId }).Distinct().ToList();
+        var users = await db.Users.AsNoTracking().Where(u => userIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id, ct);
+        var anomalyIds = rows.Select(r => (Guid?)r.A.Id).ToList();
+        var refunds = await db.MoneyRefunds.AsNoTracking().Where(r => anomalyIds.Contains(r.AnomalyId) && r.Status != RefundStatuses.Cancelled).ToListAsync(ct);
+        string Name(Guid id) => users.TryGetValue(id, out var u) ? u.FullName : "";
+        return rows.Select(r =>
+        {
+            var latest = refunds.Where(x => x.AnomalyId == r.A.Id).OrderByDescending(x => x.CreatedAt).ThenBy(x => x.Id).FirstOrDefault();
+            var payer = users.GetValueOrDefault(r.C.PayerId);
+            var refundable = r.A.Status == "OPEN" && latest == null ? r.A.RefundAmount : 0m;
+            return new AdminAnomalyDto(r.A.Id, r.A.Kind, r.A.Status, r.A.ReceivedAmount, r.A.ExpectedAmount, r.A.RefundAmount, refundable, latest != null, latest?.Id, latest?.Code, latest?.Status,
+                r.A.Reference, r.A.OrderCode, r.A.Note, r.A.CreatedAt, r.A.ResolvedAt, r.A.ResolvedBy, new(r.C.Id, r.C.Flow, r.C.SourceId, r.C.Amount, r.C.Status),
+                new(r.C.PayerId, Name(r.C.PayerId)), new(r.C.PayeeId, Name(r.C.PayeeId)),
+                payer == null ? new("NONE", null, null) : new(BankStatusOf(payer), payer.BankName, PayoutBankRules.Mask(payer.BankAccountNumber)));
+        }).ToList();
+    }
+
+    public async Task<AnomalySummaryDto> GetAnomalySummaryAsync(CancellationToken ct = default) =>
+        new(await db.MoneyCollectionAnomalies.AsNoTracking().CountAsync(a => a.Status == "OPEN", ct),
+            await db.MoneyRefunds.AsNoTracking().CountAsync(r => r.Status == RefundStatuses.AwaitingApproval, ct));
+
+    /// <summary>Đóng một bất thường OPEN mà không hoàn tiền (Admin ghi chú 5-500 ký tự, có audit). Không đóng được khi đã có lệnh hoàn chưa hủy.</summary>
+    public async Task<AdminAnomalyDto> ResolveAnomalyAsync(Guid id, string? note, Guid actorId, CancellationToken ct = default)
+    {
+        var text = (note ?? "").Trim();
+        if (text.Length is < 5 or > 500) throw new ArgumentException("Ghi chú xử lý phải từ 5 đến 500 ký tự.");
+        var collectionId = await db.MoneyCollectionAnomalies.AsNoTracking().Where(x => x.Id == id).Select(x => (Guid?)x.CollectionId).SingleOrDefaultAsync(ct)
+            ?? throw new KeyNotFoundException("Không tìm thấy bất thường thu tiền.");
+        var now = Now;
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        // Cùng thứ tự khóa với lúc tạo lệnh hoàn: khoản thu → bất thường → lệnh hoàn.
+        await db.Database.ExecuteSqlInterpolatedAsync($"SELECT id FROM money_collections WHERE id = {collectionId} FOR UPDATE", ct);
+        var a = await db.MoneyCollectionAnomalies.FromSqlInterpolated($"SELECT * FROM money_collection_anomalies WHERE id = {id} FOR UPDATE").AsTracking().SingleAsync(ct);
+        if (a.Status != "OPEN") throw new DepotConflictException("Bất thường này đã được xử lý.");
+        var refund = await db.MoneyRefunds.AsNoTracking().Where(r => r.AnomalyId == id && r.Status != RefundStatuses.Cancelled).Select(r => r.Code).FirstOrDefaultAsync(ct);
+        if (refund != null) throw new DepotConflictException($"Bất thường này đã có lệnh hoàn {refund}. Hãy hoàn tất hoặc hủy lệnh đó thay vì đóng.");
+        var oldNote = a.Note;
+        a.Status = "RESOLVED"; a.ResolvedAt = now; a.ResolvedBy = actorId;
+        a.Note = string.IsNullOrWhiteSpace(oldNote) ? text : oldNote + " | " + text;
+        db.AuditLogs.Add(new() { UserId = actorId, Action = "ANOMALY_RESOLVED", EntityName = "money_collection_anomalies", EntityId = id,
+            OldData = JsonSerializer.Serialize(new { status = "OPEN", a.Kind, a.RefundAmount }, Json), NewData = JsonSerializer.Serialize(new { status = "RESOLVED", note = text, refunded = false }, Json), CreatedAt = now });
+        await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+        db.ChangeTracker.Clear();
+        return await GetAnomalyAsync(id, ct);
+    }
+
+    // ============================ LỆNH HOÀN TIỀN ============================
+
+    public async Task<PagedResult<AdminRefundDto>> ListRefundsAsync(string? status, Guid? payerId, int page, int pageSize, CancellationToken ct = default)
+    {
+        (page, pageSize) = Paging(page, pageSize);
+        var q = db.MoneyRefunds.AsNoTracking().AsQueryable();
+        if (!string.IsNullOrWhiteSpace(status)) { var v = status.Trim().ToUpperInvariant(); q = q.Where(r => r.Status == v); }
+        if (payerId != null) q = q.Where(r => r.PayerId == payerId);
+        var total = await q.CountAsync(ct);
+        var rows = await q.OrderByDescending(r => r.CreatedAt).ThenBy(r => r.Id).Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(ct);
+        var names = await NamesAsync(rows.Select(r => r.PayerId), ct);
+        return new() { Items = rows.Select(r => ToRefundDto(r, names)).ToList(), TotalCount = total, Page = page, PageSize = pageSize };
+    }
+
+    public async Task<AdminRefundDetailDto> GetRefundAsync(Guid id, CancellationToken ct = default)
+    {
+        var r = await db.MoneyRefunds.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct) ?? throw new KeyNotFoundException("Không tìm thấy lệnh hoàn.");
+        var names = await NamesAsync([r.PayerId], ct);
+        var c = await db.MoneyCollections.AsNoTracking().SingleAsync(x => x.Id == r.CollectionId, ct);
+        PayoutBankView? bank = null;
+        if (!string.IsNullOrWhiteSpace(r.BankSnapshot))
+        {
+            try
+            {
+                var s = JsonSerializer.Deserialize<PayoutEngine.BankSnapshot>(r.BankSnapshot, Json);
+                if (s != null) bank = new(s.BankName, s.Bin, PayoutBankRules.Mask(s.Account), s.Holder);
+            }
+            catch (JsonException) { }
+        }
+        var key = r.Status is RefundStatuses.Processing or RefundStatuses.Unknown or RefundStatuses.Failed or RefundStatuses.Pending or RefundStatuses.Paid ? PayoutRules.KeyFor(r.Code, r.Attempt) : null;
+        var anomalyKind = r.AnomalyId == null ? null : await db.MoneyCollectionAnomalies.AsNoTracking().Where(a => a.Id == r.AnomalyId).Select(a => a.Kind).FirstOrDefaultAsync(ct);
+        var ledger = await db.PayableLines.AsNoTracking().Where(l => l.SourceType == c.SourceType && l.SourceId == c.SourceId && l.Kind == PayableKinds.Refund && l.RefundKey == r.Code).Select(l => l.State).FirstOrDefaultAsync(ct);
+        return new(ToRefundDto(r, names), bank, key, new(c.Id, c.Flow, c.SourceId, c.Amount, c.Status), anomalyKind, ledger);
+    }
+
+    private static AdminRefundDto ToRefundDto(MoneyRefund r, Dictionary<Guid, string> names) =>
+        new(r.Id, r.Code, r.CollectionId, r.AnomalyId, r.PayerId, names.GetValueOrDefault(r.PayerId, ""), r.Kind, r.Amount, r.Reason, r.Status, r.Provider, r.ProviderRef, r.GatewayStatus,
+            r.FailReason, r.Attempt, r.CreatedBy, r.ApprovedBy, r.ApprovedAt == null ? null : PayoutRules.Utc(r.ApprovedAt.Value), PayoutRules.Utc(r.CreatedAt),
+            r.LastAttemptAt == null ? null : PayoutRules.Utc(r.LastAttemptAt.Value), r.PaidAt == null ? null : PayoutRules.Utc(r.PaidAt.Value));
 }

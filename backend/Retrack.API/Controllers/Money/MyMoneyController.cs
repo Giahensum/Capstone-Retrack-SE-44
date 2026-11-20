@@ -30,6 +30,12 @@ public class MyMoneyController(MyMoneyService service) : ControllerBase
     public async Task<IActionResult> Payouts([FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default) =>
         Ok(ApiResponse<PagedResult<MyPayoutDto>>.Ok(await service.ListPayoutsAsync(UserId, page, pageSize, ct)));
 
+    /// <summary>Các lệnh hoàn tiền của chính người trả (SELLER, DEPOT_OWNER, FACTORY): code, amount, status, statusNote, createdAt, paidAt.</summary>
+    [HttpGet("my/refunds")]
+    [Authorize(Roles = PayeeRoleList)]
+    public async Task<IActionResult> Refunds([FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default) =>
+        Ok(ApiResponse<PagedResult<MyRefundDto>>.Ok(await service.ListRefundsAsync(UserId, page, pageSize, ct)));
+
     [HttpGet("my/bank")]
     [Authorize(Roles = PayeeRoleList)]
     public async Task<IActionResult> GetBank(CancellationToken ct) => Ok(ApiResponse<PayeeBankDto>.Ok(await service.GetBankAsync(UserId, ct)));

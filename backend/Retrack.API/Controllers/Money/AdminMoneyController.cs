@@ -97,15 +97,29 @@ public class AdminMoneyController(PayoutEngine engine, MoneyAdminService admin) 
 
     // ----- Người nhận -----
     [HttpGet("payees")]
-    public async Task<IActionResult> Payees([FromQuery] string? search, [FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default) =>
-        Ok(ApiResponse<PagedResult<PayeeSummaryDto>>.Ok(await admin.ListPayeesAsync(search, page, pageSize, ct)));
+    public async Task<IActionResult> Payees([FromQuery] string? search, [FromQuery] string? bankStatus, [FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default) =>
+        Ok(ApiResponse<PagedResult<PayeeSummaryDto>>.Ok(await admin.ListPayeesAsync(search, bankStatus, page, pageSize, ct)));
+
+    /// <summary>Số tài khoản ngân hàng đang chờ Admin duyệt (huy hiệu).</summary>
+    [HttpGet("payees/pending-bank-count")]
+    public async Task<IActionResult> PendingBankCount(CancellationToken ct) => Ok(ApiResponse<PendingBankCountDto>.Ok(new(await admin.CountPendingBankAsync(ct))));
 
     [HttpGet("payees/{userId:guid}/bank")]
     public async Task<IActionResult> PayeeBank(Guid userId, CancellationToken ct) => Ok(ApiResponse<PayeeBankAdminDto>.Ok(await admin.GetPayeeBankAsync(userId, ct)));
 
+    /// <summary>Duyệt tài khoản; sau đó tự giải phóng các kỳ chi của người này đang HELD vì tài khoản chưa được duyệt.</summary>
     [HttpPost("payees/{userId:guid}/bank/verify")]
-    public async Task<IActionResult> VerifyBank(Guid userId, [FromBody] VerifyBankRequest req, CancellationToken ct) =>
-        Ok(ApiResponse<PayeeBankDto>.Ok(await admin.VerifyBankAsync(userId, req.ExpectedAccountNumber, ActorId, ct), "Đã xác minh tài khoản ngân hàng."));
+    public async Task<IActionResult> VerifyBank(Guid userId, [FromBody] VerifyBankRequest req, CancellationToken ct)
+    {
+        var bank = await admin.VerifyBankAsync(userId, req.ExpectedAccountNumber, ActorId, ct);
+        var released = await engine.ReleaseHeldForPayeeAsync(userId, ActorId, ct);
+        return Ok(ApiResponse<PayeeBankDto>.Ok(bank, released > 0 ? $"Đã duyệt tài khoản ngân hàng và giải phóng {released} kỳ chi đang giữ." : "Đã duyệt tài khoản ngân hàng."));
+    }
+
+    /// <summary>Từ chối tài khoản: { expectedAccountNumber, reason (5-255 ký tự) }.</summary>
+    [HttpPost("payees/{userId:guid}/bank/reject")]
+    public async Task<IActionResult> RejectBank(Guid userId, [FromBody] RejectBankRequest req, CancellationToken ct) =>
+        Ok(ApiResponse<PayeeBankDto>.Ok(await admin.RejectBankAsync(userId, req.ExpectedAccountNumber, req.Reason, ActorId, ct), "Đã từ chối tài khoản ngân hàng."));
 
     [HttpPut("payees/{userId:guid}/auto-payout")]
     public async Task<IActionResult> SetAutoPayout(Guid userId, [FromBody] AutoPayoutRequest req, CancellationToken ct) =>

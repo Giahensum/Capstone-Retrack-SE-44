@@ -157,7 +157,7 @@ public sealed class PayoutWorkerTests : PayoutTestBase
     }
 }
 
-public sealed class PayoutApiTests : PayoutTestBase
+public sealed partial class PayoutApiTests : PayoutTestBase
 {
     private WebApplication app = null!;
     private HttpClient client = null!;
@@ -174,6 +174,7 @@ public sealed class PayoutApiTests : PayoutTestBase
         builder.Services.AddScoped<MoneyConfigReader>();
         builder.Services.AddScoped<IPayoutProviderResolver>(_ => new FixedResolver(Fake));
         builder.Services.AddScoped<PayoutEngine>();
+        builder.Services.AddScoped<RefundEngine>();
         builder.Services.AddScoped<MoneyAdminService>();
         builder.Services.AddScoped<MyMoneyService>();
         builder.Services.AddSingleton(Options.Create(new PayOsPayoutOptions()));
@@ -295,24 +296,31 @@ public sealed class PayoutApiTests : PayoutTestBase
     }
 
     [PostgresMoneyFact]
-    public async Task PayeeBankUpdateAutoVerifiesOnNameMatchAndHoldsAfterChange()
+    public async Task PayeeBankUpdateAlwaysNeedsAdminApprovalAndHasNoHold()
     {
         var u = await NewPayee("Nguyễn Văn Đạt", bank: false);
         var bad = await Call("PUT", "/api/money/my/bank", "SELLER", u, new { bankName = "ACB", bankBin = "1234", accountNumber = "123456789", accountName = "Nguyễn Văn Đạt" });
         Assert.Equal(HttpStatusCode.BadRequest, bad.Status);
         Assert.Equal(HttpStatusCode.BadRequest, (await Call("PUT", "/api/money/my/bank", "SELLER", u, new { bankName = "ACB", bankBin = "970416", accountNumber = "12ab", accountName = "Nguyễn Văn Đạt" })).Status);
+        // Tên chủ tài khoản KHỚP họ tên nhưng vẫn phải chờ Admin: không tự xác minh.
         var match = await Call("PUT", "/api/money/my/bank", "SELLER", u, new { bankName = "", bankBin = "970416", accountNumber = "123456789", accountName = "NGUYEN VAN DAT" });
         Assert.Equal(HttpStatusCode.OK, match.Status);
         var d = match.Body.GetProperty("data");
-        Assert.Equal("VERIFIED", d.GetProperty("status").GetString());
+        Assert.Equal("PENDING_VERIFICATION", d.GetProperty("status").GetString());
+        Assert.Equal(JsonValueKind.Null, d.GetProperty("verifiedAt").ValueKind);
         Assert.Equal("ACB", d.GetProperty("bankName").GetString()); // lấy tên từ danh sách BIN khi bỏ trống
         Assert.Equal("****6789", d.GetProperty("accountNumberMasked").GetString());
-        Assert.NotNull(d.GetProperty("verifiedAt").GetString());
-        Assert.NotNull(d.GetProperty("holdUntil").GetString()); // hold sau khi đổi
-        // lưu lại y nguyên: không đổi thời điểm đổi
+        Assert.NotNull(d.GetProperty("changedAt").GetString());
+        Assert.False(d.TryGetProperty("holdUntil", out _)); // không còn thời gian giữ
+        Assert.Equal(JsonValueKind.Null, d.GetProperty("rejectReason").ValueKind);
+        // lưu lại y nguyên: không đổi gì (kể cả thời điểm đổi)
         var again = await Call("PUT", "/api/money/my/bank", "SELLER", u, new { bankName = "ACB", bankBin = "970416", accountNumber = "123456789", accountName = "NGUYEN VAN DAT" });
         Assert.Equal(d.GetProperty("changedAt").GetString(), again.Body.GetProperty("data").GetProperty("changedAt").GetString());
-        // đổi sang tên khác: chờ xác minh, xóa verifiedAt
+        // Admin duyệt rồi người dùng đổi tài khoản: quay về chờ duyệt, xóa verifiedAt
+        Assert.Equal(HttpStatusCode.OK, (await AsAdmin("POST", $"/api/admin/money/payees/{u}/bank/verify", new { expectedAccountNumber = "123456789" })).Status);
+        Assert.Equal("VERIFIED", (await Call("GET", "/api/money/my/bank", "SELLER", u)).Body.GetProperty("data").GetProperty("status").GetString());
+        var same = await Call("PUT", "/api/money/my/bank", "SELLER", u, new { bankName = "ACB", bankBin = "970416", accountNumber = "123456789", accountName = "NGUYEN VAN DAT" });
+        Assert.Equal("VERIFIED", same.Body.GetProperty("data").GetProperty("status").GetString()); // lưu y nguyên không đổi trạng thái
         var other = await Call("PUT", "/api/money/my/bank", "SELLER", u, new { bankName = "ACB", bankBin = "970416", accountNumber = "123456789", accountName = "TRAN THI B" });
         var o = other.Body.GetProperty("data");
         Assert.Equal("PENDING_VERIFICATION", o.GetProperty("status").GetString());
@@ -411,7 +419,7 @@ public sealed class PayoutApiTests : PayoutTestBase
         Assert.Equal("SIMULATED", d.GetProperty("payoutProvider").GetString());
         Assert.False(d.GetProperty("payosPayoutConfigured").GetBoolean());
         Assert.Equal(3, d.GetProperty("defaultCommission").GetProperty("PICKUP").GetDecimal());
-        Assert.Equal(24, d.GetProperty("payoutBankChangeHoldHours").GetInt32());
+        Assert.False(d.TryGetProperty("payoutBankChangeHoldHours", out _)); // đã bỏ thời gian giữ sau khi đổi ngân hàng
 
         var upd = await AsAdmin("PUT", "/api/admin/money/settings", new { mode = "platform", payoutHoldMinutes = 5, payoutAutoMaxAmount = 2_000_000, defaultCommission = new Dictionary<string, decimal> { ["BATCH"] = 2.5m }, payoutTestEnabled = true });
         Assert.Equal(HttpStatusCode.OK, upd.Status);
@@ -424,7 +432,7 @@ public sealed class PayoutApiTests : PayoutTestBase
 
         // kiểm tra phạm vi
         foreach (var bad in new object[] { new { mode = "X" }, new { payoutSchedule = "MONTHLY" }, new { payoutHoldMinutes = -1 }, new { payoutMinAmount = 1.5 }, new { payoutProvider = "FOO" },
-            new { payoutTestMaxAmount = 999 }, new { payoutTestMaxAmount = 100_001 }, new { payoutBankChangeHoldHours = 721 }, new { defaultCommission = new Dictionary<string, decimal> { ["PICKUP"] = 101m } },
+            new { payoutTestMaxAmount = 999 }, new { payoutTestMaxAmount = 100_001 }, new { defaultCommission = new Dictionary<string, decimal> { ["PICKUP"] = 101m } },
             new { defaultCommission = new Dictionary<string, decimal> { ["NOPE"] = 1m } } })
             Assert.Equal(HttpStatusCode.BadRequest, (await AsAdmin("PUT", "/api/admin/money/settings", bad)).Status);
         var payos = await AsAdmin("PUT", "/api/admin/money/settings", new { payoutProvider = "PAYOS" });

@@ -12,9 +12,10 @@ namespace Retrack.API.Services.Money;
 /// <param name="MoneyMode">LEGACY hoặc PLATFORM (khóa money.mode).</param>
 /// <param name="CanPay">true khi người gọi là người trả, chế độ PLATFORM, nguồn đang ở bước cho phép thanh toán và khoản thu chưa PAID.</param>
 /// <param name="CheckoutUrl">Chỉ trả cho người trả khi khoản thu còn PENDING.</param>
+/// <param name="RefundStatus">Trạng thái lệnh hoàn mới nhất chưa hủy của khoản thu (chỉ người trả thấy); null nếu chưa có.</param>
 /// <param name="HasOpenAnomaly">Có tiền về bất thường (thiếu/dư/muộn/trùng) đang chờ Admin xử lý.</param>
 public sealed record MoneyCollectionDto(Guid? Id, string Flow, Guid SourceId, decimal Amount, string Status, string Role, string MoneyMode, bool CanPay,
-    string? CheckoutUrl, long? OrderCode, DateTime? PaidAt, decimal? ReceivedAmount, bool HasOpenAnomaly, string? Message);
+    string? CheckoutUrl, long? OrderCode, DateTime? PaidAt, decimal? ReceivedAmount, bool HasOpenAnomaly, string? Message, string? RefundStatus = null);
 
 public enum MoneyWebhookResult { Invalid, NotMine, Handled }
 
@@ -79,11 +80,14 @@ public sealed class MoneyCollectionService(AppDbContext db, Retrack.API.Services
     {
         var payer = info.PayerId == userId;
         var open = c != null && await db.MoneyCollectionAnomalies.AsNoTracking().AnyAsync(a => a.CollectionId == c.Id && a.Status == "OPEN", ct);
+        var refundStatus = payer && c != null
+            ? await db.MoneyRefunds.AsNoTracking().Where(r => r.CollectionId == c.Id && r.PayerId == userId && r.Status != RefundStatuses.Cancelled).OrderByDescending(r => r.CreatedAt).Select(r => r.Status).FirstOrDefaultAsync(ct)
+            : null;
         var status = c?.Status ?? "NONE";
         var canPay = payer && cfg.IsPlatformMode && info.BlockReason == null && (c == null || c.Status == CollectionStates.Pending);
         var message = cfg.IsPlatformMode ? (c?.Status == CollectionStates.Paid ? null : info.BlockReason) : "Chế độ thu chi qua sàn chưa được bật.";
         return new(c?.Id, flow, sourceId, c?.Amount ?? info.Amount, status, payer ? "PAYER" : "PAYEE", cfg.Mode, canPay,
-            payer && c?.Status == CollectionStates.Pending ? c.PayosCheckoutUrl : null, payer ? c?.PayosOrderCode : null, c?.PaidAt, c?.ReceivedAmount, open, message);
+            payer && c?.Status == CollectionStates.Pending ? c.PayosCheckoutUrl : null, payer ? c?.PayosOrderCode : null, c?.PaidAt, c?.ReceivedAmount, open, message, refundStatus);
     }
 
     private async Task RequireActiveUserAsync(Guid userId, CancellationToken ct)

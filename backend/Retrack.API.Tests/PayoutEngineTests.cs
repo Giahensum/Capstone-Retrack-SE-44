@@ -27,17 +27,20 @@ public sealed class PayoutRulesTests
     }
 
     [Fact]
-    public void CheckBankRequiresVerifiedCompleteAndNotRecentlyChanged()
+    public void CheckBankRequiresVerifiedAndCompleteOnly()
     {
-        var now = new DateTime(2026, 3, 10, 0, 0, 0, DateTimeKind.Utc);
-        Assert.True(PayoutRules.CheckBank("970436", "0123456789", "AN", "VERIFIED", null, now, 24).Ready);
-        Assert.False(PayoutRules.CheckBank("970436", "0123456789", "AN", "PENDING_VERIFICATION", null, now, 24).Ready);
-        Assert.False(PayoutRules.CheckBank("97043", "0123456789", "AN", "VERIFIED", null, now, 24).Ready);
-        Assert.False(PayoutRules.CheckBank("970436", "12345", "AN", "VERIFIED", null, now, 24).Ready);
-        Assert.False(PayoutRules.CheckBank("970436", "0123456789", "", "VERIFIED", null, now, 24).Ready);
-        Assert.False(PayoutRules.CheckBank("970436", "0123456789", "AN", "VERIFIED", now.AddHours(-23), now, 24).Ready);
-        Assert.True(PayoutRules.CheckBank("970436", "0123456789", "AN", "VERIFIED", now.AddHours(-24), now, 24).Ready);
-        Assert.True(PayoutRules.CheckBank("970436", "0123456789", "AN", "VERIFIED", now.AddMinutes(-1), now, 0).Ready);
+        Assert.True(PayoutRules.CheckBank("970436", "0123456789", "AN", "VERIFIED").Ready);
+        Assert.False(PayoutRules.CheckBank("970436", "0123456789", "AN", "PENDING_VERIFICATION").Ready);
+        Assert.False(PayoutRules.CheckBank("970436", "0123456789", "AN", null).Ready);
+        var rejected = PayoutRules.CheckBank("970436", "0123456789", "AN", "REJECTED");
+        Assert.False(rejected.Ready);
+        Assert.Contains("từ chối", rejected.Reason);
+        Assert.False(PayoutRules.CheckBank("97043", "0123456789", "AN", "VERIFIED").Ready);
+        Assert.False(PayoutRules.CheckBank("970436", "12345", "AN", "VERIFIED").Ready);
+        Assert.False(PayoutRules.CheckBank("970436", "0123456789", "", "VERIFIED").Ready);
+        Assert.True(PayoutRules.CheckBank("970436", "012345", "AN", "VERIFIED").Ready);   // 6 số
+        Assert.True(PayoutRules.CheckBank("970436", new string('9', 20), "AN", "VERIFIED").Ready); // 20 số
+        Assert.False(PayoutRules.CheckBank("970436", new string('9', 21), "AN", "VERIFIED").Ready);
     }
 
     [Fact]
@@ -467,7 +470,7 @@ public sealed class PayoutEngineTests : PayoutTestBase
         await AddLine(payee, 200_000, 0);
         var plan = await RunOne(payee);
         Assert.Equal("HELD", plan.Status);
-        Assert.Contains("chưa được xác minh", plan.Reason);
+        Assert.Contains("chưa được Admin duyệt", plan.Reason);
         Assert.Equal(0, Fake.PayoutCalls);
         await using (var db = Open()) await Assert.ThrowsAsync<DepotConflictException>(() => Engine(db).ReleaseAsync(plan.RunId!.Value, AdminUser));
         await using (var db = Open()) await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE users SET bank_status = 'VERIFIED' WHERE id = {payee}");
@@ -481,17 +484,14 @@ public sealed class PayoutEngineTests : PayoutTestBase
     }
 
     [PostgresMoneyFact]
-    public async Task RecentBankChangeHoldsUntilHoldPeriodPasses()
+    public async Task VerifiedBankIsNotHeldEvenIfChangedJustNow()
     {
-        var payee = await NewPayee(changedAt: T0.AddHours(-1));
+        // Không còn thời gian giữ sau khi đổi: chỉ cần VERIFIED (kể cả cột bank_changed_at cũ còn dữ liệu).
+        var payee = await NewPayee(changedAt: T0.AddMinutes(-1));
         await AddLine(payee, 200_000, 0);
         var plan = await RunOne(payee);
-        Assert.Equal("HELD", plan.Status);
-        Assert.Contains("giữ kỳ chi 24 giờ", plan.Reason);
-        await using (var db = Open()) await Assert.ThrowsAsync<DepotConflictException>(() => Engine(db).ReleaseAsync(plan.RunId!.Value, AdminUser));
-        Clock.Advance(TimeSpan.FromHours(24));
-        await using var db2 = Open();
-        Assert.Equal("PROCESSING", (await Engine(db2).ReleaseAsync(plan.RunId!.Value, AdminUser)).Status);
+        Assert.Equal("PROCESSING", plan.Status);
+        Assert.Equal(1, Fake.PayoutCalls);
     }
 
     [PostgresMoneyFact]

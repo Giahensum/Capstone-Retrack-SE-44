@@ -130,3 +130,45 @@ public class PayeePayoutSetting
     [Column("auto_enabled")] public bool AutoEnabled { get; set; } = true;
     [Column("updated_at")] public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }
+
+/// <summary>Loại hoàn tiền cho người trả (khớp ck_money_refunds_kind của RETRACK_MONEY_V4).</summary>
+public static class RefundKinds
+{
+    public const string Excess = "EXCESS", Duplicate = "DUPLICATE", Late = "LATE", Full = "FULL", Partial = "PARTIAL";
+}
+
+/// <summary>Trạng thái lệnh hoàn tiền (khớp ck_money_refunds_status).</summary>
+public static class RefundStatuses
+{
+    public const string Pending = "PENDING", AwaitingApproval = "AWAITING_APPROVAL", Processing = "PROCESSING", Paid = "PAID",
+        Failed = "FAILED", Unknown = "UNKNOWN", ManualPaid = "MANUAL_PAID", Cancelled = "CANCELLED";
+}
+
+/// <summary>Lệnh hoàn tiền từ sàn về tài khoản ngân hàng của người đã trả vào sàn.</summary>
+[Table("money_refunds")]
+public class MoneyRefund
+{
+    [Key, Column("id")] public Guid Id { get; set; } = Guid.NewGuid();
+    [Column("code"), MaxLength(40)] public string Code { get; set; } = "";
+    [Column("collection_id")] public Guid CollectionId { get; set; }
+    [Column("anomaly_id")] public Guid? AnomalyId { get; set; }
+    [Column("payer_id")] public Guid PayerId { get; set; }
+    [Column("kind"), MaxLength(20)] public string Kind { get; set; } = RefundKinds.Partial;
+    [Column("amount")] public decimal Amount { get; set; }
+    [Column("reason")] public string Reason { get; set; } = "";
+    [Column("status"), MaxLength(20)] public string Status { get; set; } = RefundStatuses.Pending;
+    [Column("provider"), MaxLength(20)] public string Provider { get; set; } = "SIMULATED";
+    [Column("provider_ref"), MaxLength(100)] public string? ProviderRef { get; set; }
+    [Column("gateway_status"), MaxLength(40)] public string? GatewayStatus { get; set; }
+    [Column("fail_reason")] public string? FailReason { get; set; }
+    [Column("attempt")] public int Attempt { get; set; } = 1;
+    [Column("last_attempt_at")] public DateTime? LastAttemptAt { get; set; }
+    [Column("bank_snapshot", TypeName = "jsonb")] public string? BankSnapshot { get; set; }
+    [Column("created_by")] public Guid? CreatedBy { get; set; }
+    [Column("approved_by")] public Guid? ApprovedBy { get; set; }
+    [Column("approved_at")] public DateTime? ApprovedAt { get; set; }
+    [Column("paid_at")] public DateTime? PaidAt { get; set; }
+    [Column("version")] public int Version { get; set; }
+    [Column("created_at")] public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    [Column("updated_at")] public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+}
