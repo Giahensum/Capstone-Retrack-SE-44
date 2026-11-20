@@ -5,7 +5,7 @@ import { Wallet, Undo2, Hourglass, CircleDollarSign, Send, BadgeCheck, MinusCirc
 import { Panel, StatCard, DataTable, Th, Td, TableMessage, Pagination, Field, inputClass, PrimaryButton, GhostButton } from '@/features/admin/components/AdminUI';
 import { Badge, Notice } from '@/components/liquidation/LiquidationUI';
 import { moneyPayeeApi } from './moneyPayeeApi';
-import { vnd, fmtDateTime, fmtDate, apiError } from '@/features/money-admin/moneyLabels';
+import { vnd, deduct, fmtDateTime, fmtDate, apiError } from '@/features/money-admin/moneyLabels';
 import { PayoutStatusChip, BankStatusChip, BankSelect, FieldError } from '@/features/money-admin/moneyUi';
 import { payerRefundStatusMeta } from '@/features/money-admin/refundLabels';
 import { validateBankForm, buildBankBody, bankHelpText, BANK_POLICY_TEXT, BANK_SAVED_TEXT } from './payeeBank';
@@ -23,7 +23,7 @@ function Summary() {
         <StatCard icon={CircleDollarSign} tone="teal" label="Sẵn sàng chi" value={v(d?.available)} loading={q.isLoading} hint="Sẽ vào kỳ chi tới" />
         <StatCard icon={Send} tone="blue" label="Đang chi" value={v(d?.inPayout)} loading={q.isLoading} hint="Đã vào kỳ chi, chờ hoàn tất" />
         <StatCard icon={BadgeCheck} tone="primary" label="Đã nhận" value={v(d?.paid)} loading={q.isLoading} hint="Tổng các kỳ đã chi" />
-        <StatCard icon={MinusCircle} tone="red" label="Nợ mang sang" value={v(d?.carriedDebt)} loading={q.isLoading} hint="Được trừ vào kỳ chi sau" />
+        <StatCard icon={MinusCircle} tone="red" label="Nợ mang sang" value={d ? vnd(deduct(d.carriedDebt)) : '—'} loading={q.isLoading} hint="Được trừ vào kỳ chi sau" />
         <StatCard icon={CalendarClock} tone="slate" label="Lần mở chi tiếp theo" value={d ? (d.nextReleaseAt ? fmtDateTime(d.nextReleaseAt) : 'Chưa có') : '—'} loading={q.isLoading} />
       </div>
       {q.isError && <p role="alert" className="text-sm font-semibold text-d-error">{apiError(q.error, 'Không tải được thu nhập.')}</p>}
@@ -51,8 +51,8 @@ function History() {
             <Td>{fmtDate(r.periodStart)} đến {fmtDate(r.periodEnd)}</Td>
             <Td className="text-right">{vnd(r.gross)}</Td>
             <Td className="text-right">{vnd(r.commission)}</Td>
-            <Td className="text-right">{vnd(r.refundAmount)}</Td>
-            <Td className="text-right">{vnd(r.carriedDebt)}</Td>
+            <Td className="text-right">{vnd(deduct(r.refundAmount))}</Td>
+            <Td className="text-right">{vnd(deduct(r.carriedDebt))}</Td>
             <Td className="text-right font-bold">{vnd(r.net)}</Td>
             <Td>
               <PayoutStatusChip status={r.status} />

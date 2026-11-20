@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   payoutStatusMeta, payoutActions, vnd, vnToday, addDays, vnStartOfDayIso, validatePeriod, validateSettings, settingsToForm,
-  formToSettingsPatch, newClientKey, validateTestTransfer, maskAccount, bankStatusMeta, fmtDateTime,
+  formToSettingsPatch, signedForKind, deduct, newClientKey, validateTestTransfer, maskAccount, bankStatusMeta, fmtDateTime,
 } from './moneyLabels.js';
 
 test('payoutStatusMeta: có nhãn tiếng Việt và mặc định an toàn', () => {
@@ -121,4 +121,19 @@ test('maskAccount, bankStatusMeta, fmtDateTime', () => {
   // 2026-01-01T17:00Z = 00:00 ngày 02/01 giờ Việt Nam (backend không gắn hậu tố Z)
   assert.match(fmtDateTime('2026-01-01T17:00:00'), /02\/01\/2026/);
   assert.equal(fmtDateTime(null), '—');
+});
+
+test('signedForKind: dòng hoàn tiền hiện số âm, dòng bán giữ nguyên', () => {
+  assert.equal(signedForKind('REFUND', 4500), -4500);
+  assert.equal(signedForKind('REFUND', -4500), -4500);
+  assert.equal(signedForKind('SALE', 5000), 5000);
+  assert.equal(signedForKind('REFUND', null), null);
+});
+
+test('deduct: khoản bị trừ hiện số âm, số 0 giữ nguyên, vnd dùng dấu cách không ngắt dòng', () => {
+  assert.equal(deduct(85500), -85500);
+  assert.equal(deduct(-85500), -85500);
+  assert.equal(deduct(0), 0);
+  assert.equal(deduct(null), null);
+  assert.equal(vnd(90000), '90.000 đ');
 });

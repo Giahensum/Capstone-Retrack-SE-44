@@ -5,7 +5,7 @@ import { Panel, Field, inputClass, DataTable, Th, Td, TableMessage, Pagination, 
 import { Badge } from '@/components/liquidation/LiquidationUI';
 import { moneyAdminApi } from '../moneyAdminApi';
 import {
-  vnd, pct, fmtDateTime, flowLabel, sourceLabel, kindLabel, apiError, COLLECTION_STATUS, LINE_STATE, collectionStatusMeta, lineStateMeta, FLOW_LABEL,
+  vnd, pct, fmtDateTime, flowLabel, sourceLabel, kindLabel, signedForKind, apiError, COLLECTION_STATUS, LINE_STATE, collectionStatusMeta, lineStateMeta, FLOW_LABEL,
 } from '../moneyLabels';
 import PayeeFilter from './PayeeFilter';
 import { CollectionRefundDialog } from './RefundDialogs';
@@ -99,8 +99,8 @@ function LedgerPanel() {
           return (
             <tr key={l.id}>
               <Td className="font-semibold">{l.payeeName}</Td><Td>{flowLabel(l.flow)}</Td><Td>{kindLabel(l.kind)}</Td>
-              <Td className="text-right">{vnd(l.gross)}</Td><Td className="text-right">{pct(l.commissionRate)}</Td>
-              <Td className="text-right">{vnd(l.commission)}</Td><Td className="text-right font-semibold">{vnd(l.net)}</Td>
+              <Td className="text-right">{vnd(signedForKind(l.kind, l.gross))}</Td><Td className="text-right">{pct(l.commissionRate)}</Td>
+              <Td className="text-right">{vnd(signedForKind(l.kind, l.commission))}</Td><Td className="text-right font-semibold">{vnd(l.net)}</Td>
               <Td><Badge tone={m.tone}>{m.label}</Badge></Td><Td>{fmtDateTime(l.availableAt)}</Td>
             </tr>
           );
