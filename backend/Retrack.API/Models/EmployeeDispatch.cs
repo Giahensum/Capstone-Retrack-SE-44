@@ -20,6 +20,7 @@ public sealed class EmployeeDispatchShift
 {
     [Key, Column("id")] public Guid Id { get; set; } = Guid.NewGuid();
     [Column("area_id")] public Guid AreaId { get; set; }
+    [Column("is_automatic")] public bool IsAutomatic { get; set; }
     [Column("employee_id")] public Guid EmployeeId { get; set; }
     [Column("starts_at")] public DateTime StartsAt { get; set; }
     [Column("ends_at")] public DateTime EndsAt { get; set; }

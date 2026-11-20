@@ -35,9 +35,7 @@ function Workspace() {
   // DocuSign đưa người dùng quay lại với ?esign=return: mở thẳng tab đối tác để thấy kết quả ký.
   const [tab, setTab] = useState(() => {
     const params = new URLSearchParams(window.location.search);
-    // PayOS đưa người nộp phí quay lại với ?payos=return|cancel: mở thẳng tab Phí nền tảng.
-    if (params.get("payos")) return "platform-fees";
-    return params.get("esign") === "return" ? "partners" : "dashboard";
+    return params.has("payos") ? "platform-fees" : params.get("esign") === "return" ? "partners" : "dashboard";
   });
   const [focusId, setFocusId] = useState(null);
   function navigate(next, orderId = null) {
@@ -62,7 +60,7 @@ function Workspace() {
         >
           <img className="brand-mark" src="/brand/logo_mark.png" alt="" aria-hidden="true" />
           <span className="factory-brand-wordmark" aria-hidden="true">
-            <strong>retrack</strong>
+            <strong>RETRACK</strong>
             <small>FACTORY WORKSPACE</small>
           </span>
         </a>
@@ -75,7 +73,7 @@ function Workspace() {
         </div>
         <div className="nav-caption">KHÔNG GIAN LÀM VIỆC</div>
         <nav aria-label="Điều hướng nhà máy">
-          {tabs.map(([key, label, icon]) => (
+          {tabs.filter(([key]) => key !== "notifications").map(([key, label, icon]) => (
             <button
               key={key}
               className={tab === key ? "active" : ""}
@@ -92,10 +90,6 @@ function Workspace() {
             </button>
           ))}
         </nav>
-        <div className="sidebar-bottom">
-          <span className="live-dot" /> Đã kết nối API
-          <small>Dữ liệu đồng bộ từ PostgreSQL.</small>
-        </div>
       </aside>
       <div className="factory-workspace">
         <header className="workspace-topbar">
@@ -106,11 +100,6 @@ function Workspace() {
           <div className="factory-topbar-actions"><FactoryNotificationBell navigate={navigate} /><span className="user-chip"><span>{(user?.fullName || "F").slice(0, 2).toUpperCase()}</span>{user?.fullName || user?.email}<button className="logout-button" onClick={() => { logout(); navigateRoute("/login", { replace: true }); }}>Đăng xuất</button></span></div>
         </header>
         <main className="factory-main">
-          <div className="demo-banner">
-            <span className="live-dot" />
-            <strong>Đã kết nối máy chủ</strong>
-            <span>Dữ liệu hồ sơ, nhu cầu, lô hàng và quyết toán được tải từ API. Trạng thái vận chuyển do luồng tài xế cập nhật.</span>
-          </div>
           {tab === "dashboard" && <Dashboard navigate={navigate} />}
           {tab === "marketplace" && <Marketplace navigate={navigate} directOnly={Boolean(focusId)} />}
           {tab === "demands" && <Demands />}

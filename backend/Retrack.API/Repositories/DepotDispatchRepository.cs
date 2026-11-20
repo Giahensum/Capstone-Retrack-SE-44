@@ -8,6 +8,9 @@ namespace Retrack.API.Repositories;
 
 public sealed class DepotDispatchRepository(AppDbContext db) : IDepotDispatchRepository
 {
+    public Task<EmployeeCollectionArea?> MatchingAreaAsync(Guid depot, double latitude, double longitude) =>
+        db.EmployeeCollectionAreas.Where(a => a.DepotId == depot && a.Latitude == latitude && a.Longitude == longitude)
+            .OrderBy(a => a.Id).FirstOrDefaultAsync();
     // Cùng khóa với EmployeeDispatchService TV3; Owner không tạo nguồn phân công song song.
     public Task LockAsync() => db.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock(62051001)");
     public Task<PagedResult<StaffDto>> EmployeesAsync(Guid depot,DepotQuery query)=>DepotRepositoryPage.ReadAsync(
@@ -34,10 +37,10 @@ public sealed class DepotDispatchRepository(AppDbContext db) : IDepotDispatchRep
         if (!string.IsNullOrWhiteSpace(query.Search)) rows = rows.Where(x => x.employee.FullName.Contains(query.Search) || x.area.Name.Contains(query.Search));
         if (availableOnly) rows = rows.Where(x => x.shift.Availability == "AVAILABLE" && x.area.IsActive && x.employee.IsActive && x.employee.Role == "DEPOT_EMPLOYEE" &&
             db.DepotStaffs.Any(s => s.DepotId == depot && s.UserId == x.employee.Id && s.IsActive && s.StaffType == "DEPOT_EMPLOYEE") &&
-            db.PickupRequests.Count(p => p.TargetDepotId == depot && p.AcceptedCollectorId == x.employee.Id && (p.Status == "SCHEDULED" || p.Status == "IN_PROGRESS")) < x.shift.MaxPendingOrders);
+            (x.shift.IsAutomatic || db.PickupRequests.Count(p => p.TargetDepotId == depot && p.AcceptedCollectorId == x.employee.Id && (p.Status == "SCHEDULED" || p.Status == "IN_PROGRESS")) < x.shift.MaxPendingOrders));
         return DepotRepositoryPage.ReadAsync(rows.OrderByDescending(x => x.shift.StartsAt).ThenBy(x => x.shift.Id).Select(x => new DispatchShiftDto(
             x.shift.Id, x.area.Id, x.area.Name, x.employee.Id, x.employee.FullName, x.shift.StartsAt, x.shift.EndsAt, x.shift.Availability, x.shift.Reason, x.shift.Vehicle, x.shift.CapacityKg, x.shift.MaxPendingOrders,
-            db.PickupRequests.Count(p => p.TargetDepotId == depot && p.AcceptedCollectorId == x.employee.Id && (p.Status == "SCHEDULED" || p.Status == "IN_PROGRESS")))), query);
+            db.PickupRequests.Count(p => p.TargetDepotId == depot && p.AcceptedCollectorId == x.employee.Id && (p.Status == "SCHEDULED" || p.Status == "IN_PROGRESS")), x.shift.IsAutomatic)), query);
     }
     private IQueryable<DispatchPickupDto> MapPickups(IQueryable<PickupRequest> rows) => rows.Select(x => new DispatchPickupDto(
         x.Id, x.Seller.FullName, x.Seller.Phone, x.Address, x.Description, x.Latitude, x.Longitude, x.PreferredDatetime, x.Status, x.AcceptedCollectorId, x.AcceptedCollector == null ? null : x.AcceptedCollector.FullName,

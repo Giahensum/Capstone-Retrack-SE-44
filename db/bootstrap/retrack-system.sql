@@ -924,6 +924,10 @@ CREATE TABLE IF NOT EXISTS employee_dispatch_shifts (
     CHECK (availability = 'AVAILABLE' OR (reason IS NOT NULL AND char_length(btrim(reason)) BETWEEN 10 AND 1000))
 );
 CREATE INDEX IF NOT EXISTS ix_dispatch_shift_employee ON employee_dispatch_shifts(employee_id, starts_at, ends_at);
+-- RETRACK_AUTO_DISPATCH_DAY_V1_BEGIN
+-- DB đang dùng: chạy riêng khối này trước khi triển khai backend, không chọn seed.
+ALTER TABLE employee_dispatch_shifts ADD COLUMN IF NOT EXISTS is_automatic BOOLEAN NOT NULL DEFAULT false;
+-- RETRACK_AUTO_DISPATCH_DAY_V1_END
 CREATE TABLE IF NOT EXISTS employee_dispatch_queue (
     pickup_id UUID PRIMARY KEY REFERENCES pickup_requests(id) ON DELETE CASCADE,
     reason TEXT NOT NULL,
@@ -1752,8 +1756,8 @@ DECLARE
     employee_names text[] := ARRAY['Trần Minh Quân','Lê Văn Hòa','Nguyễn Đức Thành','Phạm Quốc Huy','Võ Thanh Tùng','Đặng Minh Hải'];
     seller_names text[] := ARRAY['Nguyễn Thị Mai','Trần Văn Sơn','Lê Thu Hà','Phạm Ngọc Anh','Võ Thị Hương','Đặng Quốc Bảo','Hoàng Thanh Bình','Bùi Thị Loan','Đỗ Minh Khang','Ngô Thị Thảo','Hồ Văn Phúc','Dương Hải Yến'];
     descriptions text[] := ARRAY['Tôi có hai bao chai nhựa đã rửa sạch, nhờ gọi trước khi tới.', 'Cửa hàng có thùng carton đã gấp gọn sau đợt nhập hàng.', 'Gia đình cần bán giấy báo và sách cũ, đã buộc thành từng bó.', 'Có lon nhôm và chai nước, tôi đã phân loại riêng.', 'Cần thu gom bìa carton và túi giấy ở cửa hàng.', 'Nhà có quạt hỏng và vài thanh sắt, nhờ đến xem rồi cân.', 'Văn phòng có giấy in cũ, vui lòng liên hệ trước khi lấy.', 'Tôi có chai nhựa và can nhựa rỗng, để sẵn ở tầng trệt.', 'Nhờ thu gom thùng giấy đóng đồ và lon nước ngọt.', 'Có một ít đồng dây điện và đồ nhôm cũ cần bán.', 'Cửa hàng dọn kho có giấy bìa và chai nhựa.', 'Gia đình có sách cũ và giấy vụn đã đóng bao.'];
-    shift_start timestamptz := CURRENT_TIMESTAMP;
-    shift_end timestamptz := CURRENT_TIMESTAMP + interval '20 hours';
+    shift_start timestamptz := date_trunc('day', CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Ho_Chi_Minh') AT TIME ZONE 'Asia/Ho_Chi_Minh';
+    shift_end timestamptz := (date_trunc('day', CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Ho_Chi_Minh') + interval '1 day') AT TIME ZONE 'Asia/Ho_Chi_Minh';
 BEGIN
     IF current_setting('retrack.seed_demo', true) IS DISTINCT FROM 'on' THEN RETURN; END IF;
     SELECT * INTO employee_source FROM users WHERE email = 'employee.dispatch07@retrack.test' AND role = 'DEPOT_EMPLOYEE';
@@ -1800,11 +1804,11 @@ BEGIN
         IF NOT EXISTS(SELECT 1 FROM employee_dispatch_shifts WHERE employee_dispatch_shifts.employee_id = fixture.employee_id
             AND ends_at > shift_start) THEN
             shift_id := gen_random_uuid();
-            INSERT INTO employee_dispatch_shifts(id,area_id,employee_id,starts_at,ends_at,availability,vehicle,
+            INSERT INTO employee_dispatch_shifts(id,area_id,employee_id,starts_at,ends_at,availability,vehicle,is_automatic,
                 capacity_kg,max_pending_orders,updated_at)
             VALUES(shift_id,area_id,employee_id,shift_start,shift_end,'AVAILABLE',
-                CASE WHEN i % 2 = 0 THEN 'car' ELSE 'motorcycle' END,
-                CASE WHEN i % 2 = 0 THEN 500 ELSE 100 END,30,CURRENT_TIMESTAMP);
+                CASE WHEN i % 2 = 0 THEN 'car' ELSE 'motorcycle' END,true,
+                CASE WHEN i % 2 = 0 THEN 500 ELSE 100 END,14,CURRENT_TIMESTAMP);
         END IF;
     END LOOP;
     -- 12 Seller / 12 đơn / 12 địa chỉ riêng. Không lặp địa điểm để tạo thêm số lượng.
@@ -1847,6 +1851,60 @@ BEGIN
     RAISE NOTICE 'Đã chuẩn bị 12 đơn tại 12 địa chỉ, 6 nhân viên chia 2 kho. Tài khoản dispatch01–06. Không reset lịch sử.';
 END $retrack_dispatch_demo_seed$;
 -- RETRACK_DISPATCH_DEMO_SEED_END
+
+-- RETRACK_AUTO_DISPATCH_BULK_SEED_BEGIN
+-- Hai kho mới hoàn toàn không seed vùng/ca: worker tự chuẩn bị sau khi backend chạy.
+-- Tọa độ mô phỏng gần điểm tham chiếu thật, không phải địa chỉ nhà khách hàng đã xác minh.
+DO $auto_dispatch_bulk$
+DECLARE
+    depot uuid; emp uuid; seller uuid; n integer; k integer; local_index integer;
+    employee_hash text; seller_hash text; owner uuid;
+    lat numeric; lng numeric; place text;
+    surnames text[] := ARRAY['Nguyễn','Trần','Lê','Phạm','Võ','Đặng','Hoàng','Bùi'];
+    names text[] := ARRAY['Minh Anh','Thanh Hà','Quốc Hưng','Ngọc Lan','Văn Nam','Thu Trang','Đức Hải','Thị Hạnh','Gia Bảo','Khánh Linh'];
+BEGIN
+    IF current_setting('retrack.seed_demo', true) IS DISTINCT FROM 'on' THEN RETURN; END IF;
+    SELECT password_hash INTO employee_hash FROM users WHERE email='employee.dispatch07@retrack.test';
+    SELECT password_hash INTO seller_hash FROM users WHERE email='seller@retrack.vn';
+    SELECT id INTO owner FROM users WHERE email='depot@retrack.vn' AND role='DEPOT_OWNER';
+    IF employee_hash IS NULL OR seller_hash IS NULL OR owner IS NULL THEN RAISE EXCEPTION 'Thiếu tài khoản nguồn seed tự động'; END IF;
+    FOR k IN 1..2 LOOP
+        depot := ('fa100000-0000-4000-8000-' || lpad(k::text,12,'0'))::uuid;
+        INSERT INTO depots(id,owner_id,name,address,latitude,longitude,rating,verification_status,created_at)
+        VALUES(depot,owner,CASE WHEN k=1 THEN 'Kho Thu Mua Thành Đạt' ELSE 'Kho Tái Chế Minh Phát' END,
+            CASE WHEN k=1 THEN 'Khu vực Hòa Khánh, Đà Nẵng' ELSE 'Khu vực Hòa Quý, Đà Nẵng' END,
+            CASE WHEN k=1 THEN 16.0746638 ELSE 15.9874125 END,CASE WHEN k=1 THEN 108.1506880 ELSE 108.2562344 END,
+            0,'APPROVED',CURRENT_TIMESTAMP) ON CONFLICT(id) DO NOTHING;
+        FOR local_index IN 1..4 LOOP
+            n := (k-1)*4+local_index;
+            emp := ('fa200000-0000-4000-8000-' || lpad(n::text,12,'0'))::uuid;
+            INSERT INTO users(id,email,password_hash,role,full_name,phone,is_active,created_at,updated_at)
+            VALUES(emp,'employee.dispatch' || lpad((n+8)::text,2,'0') || '@retrack.test',employee_hash,'DEPOT_EMPLOYEE',
+                surnames[n] || ' ' || names[n],'090970' || lpad(n::text,4,'0'),true,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP) ON CONFLICT(id) DO NOTHING;
+            INSERT INTO depot_staffs(id,depot_id,user_id,staff_type,is_active)
+            VALUES(('fa300000-0000-4000-8000-' || lpad(n::text,12,'0'))::uuid,depot,emp,'DEPOT_EMPLOYEE',true) ON CONFLICT(id) DO NOTHING;
+        END LOOP;
+        FOR local_index IN 1..6 LOOP
+            n := (k-1)*6+local_index;
+            seller := ('fa400000-0000-4000-8000-' || lpad(n::text,12,'0'))::uuid;
+            INSERT INTO users(id,email,password_hash,role,full_name,phone,is_active,created_at,updated_at)
+            VALUES(seller,'seller.dispatch' || (100+n)::text || '@retrack.test',seller_hash,'SELLER',
+                surnames[1+(n-1)/10] || ' ' || names[1+(n-1)%10],'090960' || lpad(n::text,4,'0'),true,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP) ON CONFLICT(id) DO NOTHING;
+            -- Mỗi kho có sáu đơn: ba gần Hòa Khánh, ba gần Hòa Quý (một đơn hẹn ngày sau).
+            lat := CASE WHEN local_index<=3 THEN 16.0746638 ELSE 15.9874125 END + (n%10)*0.00006;
+            lng := CASE WHEN local_index<=3 THEN 108.1506880 ELSE 108.2562344 END + n*0.000035;
+            place := CASE WHEN local_index<=3 THEN 'Nguyễn Lương Bằng, Hòa Khánh' ELSE 'Hòa Quý, Ngũ Hành Sơn' END;
+            INSERT INTO pickup_requests(id,seller_id,target_depot_id,description,address,latitude,longitude,preferred_datetime,
+                status,gross_amount,platform_fee_percentage,platform_fee_amount,net_amount,created_at,updated_at)
+            VALUES(('fa500000-0000-4000-8000-' || lpad(n::text,12,'0'))::uuid,seller,depot,
+                (ARRAY['Tôi có các thùng carton sau khi chuyển nhà, đã tháo và buộc gọn.', 'Nhờ anh chị thu gom chai nước suối và lon nước ngọt, tôi để riêng hai túi.', 'Có sách giáo khoa cũ và giấy báo, vui lòng gọi trước khi đến.', 'Nhà vừa thay kệ sắt nhỏ, cần người tới thu mua giúp.', 'Có chậu nhôm cũ và vài chiếc nồi không dùng nữa.', 'Tôi dọn kho cuối tuần, có giấy bìa và vỏ hộp sữa đã rửa sạch.', 'Cửa hàng có thùng giấy đóng hàng, đã xếp cạnh cửa ra vào.', 'Gia đình có chai nhựa sạch, xin liên hệ trước để tôi mở cổng.', 'Có báo cũ và tập vở đã bỏ bìa nhựa, nhờ đến thu gom.', 'Tôi có một khung bàn sắt đã tháo rời, có thể phụ mang ra xe.', 'Có lon nhôm và hộp kim loại, đã gom riêng trong bao.', 'Nhà có ít bìa carton và chai nhựa, tôi hẹn thu gom sau hai ngày.'])[n],
+                'Điểm mô phỏng ' || n || ' gần ' || place || ', Đà Nẵng',lat,lng,
+                CASE WHEN local_index>5 THEN CURRENT_TIMESTAMP+interval '2 days' ELSE NULL END,
+                'PENDING',0,5,0,0,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP) ON CONFLICT(id) DO NOTHING;
+        END LOOP;
+    END LOOP;
+END $auto_dispatch_bulk$;
+-- RETRACK_AUTO_DISPATCH_BULK_SEED_END
 
 -- RETRACK_DRIVER_POOL_SEED_BEGIN
 DO $retrack_driver_pool_seed$

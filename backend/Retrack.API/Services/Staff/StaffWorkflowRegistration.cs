@@ -24,6 +24,8 @@ public static class StaffWorkflowRegistration
         services.AddScoped<IEmployeeCollectionService, EmployeeCollectionService>();
         services.AddScoped<EmployeeReportingService>();
         services.AddScoped<EmployeeDispatchService>();
+        services.AddScoped<EmployeeDailyPlanService>();
+        services.AddScoped<Retrack.API.Repositories.EmployeeDailyPlanRepository>();
         services.AddScoped<DriverJobService>();
         services.AddScoped<DriverDeliveryService>();
         services.AddScoped<DriverReportingService>();

@@ -14,6 +14,7 @@ test('Owner tạo khu vực/ca, phân công ngoại lệ, nhận thông báo đ�
   // Worker chỉ xét kho đã có khu vực. Đợi producer thật trước khi mở Inbox polling 30 giây.
   await expect.poll(async()=>((await (await request.get(`/api/depot/notifications?depotId=${f.DepotId}&category=PICKUP`,{headers:{Authorization:`Bearer ${token}`}})).json()).data.totalCount),{timeout:25000}).toBeGreaterThan(0);
   await page.getByRole('button',{name:'＋ Bố trí ca',exact:true}).click();const shift=page.getByRole('dialog',{name:'Bố trí ca thu gom'});
+  await shift.getByLabel('Nguồn khu vực').selectOption('configured');
   await shift.getByRole('combobox',{name:'Khu vực thu gom',exact:true}).selectOption({label:'Vùng Ngũ Hành Sơn fixture'});await shift.getByRole('combobox',{name:'Nhân viên thu gom',exact:true}).selectOption(f.EmployeeId);
   await shift.getByRole('button',{name:'Lưu ca thu gom'}).click();await expect(shift).toHaveCount(0);
   await page.getByRole('tab',{name:'Ca thu gom',exact:true}).click();await expect(page.getByRole('row').filter({hasText:'DEPOT_EMPLOYEE hoàn thiện fixture'})).toContainText('Sẵn sàng');

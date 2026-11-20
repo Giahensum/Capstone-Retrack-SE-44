@@ -62,7 +62,7 @@ public sealed class TestTransferBody
 }
 
 // ===== Thu / sổ cái =====
-public sealed record MoneyCollectionDto(Guid Id, string Flow, string SourceType, Guid SourceId, Guid PayerId, string PayerName, Guid PayeeId, string PayeeName,
+public sealed record AdminMoneyCollectionDto(Guid Id, string Flow, string SourceType, Guid SourceId, Guid PayerId, string PayerName, Guid PayeeId, string PayeeName,
     decimal Amount, string Status, DateTime? PaidAt, decimal? ReceivedAmount, DateTime CreatedAt);
 
 public sealed record PayableLineDto(Guid Id, Guid CollectionId, Guid PayeeId, string PayeeName, string Flow, string SourceType, Guid SourceId, string Kind,

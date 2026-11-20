@@ -89,7 +89,7 @@ public class AdminMoneyController(PayoutEngine engine, MoneyAdminService admin) 
     // ----- Thu và sổ cái -----
     [HttpGet("collections")]
     public async Task<IActionResult> Collections([FromQuery] string? status, [FromQuery] string? flow, [FromQuery] Guid? payeeId, [FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default) =>
-        Ok(ApiResponse<PagedResult<MoneyCollectionDto>>.Ok(await admin.ListCollectionsAsync(status, flow, payeeId, page, pageSize, ct)));
+        Ok(ApiResponse<PagedResult<AdminMoneyCollectionDto>>.Ok(await admin.ListCollectionsAsync(status, flow, payeeId, page, pageSize, ct)));
 
     [HttpGet("ledger")]
     public async Task<IActionResult> Ledger([FromQuery] Guid? payeeId, [FromQuery] string? flow, [FromQuery] string? state, [FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default) =>

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useDepotMutation, useDepotQuery, money, batchLabels } from '../depotApi';
 import { buttonClass, inputClass, MutationError, QueryState, Pager } from './DepotUI';
+import BatchDetailSection from './BatchDetailSection';
 
 const actions = { PRICE_PROPOSED: 'Nhà máy gửi đề xuất giá', PRICE_ACCEPTED: 'Kho đồng ý giá', PRICE_DISPUTED: 'Kho yêu cầu điều chỉnh', PAYMENT_REPORTED: 'Nhà máy báo đã chuyển tiền', PAYMENT_CONFIRMED: 'Kho xác nhận nhận đủ tiền', QC_ACCEPTED: 'KCS đạt', QC_REJECTED: 'KCS không đạt', QC_RESOLUTION: 'Chọn hướng xử lý KCS', RETURN_HANDED_OVER: 'Nhà máy bàn giao trả', RETURN_RECEIVED: 'Kho nhận đủ lô trả' };
 export default function BatchSettlementPanel({ detail, id }) {
@@ -26,12 +27,13 @@ export default function BatchSettlementPanel({ detail, id }) {
         <button type="button" className="rounded-full border border-d-border-subtle px-4 py-2 text-d-primary disabled:opacity-40" disabled={!reason.trim() || decision.isPending} onClick={() => decide(false)}>Yêu cầu điều chỉnh giá</button>
       </div><MutationError mutation={decision} />
     </div>}
-    <h4 className="text-sm font-semibold">Lịch sử xác nhận của hai bên</h4>
+    <BatchDetailSection title={<span role="heading" aria-level="4">Lịch sử xác nhận của hai bên</span>}>
     <QueryState query={history}><ol className="space-y-3">{history.data?.items.map(event => <li key={event.id} className="rounded-xl bg-d-surface-accent p-3 text-sm">
       <p className="font-semibold">{actions[event.action] ?? event.action}{event.revision ? ` · Phiên bản ${event.revision}` : ''}</p>
       {event.netAmount != null && <p>Đơn giá: {money(event.pricePerKg)}/kg · Tiền cho kho: {money(event.netAmount)}</p>}
       <p className="text-d-on-surface-variant">{new Date(event.createdAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}</p>
       {event.note && <p className="whitespace-pre-wrap">{event.note}</p>}
-    </li>)}</ol>{!history.data?.totalCount && <p className="text-sm text-d-on-surface-variant">Chưa có xác nhận giá hoặc tiền.</p>}<Pager page={page} setPage={setPage} total={history.data?.totalCount} /></QueryState>
+    </li>)}</ol>{!history.data?.totalCount && <p className="text-sm text-d-on-surface-variant">Chưa có xác nhận giá hoặc tiền.</p>}{history.data?.totalCount > 20 && <Pager page={page} setPage={setPage} total={history.data.totalCount} />}</QueryState>
+    </BatchDetailSection>
   </section>;
 }

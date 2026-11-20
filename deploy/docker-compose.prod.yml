@@ -73,6 +73,8 @@ services:
       DocuSign__PrivateKeyBase64: ${DOCUSIGN_PRIVATE_KEY_BASE64:-}
       DocuSign__WebhookUrl: ${DOCUSIGN_WEBHOOK_URL:-}
       VerificationScanner__Mode: ${VERIFICATION_SCANNER_MODE:-Disabled}
+      # Chỉ cho demo: nhận hồ sơ kho KHÔNG quét mã độc khi Mode=Disabled. Mặc định false.
+      VerificationScanner__AllowUnscannedForDemo: ${VERIFICATION_ALLOW_UNSCANNED_DEMO:-false}
       VerificationStorage__Provider: ${VERIFICATION_STORAGE_PROVIDER:-Database}
     ports:
       - "${API_BIND:-0.0.0.0}:${API_PORT:-8080}:8080"

@@ -129,7 +129,7 @@ public sealed class LiquidationEsignPostgresTests : IAsyncLifetime
         await Assert.ThrowsAsync<DepotForbiddenException>(() => service.CreateSigningUrlAsync(stranger, agreementId, default));
         await Assert.ThrowsAsync<DepotConflictException>(() => service.DownloadAsync(seller, agreementId, default));
         // DocuSign bật và chưa ai ký theo cách cũ: nút xác nhận cũ bị từ chối.
-        await Assert.ThrowsAsync<DepotConflictException>(() => service.EnsureLegacySigningAllowedAsync(agreementId, default));
+        await Assert.ThrowsAsync<DepotConflictException>(() => service.EnsureLegacySigningAllowedAsync(seller, agreementId, default));
     }
 
     [PostgresEsignFact]
@@ -158,14 +158,110 @@ public sealed class LiquidationEsignPostgresTests : IAsyncLifetime
             var a = await seed.LiquidationAgreements.SingleAsync(); a.SellerSignedAt = DateTime.UtcNow; await seed.SaveChangesAsync();
         }
         await using var db = Open();
-        await Service(db).EnsureLegacySigningAllowedAsync(agreementId, default);
+        await Service(db).EnsureLegacySigningAllowedAsync(seller, agreementId, default);
         await Assert.ThrowsAsync<DepotConflictException>(() => Service(db).CreateSigningUrlAsync(buyer, agreementId, default));
         Assert.Equal(0, client.Created);
     }
 
+    [PostgresEsignFact]
+    public async Task Status_tells_the_ui_when_the_legacy_button_is_still_allowed()
+    {
+        await using (var d1 = Open()) Assert.False((await Service(d1).GetStatusAsync(seller, agreementId, default)).LegacyAllowed);
+        await using (var seed = Open())
+        {
+            var a = await seed.LiquidationAgreements.SingleAsync(); a.SellerSignedAt = DateTime.UtcNow; await seed.SaveChangesAsync();
+        }
+        await using var d2 = Open();
+        Assert.True((await Service(d2).GetStatusAsync(buyer, agreementId, default)).LegacyAllowed);
+        client.Configured = false;
+        await using var d3 = Open();
+        var off = await Service(d3).GetStatusAsync(buyer, agreementId, default);
+        Assert.False(off.Configured); Assert.True(off.LegacyAllowed);
+        await Assert.ThrowsAsync<DepotConflictException>(() => Service(d3).CreateSigningUrlAsync(buyer, agreementId, default));
+    }
+
+    [PostgresEsignFact]
+    public async Task Legacy_gate_checks_membership_first_so_it_does_not_reveal_other_agreements()
+    {
+        await using var db = Open();
+        await Assert.ThrowsAsync<DepotForbiddenException>(() => Service(db).EnsureLegacySigningAllowedAsync(stranger, agreementId, default));
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => Service(db).EnsureLegacySigningAllowedAsync(seller, Guid.NewGuid(), default));
+    }
+
+    [PostgresEsignFact]
+    public async Task Deactivated_account_cannot_use_the_endpoints_even_for_its_own_agreement()
+    {
+        await using (var seed = Open())
+        {
+            var u = await seed.Users.SingleAsync(x => x.Id == seller); u.IsActive = false; await seed.SaveChangesAsync();
+        }
+        await using var db = Open();
+        await Assert.ThrowsAsync<DepotForbiddenException>(() => Service(db).GetStatusAsync(seller, agreementId, default));
+        await Assert.ThrowsAsync<DepotForbiddenException>(() => Service(db).CreateSigningUrlAsync(seller, agreementId, default));
+        await Assert.ThrowsAsync<DepotForbiddenException>(() => Service(db).DownloadAsync(seller, agreementId, default));
+        Assert.Equal(0, client.Created);
+    }
+
+    [PostgresEsignFact]
+    public async Task Replacing_a_voided_envelope_clears_old_signatures_so_both_sign_again()
+    {
+        await using (var d1 = Open()) await Service(d1).CreateSigningUrlAsync(seller, agreementId, default);
+        client.Reply = State("sent", true, false);
+        await using (var d2 = Open()) await Service(d2).RefreshAsync(seller, agreementId, default);
+        client.Reply = State("voided", true, false);
+        await using (var d3 = Open()) Assert.Equal("VOIDED", (await Service(d3).RefreshAsync(seller, agreementId, default)).State);
+        client.Reply = State("sent", false, false); // envelope mới chưa ai ký
+        await using (var d4 = Open())
+        {
+            await Service(d4).CreateSigningUrlAsync(seller, agreementId, default); // envelope thay thế: Seller phải ký lại
+            Assert.Equal(2, client.Created);
+        }
+        await using var d5 = Open();
+        var a = await d5.LiquidationAgreements.AsNoTracking().SingleAsync();
+        Assert.Null(a.SellerSignedAt); Assert.Null(a.BuyerSignedAt); Assert.Equal("SENT", a.EsignStatus);
+    }
+
+    [PostgresEsignFact]
+    public async Task User_text_cannot_inject_signature_anchors_and_numbers_do_not_depend_on_culture()
+    {
+        await using (var seed = Open())
+        {
+            var lot = await seed.LiquidationLots.SingleAsync(); lot.ScopeDetails = "Nội thất /ksb/ và /kss/ khác"; lot.DepositPercent = 10.5m; await seed.SaveChangesAsync();
+        }
+        var previous = System.Globalization.CultureInfo.CurrentCulture;
+        System.Globalization.CultureInfo.CurrentCulture = new System.Globalization.CultureInfo("fr-FR");
+        try
+        {
+            await using var db = Open();
+            await Service(db).CreateSigningUrlAsync(seller, agreementId, default);
+        }
+        finally { System.Globalization.CultureInfo.CurrentCulture = previous; }
+        var html = System.Net.WebUtility.HtmlDecode(client.LastHtml);
+        Assert.Equal(1, System.Text.RegularExpressions.Regex.Matches(html, "/ksb/").Count);
+        Assert.Equal(1, System.Text.RegularExpressions.Regex.Matches(html, "/kss/").Count);
+        Assert.Contains("10.5%", html);
+        Assert.Matches(@"\d{2}/\d{2}/\d{4}", html);
+    }
+
+    [PostgresEsignFact]
+    public async Task Webhook_with_a_known_envelope_syncs_signatures_and_unknown_ids_are_ignored()
+    {
+        await using (var d1 = Open()) await Service(d1).CreateSigningUrlAsync(seller, agreementId, default);
+        string envelopeId;
+        await using (var peek = Open()) envelopeId = (await peek.LiquidationAgreements.AsNoTracking().SingleAsync()).EsignEnvelopeId!;
+        client.Reply = State("completed", true, true);
+        await using (var d2 = Open()) await Service(d2).HandleWebhookAsync("{\"envelopeId\":\"" + Guid.NewGuid() + "\"}", default);
+        await using (var d3 = Open()) Assert.Null((await d3.LiquidationAgreements.AsNoTracking().SingleAsync()).SellerSignedAt);
+        await using (var d4 = Open()) await Service(d4).HandleWebhookAsync("{\"envelopeId\":\"" + envelopeId + "\"}", default);
+        await using var d5 = Open();
+        var a = await d5.LiquidationAgreements.AsNoTracking().SingleAsync();
+        Assert.NotNull(a.SellerSignedAt); Assert.NotNull(a.BuyerSignedAt); Assert.Equal("COMPLETED", a.EsignStatus);
+    }
+
     private sealed class FakeDocuSign : IDocuSignClient
     {
-        public bool IsConfigured => true;
+        public bool Configured { get; set; } = true;
+        public bool IsConfigured => Configured;
         public int Created { get; private set; }
         public string LastHtml { get; private set; } = "";
         public EnvelopeState Reply { get; set; } = new("sent", null, []);

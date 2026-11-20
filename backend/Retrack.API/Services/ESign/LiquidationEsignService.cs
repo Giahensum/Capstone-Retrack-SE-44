@@ -15,7 +15,7 @@ namespace Retrack.API.Services.ESign;
 /// <param name="State">NOT_STARTED, SENT, SELLER_SIGNED, BUYER_SIGNED, COMPLETED, DECLINED hoặc VOIDED.</param>
 /// <param name="Role">SELLER hoặc BUYER (chủ kho mua): bên của người đang gọi.</param>
 public sealed record LiquidationEsignStatusDto(bool Configured, string State, string Role, bool MySideSigned, bool SellerSigned, bool BuyerSigned,
-    string ContractNumber, DateTime? SentAt, DateTime? CompletedAt);
+    string ContractNumber, DateTime? SentAt, DateTime? CompletedAt, bool LegacyAllowed);
 
 public interface ILiquidationEsignService
 {
@@ -31,7 +31,7 @@ public interface ILiquidationEsignService
     /// Nút ký xác nhận cũ chỉ còn dùng khi chưa cấu hình DocuSign, hoặc khi một bên đã ký theo cách cũ trước đó (để không kẹt hợp đồng).
     /// Ném lỗi nếu phải ký bằng DocuSign.
     /// </summary>
-    Task EnsureLegacySigningAllowedAsync(Guid agreementId, CancellationToken ct);
+    Task EnsureLegacySigningAllowedAsync(Guid userId, Guid agreementId, CancellationToken ct);
 }
 
 /// <summary>
@@ -97,15 +97,16 @@ public sealed partial class LiquidationEsignService(
         catch (DepotConflictException) { logger.LogInformation("Bỏ qua kết quả ký đã cũ của hợp đồng thanh lý: {EnvelopeId}", envelopeId); }
     }
 
-    public async Task EnsureLegacySigningAllowedAsync(Guid agreementId, CancellationToken ct)
+    public async Task EnsureLegacySigningAllowedAsync(Guid userId, Guid agreementId, CancellationToken ct)
     {
-        if (!docusign.IsConfigured) return;
-        var a = await db.LiquidationAgreements.AsNoTracking().Where(x => x.Id == agreementId)
-            .Select(x => new { x.EsignEnvelopeId, x.SellerSignedAt, x.BuyerSignedAt }).SingleOrDefaultAsync(ct);
-        if (a is null) return; // để luồng cũ trả lỗi "không tìm thấy" như trước
-        if (string.IsNullOrEmpty(a.EsignEnvelopeId) && (a.SellerSignedAt != null || a.BuyerSignedAt != null)) return;
+        var (a, _) = await LoadAsync(userId, agreementId, ct); // người ngoài thỏa thuận bị từ chối như các thao tác khác
+        if (IsLegacyAllowed(a)) return;
         throw new DepotConflictException("Hợp đồng đặt cọc được ký điện tử qua DocuSign. Hãy dùng nút “Ký điện tử (DocuSign)”.");
     }
+
+    /// <summary>Ký xác nhận cũ chỉ còn dùng khi chưa bật DocuSign, hoặc khi một bên đã ký cũ trước khi có envelope (tránh kẹt hợp đồng).</summary>
+    private bool IsLegacyAllowed(LiquidationAgreement a) =>
+        !docusign.IsConfigured || (string.IsNullOrEmpty(a.EsignEnvelopeId) && (a.SellerSignedAt != null || a.BuyerSignedAt != null));
 
     // ------------------------------------------------------------------ nội bộ
     private void RequireConfigured()
@@ -125,6 +126,8 @@ public sealed partial class LiquidationEsignService(
             ?? throw new KeyNotFoundException("Không tìm thấy thỏa thuận.");
         var role = a.Lot.SellerId == userId ? "SELLER" : a.BuyerId == userId ? "BUYER"
             : throw new DepotForbiddenException("Bạn không thuộc hợp đồng này.");
+        if (!await db.Users.AnyAsync(u => u.Id == userId && u.IsActive, ct))
+            throw new DepotForbiddenException("Tài khoản không còn hoạt động.");
         return (a, role);
     }
 
@@ -136,7 +139,7 @@ public sealed partial class LiquidationEsignService(
         var sellerSigned = a.SellerSignedAt != null;
         var buyerSigned = a.BuyerSignedAt != null;
         return new LiquidationEsignStatusDto(docusign.IsConfigured, state, role, role == "SELLER" ? sellerSigned : buyerSigned,
-            sellerSigned, buyerSigned, ContractNumber(a), a.EsignSentAt, a.EsignCompletedAt);
+            sellerSigned, buyerSigned, ContractNumber(a), a.EsignSentAt, a.EsignCompletedAt, IsLegacyAllowed(a));
     }
 
     private async Task<EnvelopeSigner> SignerOfAsync(LiquidationAgreement a, bool seller, CancellationToken ct)
@@ -172,8 +175,21 @@ public sealed partial class LiquidationEsignService(
         await using var tx = await db.Database.BeginTransactionAsync(ct);
         await LockAsync(a, ct);
         await db.Entry(a).ReloadAsync(ct);
-        if (a.EsignEnvelopeId != previousEnvelope || DocumentHash(a) != documentHash || a.DepositReportedAt != null)
+        await db.Entry(a.Lot).ReloadAsync(ct); // làm tươi lô để mã băm phản ánh dữ liệu hiện tại
+        if (a.EsignEnvelopeId != previousEnvelope)
+        {
+            // Bên còn lại vừa tạo envelope cho đúng phiên bản này: dùng envelope đó, envelope thừa của lượt này bị bỏ.
+            if (!string.IsNullOrEmpty(a.EsignEnvelopeId) && a.EsignTermsHash == documentHash && a.EsignStatus is not ("DECLINED" or "VOIDED"))
+            {
+                logger.LogWarning("Envelope thanh lý {EnvelopeId} bị bỏ vì một envelope khác đã được lưu trước.", envelopeId);
+                return;
+            }
             throw new DepotConflictException("Thỏa thuận đã thay đổi. Hãy tải lại trước khi ký.");
+        }
+        if (DocumentHash(a) != documentHash || a.DepositReportedAt != null)
+            throw new DepotConflictException("Thỏa thuận đã thay đổi. Hãy tải lại trước khi ký.");
+        // Envelope thay thế yêu cầu cả hai bên ký lại: xóa chữ ký của envelope cũ (chưa báo cọc nên không vi phạm ràng buộc).
+        if (!string.IsNullOrEmpty(previousEnvelope)) { a.SellerSignedAt = null; a.BuyerSignedAt = null; }
         a.EsignEnvelopeId = envelopeId.ToLowerInvariant();
         a.EsignTermsHash = documentHash;
         a.EsignStatus = "SENT";
@@ -201,15 +217,15 @@ public sealed partial class LiquidationEsignService(
         await using var tx = await db.Database.BeginTransactionAsync(ct);
         await LockAsync(a, ct);
         await db.Entry(a).ReloadAsync(ct);
-        await db.Entry(a).Reference(x => x.Lot).LoadAsync(ct);
+        await db.Entry(a.Lot).ReloadAsync(ct);
         if (a.EsignEnvelopeId != envelopeId || a.EsignTermsHash != esignHash || DocumentHash(a) != esignHash)
             throw new DepotConflictException("Kết quả ký thuộc phiên bản hợp đồng cũ. Hãy tải lại để xem hợp đồng hiện tại.");
 
         var now = DateTime.UtcNow;
         var sellerDone = envelope.Signers.FirstOrDefault(s => s.RecipientId == "1");
         var buyerDone = envelope.Signers.FirstOrDefault(s => s.RecipientId == "2");
-        var sellerSigned = sellerDone?.Status == "completed";
-        var buyerSigned = buyerDone?.Status == "completed";
+        var sellerSigned = sellerDone?.Status == "completed" || envelope.Status == "completed";
+        var buyerSigned = buyerDone?.Status == "completed" || envelope.Status == "completed";
         var title = a.Lot.Title;
 
         if (envelope.Status == "declined" && a.EsignStatus != "COMPLETED" && a.DepositReportedAt == null)
@@ -255,11 +271,12 @@ public sealed partial class LiquidationEsignService(
     // Giờ Việt Nam (UTC+7) cố định để không phụ thuộc cơ sở dữ liệu múi giờ của máy chủ.
     private static DateTime Vn(DateTime utc) => DateTime.SpecifyKind(utc, DateTimeKind.Utc).AddHours(7);
 
-    private static string ContractNumber(LiquidationAgreement a) => $"HDDC-{Vn(a.CreatedAt):yyyyMMdd}-{a.Id.ToString("N")[..6].ToUpperInvariant()}";
+    private static string ContractNumber(LiquidationAgreement a) => $"HDDC-{Vn(a.CreatedAt).ToString("yyyyMMdd", System.Globalization.CultureInfo.InvariantCulture)}-{a.Id.ToString("N")[..6].ToUpperInvariant()}";
 
     private static string BuildHtml(LiquidationAgreement a, DTOs.Liquidation.ContractPartiesDto p)
     {
-        static string E(string? s) => WebUtility.HtmlEncode(s ?? "");
+        static string E(string? s) => WebUtility.HtmlEncode((s ?? "").Replace(SellerAnchor, "").Replace(BuyerAnchor, ""));
+        static string D(DateTime d) => d.ToString("dd/MM/yyyy", System.Globalization.CultureInfo.InvariantCulture);
         static string Money(decimal v) => v.ToString("N0", System.Globalization.CultureInfo.InvariantCulture).Replace(",", ".") + " đồng";
         const string dots = "..............................";
         var date = Vn(a.CreatedAt);
@@ -274,9 +291,9 @@ public sealed partial class LiquidationEsignService(
         sb.Append("<h2 style=\"text-align:center;margin:16px 0 2px\">HỢP ĐỒNG ĐẶT CỌC MUA BÁN TRỌN LÔ TÀI SẢN THANH LÝ</h2>");
         sb.Append($"<p style=\"text-align:center;margin:0\">Số: <b>{E(number)}</b></p>");
         P("<i>– Căn cứ Bộ luật Dân sự năm 2015;</i>");
-        P($"<i>– Căn cứ kết quả phiên trả giá lô tài sản “{E(a.Lot.Title)}” trên nền tảng RETRACK kết thúc ngày {date:dd/MM/yyyy};</i>");
+        P($"<i>– Căn cứ kết quả phiên trả giá lô tài sản “{E(a.Lot.Title)}” trên nền tảng RETRACK kết thúc ngày {D(date)};</i>");
         P("<i>– Căn cứ nhu cầu và khả năng của hai bên.</i>");
-        P($"Hôm nay, ngày {date:dd} tháng {date:MM} năm {date:yyyy}, hai bên gồm:");
+        P($"Hôm nay, ngày {date.ToString("dd", System.Globalization.CultureInfo.InvariantCulture)} tháng {date.ToString("MM", System.Globalization.CultureInfo.InvariantCulture)} năm {date.ToString("yyyy", System.Globalization.CultureInfo.InvariantCulture)}, hai bên gồm:");
         P("<b>BÊN BÁN</b> (sau đây gọi là Bên A)");
         P($"Ông/Bà: <b>{E(p.SellerName)}</b><br/>Số CCCD/CMND hoặc Mã số thuế: {dots}<br/>Địa chỉ thường trú/trụ sở: {dots}<br/>Điện thoại: {E(p.SellerPhone)}");
         P("<b>BÊN MUA</b> (sau đây gọi là Bên B)");
@@ -291,7 +308,7 @@ public sealed partial class LiquidationEsignService(
 
         H("Điều 2. Giá mua bán và tiền đặt cọc");
         P($"2.1. Tổng giá trị Hợp đồng (giá trúng trọn lô): <b>{Money(a.Amount)}</b> (Bằng chữ: <i>{VietnameseNumber.AmountInWords(a.Amount)}</i>).");
-        P($"2.2. Tiền đặt cọc: <b>{a.Lot.DepositPercent:0.##}%</b> giá trúng, tương đương <b>{Money(a.DepositAmount)}</b> (Bằng chữ: <i>{VietnameseNumber.AmountInWords(a.DepositAmount)}</i>). Bên B nộp cho Bên A sau khi hai bên đã ký Hợp đồng này.");
+        P($"2.2. Tiền đặt cọc: <b>{a.Lot.DepositPercent.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)}%</b> giá trúng, tương đương <b>{Money(a.DepositAmount)}</b> (Bằng chữ: <i>{VietnameseNumber.AmountInWords(a.DepositAmount)}</i>). Bên B nộp cho Bên A sau khi hai bên đã ký Hợp đồng này.");
         P($"2.3. Phần còn lại: <b>{Money(remaining)}</b> (Bằng chữ: <i>{VietnameseNumber.AmountInWords(remaining)}</i>). Bên B thanh toán sau khi Bên A xác nhận đã nhận tiền đặt cọc và trước khi Bên A bàn giao Lô hàng.");
         P("2.4. Tiền đặt cọc được trừ vào giá mua khi Hợp đồng được thực hiện.");
 
@@ -301,7 +318,7 @@ public sealed partial class LiquidationEsignService(
 
         H("Điều 4. Giao nhận và thu gom Lô hàng");
         P("4.1. Bên A bàn giao Lô hàng cho Bên B sau khi đã nhận đủ tiền theo Điều 2.");
-        P($"4.2. Bên B thu gom hết Lô hàng chậm nhất vào ngày <b>{Vn(a.Lot.CollectionDeadline):dd/MM/yyyy}</b>.");
+        P($"4.2. Bên B thu gom hết Lô hàng chậm nhất vào ngày <b>{D(Vn(a.Lot.CollectionDeadline))}</b>.");
         P($"4.3. Điều kiện thu gom và thanh toán do Bên A công bố: {E(a.Lot.CollectionTerms).Replace("\n", "<br/>")}");
         P("4.4. Việc bàn giao của Bên A và việc nhận đủ hàng của Bên B được mỗi bên xác nhận trên nền tảng RETRACK.");
 

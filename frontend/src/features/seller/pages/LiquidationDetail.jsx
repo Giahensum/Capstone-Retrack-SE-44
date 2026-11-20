@@ -16,7 +16,7 @@ import {
   Modal, ConfirmModal, Section, Tile, Notice, Steps, Badge, PriceHero, PriceBar, RankIcon, PHASE_TONE,
 } from '@/components/liquidation/LiquidationUI';
 import { AGREEMENT_STAGE_LABEL, LIQUIDATION_PHASE_LABEL } from '../liquidationLabels';
-import { LiquidationEsignPanel, LiquidationEsignSignButton, useLiquidationEsign, useLiquidationEsignReturn } from '@/features/esign/LiquidationEsign';
+import { LiquidationEsignPanel, LiquidationEsignSignButton, isEsignActive, useLiquidationEsign, useLiquidationEsignReturn } from '@/features/esign/LiquidationEsign';
 
 // Hành động Seller tiếp theo theo giai đoạn thỏa thuận (server vẫn kiểm lại trạng thái).
 const STAGE_ACTIONS = {
@@ -54,7 +54,7 @@ export default function LiquidationDetail() {
     },
   });
   const esign = useLiquidationEsign(data?.agreement?.id);
-  const esignOn = !!esign.data?.configured;
+  const esignOn = isEsignActive(esign.data);
   useLiquidationEsignReturn(() => refetch());
   const { data: bids } = useQuery({
     queryKey: ['seller-liquidation-bids', id, bidPage],
@@ -111,7 +111,7 @@ export default function LiquidationDetail() {
   const hasDeposit = agreement?.depositAmount > 0;
   const action = agreement ? STAGE_ACTIONS[agreement.stage] : null;
   // Đã bật DocuSign thì bước ký dùng nút DocuSign riêng, không dùng nút xác nhận cũ.
-  const canAct = action && !(action.key === 'sign' && (agreement.sellerSignedAt || esignOn));
+  const canAct = action && !(action.key === 'sign' && (agreement.sellerSignedAt || esignOn || esign.isPending));
 
   let steps = [];
   if (agreement) {
