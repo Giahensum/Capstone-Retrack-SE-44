@@ -40,7 +40,8 @@ namespace Retrack.API.Services.Seller
             Stream imageStream,
             string fileName,
             string contentType,
-            bool uploadToCloud = false)
+            bool uploadToCloud = false,
+            string scanMode = "single")
         {
             // Copy stream for Cloudinary if needed
             byte[] imageBytes;
@@ -51,7 +52,7 @@ namespace Retrack.API.Services.Seller
             }
 
             var aiBaseUrl = GetAiBaseUrl();
-            _logger.LogInformation("Gửi ảnh {FileName} tới AI microservice tại {Url}...", fileName, aiBaseUrl);
+            _logger.LogInformation("Gửi ảnh {FileName} (chế độ: {Mode}) tới AI microservice tại {Url}...", fileName, scanMode, aiBaseUrl);
 
             using var content = new MultipartFormDataContent();
             var byteContent = new ByteArrayContent(imageBytes);
@@ -61,7 +62,8 @@ namespace Retrack.API.Services.Seller
             HttpResponseMessage response;
             try
             {
-                response = await _httpClient.PostAsync($"{aiBaseUrl}/api/ai/classify", content);
+                var queryMode = Uri.EscapeDataString(scanMode ?? "single");
+                response = await _httpClient.PostAsync($"{aiBaseUrl}/api/ai/classify?mode={queryMode}", content);
             }
             catch (Exception ex)
             {
@@ -83,7 +85,9 @@ namespace Retrack.API.Services.Seller
             var result = JsonSerializer.Deserialize<SellerAiClassifyResponseDto>(json, options)
                          ?? throw new InvalidOperationException("Không thể giải mã phản hồi từ dịch vụ AI.");
 
-            // Tra cứu giá thị trường thực tế từ Database
+            result.ScanMode = scanMode ?? "single";
+
+            // Tra cứu giá thị trường thực tế từ Database cho cả đơn vật thể và đống hỗn hợp
             await EnrichWithMarketPrice(result);
 
             // Tải lên Cloudinary nếu người dùng yêu cầu
@@ -103,10 +107,10 @@ namespace Retrack.API.Services.Seller
             return result;
         }
 
-        public async Task<SellerAiClassifyResponseDto> ClassifyBase64Async(string imageBase64, bool uploadToCloud = false)
+        public async Task<SellerAiClassifyResponseDto> ClassifyBase64Async(string imageBase64, bool uploadToCloud = false, string scanMode = "single")
         {
             var aiBaseUrl = GetAiBaseUrl();
-            var payload = new { image_base64 = imageBase64 };
+            var payload = new { image_base64 = imageBase64, scan_mode = scanMode ?? "single" };
             var jsonPayload = JsonSerializer.Serialize(payload);
             using var httpContent = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
 
@@ -133,6 +137,8 @@ namespace Retrack.API.Services.Seller
             var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
             var result = JsonSerializer.Deserialize<SellerAiClassifyResponseDto>(json, options)
                          ?? throw new InvalidOperationException("Không thể giải mã phản hồi từ dịch vụ AI.");
+
+            result.ScanMode = scanMode ?? "single";
 
             await EnrichWithMarketPrice(result);
 
@@ -161,6 +167,11 @@ namespace Retrack.API.Services.Seller
             try
             {
                 var res = await _httpClient.GetAsync($"{aiBaseUrl}/api/ai/health");
+                if (!res.IsSuccessStatusCode)
+                {
+                    res = await _httpClient.GetAsync($"{aiBaseUrl}/api/ai/status");
+                }
+
                 if (res.IsSuccessStatusCode)
                 {
                     var body = await res.Content.ReadAsStringAsync();
@@ -196,9 +207,9 @@ namespace Retrack.API.Services.Seller
 
         private async Task EnrichWithMarketPrice(SellerAiClassifyResponseDto result)
         {
-            if (string.IsNullOrWhiteSpace(result.MaterialType)) return;
-
-            if (Enum.TryParse<MaterialType>(result.MaterialType, true, out var matEnum))
+            // 1. Enrich for primary material (Single Mode)
+            if (!string.IsNullOrWhiteSpace(result.MaterialType) &&
+                Enum.TryParse<MaterialType>(result.MaterialType, true, out var matEnum))
             {
                 try
                 {
@@ -216,6 +227,35 @@ namespace Retrack.API.Services.Seller
                 catch (Exception ex)
                 {
                     _logger.LogWarning(ex, "Lỗi truy vấn giá thị trường cho {MaterialType}", result.MaterialType);
+                }
+            }
+
+            // 2. Enrich for each detected object in Mixed Pile Mode
+            if (result.DetectedObjects != null && result.DetectedObjects.Count > 0)
+            {
+                foreach (var obj in result.DetectedObjects)
+                {
+                    if (!string.IsNullOrWhiteSpace(obj.MaterialType) &&
+                        Enum.TryParse<MaterialType>(obj.MaterialType, true, out var objEnum))
+                    {
+                        try
+                        {
+                            var price = await _db.MarketPrices
+                                .Where(p => p.MaterialType == objEnum)
+                                .OrderByDescending(p => p.EffectiveDate)
+                                .Select(p => (decimal?)p.PricePerKg)
+                                .FirstOrDefaultAsync();
+
+                            if (price.HasValue && price.Value > 0)
+                            {
+                                obj.UnitPrice = price.Value;
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Lỗi truy vấn giá thị trường cho đối tượng con {MaterialType}", obj.MaterialType);
+                        }
+                    }
                 }
             }
         }

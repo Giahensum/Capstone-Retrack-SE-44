@@ -571,11 +571,11 @@ export default function CreateRequest() {
                     {detectedAiData.recommendedPricePerKg ? (
                       <div className="mt-1 flex items-center gap-2 flex-wrap">
                         <span className="font-semibold text-emerald-800 dark:text-emerald-300 bg-emerald-500/20 px-2 py-0.5 rounded-full text-xs">
-                          💰 Giá AI đề xuất: {detectedAiData.recommendedPricePerKg.toLocaleString('vi-VN')} đ/kg
+                          💰 {detectedAiData.scan_mode === 'mixed_pile' ? 'Đơn giá bình quân:' : 'Giá AI đề xuất:'} {detectedAiData.recommendedPricePerKg.toLocaleString('vi-VN')} đ/kg
                         </span>
                         {detectedAiData.estimatedTotalPayout && (
                           <span className="text-d-on-surface-variant text-[11px]">
-                            • Ước tính: ~{detectedAiData.estimatedTotalPayout.toLocaleString('vi-VN')} đ ({detectedAiData.estimatedWeight || 10}kg)
+                            • {detectedAiData.scan_mode === 'mixed_pile' ? 'Tổng tiền cả đống:' : 'Ước tính:'} ~{detectedAiData.estimatedTotalPayout.toLocaleString('vi-VN')} đ ({detectedAiData.estimatedWeight || 10}kg)
                           </span>
                         )}
                         {detectedAiData.nearestDepotName && (
@@ -600,8 +600,8 @@ export default function CreateRequest() {
                 </button>
               </div>
 
-              {/* Selector for other predictions in Top 5 */}
-              {detectedAiData.top_predictions && detectedAiData.top_predictions.length > 1 && (
+              {/* Selector for other predictions in Top 5 (Single Mode Only) */}
+              {detectedAiData.scan_mode !== 'mixed_pile' && detectedAiData.top_predictions && detectedAiData.top_predictions.length > 1 && (
                 <div className="pt-2.5 border-t border-emerald-500/20 space-y-1.5">
                   <div className="flex items-center gap-1.5 text-[11px] font-semibold text-d-on-surface">
                     <Layers size={13} className="text-emerald-600" />

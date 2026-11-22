@@ -277,3 +277,71 @@ export function calculateSmartPriceRecommendation({
     nearestDepot: nearestDepot || null,
   };
 }
+
+/**
+ * Tính toán định giá tổng hợp cho Đống phế liệu hỗn hợp đa vật thể (Multi-Item Mixed Waste Pile)
+ */
+export function calculateMixedPilePricingRecommendation({
+  detectedObjects = [],
+  totalWeightKg = 20,
+  nearestDepot = null,
+  qualityId = 'STANDARD',
+  fulfillment = 'DOORSTEP',
+  userLocation = null,
+}) {
+  if (!detectedObjects || detectedObjects.length === 0) {
+    return {
+      isMixed: true,
+      items: [],
+      totalEstimatedValue: 0,
+      averageUnitPrice: 0,
+      totalWeightKg,
+    };
+  }
+
+  // Phân bổ tính tiền cho từng đối tượng trong đống phế liệu
+  let totalEstimatedValue = 0;
+  const items = detectedObjects.map((obj) => {
+    const sharePercent = Number(obj.estimated_share_percent) || 0;
+    const itemWeightKg = Math.round((totalWeightKg * (sharePercent / 100)) * 10) / 10;
+
+    const singleRec = calculateSmartPriceRecommendation({
+      wasteItem: {
+        class_key: obj.class_key,
+        material_type: obj.material_type,
+        current_market_price: obj.unit_price,
+        is_recyclable: obj.is_recyclable !== false,
+      },
+      nearestDepot,
+      weightKg: Math.max(itemWeightKg, 1),
+      qualityId,
+      fulfillment,
+      userLocation,
+    });
+
+    const itemTotal = Math.round(singleRec.recommendedUnitPrice * itemWeightKg);
+    totalEstimatedValue += itemTotal;
+
+    return {
+      ...obj,
+      itemWeightKg,
+      unitPrice: singleRec.recommendedUnitPrice,
+      subTotal: itemTotal,
+      pricingBreakdown: singleRec.breakdown,
+    };
+  });
+
+  const averageUnitPrice = totalWeightKg > 0 ? Math.round(totalEstimatedValue / totalWeightKg) : 0;
+
+  return {
+    isMixed: true,
+    items,
+    totalWeightKg,
+    totalEstimatedValue,
+    averageUnitPrice,
+    nearestDepot,
+    qualityId,
+    fulfillment,
+  };
+}
+

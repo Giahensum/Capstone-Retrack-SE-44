@@ -52,17 +52,18 @@ export const sellerApi = {
   markAllRead: () => api.patch('/seller/notifications/read-all').then(r => r.data),
 
   // ── AI Computer Vision ──
-  classifyAiImage: (file, upload = false) => {
+  classifyAiImage: (file, upload = false, mode = 'single') => {
     const formData = new FormData();
     formData.append('file', file);
-    return api.post(`/seller/ai/classify?upload=${upload}`, formData, {
+    return api.post(`/seller/ai/classify?upload=${upload}&mode=${encodeURIComponent(mode)}`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     }).then(r => r.data.data);
   },
-  classifyAiBase64: (imageBase64, uploadToCloud = false) => {
+  classifyAiBase64: (imageBase64, uploadToCloud = false, mode = 'single') => {
     return api.post('/seller/ai/classify-base64', {
       image_base64: imageBase64,
       upload_to_cloud: uploadToCloud,
+      scan_mode: mode,
     }).then(r => r.data.data);
   },
   getAiStatus: () => api.get('/seller/ai/status').then(r => r.data.data),

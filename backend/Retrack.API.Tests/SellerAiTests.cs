@@ -15,26 +15,30 @@ namespace Retrack.API.Tests
         public bool ShouldThrow { get; set; }
         public string ErrorMessage { get; set; } = "Dịch vụ AI không phản hồi";
 
-        public Task<SellerAiClassifyResponseDto> ClassifyAsync(Stream imageStream, string fileName, string contentType, bool uploadToCloud = false)
+        public Task<SellerAiClassifyResponseDto> ClassifyAsync(Stream imageStream, string fileName, string contentType, bool uploadToCloud = false, string scanMode = "single")
         {
             if (ShouldThrow) throw new InvalidOperationException(ErrorMessage);
-            return Task.FromResult(MockResponse ?? new SellerAiClassifyResponseDto());
+            var res = MockResponse ?? new SellerAiClassifyResponseDto();
+            res.ScanMode = scanMode;
+            return Task.FromResult(res);
         }
 
-        public Task<SellerAiClassifyResponseDto> ClassifyBase64Async(string imageBase64, bool uploadToCloud = false)
+        public Task<SellerAiClassifyResponseDto> ClassifyBase64Async(string imageBase64, bool uploadToCloud = false, string scanMode = "single")
         {
             if (ShouldThrow) throw new InvalidOperationException(ErrorMessage);
-            return Task.FromResult(MockResponse ?? new SellerAiClassifyResponseDto());
+            var res = MockResponse ?? new SellerAiClassifyResponseDto();
+            res.ScanMode = scanMode;
+            return Task.FromResult(res);
         }
 
         public Task<object> GetStatusAsync()
         {
-            return Task.FromResult<object>(new { status = "healthy", model = "EfficientNet-B4" });
+            return Task.FromResult<object>(new { status = "healthy", model = "EfficientNet-B4 + YOLOv8n" });
         }
 
         public Task<object> GetClassesAsync()
         {
-            return Task.FromResult<object>(new { classes = new[] { "cardboard", "plastic" } });
+            return Task.FromResult<object>(new { classes = new[] { "cardboard", "plastic", "metal" } });
         }
     }
 
@@ -110,6 +114,45 @@ namespace Retrack.API.Tests
             Assert.Equal("cardboard", apiResponse.Data.PrimaryClass);
             Assert.Equal("Bìa Carton & Thùng giấy", apiResponse.Data.NameVi);
             Assert.Equal(85.5, apiResponse.Data.Confidence);
+            Assert.Equal("single", apiResponse.Data.ScanMode);
+        }
+
+        [Fact]
+        public async Task Classify_ReturnsMixedPileWithMultipleBoxes_WhenMixedMode()
+        {
+            var bytes = new byte[] { 0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46 };
+            var stream = new MemoryStream(bytes);
+            var file = new FormFile(stream, 0, bytes.Length, "file", "mixed_waste.jpg")
+            {
+                Headers = new HeaderDictionary(),
+                ContentType = "image/jpeg"
+            };
+
+            _aiService.MockResponse = new SellerAiClassifyResponseDto
+            {
+                PrimaryClass = "mixed_pile",
+                NameVi = "Đống phế liệu hỗn hợp đa vật thể",
+                MaterialType = "MIXED",
+                Confidence = 92.0,
+                ScanMode = "mixed_pile",
+                DetectedObjects = new List<AiDetectedObjectDto>
+                {
+                    new() { Id = "obj_1", ClassKey = "cardboard", NameVi = "Bìa Carton", MaterialType = "CARDBOARD", Confidence = 95.0, EstimatedSharePercent = 50.0, Color = "#10b981" },
+                    new() { Id = "obj_2", ClassKey = "plastic", NameVi = "Chai nhựa PET", MaterialType = "PLASTIC", Confidence = 91.5, EstimatedSharePercent = 30.0, Color = "#3b82f6" },
+                    new() { Id = "obj_3", ClassKey = "metal", NameVi = "Vỏ lon nhôm", MaterialType = "METAL", Confidence = 88.0, EstimatedSharePercent = 20.0, Color = "#f59e0b" },
+                }
+            };
+
+            var result = await _controller.Classify(file, false, "mixed_pile");
+            var okResult = Assert.IsType<OkObjectResult>(result);
+            var apiResponse = Assert.IsType<ApiResponse<SellerAiClassifyResponseDto>>(okResult.Value);
+
+            Assert.True(apiResponse.Success);
+            Assert.NotNull(apiResponse.Data);
+            Assert.Equal("mixed_pile", apiResponse.Data.ScanMode);
+            Assert.Equal(3, apiResponse.Data.DetectedObjects.Count);
+            Assert.Equal("Bìa Carton", apiResponse.Data.DetectedObjects[0].NameVi);
+            Assert.Equal(50.0, apiResponse.Data.DetectedObjects[0].EstimatedSharePercent);
         }
 
         [Fact]

@@ -20,11 +20,11 @@ namespace Retrack.API.Controllers.Seller
         }
 
         /// <summary>
-        /// Phân loại rác / phế liệu qua ảnh (Computer Vision AI: EfficientNet-B4 + YOLOv8 + OCR)
+        /// Phân loại rác / phế liệu qua ảnh (Hỗ trợ 2 chế độ: single hoặc mixed_pile đa vật thể)
         /// </summary>
         [HttpPost("classify")]
         [RequestSizeLimit(15 * 1024 * 1024)] // 15MB
-        public async Task<IActionResult> Classify(IFormFile? file, [FromQuery] bool upload = false)
+        public async Task<IActionResult> Classify(IFormFile? file, [FromQuery] bool upload = false, [FromQuery] string mode = "single")
         {
             if (file == null || file.Length == 0)
                 return BadRequest(ApiResponse<string>.Fail("Vui lòng chọn hoặc chụp ảnh phế liệu cần nhận diện."));
@@ -39,8 +39,11 @@ namespace Retrack.API.Controllers.Seller
             try
             {
                 using var stream = file.OpenReadStream();
-                var result = await _aiService.ClassifyAsync(stream, file.FileName, file.ContentType, upload);
-                return Ok(ApiResponse<SellerAiClassifyResponseDto>.Ok(result, "Nhận diện phế liệu thành công bằng AI."));
+                var result = await _aiService.ClassifyAsync(stream, file.FileName, file.ContentType, upload, mode);
+                var message = mode == "mixed_pile"
+                    ? "Nhận diện đống phế liệu hỗn hợp thành công với YOLOv8 đa vật thể."
+                    : "Nhận diện phế liệu thành công bằng AI.";
+                return Ok(ApiResponse<SellerAiClassifyResponseDto>.Ok(result, message));
             }
             catch (InvalidOperationException ex)
             {
@@ -65,8 +68,11 @@ namespace Retrack.API.Controllers.Seller
 
             try
             {
-                var result = await _aiService.ClassifyBase64Async(dto.ImageBase64, dto.UploadToCloud);
-                return Ok(ApiResponse<SellerAiClassifyResponseDto>.Ok(result, "Nhận diện phế liệu thành công bằng AI."));
+                var result = await _aiService.ClassifyBase64Async(dto.ImageBase64, dto.UploadToCloud, dto.ScanMode);
+                var message = dto.ScanMode == "mixed_pile"
+                    ? "Nhận diện đống phế liệu hỗn hợp thành công từ Camera trực tiếp."
+                    : "Nhận diện phế liệu thành công bằng AI.";
+                return Ok(ApiResponse<SellerAiClassifyResponseDto>.Ok(result, message));
             }
             catch (InvalidOperationException ex)
             {
