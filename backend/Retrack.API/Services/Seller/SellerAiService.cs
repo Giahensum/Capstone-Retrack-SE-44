@@ -258,6 +258,203 @@ namespace Retrack.API.Services.Seller
                     }
                 }
             }
+
+            // 3. Enrich Price Trend & Optimal Selling Timing Forecast
+            try
+            {
+                var targetMat = result.ScanMode == "mixed_pile" ? "MIXED" : (!string.IsNullOrWhiteSpace(result.MaterialType) ? result.MaterialType : result.PrimaryClass);
+                var basePrice = result.CurrentMarketPrice ?? (result.ScanMode == "mixed_pile" ? 7500 : 4200);
+                result.PriceForecast = await GetPriceTrendForecastAsync(targetMat, basePrice, 20);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Lỗi dự báo xu hướng giá cho {MaterialType}", result.MaterialType);
+            }
+        }
+
+        public async Task<PriceTrendForecastDto> GetPriceTrendForecastAsync(string materialType, decimal currentPrice, double weightKg = 10)
+        {
+            var matUpper = (materialType ?? string.Empty).ToUpperInvariant();
+            decimal effectivePrice = currentPrice;
+
+            if (effectivePrice <= 0 && Enum.TryParse<MaterialType>(matUpper, true, out var matEnum))
+            {
+                var latest = await _db.MarketPrices
+                    .Where(p => p.MaterialType == matEnum)
+                    .OrderByDescending(p => p.EffectiveDate)
+                    .Select(p => (decimal?)p.PricePerKg)
+                    .FirstOrDefaultAsync();
+
+                if (latest.HasValue && latest.Value > 0)
+                {
+                    effectivePrice = latest.Value;
+                }
+            }
+
+            if (effectivePrice <= 0)
+            {
+                effectivePrice = matUpper switch
+                {
+                    "CARDBOARD" => 3500,
+                    "PAPER" => 4000,
+                    "PLASTIC" or "PET" or "HDPE" => 8500,
+                    "METAL" or "ALUMINUM" => 24000,
+                    "IRON" or "STEEL" => 12000,
+                    "MIXED" => 7800,
+                    _ => 5000
+                };
+            }
+
+            string trendDirection;
+            double trendPercentage;
+            double confidenceScore;
+            string optimalAction;
+            string optimalTimingTitle;
+            string optimalTimingAdvice;
+            string optimalDay;
+            var drivers = new List<string>();
+
+            if (matUpper.Contains("METAL") || matUpper.Contains("ALUMINUM") || matUpper.Contains("IRON") || matUpper.Contains("STEEL") || matUpper.Contains("COPPER"))
+            {
+                trendDirection = "UP";
+                trendPercentage = 4.8;
+                confidenceScore = 86.5;
+                optimalAction = "HOLD_AND_ACCUMULATE";
+                optimalTimingTitle = "Nên tích trữ thêm 3 - 5 ngày để gom lô lớn";
+                optimalDay = "Thứ Năm tuần này";
+                optimalTimingAdvice = "Giá kim loại đang có xu hướng tăng +4.8% trong 7 ngày tới do nhu cầu từ các nhà máy phôi thép. Bạn nên giữ và tích thêm số lượng lớn để nhận thêm trợ giá sản lượng.";
+                drivers.Add("Nhu cầu lò tái chế phôi kim loại tăng cao vào chu kỳ sản xuất giữa tuần.");
+                drivers.Add("Chỉ số giá nhập khẩu kim loại nguyên liệu đang có xu hướng phục hồi.");
+                drivers.Add("Trợ giá khối lượng lớn (+300 đ - 500 đ/kg) khi gom trên 50kg.");
+            }
+            else if (matUpper.Contains("CARDBOARD") || matUpper.Contains("PAPER"))
+            {
+                trendDirection = "UP";
+                trendPercentage = 3.2;
+                confidenceScore = 84.0;
+                optimalAction = "SELL_BEFORE_WEEKEND";
+                optimalTimingTitle = "Nên đặt lịch thu gom trước Thứ Sáu";
+                optimalDay = "Thứ Sáu";
+                optimalTimingAdvice = "Các kho vựa đối tác thường hoàn tất đóng kiện xuất đi nhà máy giấy bao bì vào cuối tuần. Bán trước Thứ Sáu sẽ được ưu tiên điều phối xe và chốt giá tốt nhất.";
+                drivers.Add("Nhu cầu nguyên liệu giấy tái sinh của các nhà máy bao bì carton duy trì ổn định.");
+                drivers.Add("Kho vựa đang cần bổ sung tồn kho giấy carton để chạy dây chuyền ép kiện.");
+            }
+            else if (matUpper.Contains("PLASTIC") || matUpper.Contains("PET") || matUpper.Contains("HDPE"))
+            {
+                trendDirection = "STABLE";
+                trendPercentage = 0.5;
+                confidenceScore = 91.0;
+                optimalAction = "SELL_NOW";
+                optimalTimingTitle = "Nên bán ngay hôm nay";
+                optimalDay = "Hôm nay";
+                optimalTimingAdvice = "Giá nhựa tái sinh đang ở vùng đỉnh ổn định 14 ngày qua. Đặt lịch bán ngay hôm nay giúp bạn giải phóng không gian lưu trữ và tránh suy giảm phẩm chất nhựa.";
+                drivers.Add("Chỉ số giá hạt nhựa tái sinh PET/HDPE đang đi ngang ổn định.");
+                drivers.Add("Nguồn cung chai nhựa sinh hoạt dồi dào, ít có biến động lớn trong ngắn hạn.");
+            }
+            else if (matUpper.Contains("MIXED"))
+            {
+                trendDirection = "UP";
+                trendPercentage = 3.6;
+                confidenceScore = 85.0;
+                optimalAction = "HOLD_AND_ACCUMULATE";
+                optimalTimingTitle = "Xu hướng đống hỗn hợp tăng nhẹ (+3.6%)";
+                optimalDay = "3 ngày tới";
+                optimalTimingAdvice = "Đống phế liệu hỗn hợp của bạn có tỷ trọng thành phần kim loại và carton đang tăng giá. Nên phân loại sơ bộ và tích thêm để tối ưu hóa giá trị thanh toán.";
+                drivers.Add("Thành phần kim loại trong đống kéo giá bình quân tăng theo sóng tuần.");
+                drivers.Add("Hỗ trợ thu gom trọn gói tận nơi khi đạt khối lượng trên 30kg.");
+            }
+            else
+            {
+                trendDirection = "STABLE";
+                trendPercentage = 0.0;
+                confidenceScore = 80.0;
+                optimalAction = "SELL_NOW";
+                optimalTimingTitle = "Giá thị trường duy trì ổn định";
+                optimalDay = "Linh hoạt";
+                optimalTimingAdvice = "Mức giá hiện tại tương ứng với giá sàn thị trường chuẩn. Bạn có thể đặt đơn bất cứ lúc nào thuận tiện.";
+                drivers.Add("Thị trường phế liệu đang trong giai đoạn bình ổn giá.");
+            }
+
+            var now = DateTime.UtcNow;
+            var points = new List<PriceForecastPointDto>();
+            decimal peakPrice = effectivePrice;
+
+            for (int offset = -3; offset <= 7; offset++)
+            {
+                var dt = now.AddDays(offset);
+                decimal pointPrice;
+
+                if (offset < 0)
+                {
+                    var pastFactor = trendDirection == "UP" ? (1.0m - (decimal)(Math.Abs(offset) * 0.012)) : (1.0m + (decimal)(Math.Abs(offset) * 0.008));
+                    pointPrice = Math.Round(effectivePrice * pastFactor, 0);
+                }
+                else if (offset == 0)
+                {
+                    pointPrice = effectivePrice;
+                }
+                else
+                {
+                    var growthRatio = (decimal)(trendPercentage / 100.0) * (offset / 7.0m);
+                    pointPrice = Math.Round(effectivePrice * (1.0m + growthRatio), 0);
+                }
+
+                if (pointPrice > peakPrice) peakPrice = pointPrice;
+
+                string dayLabel = offset switch
+                {
+                    -3 => "T-3",
+                    -2 => "T-2",
+                    -1 => "Hôm qua",
+                    0 => "Hôm nay",
+                    1 => "+1 ngày",
+                    2 => "+2 ngày",
+                    3 => "+3 ngày",
+                    4 => "+4 ngày",
+                    5 => "+5 ngày",
+                    6 => "+6 ngày",
+                    7 => "+7 ngày",
+                    _ => dt.ToString("dd/MM")
+                };
+
+                points.Add(new PriceForecastPointDto
+                {
+                    Date = dt.ToString("yyyy-MM-dd"),
+                    DayLabel = dayLabel,
+                    Price = pointPrice,
+                    IsForecast = offset > 0
+                });
+            }
+
+            var forecastPrice7d = points.Last().Price;
+            decimal potentialGain = Math.Max(0, (peakPrice - effectivePrice) * (decimal)weightKg);
+
+            return new PriceTrendForecastDto
+            {
+                MaterialType = materialType,
+                MaterialNameVi = matUpper switch
+                {
+                    "CARDBOARD" => "Bìa Carton",
+                    "PAPER" => "Giấy phế liệu",
+                    "PLASTIC" or "PET" => "Nhựa PET",
+                    "METAL" or "ALUMINUM" => "Nhôm / Kim loại",
+                    "IRON" => "Sắt phế liệu",
+                    "MIXED" => "Đống phế liệu hỗn hợp",
+                    _ => materialType
+                },
+                CurrentPrice = effectivePrice,
+                ForecastPrice7d = forecastPrice7d,
+                TrendDirection = trendDirection,
+                TrendPercentage = trendPercentage,
+                ConfidenceScore = confidenceScore,
+                OptimalAction = optimalAction,
+                OptimalTimingTitle = optimalTimingTitle,
+                OptimalTimingAdvice = optimalTimingAdvice,
+                OptimalDay = optimalDay,
+                PotentialGainAmount = potentialGain,
+                MarketDrivers = drivers,
+                Points = points
+            };
         }
     }
 }

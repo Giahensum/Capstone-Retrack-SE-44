@@ -87,10 +87,24 @@ if (!fs.existsSync(EVIDENCE_DIR)) {
     const priceText = await page.locator('span.text-2xl.font-black.text-emerald-600').first().textContent().catch(() => 'N/A');
     console.log(`💰 Giá đề xuất cho phế liệu đơn lẻ: ${priceText} đ/kg`);
 
+    // Verify NEW: Price Trend & Optimal Selling Timing Card
+    console.log('👉 Kiểm tra Component Dự báo xu hướng giá & Thời điểm bán tối ưu...');
+    await page.waitForSelector('text=Dự báo xu hướng giá & Thời điểm bán tối ưu', { timeout: 5000 });
+    const hasTrendBadge = await page.locator('text=AI Forecast 7D').count() > 0;
+    console.log(`📈 Badge AI Forecast 7D hiển thị: ${hasTrendBadge}`);
+
+    // Click to expand Market Drivers accordion
+    const expandDriversBtn = page.locator('button:has-text("Xem lý do thị trường & động lực giá")').first();
+    if (await expandDriversBtn.count() > 0) {
+      await expandDriversBtn.click();
+      await page.waitForTimeout(400);
+      console.log('🔍 Đã mở rộng phân tích bối cảnh cung cầu thị trường.');
+    }
+
     // Capture screenshot Flow 1
     const shot1Path = path.join(EVIDENCE_DIR, '01_ai_scanner_pricing_recommendation.png');
     await page.screenshot({ path: shot1Path, fullPage: true });
-    console.log(`📸 Lưu screenshot Flow 1: ${shot1Path}`);
+    console.log(`📸 Lưu screenshot Flow 1 (Kèm dự báo giá & thời điểm bán): ${shot1Path}`);
 
     // Click "Tạo đơn với mức giá đề xuất này"
     console.log('👉 Bấm nút chuyển thông tin AI sang Tạo đơn...');
@@ -154,10 +168,15 @@ if (!fs.existsSync(EVIDENCE_DIR)) {
     const mixedPayoutText = await page.locator('div.text-2xl.font-black.text-emerald-600').first().textContent().catch(() => 'N/A');
     console.log(`💰 Tổng giá trị AI ước tính cả đống hỗn hợp: ${mixedPayoutText}`);
 
+    // Verify Mixed Pile Price Trend & Timing Card
+    console.log('👉 Kiểm tra Component Dự báo xu hướng giá đống phế liệu hỗn hợp...');
+    const hasMixedTrend = await page.locator('text=Dự báo xu hướng giá & Thời điểm bán tối ưu').count() > 0;
+    console.log(`📈 Card Dự báo xu hướng giá đống hỗn hợp hiển thị: ${hasMixedTrend}`);
+
     // Capture screenshot Flow 2
     const shot3Path = path.join(EVIDENCE_DIR, '03_mixed_pile_multibox_scanner.png');
     await page.screenshot({ path: shot3Path, fullPage: true });
-    console.log(`📸 Lưu screenshot Flow 2 (Multi-box Scanner): ${shot3Path}`);
+    console.log(`📸 Lưu screenshot Flow 2 (Multi-box Scanner & Trend Forecast): ${shot3Path}`);
 
     // -------------------------------------------------------------
     // FLOW 3: 1-CLICK TRANSFER TO CREATE REQUEST & FULL SUBMISSION

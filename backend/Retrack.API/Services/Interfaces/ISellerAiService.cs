@@ -6,6 +6,7 @@ namespace Retrack.API.Services.Interfaces
     {
         Task<SellerAiClassifyResponseDto> ClassifyAsync(Stream imageStream, string fileName, string contentType, bool uploadToCloud = false, string scanMode = "single");
         Task<SellerAiClassifyResponseDto> ClassifyBase64Async(string imageBase64, bool uploadToCloud = false, string scanMode = "single");
+        Task<PriceTrendForecastDto> GetPriceTrendForecastAsync(string materialType, decimal currentPrice, double weightKg = 10);
         Task<object> GetStatusAsync();
         Task<object> GetClassesAsync();
     }

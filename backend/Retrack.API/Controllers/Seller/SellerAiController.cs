@@ -105,5 +105,18 @@ namespace Retrack.API.Controllers.Seller
             var classes = await _aiService.GetClassesAsync();
             return Ok(ApiResponse<object>.Ok(classes));
         }
+
+        /// <summary>
+        /// Dự báo xu hướng giá & Gợi ý thời điểm bán tối ưu (Optimal Selling Timing)
+        /// </summary>
+        [HttpGet("price-forecast")]
+        public async Task<IActionResult> GetPriceForecast(
+            [FromQuery] string material = "CARDBOARD",
+            [FromQuery] decimal price = 0,
+            [FromQuery] double weight = 10)
+        {
+            var forecast = await _aiService.GetPriceTrendForecastAsync(material, price, weight);
+            return Ok(ApiResponse<PriceTrendForecastDto>.Ok(forecast, "Lấy dự báo xu hướng giá và thời điểm bán thành công."));
+        }
     }
 }

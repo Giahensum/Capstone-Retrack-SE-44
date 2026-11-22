@@ -8,13 +8,15 @@ import {
   Loader2, Camera, Upload, Sparkles, RefreshCw, ArrowRight,
   CheckCircle2, AlertTriangle, ShieldCheck, Check, Layers,
   MapPin, Scale, Award, Truck, Store, Calculator,
-  ChevronDown, ChevronUp, Coins, Info, Eye, EyeOff, RotateCcw,
+  ChevronDown, ChevronUp, Coins, Info, Eye, EyeOff,
+  TrendingUp, TrendingDown,
 } from 'lucide-react';
 import { normalizeAiPredictions } from '../aiWasteMetadata';
 import {
   calculateDepotsDistanceWithGoong,
   calculateSmartPriceRecommendation,
   calculateMixedPilePricingRecommendation,
+  calculatePriceTrendAndTiming,
   QUALITY_CONDITIONS,
   FULFILLMENT_METHODS,
 } from '../pricingRecommendation';
@@ -38,6 +40,254 @@ const DEMO_SAMPLES = [
   },
 ];
 
+/**
+ * Component hiển thị Dự báo xu hướng giá & Gợi ý thời điểm bán tối ưu (AI Market Timing)
+ */
+function PriceTrendAndTimingCard({ forecast, weightKg = 20 }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  if (!forecast || !forecast.points || forecast.points.length === 0) return null;
+
+  const points = forecast.points;
+  const prices = points.map((p) => p.price);
+  const minPrice = Math.min(...prices);
+  const maxPrice = Math.max(...prices);
+  const priceRange = maxPrice - minPrice || 1;
+
+  // Chart dimensions
+  const svgWidth = 480;
+  const svgHeight = 85;
+  const padX = 28;
+  const padY = 16;
+  const chartW = svgWidth - padX * 2;
+  const chartH = svgHeight - padY * 2;
+
+  const getX = (index) => padX + (index / (points.length - 1)) * chartW;
+  const getY = (price) => padY + chartH - ((price - minPrice) / priceRange) * chartH;
+
+  const todayIndex = points.findIndex((p) => p.dayLabel === 'Hôm nay' || p.offset === 0);
+  const validTodayIndex = todayIndex >= 0 ? todayIndex : 2;
+
+  const historyPath = points.slice(0, validTodayIndex + 1).map((p, idx) => {
+    return `${idx === 0 ? 'M' : 'L'} ${getX(idx)} ${getY(p.price)}`;
+  }).join(' ');
+
+  const forecastPath = points.slice(validTodayIndex).map((p, idx) => {
+    const globalIdx = validTodayIndex + idx;
+    return `${idx === 0 ? 'M' : 'L'} ${getX(globalIdx)} ${getY(p.price)}`;
+  }).join(' ');
+
+  const peakPoint = points.reduce((prev, curr) => (curr.price > prev.price ? curr : prev), points[0]);
+  const peakIndex = points.findIndex((p) => p === peakPoint);
+
+  const isUp = forecast.trendDirection === 'UP';
+  const isDown = forecast.trendDirection === 'DOWN';
+
+  return (
+    <div className="bg-gradient-to-br from-d-surface-container-low via-d-surface-container-lowest to-d-surface-container-lowest border border-d-primary/25 rounded-2xl p-4 space-y-3 shadow-xs">
+      {/* Top Bar: Title & Trend Badge */}
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-xl bg-d-primary/10 text-d-primary flex items-center justify-center shrink-0">
+            <TrendingUp size={18} />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h4 className="font-bold text-xs text-d-on-surface">
+                Dự báo xu hướng giá & Thời điểm bán tối ưu
+              </h4>
+              <span className="text-[10px] font-bold text-d-primary bg-d-primary/10 px-2 py-0.5 rounded-full font-mono">
+                AI Forecast 7D
+              </span>
+            </div>
+            <p className="text-[11px] text-d-on-surface-variant mt-0.5">
+              Phân tích dữ liệu giá 30 ngày qua & chu kỳ nhập của kho vựa
+            </p>
+          </div>
+        </div>
+
+        {/* Trend Indicator Badge */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span
+            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold font-mono ${
+              isUp
+                ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30'
+                : isDown
+                ? 'bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-500/30'
+                : 'bg-blue-500/15 text-blue-700 dark:text-blue-400 border border-blue-500/30'
+            }`}
+          >
+            {isUp && <TrendingUp size={13} />}
+            {isDown && <TrendingDown size={13} />}
+            <span>
+              {isUp ? `Tăng +${forecast.trendPercentage}%` : isDown ? `Giảm -${Math.abs(forecast.trendPercentage)}%` : 'Bình ổn ±0%'}
+            </span>
+          </span>
+          <span className="text-[10px] text-d-on-surface-variant font-mono">
+            (Độ tin cậy: {forecast.confidenceScore}%)
+          </span>
+        </div>
+      </div>
+
+      {/* SVG Interactive Trend Sparkline */}
+      <div className="bg-d-surface-container-lowest border border-d-border-subtle rounded-xl p-2.5 relative">
+        <div className="flex justify-between text-[10px] font-mono text-d-on-surface-variant px-2 mb-1">
+          <span>Quá khứ</span>
+          <span className="text-d-primary font-bold">● Hôm nay</span>
+          <span className="text-amber-600 font-bold">Dự báo 7 ngày tới (AI) ➔</span>
+        </div>
+
+        <svg viewBox={`0 0 ${svgWidth} ${svgHeight}`} className="w-full h-22 overflow-visible">
+          {/* Grid lines */}
+          <line x1={padX} y1={getY(maxPrice)} x2={svgWidth - padX} y2={getY(maxPrice)} stroke="#e5e7eb" strokeDasharray="2 2" strokeWidth="1" />
+          <line x1={padX} y1={getY(minPrice)} x2={svgWidth - padX} y2={getY(minPrice)} stroke="#e5e7eb" strokeDasharray="2 2" strokeWidth="1" />
+
+          {/* Today vertical divider */}
+          <line
+            x1={getX(validTodayIndex)}
+            y1={padY}
+            x2={getX(validTodayIndex)}
+            y2={svgHeight - padY}
+            stroke="#10b981"
+            strokeDasharray="2 2"
+            strokeWidth="1.5"
+            opacity="0.6"
+          />
+
+          {/* Historical path (Solid) */}
+          <path d={historyPath} fill="none" stroke="#6b7280" strokeWidth="2.5" strokeLinecap="round" />
+
+          {/* Forecast path (Dashed) */}
+          <path d={forecastPath} fill="none" stroke="#10b981" strokeWidth="2.5" strokeDasharray="4 4" strokeLinecap="round" />
+
+          {/* Points */}
+          {points.map((p, idx) => {
+            const cx = getX(idx);
+            const cy = getY(p.price);
+            const isToday = idx === validTodayIndex;
+            const isPeak = idx === peakIndex && p.price > forecast.currentPrice;
+
+            return (
+              <g key={idx} className="cursor-pointer group">
+                <circle
+                  cx={cx}
+                  cy={cy}
+                  r={isToday ? 5 : isPeak ? 5 : 3.5}
+                  fill={isToday ? '#10b981' : isPeak ? '#f59e0b' : p.isForecast ? '#34d399' : '#9ca3af'}
+                  stroke="#ffffff"
+                  strokeWidth="2"
+                />
+                <text
+                  x={cx}
+                  y={svgHeight - 2}
+                  textAnchor="middle"
+                  className="text-[9px] fill-current text-d-on-surface-variant font-mono"
+                >
+                  {p.dayLabel}
+                </text>
+              </g>
+            );
+          })}
+        </svg>
+
+        <div className="flex justify-between items-center text-[10px] text-d-on-surface-variant pt-1 border-t border-d-border-subtle mt-1 font-mono">
+          <span>Giá thấp nhất: {minPrice.toLocaleString('vi-VN')} đ</span>
+          <span className="text-emerald-600 font-bold">
+            Giá đỉnh kỳ vọng ({peakPoint.dayLabel}): {maxPrice.toLocaleString('vi-VN')} đ/kg
+          </span>
+        </div>
+      </div>
+
+      {/* Actionable Advice & Simulation Card */}
+      <div
+        className={`p-3 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+          forecast.optimalAction === 'HOLD_AND_ACCUMULATE'
+            ? 'bg-amber-500/10 border-amber-500/30'
+            : forecast.optimalAction === 'SELL_BEFORE_WEEKEND'
+            ? 'bg-blue-500/10 border-blue-500/30'
+            : 'bg-emerald-500/10 border-emerald-500/30'
+        }`}
+      >
+        <div className="space-y-1">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span
+              className={`text-[11px] font-extrabold uppercase tracking-wide px-2 py-0.5 rounded-md ${
+                forecast.optimalAction === 'HOLD_AND_ACCUMULATE'
+                  ? 'bg-amber-500 text-white'
+                  : forecast.optimalAction === 'SELL_BEFORE_WEEKEND'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-emerald-600 text-white'
+              }`}
+            >
+              {forecast.optimalAction === 'HOLD_AND_ACCUMULATE'
+                ? '🟡 Gợi ý: Nên gom thêm 3 - 5 ngày'
+                : forecast.optimalAction === 'SELL_BEFORE_WEEKEND'
+                ? '🔵 Gợi ý: Bán trước Thứ Sáu'
+                : '🟢 Gợi ý: Nên bán ngay hôm nay'}
+            </span>
+            <span className="text-xs font-bold text-d-on-surface">
+              {forecast.optimalTimingTitle}
+            </span>
+          </div>
+
+          <p className="text-xs text-d-on-surface-variant leading-relaxed">
+            {forecast.optimalTimingAdvice}
+          </p>
+        </div>
+
+        {forecast.potentialGain > 0 && (
+          <div className="bg-white dark:bg-d-surface-container-low p-2 rounded-xl border border-amber-500/20 shrink-0 text-right shadow-2xs">
+            <span className="text-[10px] text-d-on-surface-variant block font-medium">
+              Chênh lệch lợi nhuận ước tính (~{weightKg}kg):
+            </span>
+            <div className="flex items-baseline justify-end gap-1 mt-0.5">
+              <span className="text-xs font-semibold text-d-on-surface-variant line-through font-mono">
+                {forecast.currentTotal.toLocaleString('vi-VN')}đ
+              </span>
+              <span className="text-sm font-black text-emerald-600 font-mono">
+                ➔ {forecast.optimalTotal.toLocaleString('vi-VN')}đ
+              </span>
+            </div>
+            <span className="text-[10px] font-bold text-emerald-600 font-mono">
+              (Thêm +{forecast.potentialGain.toLocaleString('vi-VN')} đ)
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Accordion: Market Drivers */}
+      <div className="pt-0.5">
+        <button
+          type="button"
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="text-xs font-bold text-d-primary hover:underline flex items-center justify-between w-full cursor-pointer py-1"
+        >
+          <span className="flex items-center gap-1.5">
+            <Info size={13} />
+            <span>Xem lý do thị trường & động lực giá ({forecast.marketDrivers?.length || 0} yếu tố)</span>
+          </span>
+          {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+        </button>
+
+        {isExpanded && (
+          <div className="mt-2 p-3 rounded-xl bg-d-surface-container-lowest border border-d-border-subtle text-xs space-y-1.5 animate-fadeIn">
+            <p className="font-bold text-d-on-surface text-[11px] mb-1">
+              Phân tích bối cảnh cung - cầu từ các nhà máy & vựa phế liệu đối tác:
+            </p>
+            <ul className="space-y-1 text-d-on-surface-variant text-[11px]">
+              {forecast.marketDrivers?.map((driver, i) => (
+                <li key={i} className="flex items-start gap-1.5">
+                  <span className="text-d-primary font-bold">•</span>
+                  <span>{driver}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function SellerAiScanner() {
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
@@ -57,7 +307,6 @@ export default function SellerAiScanner() {
   // Multi-box interaction state for mixed pile
   const [hoveredBoxId, setHoveredBoxId] = useState(null);
   const [hiddenBoxIds, setHiddenBoxIds] = useState(new Set());
-  const [manualShares, setManualShares] = useState({}); // { [boxId]: number }
 
   // ── Smart Price Recommendation inputs & state ──
   const [userLocation, setUserLocation] = useState({ address: '', lat: null, lng: null });
@@ -255,23 +504,8 @@ export default function SellerAiScanner() {
     setSelectedPredictionIndex(0);
     setHoveredBoxId(null);
     setHiddenBoxIds(new Set());
-    setManualShares({});
     if (fileInputRef.current) fileInputRef.current.value = '';
     if (activeTab === 'camera') startCamera();
-  };
-
-  // Cập nhật tỷ lệ % thủ công cho từng vật thể trong đống phế liệu
-  const handleUpdateShare = (itemId, newPercent) => {
-    setManualShares((prev) => ({
-      ...prev,
-      [itemId]: Math.max(1, Math.min(99, Number(newPercent))),
-    }));
-  };
-
-  // Hoàn tác về tỷ lệ chuẩn hóa vật lý ban đầu từ AI
-  const handleResetManualShares = () => {
-    setManualShares({});
-    toast.success('Đã hoàn tác về tỷ lệ chuẩn hóa vật lý ban đầu từ AI');
   };
 
   // Handle Quick Demo Sample selection
@@ -316,14 +550,8 @@ export default function SellerAiScanner() {
 
     // Chế độ 2: Đống phế liệu hỗn hợp (Mixed Pile)
     if (scanMode === 'mixed_pile') {
-      const effectiveObjects = (aiResult.detected_objects || []).map((obj) => ({
-        ...obj,
-        estimated_share_percent: manualShares[obj.id] ?? obj.estimated_share_percent,
-        manual_share_percent: manualShares[obj.id],
-      }));
-
       const mixedPricing = calculateMixedPilePricingRecommendation({
-        detectedObjects: effectiveObjects,
+        detectedObjects: aiResult.detected_objects || [],
         totalWeightKg: Number(estimatedWeight) || 20,
         nearestDepot,
         qualityId: qualityCondition,
@@ -848,11 +1076,7 @@ export default function SellerAiScanner() {
 
           {/* AI Result Card: MIXED PILE MODE */}
           {aiResult && scanMode === 'mixed_pile' && (() => {
-            const detectedObjects = (aiResult.detected_objects || []).map((obj) => ({
-              ...obj,
-              estimated_share_percent: manualShares[obj.id] ?? obj.estimated_share_percent,
-              manual_share_percent: manualShares[obj.id],
-            }));
+            const detectedObjects = aiResult.detected_objects || [];
             const mixedPricing = calculateMixedPilePricingRecommendation({
               detectedObjects,
               totalWeightKg: Number(estimatedWeight) || 20,
@@ -861,8 +1085,6 @@ export default function SellerAiScanner() {
               fulfillment: fulfillmentMethod,
               userLocation,
             });
-
-            const hasManualAdjustments = Object.keys(manualShares).length > 0;
 
             return (
               <div className="bg-d-surface-container-lowest border border-amber-500/30 rounded-3xl p-6 shadow-md space-y-6">
@@ -888,37 +1110,13 @@ export default function SellerAiScanner() {
                   </div>
                 </div>
 
-                {/* ── Thông tin Khoa học Vật lý: Chuẩn hóa Trọng số Tỷ trọng Rời (Bulk Density) ── */}
-                <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-xs space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1.5 text-xs">
-                      <Sparkles size={14} className="text-amber-600" />
-                      <span>Chuẩn hóa Trọng số Tỷ trọng Vật lý (Bulk Density Index):</span>
-                    </span>
-                    {hasManualAdjustments && (
-                      <button
-                        type="button"
-                        onClick={handleResetManualShares}
-                        className="text-[11px] font-bold text-d-primary hover:underline flex items-center gap-1 cursor-pointer"
-                      >
-                        <RotateCcw size={12} />
-                        <span>Hoàn tác tỷ lệ AI</span>
-                      </button>
-                    )}
-                  </div>
-                  <p className="text-[11px] text-d-on-surface-variant leading-relaxed">
-                    Hệ thống tự động quy đổi diện tích quang học 2D sang khối lượng thực tế (kg) bằng công thức: <code className="font-mono text-d-on-surface bg-d-surface-container px-1 py-0.5 rounded">M = Area × ρ × Conf</code>.
-                    Chai nhựa rỗng nhẹ được chiết giảm thể tích (ρ = 0.45), kim loại nặng được tăng trọng số cân ký (ρ = 3.8). Bạn có thể kéo thanh trượt bên dưới để tinh chỉnh theo ý muốn.
-                  </p>
-                </div>
-
                 {/* ── Visual Stacked Composition Bar ── */}
                 <div className="space-y-1.5">
                   <div className="flex justify-between text-xs font-bold text-d-on-surface">
-                    <span>Cơ cấu khối lượng phế liệu thực tế (Cân ký):</span>
-                    <span className="font-mono text-emerald-600 font-bold">100% khối lượng (~{estimatedWeight} kg)</span>
+                    <span>Cơ cấu thành phần đống phế liệu:</span>
+                    <span className="font-mono text-d-primary">100% diện tích</span>
                   </div>
-                  <div className="w-full h-4 bg-d-surface-container rounded-full overflow-hidden flex shadow-inner">
+                  <div className="w-full h-3.5 bg-d-surface-container rounded-full overflow-hidden flex shadow-inner">
                     {detectedObjects.map((obj) => (
                       <div
                         key={obj.id}
@@ -929,22 +1127,22 @@ export default function SellerAiScanner() {
                         }}
                         onMouseEnter={() => setHoveredBoxId(obj.id)}
                         onMouseLeave={() => setHoveredBoxId(null)}
-                        title={`${obj.name_vi}: ${obj.estimated_share_percent}% khối lượng (Diện tích ảnh: ${obj.visual_area_percent || '~'}%)`}
+                        title={`${obj.name_vi}: ${obj.estimated_share_percent}%`}
                       />
                     ))}
                   </div>
                 </div>
 
-                {/* ── Detected Objects Component Cards List with Interactive Sliders ── */}
+                {/* ── Detected Objects Component Cards List ── */}
                 <div className="space-y-2.5">
                   <div className="flex items-center justify-between text-xs font-bold text-d-on-surface">
-                    <span>Phân bổ chi tiết & Tinh chỉnh tỷ lệ (Slider):</span>
+                    <span>Danh sách vật thể phân tách (Bấm để bật/tắt Box):</span>
                     <span className="text-[11px] text-d-on-surface-variant font-normal">
-                      Kéo trượt để thay đổi %
+                      Rê chuột để sáng vị trí
                     </span>
                   </div>
 
-                  <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
+                  <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
                     {mixedPricing.items.map((item) => {
                       const isHovered = hoveredBoxId === item.id;
                       const isHidden = hiddenBoxIds.has(item.id);
@@ -954,9 +1152,9 @@ export default function SellerAiScanner() {
                           key={item.id}
                           onMouseEnter={() => setHoveredBoxId(item.id)}
                           onMouseLeave={() => setHoveredBoxId(null)}
-                          className={`p-3.5 rounded-2xl border transition-all space-y-2.5 ${
+                          className={`p-3 rounded-2xl border transition-all flex items-center justify-between gap-3 ${
                             isHovered
-                              ? 'border-2 shadow-xs ring-2 scale-[1.005]'
+                              ? 'border-2 shadow-xs ring-2 scale-[1.01]'
                               : 'border-d-border-subtle bg-d-surface-container-low hover:bg-d-surface-container'
                           }`}
                           style={{
@@ -964,76 +1162,46 @@ export default function SellerAiScanner() {
                             backgroundColor: isHovered ? `${item.color}08` : undefined,
                           }}
                         >
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="flex items-center gap-2.5 min-w-0">
-                              {/* Color Dot & Visibility Toggle */}
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  toggleBoxVisibility(item.id);
-                                }}
-                                className="w-6 h-6 rounded-lg flex items-center justify-center transition-colors cursor-pointer shrink-0"
-                                title={isHidden ? 'Hiện Bounding Box' : 'Ẩn Bounding Box'}
-                                style={{ backgroundColor: `${item.color}20`, color: item.color }}
-                              >
-                                {isHidden ? <EyeOff size={14} /> : <Eye size={14} />}
-                              </button>
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            {/* Color Dot & Visibility Toggle */}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleBoxVisibility(item.id);
+                              }}
+                              className="w-6 h-6 rounded-lg flex items-center justify-center transition-colors cursor-pointer"
+                              title={isHidden ? 'Hiện Bounding Box' : 'Ẩn Bounding Box'}
+                              style={{ backgroundColor: `${item.color}20`, color: item.color }}
+                            >
+                              {isHidden ? <EyeOff size={14} /> : <Eye size={14} />}
+                            </button>
 
-                              <div className="min-w-0">
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  <span className="font-bold text-xs text-d-on-surface truncate">
-                                    {item.name_vi}
-                                  </span>
-                                  <span
-                                    className="text-[10px] font-bold px-1.5 py-0.2 rounded font-mono text-white"
-                                    style={{ backgroundColor: item.color }}
-                                  >
-                                    {item.estimated_share_percent}% khối lượng
-                                  </span>
-                                  {item.bulk_density && (
-                                    <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-d-surface-container text-d-on-surface-variant">
-                                      ρ={item.bulk_density}
-                                    </span>
-                                  )}
-                                </div>
-                                <p className="text-[11px] text-d-on-surface-variant truncate mt-0.5">
-                                  Khối lượng: <strong className="text-d-on-surface font-mono">~{item.itemWeightKg} kg</strong> · Đơn giá: {item.unitPrice.toLocaleString('vi-VN')} đ/kg
-                                  {item.visual_area_percent != null && (
-                                    <span className="opacity-75 font-mono ml-1.5">
-                                      (Diện tích 2D: {item.visual_area_percent}%)
-                                    </span>
-                                  )}
-                                </p>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="font-bold text-xs text-d-on-surface truncate">
+                                  {item.name_vi}
+                                </span>
+                                <span
+                                  className="text-[10px] font-bold px-1.5 py-0.2 rounded font-mono text-white"
+                                  style={{ backgroundColor: item.color }}
+                                >
+                                  {item.estimated_share_percent}%
+                                </span>
                               </div>
-                            </div>
-
-                            {/* Subtotal Payout */}
-                            <div className="text-right shrink-0">
-                              <span className="font-mono font-bold text-sm text-emerald-600 block">
-                                ~{item.subTotal.toLocaleString('vi-VN')} đ
-                              </span>
-                              <span className="text-[10px] text-d-on-surface-variant font-mono">
-                                {item.confidence}% tin cậy
-                              </span>
+                              <p className="text-[11px] text-d-on-surface-variant truncate mt-0.5">
+                                Ước tính: <strong className="text-d-on-surface font-mono">~{item.itemWeightKg} kg</strong> · {item.unitPrice.toLocaleString('vi-VN')} đ/kg
+                              </p>
                             </div>
                           </div>
 
-                          {/* Interactive Share Slider */}
-                          <div className="flex items-center gap-3 pt-1 border-t border-d-border-subtle/50">
-                            <span className="text-[10px] text-d-on-surface-variant shrink-0 font-medium">
-                              Chỉnh tỷ lệ:
+                          {/* Subtotal Payout */}
+                          <div className="text-right shrink-0">
+                            <span className="font-mono font-bold text-sm text-emerald-600 block">
+                              ~{item.subTotal.toLocaleString('vi-VN')} đ
                             </span>
-                            <input
-                              type="range"
-                              min="1"
-                              max="95"
-                              value={item.estimated_share_percent}
-                              onChange={(e) => handleUpdateShare(item.id, e.target.value)}
-                              className="w-full h-1.5 bg-d-surface-container rounded-lg appearance-none cursor-pointer accent-d-primary"
-                            />
-                            <span className="text-xs font-mono font-bold text-d-on-surface w-10 text-right shrink-0">
-                              {item.estimated_share_percent}%
+                            <span className="text-[10px] text-d-on-surface-variant font-mono">
+                              {item.confidence}% tin cậy
                             </span>
                           </div>
                         </div>
@@ -1144,6 +1312,24 @@ export default function SellerAiScanner() {
                     })}
                   </div>
                 </div>
+
+                {/* ── Bổ sung: Dự báo xu hướng giá đống phế liệu hỗn hợp ── */}
+                {(() => {
+                  const mixedTrendForecast = calculatePriceTrendAndTiming({
+                    materialType: 'MIXED',
+                    classKey: 'mixed_pile',
+                    currentPrice: mixedPricing.averageUnitPrice,
+                    weightKg: Number(estimatedWeight) || 20,
+                    isMixed: true,
+                    detectedObjects: aiResult.detected_objects || [],
+                  });
+                  return (
+                    <PriceTrendAndTimingCard
+                      forecast={aiResult.price_forecast || mixedTrendForecast}
+                      weightKg={Number(estimatedWeight) || 20}
+                    />
+                  );
+                })()}
 
                 {/* ── Grand Total Payout Banner ── */}
                 <div className="p-4 rounded-2xl bg-gradient-to-br from-amber-500/15 via-emerald-500/10 to-transparent border border-amber-500/30 space-y-3">
@@ -1639,6 +1825,23 @@ export default function SellerAiScanner() {
                         </div>
                       )}
                     </div>
+
+                    {/* ── Bổ sung: Dự báo xu hướng giá & Gợi ý thời điểm bán tối ưu ── */}
+                    {(() => {
+                      const trendForecast = calculatePriceTrendAndTiming({
+                        materialType: currentSelected.material_type,
+                        classKey: currentSelected.class_key,
+                        currentPrice: smartPrice.recommendedUnitPrice,
+                        weightKg: Number(estimatedWeight) || 20,
+                        isMixed: false,
+                      });
+                      return (
+                        <PriceTrendAndTimingCard
+                          forecast={aiResult.price_forecast || trendForecast}
+                          weightKg={Number(estimatedWeight) || 20}
+                        />
+                      );
+                    })()}
 
                     {/* Nút 1-Click: Tạo đơn với mức giá đề xuất */}
                     <button

@@ -40,6 +40,29 @@ namespace Retrack.API.Tests
         {
             return Task.FromResult<object>(new { classes = new[] { "cardboard", "plastic", "metal" } });
         }
+
+        public Task<PriceTrendForecastDto> GetPriceTrendForecastAsync(string materialType, decimal currentPrice, double weightKg = 10)
+        {
+            return Task.FromResult(new PriceTrendForecastDto
+            {
+                MaterialType = materialType,
+                CurrentPrice = currentPrice > 0 ? currentPrice : 4200,
+                ForecastPrice7d = (currentPrice > 0 ? currentPrice : 4200) * 1.05m,
+                TrendDirection = "UP",
+                TrendPercentage = 5.0,
+                ConfidenceScore = 88.0,
+                OptimalAction = "HOLD_AND_ACCUMULATE",
+                OptimalTimingTitle = "Nên tích trữ thêm 3 - 5 ngày để gom lô lớn",
+                OptimalTimingAdvice = "Giá kim loại và carton đang có xu hướng tăng trong 7 ngày tới.",
+                OptimalDay = "Thứ Năm",
+                Points = new List<PriceForecastPointDto>
+                {
+                    new() { DayLabel = "Hôm nay", Price = 4200, IsForecast = false },
+                    new() { DayLabel = "+3 ngày", Price = 4350, IsForecast = true },
+                    new() { DayLabel = "+7 ngày", Price = 4410, IsForecast = true },
+                }
+            });
+        }
     }
 
     public class SellerAiTests
@@ -203,6 +226,20 @@ namespace Retrack.API.Tests
             var okResult = Assert.IsType<OkObjectResult>(result);
             var apiResponse = Assert.IsType<ApiResponse<object>>(okResult.Value);
             Assert.True(apiResponse.Success);
+        }
+
+        [Fact]
+        public async Task GetPriceForecast_ReturnsOptimalTiming_WhenValidMaterial()
+        {
+            var result = await _controller.GetPriceForecast("ALUMINUM", 24000, 20);
+            var okResult = Assert.IsType<OkObjectResult>(result);
+            var apiResponse = Assert.IsType<ApiResponse<PriceTrendForecastDto>>(okResult.Value);
+            Assert.True(apiResponse.Success);
+            Assert.NotNull(apiResponse.Data);
+            Assert.Equal("ALUMINUM", apiResponse.Data.MaterialType);
+            Assert.Equal("UP", apiResponse.Data.TrendDirection);
+            Assert.Equal("HOLD_AND_ACCUMULATE", apiResponse.Data.OptimalAction);
+            Assert.NotEmpty(apiResponse.Data.Points);
         }
     }
 }

@@ -64,12 +64,6 @@ namespace Retrack.API.DTOs
         [JsonPropertyName("estimated_share_percent")]
         public double EstimatedSharePercent { get; set; }
 
-        [JsonPropertyName("visual_area_percent")]
-        public double VisualAreaPercent { get; set; }
-
-        [JsonPropertyName("bulk_density")]
-        public double BulkDensity { get; set; } = 1.0;
-
         [JsonPropertyName("color")]
         public string Color { get; set; } = "#10b981";
 
@@ -147,6 +141,69 @@ namespace Retrack.API.DTOs
 
         [JsonPropertyName("uploaded_url")]
         public string? UploadedUrl { get; set; }
+
+        [JsonPropertyName("price_forecast")]
+        public PriceTrendForecastDto? PriceForecast { get; set; }
+    }
+
+    public class PriceForecastPointDto
+    {
+        [JsonPropertyName("date")]
+        public string Date { get; set; } = string.Empty;
+
+        [JsonPropertyName("day_label")]
+        public string DayLabel { get; set; } = string.Empty;
+
+        [JsonPropertyName("price")]
+        public decimal Price { get; set; }
+
+        [JsonPropertyName("is_forecast")]
+        public bool IsForecast { get; set; }
+    }
+
+    public class PriceTrendForecastDto
+    {
+        [JsonPropertyName("material_type")]
+        public string MaterialType { get; set; } = string.Empty;
+
+        [JsonPropertyName("material_name_vi")]
+        public string MaterialNameVi { get; set; } = string.Empty;
+
+        [JsonPropertyName("current_price")]
+        public decimal CurrentPrice { get; set; }
+
+        [JsonPropertyName("forecast_price_7d")]
+        public decimal ForecastPrice7d { get; set; }
+
+        [JsonPropertyName("trend_direction")]
+        public string TrendDirection { get; set; } = "UP"; // UP, DOWN, STABLE
+
+        [JsonPropertyName("trend_percentage")]
+        public double TrendPercentage { get; set; }
+
+        [JsonPropertyName("confidence_score")]
+        public double ConfidenceScore { get; set; }
+
+        [JsonPropertyName("optimal_action")]
+        public string OptimalAction { get; set; } = "HOLD_AND_ACCUMULATE"; // SELL_NOW, HOLD_AND_ACCUMULATE, SELL_BEFORE_WEEKEND
+
+        [JsonPropertyName("optimal_timing_title")]
+        public string OptimalTimingTitle { get; set; } = string.Empty;
+
+        [JsonPropertyName("optimal_timing_advice")]
+        public string OptimalTimingAdvice { get; set; } = string.Empty;
+
+        [JsonPropertyName("optimal_day")]
+        public string OptimalDay { get; set; } = string.Empty;
+
+        [JsonPropertyName("potential_gain_amount")]
+        public decimal PotentialGainAmount { get; set; }
+
+        [JsonPropertyName("market_drivers")]
+        public List<string> MarketDrivers { get; set; } = new();
+
+        [JsonPropertyName("points")]
+        public List<PriceForecastPointDto> Points { get; set; } = new();
     }
 
     public class AiClassifyBase64RequestDto

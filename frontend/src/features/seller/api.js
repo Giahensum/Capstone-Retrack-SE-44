@@ -68,5 +68,7 @@ export const sellerApi = {
   },
   getAiStatus: () => api.get('/seller/ai/status').then(r => r.data.data),
   getAiClasses: () => api.get('/seller/ai/classes').then(r => r.data.data),
+  getPriceForecast: (material = 'CARDBOARD', price = 0, weight = 10) =>
+    api.get('/seller/ai/price-forecast', { params: { material, price, weight } }).then(r => r.data.data),
 };
 

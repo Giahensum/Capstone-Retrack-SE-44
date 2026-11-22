@@ -57,63 +57,14 @@ const TOP_PREDICTIONS = [
   { class_key: 'trash', name_vi: 'Rác sinh hoạt không thu gom', confidence: 0.4, material_type: 'OTHER', is_recyclable: false }
 ];
 
-const BULK_DENSITIES = {
-  metal: 3.8,         // Lon nhôm, sắt thép, kim loại
-  battery: 6.5,       // Pin, ắc quy cũ
-  'white-glass': 2.5, // Thủy tinh
-  'brown-glass': 2.5,
-  'green-glass': 2.5,
-  glass: 2.5,
-  paper: 1.4,         // Giấy sách báo cọc
-  cardboard: 1.2,     // Bìa carton xếp dẹp
-  clothes: 1.0,       // Quần áo cũ
-  shoes: 0.9,         // Giày dép
-  trash: 0.8,         // Rác hỗn hợp
-  biological: 0.8,    // Rác hữu cơ
-  plastic: 0.45,      // Chai nhựa rỗng PET
-};
-
-function computePhysicalDensityShares(objects) {
-  let totalArea = 0;
-  let totalMassScore = 0;
-
-  const intermediate = objects.map((obj) => {
-    const box = obj.bounding_box;
-    const area = Math.max(box.width * box.height, 1);
-    const density = BULK_DENSITIES[obj.class_key] || 1.0;
-    const confWeight = Math.max(obj.confidence || 85, 40) / 100;
-    const massScore = area * density * confWeight;
-
-    totalArea += area;
-    totalMassScore += massScore;
-
-    return {
-      ...obj,
-      pixel_area: area,
-      bulk_density: density,
-      mass_score: massScore,
-    };
-  });
-
-  return intermediate.map((obj) => {
-    const visualArea = totalArea > 0 ? Math.round((obj.pixel_area / totalArea) * 1000) / 10 : 0;
-    const physicalWeight = totalMassScore > 0 ? Math.round((obj.mass_score / totalMassScore) * 1000) / 10 : 0;
-    return {
-      ...obj,
-      visual_area_percent: visualArea,
-      physical_weight_percent: physicalWeight,
-      estimated_share_percent: physicalWeight,
-    };
-  });
-}
-
-const RAW_MIXED_PILE_OBJECTS = [
+const MIXED_PILE_OBJECTS = [
   {
     id: 'box_carton_01',
     class_key: 'cardboard',
     name_vi: 'Bìa Carton Kraft',
     material_type: 'CARDBOARD',
     confidence: 94.8,
+    estimated_share_percent: 45.0,
     color: '#10b981', // Emerald
     unit_price: 4200,
     price_range: '3.000 - 5.500 đ/kg',
@@ -133,6 +84,7 @@ const RAW_MIXED_PILE_OBJECTS = [
     name_vi: 'Chai nhựa PET trong suốt',
     material_type: 'PLASTIC',
     confidence: 91.2,
+    estimated_share_percent: 35.0,
     color: '#3b82f6', // Blue
     unit_price: 8500,
     price_range: '7.500 - 9.500 đ/kg',
@@ -152,6 +104,7 @@ const RAW_MIXED_PILE_OBJECTS = [
     name_vi: 'Vỏ lon nhôm phế liệu',
     material_type: 'METAL',
     confidence: 88.5,
+    estimated_share_percent: 20.0,
     color: '#f59e0b', // Amber
     unit_price: 24000,
     price_range: '22.000 - 26.000 đ/kg',
@@ -166,8 +119,6 @@ const RAW_MIXED_PILE_OBJECTS = [
     }
   }
 ];
-
-const MIXED_PILE_OBJECTS = computePhysicalDensityShares(RAW_MIXED_PILE_OBJECTS);
 
 const server = http.createServer((req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -238,6 +189,48 @@ const server = http.createServer((req, res) => {
         ];
       }
 
+      const forecastPoints = [
+        { date: '2026-11-20', day_label: 'T-2', price: isMixed ? 7500 : 4050, is_forecast: false },
+        { date: '2026-11-21', day_label: 'Hôm qua', price: isMixed ? 7650 : 4120, is_forecast: false },
+        { date: '2026-11-22', day_label: 'Hôm nay', price: isMixed ? 7810 : 4200, is_forecast: false },
+        { date: '2026-11-23', day_label: '+1 ngày', price: isMixed ? 7900 : 4250, is_forecast: true },
+        { date: '2026-11-24', day_label: '+2 ngày', price: isMixed ? 8020 : 4290, is_forecast: true },
+        { date: '2026-11-25', day_label: '+3 ngày', price: isMixed ? 8150 : 4330, is_forecast: true },
+        { date: '2026-11-26', day_label: '+4 ngày', price: isMixed ? 8220 : 4360, is_forecast: true },
+        { date: '2026-11-27', day_label: '+5 ngày', price: isMixed ? 8300 : 4400, is_forecast: true },
+        { date: '2026-11-28', day_label: '+6 ngày', price: isMixed ? 8260 : 4380, is_forecast: true },
+        { date: '2026-11-29', day_label: '+7 ngày', price: isMixed ? 8200 : 4350, is_forecast: true }
+      ];
+
+      const priceForecast = {
+        material_type: isMixed ? 'MIXED' : meta.material_type,
+        material_name_vi: isMixed ? 'Đống phế liệu hỗn hợp' : meta.name_vi,
+        current_price: isMixed ? 7810 : 4200,
+        forecast_price_7d: isMixed ? 8300 : 4400,
+        trend_direction: 'UP',
+        trend_percentage: isMixed ? 4.5 : 3.8,
+        confidence_score: 87.5,
+        optimal_action: isMixed ? 'HOLD_AND_ACCUMULATE' : 'SELL_BEFORE_WEEKEND',
+        optimal_timing_title: isMixed ? 'Nên tích thêm 3 - 5 ngày để gom lô lớn' : 'Nên chốt bán trước Thứ Sáu',
+        optimal_day: 'Thứ Năm - Thứ Sáu',
+        optimal_timing_advice: isMixed
+          ? 'Đống phế liệu có thành phần kim loại và carton đang trong sóng tăng giá ngắn hạn (+4.5%). Bạn nên giữ thêm 3-5 ngày để gom trên 30kg hưởng thêm trợ giá khối lượng.'
+          : 'Kho vựa đang cần bổ sung gấp tồn kho carton để xuất nhà máy vào cuối tuần. Bạn nên đặt lịch bán trước Thứ Sáu để hưởng mức giá thu mua cao nhất.',
+        potential_gain_amount: isMixed ? 24500 : 10000,
+        market_drivers: isMixed
+          ? [
+              'Nhu cầu vỏ lon nhôm tái chế tăng đột biến ở các nhà máy luyện kim.',
+              'Kho vựa mở rộng thu mua đống hỗn hợp với mức chiết khấu điều phối thấp.',
+              'Trợ giá khối lượng lớn (+300 đ/kg) khi gom trên 30kg.'
+            ]
+          : [
+              'Nhu cầu nguyên liệu giấy tái sinh của các nhà máy bao bì carton duy trì ở mức cao.',
+              'Kho vựa hoàn tất chốt đơn xe tải gom hàng về nhà máy trước cuối tuần.',
+              'Hạn chế lưu kho lâu ngày tránh giấy bị ẩm mốc giảm giá thu mua.'
+            ],
+        points: forecastPoints
+      };
+
       const responsePayload = {
         success: true,
         scan_mode: isMixed ? 'mixed_pile' : 'single',
@@ -247,6 +240,7 @@ const server = http.createServer((req, res) => {
         is_recyclable: true,
         confidence: isMixed ? 92.8 : meta.confidence,
         box_status: isMixed ? 'YOLO: 3 Objects Detected' : ('YOLO: ' + (meta.material_type === 'OTHER' ? 'trash' : 'cardboard')),
+        price_forecast: priceForecast,
         bounding_box: {
           x1: 30,
           y1: 40,
@@ -263,7 +257,7 @@ const server = http.createServer((req, res) => {
           ? 'Đống phế liệu có nhiều thành phần giá trị cao (nhôm, nhựa, carton). Nên phân loại sơ bộ để thu mua với giá tốt nhất.'
           : meta.tip,
         suggested_description: isMixed
-          ? `Đống phế liệu hỗn hợp (${MIXED_PILE_OBJECTS.map(o => `${o.name_vi} ~${o.estimated_share_percent}%`).join(', ')} - Chuẩn hóa tỷ trọng vật lý), cần xe thu gom toàn bộ.`
+          ? 'Đống phế liệu hỗn hợp gồm 3 nhóm vật liệu chính (Bìa carton 45%, Chai nhựa PET 35%, Lon nhôm 20%), cần xe thu gom toàn bộ.'
           : meta.suggested_desc,
         top_predictions: topList,
         detected_objects: isMixed ? MIXED_PILE_OBJECTS : [
@@ -274,9 +268,6 @@ const server = http.createServer((req, res) => {
             material_type: meta.material_type,
             confidence: meta.confidence,
             estimated_share_percent: 100.0,
-            visual_area_percent: 100.0,
-            physical_weight_percent: 100.0,
-            bulk_density: BULK_DENSITIES[meta.material_type === 'OTHER' ? 'trash' : 'cardboard'] || 1.0,
             color: '#10b981',
             unit_price: 4200,
             price_range: meta.price_range,
@@ -292,7 +283,7 @@ const server = http.createServer((req, res) => {
           }
         ],
         mixed_summary: isMixed
-          ? `Đống phế liệu hỗn hợp đa vật thể gồm ${MIXED_PILE_OBJECTS.length} nhóm: ${MIXED_PILE_OBJECTS.map(o => `${o.name_vi} (${o.estimated_share_percent}% khối lượng, ${o.visual_area_percent}% diện tích ảnh)`).join('; ')}.`
+          ? 'Đống phế liệu hỗn hợp đa vật thể gồm 3 nhóm: Bìa carton kraft (45%), Chai nhựa PET (35%) và Lon kim loại (20%).'
           : '',
         annotated_image: '',
         ensemble_details: {
