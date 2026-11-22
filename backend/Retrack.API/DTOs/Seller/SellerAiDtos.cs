@@ -64,6 +64,12 @@ namespace Retrack.API.DTOs
         [JsonPropertyName("estimated_share_percent")]
         public double EstimatedSharePercent { get; set; }
 
+        [JsonPropertyName("visual_area_percent")]
+        public double VisualAreaPercent { get; set; }
+
+        [JsonPropertyName("bulk_density")]
+        public double BulkDensity { get; set; } = 1.0;
+
         [JsonPropertyName("color")]
         public string Color { get; set; } = "#10b981";
 

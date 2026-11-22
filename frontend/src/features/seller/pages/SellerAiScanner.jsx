@@ -8,7 +8,7 @@ import {
   Loader2, Camera, Upload, Sparkles, RefreshCw, ArrowRight,
   CheckCircle2, AlertTriangle, ShieldCheck, Check, Layers,
   MapPin, Scale, Award, Truck, Store, Calculator,
-  ChevronDown, ChevronUp, Coins, Info, Eye, EyeOff,
+  ChevronDown, ChevronUp, Coins, Info, Eye, EyeOff, RotateCcw,
 } from 'lucide-react';
 import { normalizeAiPredictions } from '../aiWasteMetadata';
 import {
@@ -57,6 +57,7 @@ export default function SellerAiScanner() {
   // Multi-box interaction state for mixed pile
   const [hoveredBoxId, setHoveredBoxId] = useState(null);
   const [hiddenBoxIds, setHiddenBoxIds] = useState(new Set());
+  const [manualShares, setManualShares] = useState({}); // { [boxId]: number }
 
   // ── Smart Price Recommendation inputs & state ──
   const [userLocation, setUserLocation] = useState({ address: '', lat: null, lng: null });
@@ -254,8 +255,23 @@ export default function SellerAiScanner() {
     setSelectedPredictionIndex(0);
     setHoveredBoxId(null);
     setHiddenBoxIds(new Set());
+    setManualShares({});
     if (fileInputRef.current) fileInputRef.current.value = '';
     if (activeTab === 'camera') startCamera();
+  };
+
+  // Cập nhật tỷ lệ % thủ công cho từng vật thể trong đống phế liệu
+  const handleUpdateShare = (itemId, newPercent) => {
+    setManualShares((prev) => ({
+      ...prev,
+      [itemId]: Math.max(1, Math.min(99, Number(newPercent))),
+    }));
+  };
+
+  // Hoàn tác về tỷ lệ chuẩn hóa vật lý ban đầu từ AI
+  const handleResetManualShares = () => {
+    setManualShares({});
+    toast.success('Đã hoàn tác về tỷ lệ chuẩn hóa vật lý ban đầu từ AI');
   };
 
   // Handle Quick Demo Sample selection
@@ -300,8 +316,14 @@ export default function SellerAiScanner() {
 
     // Chế độ 2: Đống phế liệu hỗn hợp (Mixed Pile)
     if (scanMode === 'mixed_pile') {
+      const effectiveObjects = (aiResult.detected_objects || []).map((obj) => ({
+        ...obj,
+        estimated_share_percent: manualShares[obj.id] ?? obj.estimated_share_percent,
+        manual_share_percent: manualShares[obj.id],
+      }));
+
       const mixedPricing = calculateMixedPilePricingRecommendation({
-        detectedObjects: aiResult.detected_objects || [],
+        detectedObjects: effectiveObjects,
         totalWeightKg: Number(estimatedWeight) || 20,
         nearestDepot,
         qualityId: qualityCondition,
@@ -826,7 +848,11 @@ export default function SellerAiScanner() {
 
           {/* AI Result Card: MIXED PILE MODE */}
           {aiResult && scanMode === 'mixed_pile' && (() => {
-            const detectedObjects = aiResult.detected_objects || [];
+            const detectedObjects = (aiResult.detected_objects || []).map((obj) => ({
+              ...obj,
+              estimated_share_percent: manualShares[obj.id] ?? obj.estimated_share_percent,
+              manual_share_percent: manualShares[obj.id],
+            }));
             const mixedPricing = calculateMixedPilePricingRecommendation({
               detectedObjects,
               totalWeightKg: Number(estimatedWeight) || 20,
@@ -835,6 +861,8 @@ export default function SellerAiScanner() {
               fulfillment: fulfillmentMethod,
               userLocation,
             });
+
+            const hasManualAdjustments = Object.keys(manualShares).length > 0;
 
             return (
               <div className="bg-d-surface-container-lowest border border-amber-500/30 rounded-3xl p-6 shadow-md space-y-6">
@@ -860,13 +888,37 @@ export default function SellerAiScanner() {
                   </div>
                 </div>
 
+                {/* ── Thông tin Khoa học Vật lý: Chuẩn hóa Trọng số Tỷ trọng Rời (Bulk Density) ── */}
+                <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-xs space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1.5 text-xs">
+                      <Sparkles size={14} className="text-amber-600" />
+                      <span>Chuẩn hóa Trọng số Tỷ trọng Vật lý (Bulk Density Index):</span>
+                    </span>
+                    {hasManualAdjustments && (
+                      <button
+                        type="button"
+                        onClick={handleResetManualShares}
+                        className="text-[11px] font-bold text-d-primary hover:underline flex items-center gap-1 cursor-pointer"
+                      >
+                        <RotateCcw size={12} />
+                        <span>Hoàn tác tỷ lệ AI</span>
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-d-on-surface-variant leading-relaxed">
+                    Hệ thống tự động quy đổi diện tích quang học 2D sang khối lượng thực tế (kg) bằng công thức: <code className="font-mono text-d-on-surface bg-d-surface-container px-1 py-0.5 rounded">M = Area × ρ × Conf</code>.
+                    Chai nhựa rỗng nhẹ được chiết giảm thể tích (ρ = 0.45), kim loại nặng được tăng trọng số cân ký (ρ = 3.8). Bạn có thể kéo thanh trượt bên dưới để tinh chỉnh theo ý muốn.
+                  </p>
+                </div>
+
                 {/* ── Visual Stacked Composition Bar ── */}
                 <div className="space-y-1.5">
                   <div className="flex justify-between text-xs font-bold text-d-on-surface">
-                    <span>Cơ cấu thành phần đống phế liệu:</span>
-                    <span className="font-mono text-d-primary">100% diện tích</span>
+                    <span>Cơ cấu khối lượng phế liệu thực tế (Cân ký):</span>
+                    <span className="font-mono text-emerald-600 font-bold">100% khối lượng (~{estimatedWeight} kg)</span>
                   </div>
-                  <div className="w-full h-3.5 bg-d-surface-container rounded-full overflow-hidden flex shadow-inner">
+                  <div className="w-full h-4 bg-d-surface-container rounded-full overflow-hidden flex shadow-inner">
                     {detectedObjects.map((obj) => (
                       <div
                         key={obj.id}
@@ -877,22 +929,22 @@ export default function SellerAiScanner() {
                         }}
                         onMouseEnter={() => setHoveredBoxId(obj.id)}
                         onMouseLeave={() => setHoveredBoxId(null)}
-                        title={`${obj.name_vi}: ${obj.estimated_share_percent}%`}
+                        title={`${obj.name_vi}: ${obj.estimated_share_percent}% khối lượng (Diện tích ảnh: ${obj.visual_area_percent || '~'}%)`}
                       />
                     ))}
                   </div>
                 </div>
 
-                {/* ── Detected Objects Component Cards List ── */}
+                {/* ── Detected Objects Component Cards List with Interactive Sliders ── */}
                 <div className="space-y-2.5">
                   <div className="flex items-center justify-between text-xs font-bold text-d-on-surface">
-                    <span>Danh sách vật thể phân tách (Bấm để bật/tắt Box):</span>
+                    <span>Phân bổ chi tiết & Tinh chỉnh tỷ lệ (Slider):</span>
                     <span className="text-[11px] text-d-on-surface-variant font-normal">
-                      Rê chuột để sáng vị trí
+                      Kéo trượt để thay đổi %
                     </span>
                   </div>
 
-                  <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                  <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
                     {mixedPricing.items.map((item) => {
                       const isHovered = hoveredBoxId === item.id;
                       const isHidden = hiddenBoxIds.has(item.id);
@@ -902,9 +954,9 @@ export default function SellerAiScanner() {
                           key={item.id}
                           onMouseEnter={() => setHoveredBoxId(item.id)}
                           onMouseLeave={() => setHoveredBoxId(null)}
-                          className={`p-3 rounded-2xl border transition-all flex items-center justify-between gap-3 ${
+                          className={`p-3.5 rounded-2xl border transition-all space-y-2.5 ${
                             isHovered
-                              ? 'border-2 shadow-xs ring-2 scale-[1.01]'
+                              ? 'border-2 shadow-xs ring-2 scale-[1.005]'
                               : 'border-d-border-subtle bg-d-surface-container-low hover:bg-d-surface-container'
                           }`}
                           style={{
@@ -912,46 +964,76 @@ export default function SellerAiScanner() {
                             backgroundColor: isHovered ? `${item.color}08` : undefined,
                           }}
                         >
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            {/* Color Dot & Visibility Toggle */}
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                toggleBoxVisibility(item.id);
-                              }}
-                              className="w-6 h-6 rounded-lg flex items-center justify-center transition-colors cursor-pointer"
-                              title={isHidden ? 'Hiện Bounding Box' : 'Ẩn Bounding Box'}
-                              style={{ backgroundColor: `${item.color}20`, color: item.color }}
-                            >
-                              {isHidden ? <EyeOff size={14} /> : <Eye size={14} />}
-                            </button>
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              {/* Color Dot & Visibility Toggle */}
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleBoxVisibility(item.id);
+                                }}
+                                className="w-6 h-6 rounded-lg flex items-center justify-center transition-colors cursor-pointer shrink-0"
+                                title={isHidden ? 'Hiện Bounding Box' : 'Ẩn Bounding Box'}
+                                style={{ backgroundColor: `${item.color}20`, color: item.color }}
+                              >
+                                {isHidden ? <EyeOff size={14} /> : <Eye size={14} />}
+                              </button>
 
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className="font-bold text-xs text-d-on-surface truncate">
-                                  {item.name_vi}
-                                </span>
-                                <span
-                                  className="text-[10px] font-bold px-1.5 py-0.2 rounded font-mono text-white"
-                                  style={{ backgroundColor: item.color }}
-                                >
-                                  {item.estimated_share_percent}%
-                                </span>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="font-bold text-xs text-d-on-surface truncate">
+                                    {item.name_vi}
+                                  </span>
+                                  <span
+                                    className="text-[10px] font-bold px-1.5 py-0.2 rounded font-mono text-white"
+                                    style={{ backgroundColor: item.color }}
+                                  >
+                                    {item.estimated_share_percent}% khối lượng
+                                  </span>
+                                  {item.bulk_density && (
+                                    <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-d-surface-container text-d-on-surface-variant">
+                                      ρ={item.bulk_density}
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-[11px] text-d-on-surface-variant truncate mt-0.5">
+                                  Khối lượng: <strong className="text-d-on-surface font-mono">~{item.itemWeightKg} kg</strong> · Đơn giá: {item.unitPrice.toLocaleString('vi-VN')} đ/kg
+                                  {item.visual_area_percent != null && (
+                                    <span className="opacity-75 font-mono ml-1.5">
+                                      (Diện tích 2D: {item.visual_area_percent}%)
+                                    </span>
+                                  )}
+                                </p>
                               </div>
-                              <p className="text-[11px] text-d-on-surface-variant truncate mt-0.5">
-                                Ước tính: <strong className="text-d-on-surface font-mono">~{item.itemWeightKg} kg</strong> · {item.unitPrice.toLocaleString('vi-VN')} đ/kg
-                              </p>
+                            </div>
+
+                            {/* Subtotal Payout */}
+                            <div className="text-right shrink-0">
+                              <span className="font-mono font-bold text-sm text-emerald-600 block">
+                                ~{item.subTotal.toLocaleString('vi-VN')} đ
+                              </span>
+                              <span className="text-[10px] text-d-on-surface-variant font-mono">
+                                {item.confidence}% tin cậy
+                              </span>
                             </div>
                           </div>
 
-                          {/* Subtotal Payout */}
-                          <div className="text-right shrink-0">
-                            <span className="font-mono font-bold text-sm text-emerald-600 block">
-                              ~{item.subTotal.toLocaleString('vi-VN')} đ
+                          {/* Interactive Share Slider */}
+                          <div className="flex items-center gap-3 pt-1 border-t border-d-border-subtle/50">
+                            <span className="text-[10px] text-d-on-surface-variant shrink-0 font-medium">
+                              Chỉnh tỷ lệ:
                             </span>
-                            <span className="text-[10px] text-d-on-surface-variant font-mono">
-                              {item.confidence}% tin cậy
+                            <input
+                              type="range"
+                              min="1"
+                              max="95"
+                              value={item.estimated_share_percent}
+                              onChange={(e) => handleUpdateShare(item.id, e.target.value)}
+                              className="w-full h-1.5 bg-d-surface-container rounded-lg appearance-none cursor-pointer accent-d-primary"
+                            />
+                            <span className="text-xs font-mono font-bold text-d-on-surface w-10 text-right shrink-0">
+                              {item.estimated_share_percent}%
                             </span>
                           </div>
                         </div>

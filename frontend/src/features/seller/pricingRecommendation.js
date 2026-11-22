@@ -279,7 +279,83 @@ export function calculateSmartPriceRecommendation({
 }
 
 /**
+ * Bảng hệ số tỷ trọng khối lượng riêng thực nghiệm của các nhóm phế liệu (Bulk Density Coefficients - ρ)
+ * Dựa trên tiêu chuẩn thu gom phế liệu thực tế và phân loại trọng lượng thể tích:
+ * - Kim loại/Sắt vụn/Lon nhôm (ρ = 3.8): Khối lượng nặng, chiếm thể tích nhỏ nhưng cân ký cao.
+ * - Pin/Ắc quy (ρ = 6.5): Chì, axit, vật liệu cực nặng.
+ * - Thủy tinh (ρ = 2.5): Chai lọ thủy tinh đặc, nặng hơn nhựa rất nhiều.
+ * - Giấy sách báo (ρ = 1.4): Giấy đóng cọc phẳng.
+ * - Bìa carton (ρ = 1.2): Thùng carton gấp gọn.
+ * - Quần áo/Vải vụn (ρ = 1.0): Vải đóng bao.
+ * - Chai nhựa rỗng PET (ρ = 0.45): Chứa nhiều không khí, thể tích nhìn rất to nhưng khối lượng rất nhẹ.
+ * - Rác thải khác (ρ = 0.8): Rác sinh hoạt, hỗn hợp.
+ */
+export const MATERIAL_BULK_DENSITY_MAP = {
+  metal: 3.8,
+  battery: 6.5,
+  'white-glass': 2.5,
+  'brown-glass': 2.5,
+  'green-glass': 2.5,
+  glass: 2.5,
+  paper: 1.4,
+  cardboard: 1.2,
+  clothes: 1.0,
+  shoes: 0.9,
+  trash: 0.8,
+  biological: 0.8,
+  plastic: 0.45,
+};
+
+/**
+ * Thuật toán chuẩn hóa tỷ lệ khối lượng thực tế bằng trọng số vật lý:
+ * M_i = Area_2D_i * ρ_i * Confidence_i
+ * WeightPercent_i = (M_i / Σ M_k) * 100%
+ */
+export function calculatePhysicalBulkDensityShares(detectedObjects = []) {
+  if (!detectedObjects || detectedObjects.length === 0) return [];
+
+  let total2DArea = 0;
+  let totalMassScore = 0;
+
+  const rawComputed = detectedObjects.map((obj) => {
+    const box = obj.bounding_box || {};
+    const width = box.width || (box.x2 && box.x1 ? Math.abs(box.x2 - box.x1) : 100);
+    const height = box.height || (box.y2 && box.y1 ? Math.abs(box.y2 - box.y1) : 100);
+    const area = Math.max(width * height, 1);
+
+    const classKey = (obj.class_key || obj.material_type || '').toLowerCase();
+    const density = MATERIAL_BULK_DENSITY_MAP[classKey] || 1.0;
+    const confWeight = Math.max(Number(obj.confidence) || 85, 40) / 100;
+    const massScore = area * density * confWeight;
+
+    total2DArea += area;
+    totalMassScore += massScore;
+
+    return {
+      ...obj,
+      pixel_area: area,
+      bulk_density: density,
+      mass_score: massScore,
+    };
+  });
+
+  return rawComputed.map((item) => {
+    const visualAreaPercent = total2DArea > 0 ? Math.round((item.pixel_area / total2DArea) * 1000) / 10 : 0;
+    const physicalWeightPercent = totalMassScore > 0 ? Math.round((item.mass_score / totalMassScore) * 1000) / 10 : 0;
+
+    return {
+      ...item,
+      visual_area_percent: visualAreaPercent,
+      physical_weight_percent: physicalWeightPercent,
+      // Nếu chưa có override thủ công từ người dùng, dùng tỷ lệ khối lượng vật lý chuẩn hóa
+      estimated_share_percent: item.manual_share_percent ?? physicalWeightPercent,
+    };
+  });
+}
+
+/**
  * Tính toán định giá tổng hợp cho Đống phế liệu hỗn hợp đa vật thể (Multi-Item Mixed Waste Pile)
+ * Đã tích hợp chuẩn hóa trọng số tỷ trọng khối lượng riêng vật lý.
  */
 export function calculateMixedPilePricingRecommendation({
   detectedObjects = [],
@@ -299,9 +375,14 @@ export function calculateMixedPilePricingRecommendation({
     };
   }
 
+  // Chuẩn hóa tỷ lệ theo trọng số khối lượng vật lý nếu chưa có trường physical_weight_percent
+  const normalizedObjects = detectedObjects.some((o) => o.physical_weight_percent != null)
+    ? detectedObjects
+    : calculatePhysicalBulkDensityShares(detectedObjects);
+
   // Phân bổ tính tiền cho từng đối tượng trong đống phế liệu
   let totalEstimatedValue = 0;
-  const items = detectedObjects.map((obj) => {
+  const items = normalizedObjects.map((obj) => {
     const sharePercent = Number(obj.estimated_share_percent) || 0;
     const itemWeightKg = Math.round((totalWeightKg * (sharePercent / 100)) * 10) / 10;
 
