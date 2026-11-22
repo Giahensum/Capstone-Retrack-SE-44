@@ -100,7 +100,11 @@ export default function CreateRequest() {
       setInputMethod('manual');
       setForm((prev) => ({
         ...prev,
-        description: enrichedAi.suggested_description || `Phế liệu ${enrichedAi.name_vi} (AI nhận diện: ${enrichedAi.confidence}%), tình trạng khô ráo cần kho thu gom.`,
+        address: ai.address || prev.address,
+        latitude: ai.latitude ?? prev.latitude,
+        longitude: ai.longitude ?? prev.longitude,
+        targetDepotId: ai.targetDepotId || prev.targetDepotId,
+        description: enrichedAi.suggested_description || prev.description || `Phế liệu ${enrichedAi.name_vi} (AI nhận diện: ${enrichedAi.confidence}%), tình trạng khô ráo cần kho thu gom.`,
       }));
 
       if (ai.imagePreview || ai.annotated_image) {
@@ -564,9 +568,27 @@ export default function CreateRequest() {
                         </span>
                       )}
                     </div>
-                    <p className="text-d-on-surface-variant text-[11px] mt-0.5">
-                      Giá tham khảo: <strong className="text-d-on-surface">{detectedAiData.price_range}</strong> — {detectedAiData.recycling_tip}
-                    </p>
+                    {detectedAiData.recommendedPricePerKg ? (
+                      <div className="mt-1 flex items-center gap-2 flex-wrap">
+                        <span className="font-semibold text-emerald-800 dark:text-emerald-300 bg-emerald-500/20 px-2 py-0.5 rounded-full text-xs">
+                          💰 Giá AI đề xuất: {detectedAiData.recommendedPricePerKg.toLocaleString('vi-VN')} đ/kg
+                        </span>
+                        {detectedAiData.estimatedTotalPayout && (
+                          <span className="text-d-on-surface-variant text-[11px]">
+                            • Ước tính: ~{detectedAiData.estimatedTotalPayout.toLocaleString('vi-VN')} đ ({detectedAiData.estimatedWeight || 10}kg)
+                          </span>
+                        )}
+                        {detectedAiData.nearestDepotName && (
+                          <span className="text-d-on-surface-variant text-[11px]">
+                            • Kho: {detectedAiData.nearestDepotName}
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-d-on-surface-variant text-[11px] mt-0.5">
+                        Giá tham khảo: <strong className="text-d-on-surface">{detectedAiData.price_range}</strong> — {detectedAiData.recycling_tip}
+                      </p>
+                    )}
                   </div>
                 </div>
                 <button
