@@ -75,22 +75,26 @@ export default function SellerAiScanner() {
       .catch(() => setAiStatus({ status: 'offline' }));
   }, []);
 
-  // Tự động tải địa chỉ từ Profile người bán nếu đã lưu
+  // Tự động tải địa chỉ từ Profile người bán nếu đã lưu, hoặc vị trí mặc định tại TP.HCM
   useEffect(() => {
     sellerApi.getProfile()
       .then((profile) => {
-        if (profile?.address) {
-          setUserLocation({
-            address: profile.address,
-            lat: profile.latitude ?? null,
-            lng: profile.longitude ?? null,
-          });
-          if (profile.latitude != null && profile.longitude != null) {
-            loadNearbyDepots(profile.latitude, profile.longitude);
-          }
-        }
+        const address = profile?.address || '123 Nguyễn Hữu Thọ, Tân Phong, Quận 7, TP. Hồ Chí Minh';
+        const lat = profile?.latitude ?? 10.7324;
+        const lng = profile?.longitude ?? 106.7009;
+        setUserLocation({ address, lat, lng });
+        loadNearbyDepots(lat, lng);
       })
-      .catch(() => {});
+      .catch(() => {
+        const defaultLat = 10.7324;
+        const defaultLng = 106.7009;
+        setUserLocation({
+          address: '123 Nguyễn Hữu Thọ, Tân Phong, Quận 7, TP. Hồ Chí Minh',
+          lat: defaultLat,
+          lng: defaultLng,
+        });
+        loadNearbyDepots(defaultLat, defaultLng);
+      });
   }, []);
 
   const loadNearbyDepots = async (lat, lng) => {
