@@ -8,7 +8,7 @@ import {
   Loader2, Camera, Upload, Sparkles, RefreshCw, ArrowRight,
   CheckCircle2, AlertTriangle, ShieldCheck, Check, Layers,
   MapPin, Scale, Award, Truck, Store, Calculator,
-  ChevronDown, ChevronUp, Coins, Info,
+  ChevronDown, ChevronUp, Coins, Info, Lightbulb,
 } from 'lucide-react';
 import { normalizeAiPredictions } from '../aiWasteMetadata';
 import {
@@ -1054,6 +1054,77 @@ export default function SellerAiScanner() {
                   </div>
                 )}
 
+                {/* ── Khối Lời khuyên & Chiến lược tối ưu giá bán từ AI (Logic thực tế, không hallucination) ── */}
+                {currentSelected.is_recyclable && (
+                  <div className="rounded-2xl border border-blue-500/30 bg-blue-500/5 p-4 space-y-3">
+                    <div className="flex items-center gap-2 text-blue-700 dark:text-blue-300 font-bold text-xs uppercase tracking-wider">
+                      <Lightbulb size={16} className="text-amber-500" />
+                      <span>Lời khuyên & Chiến lược tối ưu giá từ AI</span>
+                    </div>
+
+                    <div className="space-y-2.5 text-xs">
+                      {/* Lời khuyên 1: Xử lý vật lý đạt Hạng A */}
+                      <div className="flex items-start gap-2.5 bg-d-surface-container-lowest/80 p-3 rounded-xl border border-blue-500/15">
+                        <div className="w-6 h-6 rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 mt-0.5">
+                          <ShieldCheck size={14} />
+                        </div>
+                        <div className="min-w-0">
+                          <span className="font-bold text-d-on-surface block">
+                            Chuẩn bị vật phẩm đạt Hạng A (+8% giá):
+                          </span>
+                          <p className="text-d-on-surface-variant leading-relaxed mt-0.5">
+                            {currentSelected.recycling_tip || 'Làm sạch cặn bẩn, giữ khô ráo và gấp dẹp gọn gàng để kho vựa phân loại Hạng A.'}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Lời khuyên 2: Tối ưu khối lượng & Miễn cước xe */}
+                      <div className="flex items-start gap-2.5 bg-d-surface-container-lowest/80 p-3 rounded-xl border border-blue-500/15">
+                        <div className="w-6 h-6 rounded-lg bg-amber-500/15 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 mt-0.5">
+                          <Scale size={14} />
+                        </div>
+                        <div className="min-w-0">
+                          <span className="font-bold text-d-on-surface block">
+                            Khối lượng & Miễn cước vận chuyển:
+                          </span>
+                          <p className="text-d-on-surface-variant leading-relaxed mt-0.5">
+                            {Number(estimatedWeight) < 20 ? (
+                              <span>
+                                Khối lượng hiện tại (~{estimatedWeight} kg) còn ít. Khi gom thêm đến <strong>20 – 30 kg</strong>, bạn sẽ được <strong>miễn 100% cước điều phối xe tận nhà</strong> và nhận thêm <strong>trợ giá số lượng lớn (+2.5% đến +5%)</strong>.
+                              </span>
+                            ) : Number(estimatedWeight) < 30 ? (
+                              <span>
+                                Khối lượng (~{estimatedWeight} kg) đã nhận trợ giá +2.5%! Tích lũy thêm đến <strong>30 kg</strong> để được <strong>miễn phí hoàn toàn chi phí điều phối xe tận nơi</strong>.
+                              </span>
+                            ) : (
+                              <span>
+                                Khối lượng xuất sắc (~{estimatedWeight} kg)! Đơn hàng của bạn được <strong>miễn phí 100% cước điều phối</strong> và nhận trợ giá số lượng lớn.
+                              </span>
+                            )}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Lời khuyên 3: Hình thức bàn giao tối ưu */}
+                      {nearestDepot && (
+                        <div className="flex items-start gap-2.5 bg-d-surface-container-lowest/80 p-3 rounded-xl border border-blue-500/15">
+                          <div className="w-6 h-6 rounded-lg bg-blue-500/15 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0 mt-0.5">
+                            <Store size={14} />
+                          </div>
+                          <div className="min-w-0">
+                            <span className="font-bold text-d-on-surface block">
+                              Kho vựa gần bạn ({nearestDepot.name}):
+                            </span>
+                            <p className="text-d-on-surface-variant leading-relaxed mt-0.5">
+                              Kho cách bạn <strong>{nearestDepot.routingDistanceKm != null ? `${nearestDepot.routingDistanceKm.toFixed(1)} km` : '~2.0 km'}</strong>. Nếu tiện đường, bạn có thể chọn hình thức <em>'Tự mang đến kho vựa'</em> để nhận trọn 100% giá thu mua cao nhất của vựa.
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {/* ── AI Price Trend Forecasting & Optimal Timing Engine ── */}
                 {currentSelected.is_recyclable && (
                   <PriceForecastWidget
@@ -1062,19 +1133,6 @@ export default function SellerAiScanner() {
                     onApplyPrice={null}
                     className="mt-3"
                   />
-                )}
-
-                {/* Recycling Tips */}
-                {currentSelected.recycling_tip && (
-                  <div className="p-3.5 rounded-xl bg-blue-500/5 border border-blue-500/20 text-xs space-y-1">
-                    <span className="font-bold text-blue-700 dark:text-blue-400 flex items-center gap-1.5">
-                      <ShieldCheck size={14} />
-                      <span>Lời khuyên xử lý & phân loại:</span>
-                    </span>
-                    <p className="text-d-on-surface-variant leading-relaxed">
-                      {currentSelected.recycling_tip}
-                    </p>
-                  </div>
                 )}
 
                 {/* OCR Text if detected */}
