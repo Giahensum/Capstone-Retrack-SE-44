@@ -16,4 +16,4 @@
 *.pth
 *.pt
 model_backup_*.pth
-weights.pt
+!weights.pt
