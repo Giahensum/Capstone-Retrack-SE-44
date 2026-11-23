@@ -24,7 +24,7 @@ namespace Retrack.API.Controllers.Seller
         /// </summary>
         [HttpPost("classify")]
         [RequestSizeLimit(15 * 1024 * 1024)] // 15MB
-        public async Task<IActionResult> Classify(IFormFile? file, [FromQuery] bool upload = false)
+        public async Task<IActionResult> Classify(IFormFile? file, [FromQuery] bool upload = false, [FromQuery] string mode = "single")
         {
             if (file == null || file.Length == 0)
                 return BadRequest(ApiResponse<string>.Fail("Vui lòng chọn hoặc chụp ảnh phế liệu cần nhận diện."));
@@ -39,7 +39,7 @@ namespace Retrack.API.Controllers.Seller
             try
             {
                 using var stream = file.OpenReadStream();
-                var result = await _aiService.ClassifyAsync(stream, file.FileName, file.ContentType, upload);
+                var result = await _aiService.ClassifyAsync(stream, file.FileName, file.ContentType, upload, mode);
                 return Ok(ApiResponse<SellerAiClassifyResponseDto>.Ok(result, "Nhận diện phế liệu thành công bằng AI."));
             }
             catch (InvalidOperationException ex)
@@ -65,7 +65,7 @@ namespace Retrack.API.Controllers.Seller
 
             try
             {
-                var result = await _aiService.ClassifyBase64Async(dto.ImageBase64, dto.UploadToCloud);
+                var result = await _aiService.ClassifyBase64Async(dto.ImageBase64, dto.UploadToCloud, dto.Mode ?? "single");
                 return Ok(ApiResponse<SellerAiClassifyResponseDto>.Ok(result, "Nhận diện phế liệu thành công bằng AI."));
             }
             catch (InvalidOperationException ex)

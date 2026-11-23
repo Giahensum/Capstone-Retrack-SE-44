@@ -40,7 +40,8 @@ namespace Retrack.API.Services.Seller
             Stream imageStream,
             string fileName,
             string contentType,
-            bool uploadToCloud = false)
+            bool uploadToCloud = false,
+            string mode = "single")
         {
             // Copy stream for Cloudinary if needed
             byte[] imageBytes;
@@ -51,7 +52,7 @@ namespace Retrack.API.Services.Seller
             }
 
             var aiBaseUrl = GetAiBaseUrl();
-            _logger.LogInformation("Gửi ảnh {FileName} tới AI microservice tại {Url}...", fileName, aiBaseUrl);
+            _logger.LogInformation("Gửi ảnh {FileName} (mode: {Mode}) tới AI microservice tại {Url}...", fileName, mode, aiBaseUrl);
 
             using var content = new MultipartFormDataContent();
             var byteContent = new ByteArrayContent(imageBytes);
@@ -61,7 +62,8 @@ namespace Retrack.API.Services.Seller
             HttpResponseMessage response;
             try
             {
-                response = await _httpClient.PostAsync($"{aiBaseUrl}/api/ai/classify", content);
+                var queryMode = string.IsNullOrWhiteSpace(mode) ? "single" : mode.Trim().ToLowerInvariant();
+                response = await _httpClient.PostAsync($"{aiBaseUrl}/api/ai/classify?mode={queryMode}", content);
             }
             catch (Exception ex)
             {
@@ -103,17 +105,18 @@ namespace Retrack.API.Services.Seller
             return result;
         }
 
-        public async Task<SellerAiClassifyResponseDto> ClassifyBase64Async(string imageBase64, bool uploadToCloud = false)
+        public async Task<SellerAiClassifyResponseDto> ClassifyBase64Async(string imageBase64, bool uploadToCloud = false, string mode = "single")
         {
             var aiBaseUrl = GetAiBaseUrl();
-            var payload = new { image_base64 = imageBase64 };
+            var queryMode = string.IsNullOrWhiteSpace(mode) ? "single" : mode.Trim().ToLowerInvariant();
+            var payload = new { image_base64 = imageBase64, mode = queryMode };
             var jsonPayload = JsonSerializer.Serialize(payload);
             using var httpContent = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
 
             HttpResponseMessage response;
             try
             {
-                response = await _httpClient.PostAsync($"{aiBaseUrl}/api/ai/classify-base64", httpContent);
+                response = await _httpClient.PostAsync($"{aiBaseUrl}/api/ai/classify-base64?mode={queryMode}", httpContent);
             }
             catch (Exception ex)
             {
@@ -473,6 +476,35 @@ namespace Retrack.API.Services.Seller
                 catch (Exception ex)
                 {
                     _logger.LogWarning(ex, "Lỗi truy vấn giá thị trường cho {MaterialType}", result.MaterialType);
+                }
+            }
+
+            // Enrich từng đối tượng trong đống phế liệu hỗn hợp
+            if (result.DetectedObjects != null && result.DetectedObjects.Count > 0)
+            {
+                foreach (var obj in result.DetectedObjects)
+                {
+                    if (string.IsNullOrWhiteSpace(obj.MaterialType)) continue;
+                    if (Enum.TryParse<MaterialType>(obj.MaterialType, true, out var objEnum))
+                    {
+                        try
+                        {
+                            var p = await _db.MarketPrices
+                                .Where(mp => mp.MaterialType == objEnum)
+                                .OrderByDescending(mp => mp.EffectiveDate)
+                                .Select(mp => (decimal?)mp.PricePerKg)
+                                .FirstOrDefaultAsync();
+
+                            if (p.HasValue && p.Value > 0)
+                            {
+                                obj.CurrentMarketPrice = p.Value;
+                            }
+                        }
+                        catch
+                        {
+                            // Ignore optional per-item enrichment errors
+                        }
+                    }
                 }
             }
         }

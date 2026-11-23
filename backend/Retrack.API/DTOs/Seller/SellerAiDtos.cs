@@ -39,12 +39,66 @@ namespace Retrack.API.DTOs
 
         [JsonPropertyName("height")]
         public int Height { get; set; }
+
+        [JsonPropertyName("image_width")]
+        public int? ImageWidth { get; set; }
+
+        [JsonPropertyName("image_height")]
+        public int? ImageHeight { get; set; }
+    }
+
+    public class AiDetectedObjectDto
+    {
+        [JsonPropertyName("id")]
+        public string Id { get; set; } = string.Empty;
+
+        [JsonPropertyName("class_key")]
+        public string ClassKey { get; set; } = string.Empty;
+
+        [JsonPropertyName("name_vi")]
+        public string NameVi { get; set; } = string.Empty;
+
+        [JsonPropertyName("material_type")]
+        public string MaterialType { get; set; } = string.Empty;
+
+        [JsonPropertyName("confidence")]
+        public double Confidence { get; set; }
+
+        [JsonPropertyName("visual_area_percent")]
+        public double VisualAreaPercent { get; set; }
+
+        [JsonPropertyName("physical_weight_percent")]
+        public double PhysicalWeightPercent { get; set; }
+
+        [JsonPropertyName("estimated_share_percent")]
+        public double EstimatedSharePercent { get; set; }
+
+        [JsonPropertyName("bulk_density")]
+        public double BulkDensity { get; set; }
+
+        [JsonPropertyName("color")]
+        public string Color { get; set; } = "#10b981";
+
+        [JsonPropertyName("is_recyclable")]
+        public bool IsRecyclable { get; set; } = true;
+
+        [JsonPropertyName("price_range")]
+        public string PriceRange { get; set; } = string.Empty;
+
+        [JsonPropertyName("current_market_price")]
+        public decimal? CurrentMarketPrice { get; set; }
+
+        [JsonPropertyName("bounding_box")]
+        public AiBoundingBoxDto? BoundingBox { get; set; }
     }
 
     public class SellerAiClassifyResponseDto
     {
         [JsonPropertyName("success")]
         public bool Success { get; set; } = true;
+
+        [JsonPropertyName("scan_mode")]
+        public string ScanMode { get; set; } = "single";
 
         [JsonPropertyName("primary_class")]
         public string PrimaryClass { get; set; } = string.Empty;
@@ -91,6 +145,12 @@ namespace Retrack.API.DTOs
         [JsonPropertyName("top_predictions")]
         public List<AiPredictionItemDto> TopPredictions { get; set; } = new();
 
+        [JsonPropertyName("detected_objects")]
+        public List<AiDetectedObjectDto> DetectedObjects { get; set; } = new();
+
+        [JsonPropertyName("mixed_summary")]
+        public string MixedSummary { get; set; } = string.Empty;
+
         [JsonPropertyName("annotated_image")]
         public string AnnotatedImage { get; set; } = string.Empty;
 
@@ -105,6 +165,9 @@ namespace Retrack.API.DTOs
 
         [JsonPropertyName("upload_to_cloud")]
         public bool UploadToCloud { get; set; } = false;
+
+        [JsonPropertyName("mode")]
+        public string? Mode { get; set; } = "single";
     }
 
     public class PriceForecastPointDto

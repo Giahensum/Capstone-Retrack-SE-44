@@ -452,6 +452,7 @@ if os.path.exists(COUNCIL_DEMO_DIR):
 
 class ClassifyBase64Request(BaseModel):
     image_base64: str
+    mode: Optional[str] = "single"
 
 
 @app.get("/api/ai/health")
@@ -591,6 +592,8 @@ def _run_classification(image_np_rgb: np.ndarray):
             "y2": int(y2),
             "width": int(x2 - x1),
             "height": int(y2 - y1),
+            "image_width": int(iw),
+            "image_height": int(ih),
         },
         "ocr_text": ocr_text,
         "icon": meta.get("icon", "category"),
@@ -726,6 +729,8 @@ def _run_mixed_classification(image_np_rgb: np.ndarray):
                 'y2': by2,
                 'width': bx2 - bx1,
                 'height': by2 - by1,
+                'image_width': iw,
+                'image_height': ih,
             }
         })
 
@@ -747,6 +752,8 @@ def _run_mixed_classification(image_np_rgb: np.ndarray):
             "y2": max(b['bounding_box']['y2'] for b in detected_objects),
             "width": max(b['bounding_box']['x2'] for b in detected_objects) - min(b['bounding_box']['x1'] for b in detected_objects),
             "height": max(b['bounding_box']['y2'] for b in detected_objects) - min(b['bounding_box']['y1'] for b in detected_objects),
+            "image_width": iw,
+            "image_height": ih,
         },
         "icon": "layers",
         "unit": "kg",
@@ -791,7 +798,8 @@ async def classify_base64(req: ClassifyBase64Request, mode: Optional[str] = "sin
         raw_bytes = base64.b64decode(data)
         pil_img = Image.open(io.BytesIO(raw_bytes)).convert("RGB")
         img_np = np.array(pil_img)
-        if mode == "mixed_pile":
+        target_mode = req.mode or mode or "single"
+        if target_mode == "mixed_pile":
             return _run_mixed_classification(img_np)
         return _run_classification(img_np)
     except Exception as e:
