@@ -19,6 +19,7 @@ public interface IDepotStockRepository
     void AddNotice(Notification notice);
     Task<Guid> OwnerIdAsync(Guid depotId);
     Task<DepotBulkStockSource?> BulkSourceAsync(Guid agreementId);
+    Task<LiquidationAgreement?> LockBulkSourceAsync(Guid agreementId);
     Task<bool> HasBulkReceiptAsync(Guid agreementId);
     void ReplaceExpenses(DepotStockReceipt receipt, List<StockExpenseInput> expenses);
     Task<PagedResult<ReusableStockDto>> ReusableAsync(Guid depotId, DepotQuery query);

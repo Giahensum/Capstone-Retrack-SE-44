@@ -21,6 +21,9 @@ public class CreateStockReceiptDto
     public List<StockExpenseInput> Expenses { get; set; } = [];
     [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
     public bool PostImmediately { get; set; }
+    // Owner xác nhận nhận đủ lô và ghi kho trong cùng giao dịch; consumer cũ mặc định false.
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    public bool ConfirmBulkReceived { get; set; }
 }
 public class StockLineInput
 {
