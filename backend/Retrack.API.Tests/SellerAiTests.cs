@@ -21,16 +21,20 @@ namespace Retrack.API.Tests
         public bool ShouldThrow { get; set; }
         public string ErrorMessage { get; set; } = "Dịch vụ AI không phản hồi";
 
-        public Task<SellerAiClassifyResponseDto> ClassifyAsync(Stream imageStream, string fileName, string contentType, bool uploadToCloud = false)
+        public Task<SellerAiClassifyResponseDto> ClassifyAsync(Stream imageStream, string fileName, string contentType, bool uploadToCloud = false, string mode = "single")
         {
             if (ShouldThrow) throw new InvalidOperationException(ErrorMessage);
-            return Task.FromResult(MockResponse ?? new SellerAiClassifyResponseDto());
+            var resp = MockResponse ?? new SellerAiClassifyResponseDto();
+            resp.ScanMode = mode;
+            return Task.FromResult(resp);
         }
 
-        public Task<SellerAiClassifyResponseDto> ClassifyBase64Async(string imageBase64, bool uploadToCloud = false)
+        public Task<SellerAiClassifyResponseDto> ClassifyBase64Async(string imageBase64, bool uploadToCloud = false, string mode = "single")
         {
             if (ShouldThrow) throw new InvalidOperationException(ErrorMessage);
-            return Task.FromResult(MockResponse ?? new SellerAiClassifyResponseDto());
+            var resp = MockResponse ?? new SellerAiClassifyResponseDto();
+            resp.ScanMode = mode;
+            return Task.FromResult(resp);
         }
 
         public Task<object> GetStatusAsync()
@@ -147,6 +151,44 @@ namespace Retrack.API.Tests
             Assert.Equal("cardboard", apiResponse.Data.PrimaryClass);
             Assert.Equal("Bìa Carton & Thùng giấy", apiResponse.Data.NameVi);
             Assert.Equal(85.5, apiResponse.Data.Confidence);
+        }
+
+        [Fact]
+        public async Task Classify_SupportsMixedPileMode_WithMultiBoundingBoxes()
+        {
+            var bytes = new byte[] { 0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46 };
+            var stream = new MemoryStream(bytes);
+            var file = new FormFile(stream, 0, bytes.Length, "file", "mixed_pile.jpg")
+            {
+                Headers = new HeaderDictionary(),
+                ContentType = "image/jpeg"
+            };
+
+            _aiService.MockResponse = new SellerAiClassifyResponseDto
+            {
+                ScanMode = "mixed_pile",
+                PrimaryClass = "mixed_pile",
+                NameVi = "Đống phế liệu hỗn hợp đa vật thể",
+                MaterialType = "MIXED",
+                Confidence = 92.0,
+                DetectedObjects = new List<AiDetectedObjectDto>
+                {
+                    new() { Id = "box_1", ClassKey = "cardboard", NameVi = "Bìa Carton", PhysicalWeightPercent = 55.0, Color = "#10b981", BoundingBox = new AiBoundingBoxDto { X1 = 20, Y1 = 30, Width = 250, Height = 200 } },
+                    new() { Id = "box_2", ClassKey = "plastic", NameVi = "Chai nhựa PET", PhysicalWeightPercent = 30.0, Color = "#3b82f6", BoundingBox = new AiBoundingBoxDto { X1 = 280, Y1 = 50, Width = 150, Height = 180 } },
+                    new() { Id = "box_3", ClassKey = "metal", NameVi = "Lon nhôm", PhysicalWeightPercent = 15.0, Color = "#f59e0b", BoundingBox = new AiBoundingBoxDto { X1 = 150, Y1 = 240, Width = 120, Height = 110 } }
+                }
+            };
+
+            var result = await _controller.Classify(file, upload: false, mode: "mixed_pile");
+            var okResult = Assert.IsType<OkObjectResult>(result);
+            var apiResponse = Assert.IsType<ApiResponse<SellerAiClassifyResponseDto>>(okResult.Value);
+
+            Assert.True(apiResponse.Success);
+            Assert.NotNull(apiResponse.Data);
+            Assert.Equal("mixed_pile", apiResponse.Data.ScanMode);
+            Assert.Equal(3, apiResponse.Data.DetectedObjects.Count);
+            Assert.Equal("Bìa Carton", apiResponse.Data.DetectedObjects[0].NameVi);
+            Assert.Equal(55.0, apiResponse.Data.DetectedObjects[0].PhysicalWeightPercent);
         }
 
         [Fact]

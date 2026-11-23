@@ -9,11 +9,13 @@ import {
   CheckCircle2, AlertTriangle, ShieldCheck, Check, Layers,
   MapPin, Scale, Award, Truck, Store, Calculator,
   ChevronDown, ChevronUp, Coins, Info, Lightbulb,
+  Eye, EyeOff, RotateCcw,
 } from 'lucide-react';
 import { normalizeAiPredictions } from '../aiWasteMetadata';
 import {
   calculateDepotsDistanceWithGoong,
   calculateSmartPriceRecommendation,
+  calculateMixedPilePricingRecommendation,
   QUALITY_CONDITIONS,
   FULFILLMENT_METHODS,
 } from '../pricingRecommendation';
@@ -22,10 +24,27 @@ import PriceForecastWidget from '../components/PriceForecastWidget';
 const DEMO_SAMPLES = [
   {
     id: 'carton_box',
-    title: 'Thùng carton kraft mẫu (Exi.jpg)',
+    title: 'Thùng carton kraft đơn lẻ',
     category: 'cardboard',
     icon: 'category',
     url: '/samples/exi.jpg',
+    mode: 'single',
+  },
+  {
+    id: 'mixed_pile_demo',
+    title: 'Đống hỗn hợp: Carton + Nhựa + Lon (Tỷ lệ cao)',
+    category: 'mixed_pile',
+    icon: 'layers',
+    url: '/samples/mixed_pile_high_conf.jpg',
+    mode: 'mixed_pile',
+  },
+  {
+    id: 'mixed_plastic_metal',
+    title: 'Hỗn hợp: Chai nhựa + Lon nhôm (Tỷ lệ cao)',
+    category: 'mixed_pile',
+    icon: 'layers',
+    url: '/samples/mixed_plastic_metal.jpg',
+    mode: 'mixed_pile',
   },
 ];
 
@@ -36,6 +55,7 @@ export default function SellerAiScanner() {
   const canvasRef = useRef(null);
 
   const [activeTab, setActiveTab] = useState('upload'); // 'upload' | 'camera'
+  const [scanMode, setScanMode] = useState('single'); // 'single' | 'mixed_pile'
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraLoading, setCameraLoading] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null); // { file, preview, base64 }
@@ -43,6 +63,11 @@ export default function SellerAiScanner() {
   const [aiResult, setAiResult] = useState(null);
   const [selectedPredictionIndex, setSelectedPredictionIndex] = useState(0);
   const [aiStatus, setAiStatus] = useState(null);
+
+  // Multi-box interaction state for mixed pile
+  const [hoveredBoxId, setHoveredBoxId] = useState(null);
+  const [hiddenBoxIds, setHiddenBoxIds] = useState(new Set());
+  const [manualShares, setManualShares] = useState({}); // { [boxId]: number }
 
   // ── Smart Price Recommendation inputs & state ──
   const [userLocation, setUserLocation] = useState({ address: '', lat: null, lng: null });
@@ -171,7 +196,7 @@ export default function SellerAiScanner() {
         preview: base64,
         base64,
       });
-      runScan(file, base64);
+      runScan(file, base64, scanMode);
     }, 'image/jpeg', 0.9);
   };
 
@@ -192,28 +217,35 @@ export default function SellerAiScanner() {
         preview: URL.createObjectURL(file),
         base64,
       });
-      runScan(file, base64);
+      runScan(file, base64, scanMode);
     };
     reader.readAsDataURL(file);
   };
 
   // Run AI Scan
-  const runScan = async (file, base64) => {
+  const runScan = async (file, base64, modeToUse = scanMode) => {
     setIsScanning(true);
     setAiResult(null);
 
     try {
       let res;
       if (file) {
-        res = await sellerApi.classifyAiImage(file, false);
+        res = await sellerApi.classifyAiImage(file, false, modeToUse);
       } else if (base64) {
-        res = await sellerApi.classifyAiBase64(base64, false);
+        res = await sellerApi.classifyAiBase64(base64, false, modeToUse);
       }
 
-      if (res && res.primary_class) {
+      if (res && (res.primary_class || res.detected_objects?.length > 0)) {
         setAiResult(res);
         setSelectedPredictionIndex(0);
-        toast.success(`Đã nhận diện: ${res.name_vi} (${res.confidence}%) 🎉`);
+        if (res.scan_mode) {
+          setScanMode(res.scan_mode);
+        }
+        if (res.scan_mode === 'mixed_pile') {
+          toast.success(`Đã nhận diện đống phế liệu hỗn hợp (${res.detected_objects?.length || 0} vật thể)! 🎉`);
+        } else {
+          toast.success(`Đã nhận diện: ${res.name_vi} (${res.confidence}%) 🎉`);
+        }
       } else {
         toast.error('Không thể xác định loại phế liệu. Vui lòng thử góc chụp rõ hơn.');
       }
@@ -232,15 +264,47 @@ export default function SellerAiScanner() {
     setAiResult(null);
     setSelectedPredictionIndex(0);
     setIsScanning(false);
+    setHoveredBoxId(null);
+    setHiddenBoxIds(new Set());
+    setManualShares({});
     if (activeTab === 'camera') {
       setTimeout(() => startCamera(), 100);
     }
+  };
+
+  // Toggle Visibility of a Bounding Box
+  const toggleBoxVisibility = (boxId) => {
+    setHiddenBoxIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(boxId)) {
+        next.delete(boxId);
+      } else {
+        next.add(boxId);
+      }
+      return next;
+    });
+  };
+
+  // Cập nhật tỷ lệ % thủ công cho từng vật thể trong đống phế liệu
+  const handleUpdateShare = (itemId, newPercent) => {
+    setManualShares((prev) => ({
+      ...prev,
+      [itemId]: Math.max(1, Math.min(99, Number(newPercent))),
+    }));
+  };
+
+  // Hoàn tác về tỷ lệ chuẩn hóa vật lý ban đầu từ AI
+  const handleResetManualShares = () => {
+    setManualShares({});
+    toast.success('Đã hoàn tác về tỷ lệ chuẩn hóa vật lý ban đầu từ AI');
   };
 
   // Handle Quick Demo Sample selection
   const handleSelectSample = async (sample) => {
     try {
       setIsScanning(true);
+      const targetMode = sample.mode || 'single';
+      setScanMode(targetMode);
       const res = await fetch(sample.url);
       const blob = await res.blob();
       const file = new File([blob], `${sample.id}.jpg`, { type: 'image/jpeg' });
@@ -250,7 +314,7 @@ export default function SellerAiScanner() {
         preview,
         base64: null,
       });
-      runScan(file, null);
+      runScan(file, null, targetMode);
     } catch (err) {
       console.error(err);
       toast.error('Không thể tải ảnh mẫu thử nghiệm');
@@ -258,9 +322,67 @@ export default function SellerAiScanner() {
     }
   };
 
-  // Transfer AI Result to Create Request (cho phép chọn bất kỳ loại nào trong Top 5 kèm giá đề xuất thông minh)
+  // Transfer AI Result to Create Request
   const handleProceedToCreateRequest = (targetItem = null, customPrice = null) => {
     if (!aiResult) return;
+
+    // Chế độ 2: Đống phế liệu hỗn hợp (Mixed Pile)
+    if (scanMode === 'mixed_pile' || aiResult.scan_mode === 'mixed_pile') {
+      const effectiveObjects = (aiResult.detected_objects || []).map((obj) => ({
+        ...obj,
+        estimated_share_percent: manualShares[obj.id] ?? obj.estimated_share_percent,
+        manual_share_percent: manualShares[obj.id],
+      }));
+
+      const mixedPricing = calculateMixedPilePricingRecommendation({
+        detectedObjects: effectiveObjects,
+        totalWeightKg: Number(estimatedWeight) || 20,
+        nearestDepot,
+        qualityId: qualityCondition,
+        fulfillment: fulfillmentMethod,
+        userLocation,
+      });
+
+      const qualityMeta = QUALITY_CONDITIONS.find((q) => q.id === qualityCondition);
+      const itemsSummary = mixedPricing.items.map(
+        (it) => `• ${it.name_vi}: ${it.estimated_share_percent}% (~${it.itemWeightKg}kg x ${it.unitPrice.toLocaleString('vi-VN')} đ/kg = ${it.subTotal.toLocaleString('vi-VN')} đ)`
+      ).join('\n');
+
+      navigate('/seller/create', {
+        state: {
+          aiResult: {
+            ...aiResult,
+            scan_mode: 'mixed_pile',
+            primary_class: 'mixed_pile',
+            name_vi: 'Đống phế liệu hỗn hợp đa vật thể',
+            confidence: aiResult.confidence,
+            icon: 'layers',
+            price_range: `${mixedPricing.averageUnitPrice.toLocaleString('vi-VN')} đ/kg (Trung bình)`,
+            unit: 'kg',
+            suggested_description: `Đống phế liệu hỗn hợp đa vật thể (AI nhận diện ${mixedPricing.items.length} nhóm vật liệu), tổng khối lượng ~${estimatedWeight}kg. Tình trạng: ${qualityMeta?.shortLabel || 'Chuẩn'}.\n${itemsSummary}\nTổng giá trị AI ước tính: ~${mixedPricing.totalEstimatedValue.toLocaleString('vi-VN')} đ.`,
+            is_recyclable: true,
+            material_type: 'MIXED',
+            imagePreview: selectedImage?.preview,
+            imageFile: selectedImage?.file,
+            address: userLocation.address,
+            latitude: userLocation.lat,
+            longitude: userLocation.lng,
+            targetDepotId: nearestDepot?.id || null,
+            nearestDepotName: nearestDepot?.name || null,
+            estimatedWeight: Number(estimatedWeight) || 20,
+            recommendedPricePerKg: mixedPricing.averageUnitPrice,
+            estimatedTotalPayout: mixedPricing.totalEstimatedValue,
+            qualityCondition,
+            fulfillmentMethod,
+            detected_objects: mixedPricing.items,
+            mixed_summary: aiResult.mixed_summary,
+          },
+        },
+      });
+      return;
+    }
+
+    // Chế độ 1: Quét 1 vật thể đơn lẻ (Single Item) - GIỮ NGUYÊN 100%
     const predictions = normalizeAiPredictions(aiResult);
     const itemToUse = targetItem || predictions[selectedPredictionIndex] || predictions[0];
     if (!itemToUse) return;
@@ -280,6 +402,7 @@ export default function SellerAiScanner() {
       state: {
         aiResult: {
           ...aiResult,
+          scan_mode: 'single',
           primary_class: itemToUse.class_key,
           name_vi: itemToUse.name_vi,
           confidence: itemToUse.confidence,
@@ -329,23 +452,68 @@ export default function SellerAiScanner() {
             Trợ lý AI Phân loại Phế liệu & Định giá
           </h1>
           <p className="font-d-body-md text-d-body-md text-d-on-surface-variant mt-1">
-            Chụp ảnh phế liệu để mô hình EfficientNet-B4 + YOLOv8 tự động nhận diện 12 loại rác, kiểm tra khả năng tái chế và định giá thị trường.
+            {scanMode === 'mixed_pile'
+              ? 'Nhận diện đống phế liệu hỗn hợp, vẽ nhiều bounding box riêng biệt và ước lượng cơ cấu % thành phần theo tỷ trọng vật lý.'
+              : 'Chụp ảnh phế liệu để mô hình EfficientNet-B4 + YOLOv8 tự động nhận diện 12 loại rác, kiểm tra khả năng tái chế và định giá thị trường.'}
           </p>
         </div>
 
-        {/* AI Service Health Badge */}
-        <div className="shrink-0">
-          {aiStatus?.status === 'healthy' || aiStatus?.status === 'ok' ? (
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 text-xs font-semibold">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span>AI Service Sẵn sàng ({aiStatus.device || 'CUDA/CPU'})</span>
-            </div>
-          ) : (
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-500/10 text-amber-600 border border-amber-500/20 text-xs font-semibold">
-              <span className="w-2 h-2 rounded-full bg-amber-500" />
-              <span>Máy chủ AI cục bộ: Port 5005</span>
-            </div>
-          )}
+        {/* Action Controls: Mode Switcher & AI Service Health Badge */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 shrink-0">
+          {/* Mode Switcher: Single Item vs Mixed Pile */}
+          <div className="flex items-center gap-1.5 p-1 bg-d-surface-container-low rounded-2xl border border-d-border-subtle shrink-0">
+            <button
+              type="button"
+              id="btn-mode-single"
+              onClick={() => {
+                setScanMode('single');
+                if (selectedImage && !isScanning) {
+                  runScan(selectedImage.file, selectedImage.base64, 'single');
+                }
+              }}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                scanMode === 'single'
+                  ? 'bg-d-primary text-d-on-primary shadow-xs'
+                  : 'text-d-on-surface-variant hover:text-d-on-surface hover:bg-d-surface-container'
+              }`}
+            >
+              <MaterialIcon name="crop_free" className="text-sm" />
+              <span>Vật thể đơn lẻ</span>
+            </button>
+            <button
+              type="button"
+              id="btn-mode-mixed"
+              onClick={() => {
+                setScanMode('mixed_pile');
+                if (selectedImage && !isScanning) {
+                  runScan(selectedImage.file, selectedImage.base64, 'mixed_pile');
+                }
+              }}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                scanMode === 'mixed_pile'
+                  ? 'bg-amber-600 text-white shadow-xs'
+                  : 'text-d-on-surface-variant hover:text-d-on-surface hover:bg-d-surface-container'
+              }`}
+            >
+              <Layers size={14} />
+              <span>Đống phế liệu hỗn hợp</span>
+            </button>
+          </div>
+
+          {/* AI Service Health Badge */}
+          <div>
+            {aiStatus?.status === 'healthy' || aiStatus?.status === 'ok' ? (
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 text-xs font-semibold">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span>AI Service ({aiStatus.device || 'CUDA/CPU'})</span>
+              </div>
+            ) : (
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-500/10 text-amber-600 border border-amber-500/20 text-xs font-semibold">
+                <span className="w-2 h-2 rounded-full bg-amber-500" />
+                <span>Máy chủ AI: Port 5005</span>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -402,7 +570,11 @@ export default function SellerAiScanner() {
                   type="button"
                   disabled={isScanning}
                   onClick={() => handleSelectSample(sample)}
-                  className="px-3 py-1.5 rounded-xl border border-d-primary/40 bg-d-primary/5 hover:bg-d-primary/15 text-xs font-bold text-d-primary flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50 shadow-2xs"
+                  className={`px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50 shadow-2xs ${
+                    sample.mode === 'mixed_pile'
+                      ? 'border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 text-amber-800 dark:text-amber-300'
+                      : 'border-d-primary/40 bg-d-primary/5 hover:bg-d-primary/15 text-d-primary'
+                  }`}
                 >
                   <MaterialIcon name={sample.icon || 'category'} className="text-sm" />
                   <span>{sample.title}</span>
@@ -427,10 +599,12 @@ export default function SellerAiScanner() {
                 {/* Target Frame / Reticle */}
                 <div className="absolute inset-8 border-2 border-dashed border-white/60 rounded-2xl pointer-events-none flex flex-col justify-between p-4">
                   <div className="flex justify-between items-center text-[11px] font-mono font-bold text-white/80 bg-black/40 px-2 py-1 rounded backdrop-blur-xs w-fit">
-                    <span>HƯỚNG CAMERA VÀO VẬT THỂ PHẾ LIỆU</span>
+                    <span>{scanMode === 'mixed_pile' ? 'HƯỚNG CAMERA VÀO ĐỐNG PHẾ LIỆU HỖN HỢP' : 'HƯỚNG CAMERA VÀO VẬT THỂ PHẾ LIỆU'}</span>
                   </div>
                   <div className="text-center text-xs text-white/90 bg-black/50 py-1.5 px-3 rounded-full backdrop-blur-xs self-center">
-                    Đặt vật thể vào giữa khung để AI nhận diện chuẩn nhất
+                    {scanMode === 'mixed_pile'
+                      ? 'Lấy toàn cảnh đống phế liệu để AI phát hiện nhiều vật thể'
+                      : 'Đặt vật thể vào giữa khung để AI nhận diện chuẩn nhất'}
                   </div>
                 </div>
 
@@ -469,10 +643,12 @@ export default function SellerAiScanner() {
                   <Upload size={28} />
                 </div>
                 <h3 className="font-bold text-d-on-surface text-base">
-                  Chọn hoặc kéo thả ảnh phế liệu vào đây
+                  {scanMode === 'mixed_pile' ? 'Tải ảnh đống phế liệu hỗn hợp' : 'Chọn hoặc kéo thả ảnh phế liệu vào đây'}
                 </h3>
                 <p className="text-xs text-d-on-surface-variant mt-1 max-w-sm">
-                  Hỗ trợ định dạng JPG, PNG, WebP (Tối đa 15MB). Bạn có thể chụp ảnh thùng carton, chai lọ, vỏ lon, giấy báo...
+                  {scanMode === 'mixed_pile'
+                    ? 'Chụp góc rộng bao quát toàn bộ đống phế liệu (JPG, PNG, WebP) để AI trích xuất nhiều vật thể.'
+                    : 'Hỗ trợ định dạng JPG, PNG, WebP (Tối đa 15MB). Bạn có thể chụp ảnh thùng carton, chai lọ, vỏ lon, giấy báo...'}
                 </p>
                 <button
                   type="button"
@@ -483,14 +659,93 @@ export default function SellerAiScanner() {
               </div>
             )}
 
-            {/* View 3: Image Preview with AI Annotation */}
+            {/* View 3: Image Preview with AI Bounding Boxes (Single & Mixed Pile) */}
             {selectedImage && (
-              <div className="relative w-full h-full flex items-center justify-center bg-zinc-950">
+              <div className="relative w-full h-full flex items-center justify-center bg-zinc-950 overflow-hidden select-none">
                 <img
                   src={aiResult?.annotated_image || selectedImage.preview}
                   alt="Scanned waste"
                   className="w-full h-full object-contain"
                 />
+
+                {/* ── Interactive Bounding Boxes Overlay ── */}
+                {aiResult && !isScanning && (
+                  <div className="absolute inset-0 pointer-events-none">
+                    {/* Chế độ Mixed Pile: Nhiều bounding box đa màu sắc */}
+                    {scanMode === 'mixed_pile' && aiResult.detected_objects?.length > 0 ? (
+                      aiResult.detected_objects
+                        .filter((obj) => !hiddenBoxIds.has(obj.id))
+                        .map((obj, i) => {
+                          const box = obj.bounding_box || {};
+                          const imgW = box.image_width || 640;
+                          const imgH = box.image_height || 480;
+                          const x1 = Math.max(0, Math.min(100, (box.x1 / imgW) * 100));
+                          const y1 = Math.max(0, Math.min(100, (box.y1 / imgH) * 100));
+                          const width = Math.max(3, Math.min(100 - x1, (box.width / imgW) * 100));
+                          const height = Math.max(3, Math.min(100 - y1, (box.height / imgH) * 100));
+                          const isHovered = hoveredBoxId === obj.id;
+                          const color = obj.color || '#10b981';
+
+                          return (
+                            <div
+                              key={obj.id || i}
+                              onMouseEnter={() => setHoveredBoxId(obj.id)}
+                              onMouseLeave={() => setHoveredBoxId(null)}
+                              className={`absolute pointer-events-auto transition-all duration-150 cursor-pointer rounded-lg ${
+                                isHovered ? 'ring-4 ring-white shadow-2xl scale-[1.01] z-30' : 'z-20'
+                              }`}
+                              style={{
+                                left: `${x1}%`,
+                                top: `${y1}%`,
+                                width: `${width}%`,
+                                height: `${height}%`,
+                                border: `2.5px solid ${color}`,
+                                backgroundColor: `${color}18`,
+                              }}
+                            >
+                              {/* Label Tag on Bounding Box */}
+                              <div
+                                className="absolute -top-6 left-0 px-2 py-0.5 rounded-md text-[10px] font-bold text-white shadow-md flex items-center gap-1.5 whitespace-nowrap"
+                                style={{ backgroundColor: color }}
+                              >
+                                <span>{obj.name_vi}</span>
+                                <span className="opacity-90 font-mono font-normal">
+                                  ({obj.estimated_share_percent || obj.confidence}%)
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })
+                    ) : aiResult.bounding_box ? (
+                      /* Chế độ Single Item: 1 Bounding Box chuẩn xanh lá */
+                      (() => {
+                        const box = aiResult.bounding_box;
+                        const imgW = box.image_width || 640;
+                        const imgH = box.image_height || 480;
+                        const x1 = Math.max(0, Math.min(100, (box.x1 / imgW) * 100));
+                        const y1 = Math.max(0, Math.min(100, (box.y1 / imgH) * 100));
+                        const width = Math.max(3, Math.min(100 - x1, (box.width / imgW) * 100));
+                        const height = Math.max(3, Math.min(100 - y1, (box.height / imgH) * 100));
+
+                        return (
+                          <div
+                            className="absolute pointer-events-none rounded-lg border-2 border-emerald-500 bg-emerald-500/10 z-20"
+                            style={{
+                              left: `${x1}%`,
+                              top: `${y1}%`,
+                              width: `${width}%`,
+                              height: `${height}%`,
+                            }}
+                          >
+                            <div className="absolute -top-6 left-0 px-2 py-0.5 rounded-md text-[10px] font-bold text-white bg-emerald-600 shadow-md">
+                              {aiResult.name_vi} ({aiResult.confidence}%)
+                            </div>
+                          </div>
+                        );
+                      })()
+                    ) : null}
+                  </div>
+                )}
 
                 {/* Scanning Laser Animation */}
                 {isScanning && (
@@ -499,10 +754,14 @@ export default function SellerAiScanner() {
                     <div className="absolute inset-x-0 h-1 bg-gradient-to-r from-transparent via-emerald-400 to-transparent shadow-[0_0_15px_#10b981] animate-bounce" />
                     <Loader2 size={36} className="animate-spin text-emerald-400 mb-3" />
                     <p className="font-bold text-base tracking-wide">
-                      Mô hình AI đang phân tích phế liệu...
+                      {scanMode === 'mixed_pile'
+                        ? 'Đang phân tích đống phế liệu hỗn hợp đa vật thể...'
+                        : 'Mô hình AI đang phân tích phế liệu...'}
                     </p>
                     <p className="text-xs text-zinc-300 mt-1 max-w-xs">
-                      Đang chạy YOLOv8 định vị đối tượng, trích xuất OCR văn bản và xếp loại EfficientNet-B4...
+                      {scanMode === 'mixed_pile'
+                        ? 'YOLOv8 đang định vị nhiều bounding box và ước tính cơ cấu % theo tỷ trọng vật lý...'
+                        : 'Đang chạy YOLOv8 định vị đối tượng, trích xuất OCR văn bản và xếp loại EfficientNet-B4...'}
                     </p>
                   </div>
                 )}
@@ -531,18 +790,18 @@ export default function SellerAiScanner() {
               </button>
             ) : (
               <span className="text-xs text-d-on-surface-variant">
-                Gợi ý: Chụp ở nơi đủ sáng để đạt độ chính xác tối đa.
+                Gợi ý: {scanMode === 'mixed_pile' ? 'Chụp góc rộng bao quát đống phế liệu' : 'Chụp ở nơi đủ sáng để đạt độ chính xác tối đa'}.
               </span>
             )}
 
             {selectedImage && !isScanning && !aiResult && (
               <button
                 type="button"
-                onClick={() => runScan(selectedImage.file, selectedImage.base64)}
+                onClick={() => runScan(selectedImage.file, selectedImage.base64, scanMode)}
                 className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-d-primary text-d-on-primary text-xs font-bold hover:bg-[#385500] transition-colors cursor-pointer"
               >
                 <Sparkles size={14} />
-                <span>Phân tích lại</span>
+                <span>Phân tích lại ({scanMode === 'mixed_pile' ? 'Đa vật thể' : 'Đơn vật thể'})</span>
               </button>
             )}
           </div>
@@ -560,7 +819,9 @@ export default function SellerAiScanner() {
                   Sẵn sàng nhận diện phế liệu
                 </h3>
                 <p className="text-xs text-d-on-surface-variant mt-1.5 leading-relaxed">
-                  Chụp ảnh hoặc chọn ảnh phế liệu của bạn. Trí tuệ nhân tạo sẽ tự động nhận biết loại vật liệu, giá bán tham khảo và tư vấn cách phân loại tối ưu.
+                  {scanMode === 'mixed_pile'
+                    ? 'Chế độ Đống hỗn hợp giúp bạn chụp toàn bộ đống phế liệu, AI sẽ tự động tách từng loại (nhiều bounding box), tính % khối lượng và tổng tiền.'
+                    : 'Chụp ảnh hoặc chọn ảnh phế liệu của bạn. Trí tuệ nhân tạo sẽ tự động nhận biết loại vật liệu, giá bán tham khảo và tư vấn cách phân loại tối ưu.'}
                 </p>
               </div>
 
@@ -586,8 +847,336 @@ export default function SellerAiScanner() {
             </div>
           )}
 
-          {/* AI Result Card */}
-          {aiResult && (() => {
+          {/* AI Result Card: MIXED PILE MODE (Đa bounding box & cơ cấu tỷ trọng vật lý) */}
+          {aiResult && scanMode === 'mixed_pile' && (() => {
+            const detectedObjects = (aiResult.detected_objects || []).map((obj) => ({
+              ...obj,
+              estimated_share_percent: manualShares[obj.id] ?? obj.estimated_share_percent,
+              manual_share_percent: manualShares[obj.id],
+            }));
+            const mixedPricing = calculateMixedPilePricingRecommendation({
+              detectedObjects,
+              totalWeightKg: Number(estimatedWeight) || 20,
+              nearestDepot,
+              qualityId: qualityCondition,
+              fulfillment: fulfillmentMethod,
+              userLocation,
+            });
+
+            const hasManualAdjustments = Object.keys(manualShares).length > 0;
+
+            return (
+              <div className="bg-d-surface-container-lowest border border-amber-500/30 rounded-3xl p-6 shadow-md space-y-6">
+                {/* Header Banner: Mixed Pile Overview */}
+                <div className="flex items-start justify-between gap-3 pb-4 border-b border-d-border-subtle">
+                  <div className="flex items-start gap-3">
+                    <div className="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-700 dark:text-amber-300 flex items-center justify-center shrink-0 shadow-sm border border-amber-500/30">
+                      <Layers size={24} />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="font-bold text-d-on-surface text-lg">
+                          Đống phế liệu hỗn hợp
+                        </h3>
+                        <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
+                          📦 {detectedObjects.length} Vật thể phát hiện
+                        </span>
+                      </div>
+                      <p className="text-xs text-d-on-surface-variant mt-0.5">
+                        {aiResult.mixed_summary || 'Phát hiện nhiều loại phế liệu khác nhau trong một khung hình.'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── Thông tin Khoa học Vật lý: Chuẩn hóa Trọng số Tỷ trọng Rời (Bulk Density) ── */}
+                <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-xs space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1.5 text-xs">
+                      <Sparkles size={14} className="text-amber-600" />
+                      <span>Chuẩn hóa Trọng số Tỷ trọng Vật lý (Bulk Density Index):</span>
+                    </span>
+                    {hasManualAdjustments && (
+                      <button
+                        type="button"
+                        onClick={handleResetManualShares}
+                        className="text-[11px] font-bold text-d-primary hover:underline flex items-center gap-1 cursor-pointer"
+                      >
+                        <RotateCcw size={12} />
+                        <span>Hoàn tác tỷ lệ AI</span>
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-d-on-surface-variant leading-relaxed">
+                    Hệ thống tự động quy đổi diện tích quang học 2D sang khối lượng thực tế (kg) bằng công thức: <code className="font-mono text-d-on-surface bg-d-surface-container px-1 py-0.5 rounded">M = Area × ρ × Conf</code>.
+                    Chai nhựa rỗng nhẹ được chiết giảm thể tích (ρ = 0.45), kim loại nặng được tăng trọng số cân ký (ρ = 3.8). Bạn có thể kéo thanh trượt bên dưới để tinh chỉnh theo ý muốn.
+                  </p>
+                </div>
+
+                {/* ── Visual Stacked Composition Bar ── */}
+                <div className="space-y-1.5">
+                  <div className="flex justify-between text-xs font-bold text-d-on-surface">
+                    <span>Cơ cấu khối lượng phế liệu thực tế (Cân ký):</span>
+                    <span className="font-mono text-emerald-600 font-bold">100% khối lượng (~{estimatedWeight} kg)</span>
+                  </div>
+                  <div className="w-full h-4 bg-d-surface-container rounded-full overflow-hidden flex shadow-inner">
+                    {detectedObjects.map((obj) => (
+                      <div
+                        key={obj.id}
+                        className="h-full transition-all duration-300 relative group cursor-pointer"
+                        style={{
+                          width: `${obj.estimated_share_percent}%`,
+                          backgroundColor: obj.color,
+                        }}
+                        onMouseEnter={() => setHoveredBoxId(obj.id)}
+                        onMouseLeave={() => setHoveredBoxId(null)}
+                        title={`${obj.name_vi}: ${obj.estimated_share_percent}% khối lượng (Diện tích ảnh: ${obj.visual_area_percent || '~'}%)`}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                {/* ── Detected Objects Component Cards List with Interactive Sliders ── */}
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between text-xs font-bold text-d-on-surface">
+                    <span>Phân bổ chi tiết & Tinh chỉnh tỷ lệ (Slider):</span>
+                    <span className="text-[11px] text-d-on-surface-variant font-normal">
+                      Kéo trượt để thay đổi %
+                    </span>
+                  </div>
+
+                  <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
+                    {mixedPricing.items.map((item) => {
+                      const isHovered = hoveredBoxId === item.id;
+                      const isHidden = hiddenBoxIds.has(item.id);
+
+                      return (
+                        <div
+                          key={item.id}
+                          onMouseEnter={() => setHoveredBoxId(item.id)}
+                          onMouseLeave={() => setHoveredBoxId(null)}
+                          className={`p-3.5 rounded-2xl border transition-all space-y-2.5 ${
+                            isHovered
+                              ? 'border-2 shadow-xs ring-2 scale-[1.005]'
+                              : 'border-d-border-subtle bg-d-surface-container-low hover:bg-d-surface-container'
+                          }`}
+                          style={{
+                            borderColor: isHovered ? item.color : undefined,
+                            backgroundColor: isHovered ? `${item.color}08` : undefined,
+                          }}
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              {/* Color Dot & Visibility Toggle */}
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleBoxVisibility(item.id);
+                                }}
+                                className="w-6 h-6 rounded-lg flex items-center justify-center transition-colors cursor-pointer shrink-0"
+                                title={isHidden ? 'Hiện Bounding Box' : 'Ẩn Bounding Box'}
+                                style={{ backgroundColor: `${item.color}20`, color: item.color }}
+                              >
+                                {isHidden ? <EyeOff size={14} /> : <Eye size={14} />}
+                              </button>
+
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="font-bold text-xs text-d-on-surface truncate">
+                                    {item.name_vi}
+                                  </span>
+                                  <span
+                                    className="text-[10px] font-bold px-1.5 py-0.2 rounded font-mono text-white"
+                                    style={{ backgroundColor: item.color }}
+                                  >
+                                    {item.estimated_share_percent}% khối lượng
+                                  </span>
+                                  {item.bulk_density && (
+                                    <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-d-surface-container text-d-on-surface-variant">
+                                      ρ={item.bulk_density}
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-[11px] text-d-on-surface-variant truncate mt-0.5">
+                                  Khối lượng: <strong className="text-d-on-surface font-mono">~{item.itemWeightKg} kg</strong> · Đơn giá: {item.unitPrice.toLocaleString('vi-VN')} đ/kg
+                                  {item.visual_area_percent != null && (
+                                    <span className="opacity-75 font-mono ml-1.5">
+                                      (Diện tích 2D: {item.visual_area_percent}%)
+                                    </span>
+                                  )}
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Subtotal Payout */}
+                            <div className="text-right shrink-0">
+                              <span className="font-mono font-bold text-sm text-emerald-600 block">
+                                ~{item.subTotal.toLocaleString('vi-VN')} đ
+                              </span>
+                              <span className="text-[10px] text-d-on-surface-variant font-mono">
+                                {item.confidence}% tin cậy
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Interactive Share Slider */}
+                          <div className="flex items-center gap-3 pt-1 border-t border-d-border-subtle/50">
+                            <span className="text-[10px] text-d-on-surface-variant shrink-0 font-medium">
+                              Chỉnh tỷ lệ:
+                            </span>
+                            <input
+                              type="range"
+                              min="1"
+                              max="95"
+                              value={item.estimated_share_percent}
+                              onChange={(e) => handleUpdateShare(item.id, e.target.value)}
+                              className="w-full h-1.5 bg-d-surface-container rounded-lg appearance-none cursor-pointer accent-d-primary"
+                            />
+                            <span className="text-xs font-mono font-bold text-d-on-surface w-10 text-right shrink-0">
+                              {item.estimated_share_percent}%
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* ── Parameter Inputs for Mixed Pile Valuation ── */}
+                <div className="rounded-2xl border border-d-border-subtle bg-d-surface-container-low/60 p-4 space-y-4">
+                  {/* Location Goong.io */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-d-on-surface flex items-center gap-1.5">
+                      <MapPin size={14} className="text-d-primary" />
+                      <span>Địa điểm thu gom thực tế:</span>
+                    </label>
+                    <GoongAutocomplete
+                      value={userLocation.address}
+                      onChange={(addr) => setUserLocation((prev) => ({ ...prev, address: addr }))}
+                      onSelect={handleLocationSelect}
+                      placeholder="Gõ số nhà, tên đường hoặc bấm GPS..."
+                    />
+                  </div>
+
+                  {/* Total Weight Input */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-d-on-surface flex items-center gap-1.5">
+                        <Scale size={14} className="text-d-primary" />
+                        <span>Tổng khối lượng cả đống ước tính:</span>
+                      </label>
+                      <span className="text-xs font-bold text-d-primary font-mono">
+                        {estimatedWeight} kg
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <input
+                        type="number"
+                        min="1"
+                        max="10000"
+                        value={estimatedWeight}
+                        onChange={(e) => setEstimatedWeight(Math.max(1, Number(e.target.value) || 1))}
+                        className="w-28 px-3 py-2 rounded-xl border border-d-border-subtle bg-d-surface text-d-on-surface text-sm font-bold focus:outline-d-primary text-center"
+                      />
+                      <div className="flex flex-wrap gap-1.5">
+                        {[20, 50, 100, 200, 500].map((w) => (
+                          <button
+                            key={w}
+                            type="button"
+                            onClick={() => setEstimatedWeight(w)}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                              estimatedWeight === w
+                                ? 'bg-d-primary text-d-on-primary shadow-xs'
+                                : 'bg-d-surface-container text-d-on-surface-variant hover:bg-d-surface-container-high'
+                            }`}
+                          >
+                            {w} kg
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Quality Selector */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-d-on-surface flex items-center gap-1.5">
+                      <Award size={14} className="text-d-primary" />
+                      <span>Tình trạng phân loại thực tế:</span>
+                    </label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {QUALITY_CONDITIONS.map((cond) => {
+                        const isSelected = qualityCondition === cond.id;
+                        return (
+                          <div
+                            key={cond.id}
+                            onClick={() => setQualityCondition(cond.id)}
+                            className={`p-2.5 rounded-xl border transition-all cursor-pointer text-center ${
+                              isSelected
+                                ? 'border-2 border-d-primary bg-d-primary/5 shadow-xs'
+                                : 'border-d-border-subtle bg-d-surface hover:bg-d-surface-container'
+                            }`}
+                          >
+                            <span className="font-bold text-xs block text-d-on-surface">{cond.shortLabel}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Fulfillment Method */}
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    {FULFILLMENT_METHODS.map((f) => {
+                      const isSelected = fulfillmentMethod === f.id;
+                      return (
+                        <div
+                          key={f.id}
+                          onClick={() => setFulfillmentMethod(f.id)}
+                          className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-center gap-2 ${
+                            isSelected
+                              ? 'border-2 border-d-primary bg-d-primary/5 shadow-xs'
+                              : 'border-d-border-subtle bg-d-surface hover:bg-d-surface-container'
+                          }`}
+                        >
+                          <MaterialIcon name={f.icon} className="text-base text-d-primary" />
+                          <span className="text-xs font-bold text-d-on-surface truncate">{f.label}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* ── Grand Total Payout Banner ── */}
+                <div className="p-4 rounded-2xl bg-gradient-to-br from-amber-500/15 via-emerald-500/10 to-transparent border border-amber-500/30 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <span className="text-[11px] font-bold text-amber-800 dark:text-amber-300 uppercase tracking-wider block">
+                        💰 Tổng giá trị AI ước tính cả đống:
+                      </span>
+                      <div className="text-2xl font-black text-emerald-600 font-mono mt-0.5">
+                        ~{mixedPricing.totalEstimatedValue.toLocaleString('vi-VN')} đ
+                      </div>
+                      <p className="text-[11px] text-d-on-surface-variant">
+                        Đơn giá bình quân: <strong className="font-mono text-d-on-surface">~{mixedPricing.averageUnitPrice.toLocaleString('vi-VN')} đ/kg</strong> (Tổng ~{estimatedWeight} kg)
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleProceedToCreateRequest()}
+                      className="px-5 py-3 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0"
+                    >
+                      <span>Tạo đơn gom cả đống phế liệu</span>
+                      <ArrowRight size={14} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* AI Result Card: SINGLE ITEM MODE (GIỮ NGUYÊN 100% LUỒNG ĐƠN VẬT THỂ) */}
+          {aiResult && scanMode === 'single' && (() => {
             const predictions = normalizeAiPredictions(aiResult);
             const currentSelected = predictions[selectedPredictionIndex] || predictions[0];
             const smartPrice = calculateSmartPriceRecommendation({

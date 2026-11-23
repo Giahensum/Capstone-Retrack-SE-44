@@ -277,3 +277,142 @@ export function calculateSmartPriceRecommendation({
     nearestDepot: nearestDepot || null,
   };
 }
+
+/**
+ * Bảng trọng số tỷ trọng thể tích thực nghiệm (Bulk Density g/cm³ hoặc kg/L)
+ * Dùng để chuẩn hóa tỷ lệ % khối lượng vật lý cho đống phế liệu hỗn hợp
+ */
+export const MATERIAL_BULK_DENSITY_MAP = {
+  metal: 3.8,
+  battery: 6.5,
+  'white-glass': 2.5,
+  'brown-glass': 2.5,
+  'green-glass': 2.5,
+  glass: 2.5,
+  paper: 1.4,
+  cardboard: 1.2,
+  clothes: 1.0,
+  shoes: 0.9,
+  trash: 0.8,
+  biological: 0.8,
+  plastic: 0.45,
+};
+
+/**
+ * Thuật toán chuẩn hóa tỷ lệ khối lượng thực tế bằng trọng số vật lý:
+ * M_i = Area_2D_i * ρ_i * Confidence_i
+ * WeightPercent_i = (M_i / Σ M_k) * 100%
+ */
+export function calculatePhysicalBulkDensityShares(detectedObjects = []) {
+  if (!detectedObjects || detectedObjects.length === 0) return [];
+
+  let total2DArea = 0;
+  let totalMassScore = 0;
+
+  const rawComputed = detectedObjects.map((obj) => {
+    const box = obj.bounding_box || {};
+    const width = box.width || (box.x2 && box.x1 ? Math.abs(box.x2 - box.x1) : 100);
+    const height = box.height || (box.y2 && box.y1 ? Math.abs(box.y2 - box.y1) : 100);
+    const area = Math.max(width * height, 1);
+
+    const classKey = (obj.class_key || obj.material_type || '').toLowerCase();
+    const density = MATERIAL_BULK_DENSITY_MAP[classKey] || 1.0;
+    const confWeight = Math.max(Number(obj.confidence) || 85, 40) / 100;
+    const massScore = area * density * confWeight;
+
+    total2DArea += area;
+    totalMassScore += massScore;
+
+    return {
+      ...obj,
+      pixel_area: area,
+      bulk_density: density,
+      mass_score: massScore,
+    };
+  });
+
+  return rawComputed.map((item) => {
+    const visualAreaPercent = total2DArea > 0 ? Math.round((item.pixel_area / total2DArea) * 1000) / 10 : 0;
+    const physicalWeightPercent = totalMassScore > 0 ? Math.round((item.mass_score / totalMassScore) * 1000) / 10 : 0;
+
+    return {
+      ...item,
+      visual_area_percent: visualAreaPercent,
+      physical_weight_percent: physicalWeightPercent,
+      estimated_share_percent: item.manual_share_percent ?? physicalWeightPercent,
+    };
+  });
+}
+
+/**
+ * Tính toán định giá tổng hợp cho Đống phế liệu hỗn hợp đa vật thể (Multi-Item Mixed Waste Pile)
+ * Tích hợp chuẩn hóa trọng số tỷ trọng khối lượng riêng vật lý.
+ */
+export function calculateMixedPilePricingRecommendation({
+  detectedObjects = [],
+  totalWeightKg = 20,
+  nearestDepot = null,
+  qualityId = 'STANDARD',
+  fulfillment = 'DOORSTEP',
+  userLocation = null,
+}) {
+  if (!detectedObjects || detectedObjects.length === 0) {
+    return {
+      isMixed: true,
+      items: [],
+      totalEstimatedValue: 0,
+      averageUnitPrice: 0,
+      totalWeightKg,
+    };
+  }
+
+  // Chuẩn hóa tỷ lệ theo trọng số khối lượng vật lý nếu chưa có
+  const normalizedObjects = detectedObjects.some((o) => o.physical_weight_percent != null)
+    ? detectedObjects
+    : calculatePhysicalBulkDensityShares(detectedObjects);
+
+  // Phân bổ tính tiền cho từng đối tượng trong đống phế liệu
+  let totalEstimatedValue = 0;
+  const items = normalizedObjects.map((obj) => {
+    const sharePercent = Number(obj.estimated_share_percent) || 0;
+    const itemWeightKg = Math.round((totalWeightKg * (sharePercent / 100)) * 10) / 10;
+
+    const singleRec = calculateSmartPriceRecommendation({
+      wasteItem: {
+        class_key: obj.class_key,
+        material_type: obj.material_type,
+        current_market_price: obj.current_market_price,
+        is_recyclable: obj.is_recyclable !== false,
+      },
+      nearestDepot,
+      weightKg: Math.max(itemWeightKg, 1),
+      qualityId,
+      fulfillment,
+      userLocation,
+    });
+
+    const itemTotal = Math.round(singleRec.recommendedUnitPrice * itemWeightKg);
+    totalEstimatedValue += itemTotal;
+
+    return {
+      ...obj,
+      itemWeightKg,
+      unitPrice: singleRec.recommendedUnitPrice,
+      subTotal: itemTotal,
+      pricingBreakdown: singleRec.breakdown,
+    };
+  });
+
+  const averageUnitPrice = totalWeightKg > 0 ? Math.round(totalEstimatedValue / totalWeightKg) : 0;
+
+  return {
+    isMixed: true,
+    items,
+    totalWeightKg,
+    totalEstimatedValue,
+    averageUnitPrice,
+    nearestDepot,
+    qualityId,
+    fulfillment,
+  };
+}
