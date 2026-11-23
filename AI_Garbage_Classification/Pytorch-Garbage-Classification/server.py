@@ -659,38 +659,81 @@ BOX_COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4']
 
 def _run_mixed_classification(image_np_rgb: np.ndarray):
     ih, iw = image_np_rgb.shape[:2]
-    yolo_res = yolo_model(image_np_rgb, verbose=False)
+    # Hạ ngưỡng conf xuống 0.15 và iou=0.45 để phát hiện nhạy hơn các vật thể phế liệu trong đống
+    yolo_res = yolo_model(image_np_rgb, conf=0.15, iou=0.45, verbose=False)
 
     detected_boxes = []
     if yolo_res and len(yolo_res[0].boxes) > 0:
         img_area = ih * iw
         for idx, box in enumerate(yolo_res[0].boxes):
             conf = float(box.conf[0])
-            if conf < YOLO_CONF_THRESH:
-                continue
             bx1, by1, bx2, by2 = map(int, box.xyxy[0])
-            cls_id = int(box.cls[0])
-            cls_name = yolo_model.names.get(cls_id, "")
+            bx1 = max(0, min(iw - 1, bx1))
+            by1 = max(0, min(ih - 1, by1))
+            bx2 = max(bx1 + 15, min(iw, bx2))
+            by2 = max(by1 + 15, min(ih, by2))
             area = max((bx2 - bx1) * (by2 - by1), 1)
-            if area / img_area < MIN_BOX_AREA_RATIO:
+            if area / img_area < 0.015:
                 continue
-            retrack_cls = YOLO_TO_RETRACK_PRIMARY.get(cls_name.lower(), 'cardboard')
+
+            # Crop từng bounding box và chạy EfficientNet-B4 để phân loại chất liệu thật sự
+            crop = image_np_rgb[by1:by2, bx1:bx2]
+            if crop.shape[0] < 10 or crop.shape[1] < 10:
+                continue
+
+            pil_crop = Image.fromarray(crop).convert('RGB')
+            tensor = img_transform(pil_crop).unsqueeze(0).to(DEVICE)
+            with torch.no_grad():
+                logits = classifier_model(tensor)[0].cpu().numpy()
+
+            cls_name = yolo_model.names.get(int(box.cls[0]), "").lower()
+            yolo_prior = _get_yolo_semantic_prior(cls_name, conf)
+            adj_logits = torch.tensor(logits + yolo_prior)
+            probs = torch.softmax(adj_logits, dim=0)
+
+            best_idx = probs.argmax().item()
+            eff_cls = CLASSES[best_idx]
+            eff_conf = float(probs[best_idx])
+
             detected_boxes.append({
                 'idx': idx,
                 'box': (bx1, by1, bx2, by2),
                 'yolo_cls': cls_name,
-                'retrack_cls': retrack_cls,
-                'conf': conf,
+                'retrack_cls': eff_cls,
+                'conf': eff_conf,
                 'area': area
             })
 
-    # If YOLO didn't detect at least 2 distinct boxes, provide robust standard 3-box multi-item composition
+    # Nếu YOLO không phát hiện đủ >= 2 vật thể trong đống phế liệu (hoặc ảnh phế liệu dẹp hỗn hợp):
+    # Áp dụng cơ chế Multi-Region Spatial Classification bằng EfficientNet-B4 trên các phân vùng ảnh
     if len(detected_boxes) < 2:
-        detected_boxes = [
-            {'idx': 0, 'box': (int(iw * 0.05), int(ih * 0.08), int(iw * 0.55), int(ih * 0.90)), 'yolo_cls': 'box', 'retrack_cls': 'cardboard', 'conf': 0.94, 'area': int(iw * 0.50 * ih * 0.82)},
-            {'idx': 1, 'box': (int(iw * 0.58), int(ih * 0.12), int(iw * 0.92), int(ih * 0.88)), 'yolo_cls': 'bottle', 'retrack_cls': 'plastic', 'conf': 0.91, 'area': int(iw * 0.34 * ih * 0.76)},
-            {'idx': 2, 'box': (int(iw * 0.28), int(ih * 0.55), int(iw * 0.70), int(ih * 0.98)), 'yolo_cls': 'cup', 'retrack_cls': 'metal', 'conf': 0.88, 'area': int(iw * 0.42 * ih * 0.43)},
+        # Chia ảnh thành 3 phân vùng không gian trọng điểm (trái, giữa, phải) để phân loại chuyên sâu
+        segment_regions = [
+            (int(iw * 0.02), int(ih * 0.05), int(iw * 0.36), int(ih * 0.95)),
+            (int(iw * 0.35), int(ih * 0.05), int(iw * 0.68), int(ih * 0.95)),
+            (int(iw * 0.67), int(ih * 0.05), int(iw * 0.98), int(ih * 0.95)),
         ]
+        detected_boxes = []
+        for s_idx, (sx1, sy1, sx2, sy2) in enumerate(segment_regions):
+            crop = image_np_rgb[sy1:sy2, sx1:sx2]
+            pil_crop = Image.fromarray(crop).convert('RGB')
+            tensor = img_transform(pil_crop).unsqueeze(0).to(DEVICE)
+            with torch.no_grad():
+                logits = classifier_model(tensor)[0].cpu()
+            probs = torch.softmax(logits, dim=0)
+            best_idx = probs.argmax().item()
+            seg_cls = CLASSES[best_idx]
+            seg_conf = float(probs[best_idx])
+            s_area = max((sx2 - sx1) * (sy2 - sy1), 1)
+
+            detected_boxes.append({
+                'idx': s_idx,
+                'box': (sx1, sy1, sx2, sy2),
+                'yolo_cls': 'segment',
+                'retrack_cls': seg_cls,
+                'conf': seg_conf,
+                'area': s_area
+            })
 
     # Calculate physical bulk density mass scores
     total_area = sum(b['area'] for b in detected_boxes)

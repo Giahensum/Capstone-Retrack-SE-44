@@ -24,7 +24,7 @@ import PriceForecastWidget from '../components/PriceForecastWidget';
 const DEMO_SAMPLES = [
   {
     id: 'carton_box',
-    title: 'Thùng carton kraft đơn lẻ (Exi.jpg)',
+    title: 'Thùng carton kraft đơn lẻ',
     category: 'cardboard',
     icon: 'category',
     url: '/samples/exi.jpg',
@@ -32,10 +32,18 @@ const DEMO_SAMPLES = [
   },
   {
     id: 'mixed_pile_demo',
-    title: 'Đống phế liệu hỗn hợp (Carton + Nhựa + Lon)',
+    title: 'Đống hỗn hợp: Carton + Nhựa + Lon (Tỷ lệ cao)',
     category: 'mixed_pile',
     icon: 'layers',
-    url: '/samples/exi.jpg',
+    url: '/samples/mixed_pile_high_conf.jpg',
+    mode: 'mixed_pile',
+  },
+  {
+    id: 'mixed_plastic_metal',
+    title: 'Hỗn hợp: Chai nhựa + Lon nhôm (Tỷ lệ cao)',
+    category: 'mixed_pile',
+    icon: 'layers',
+    url: '/samples/mixed_plastic_metal.jpg',
     mode: 'mixed_pile',
   },
 ];
