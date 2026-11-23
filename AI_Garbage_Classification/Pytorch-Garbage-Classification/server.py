@@ -153,11 +153,28 @@ METADATA = {
 
 # ── 2. Khởi tạo Models (EfficientNet-B4, YOLOv8n, EasyOCR) ──
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-WEIGHTS_PATH = os.path.join(BASE_DIR, 'model.pth')
-YOLO_PATH = os.path.join(BASE_DIR, 'yolov8n.pt')
+
+# Hỗ trợ tự động nạp Model Custom (YOLO custom hoặc Classifier custom)
+# Ưu tiên: Biến môi trường -> File custom (best.pt, custom_model.pth) -> File mặc định
+CUSTOM_YOLO_CANDIDATES = [
+    os.environ.get('RETRACK_YOLO_PATH'),
+    os.path.join(BASE_DIR, 'best.pt'),
+    os.path.join(BASE_DIR, 'yolov8_custom.pt'),
+    os.path.join(BASE_DIR, 'yolov8n.pt'),
+]
+YOLO_PATH = next((p for p in CUSTOM_YOLO_CANDIDATES if p and os.path.exists(p)), 'yolov8n.pt')
+
+CUSTOM_WEIGHTS_CANDIDATES = [
+    os.environ.get('RETRACK_MODEL_PATH'),
+    os.path.join(BASE_DIR, 'custom_model.pth'),
+    os.path.join(BASE_DIR, 'model.pth'),
+]
+WEIGHTS_PATH = next((p for p in CUSTOM_WEIGHTS_CANDIDATES if p and os.path.exists(p)), os.path.join(BASE_DIR, 'model.pth'))
 
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 logger.info(f"Khoi tao ReTrack AI tren thiet bi: {DEVICE}")
+logger.info(f"Using YOLO Model: {YOLO_PATH}")
+logger.info(f"Using Classifier Weights: {WEIGHTS_PATH}")
 
 logger.info("Dang khoi tao EfficientNet-B4...")
 classifier_model = models.efficientnet_b4(weights=None)
@@ -460,8 +477,10 @@ def health_check():
     return {
         "status": "healthy",
         "service": "ReTrack AI Computer Vision",
-        "model": "Multi-Model Knowledge Stacking (EfficientNet-B4 + YOLOv8n + EasyOCR)",
+        "model": "Multi-Model Knowledge Stacking (EfficientNet-B4 + YOLOv8 + EasyOCR)",
         "fusion_mode": "Late Fusion / Logit Stacking Ensemble",
+        "yolo_model": os.path.basename(YOLO_PATH),
+        "classifier_model": os.path.basename(WEIGHTS_PATH),
         "classes_count": len(CLASSES),
         "device": "cuda" if torch.cuda.is_available() else "cpu",
     }
