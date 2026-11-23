@@ -6,6 +6,7 @@ import StockCostAdjustments from './StockCostAdjustments';
 import StockReceiptForm from './StockReceiptForm';
 import CostAllocationPanel, { CostFormulaHelp } from './CostAllocationPanel';
 import { ReceiptText } from 'lucide-react';
+import BatchDetailSection from './BatchDetailSection';
 
 export default function StockReceiptReview({ receipt, onClose }) {
   const [purchaseCost, setPurchaseCost] = useState(receipt.purchaseCost);
@@ -26,14 +27,16 @@ export default function StockReceiptReview({ receipt, onClose }) {
   return <Dialog icon={ReceiptText} title={`Phiếu nhập: ${receipt.reference}`} wide busy={busy} onClose={onClose}>
     <div className="space-y-4">
       <p className="rounded-xl bg-d-surface-accent p-3 text-sm">{canReview ? 'Phiếu chưa ghi sổ, chưa được tính vào tồn khả dụng.' : receipt.status === 'POSTED' ? 'Phiếu đã ghi sổ. Không sửa trực tiếp số lượng hay giá vốn đã duyệt.' : `${receipt.status === 'VOIDED' ? 'Đã đảo phiếu' : 'Phiếu bị từ chối'}: ${receipt.reviewNote ?? ''}`}</p>
-      <dl className="grid sm:grid-cols-2 gap-3"><div><dt>Giá mua cả lô</dt><dd className="font-semibold">{money(receipt.purchaseCost)}</dd></div><div><dt>Chi phí phiếu gốc</dt><dd className="font-semibold">{money(receipt.totalCost)}</dd></div></dl>
       {receipt.lines.map(x => <div key={x.id} className="rounded-xl bg-white border border-d-border-subtle p-4"><p className="font-semibold">{x.name} · {number(x.quantity)} {x.unit}</p>
-        <p className="text-sm mt-1">{x.conditionNote || 'Chưa ghi tình trạng'}</p><p className="text-sm mt-2">Giá bán tham khảo đã nhập: {money(x.referencePrice)} / {x.unit}</p><p className="text-sm mt-2">Chi phí phân bổ: {x.allocatedCost == null ? 'Chưa xác định' : money(x.allocatedCost)} · Giá vốn / {x.unit}: {x.allocatedCost == null ? 'Chưa xác định' : money(x.allocatedCost / x.quantity)}</p></div>)}
+        {x.conditionNote && <p className="text-sm mt-1">{x.conditionNote}</p>}</div>)}
+      <BatchDetailSection title="Chi phí và phân bổ giá vốn (nâng cao)">
+      <dl className="grid sm:grid-cols-2 gap-3"><div><dt>Giá mua cả lô đã ghi</dt><dd className="font-semibold">{money(receipt.purchaseCost)}</dd></div><div><dt>Chi phí phiếu gốc đã ghi</dt><dd className="font-semibold">{money(receipt.totalCost)}</dd></div></dl>
       <CostAllocationPanel purchaseCost={receipt.purchaseCost} lines={receipt.lines} expenses={receipt.expenses} enabled={receipt.costsConfirmed} snapshot />
       {receipt.expenses.length > 0 && <ul className="text-sm space-y-2">{receipt.expenses.map((x, i) => <li key={i}>{x.description}: {money(x.amount)}</li>)}</ul>}
+      </BatchDetailSection>
       {canReview && <>
-        {receipt.status === 'DRAFT' && <button type="button" className={buttonClass} disabled={busy} onClick={() => setEditingDraft(true)}>Sửa hàng thực nhận / phiếu nháp</button>}
-        {!editing && <button type="button" className={buttonClass} disabled={busy} onClick={() => setEditing(true)}>Bổ sung / chỉnh chi phí trước ghi sổ</button>}
+        {receipt.status === 'DRAFT' && <button type="button" className={buttonClass} disabled={busy} onClick={() => setEditingDraft(true)}>Sửa phiếu nháp</button>}
+        {receipt.status === 'SUBMITTED' && !editing && <button type="button" className={buttonClass} disabled={busy} onClick={() => setEditing(true)}>Kiểm tra / bổ sung chi phí trước duyệt</button>}
         {editing && <form className="space-y-4 rounded-2xl border border-d-border-subtle p-4" onSubmit={e => {
           e.preventDefault(); save.mutate({ body: { purchaseCost: Number(purchaseCost), costsConfirmed: confirmed,
             lines: lines.map(x => ({ id: x.id, referencePrice: Number(x.referencePrice || 0), directCost: Number(x.directCost || 0) })),
@@ -52,12 +55,14 @@ export default function StockReceiptReview({ receipt, onClose }) {
         {!editing && <div className="space-y-4 border-t border-d-border-subtle pt-4">
           <p className="text-sm">Duyệt xác nhận số hàng đã về kho. {receipt.costsConfirmed ? 'Giá vốn phân bổ sẽ được giữ làm căn cứ cho lô xuất.' : 'Giá vốn còn thiếu; báo cáo lợi nhuận sẽ hiện chưa xác định.'}</p>
           <button type="button" className={buttonClass} disabled={busy} onClick={() => post.mutate()}>{post.isPending ? 'Đang ghi sổ…' : 'Xác nhận hàng thực nhận và ghi sổ'}</button>
-          <form className="space-y-2" onSubmit={e => { e.preventDefault(); reject.mutate({ body: { reason } }); }}><label className="block">Lý do từ chối phiếu<input required maxLength={1000} className={inputClass} value={reason} onChange={e => setReason(e.target.value)} /></label><button disabled={busy} className="rounded-full border border-d-error text-d-error px-5 py-2.5">Từ chối phiếu</button></form>
+          <BatchDetailSection title="Không nhận phiếu này"><form className="space-y-2" onSubmit={e => { e.preventDefault(); reject.mutate({ body: { reason } }); }}><label className="block">Lý do từ chối phiếu<input required maxLength={1000} className={inputClass} value={reason} onChange={e => setReason(e.target.value)} /></label><button disabled={busy} className="rounded-full border border-d-error text-d-error px-5 py-2.5">Từ chối phiếu</button></form></BatchDetailSection>
         </div>}
       </>}
-      {receipt.status === 'POSTED' && <form className="space-y-3 border-t border-d-border-subtle pt-4" onSubmit={e => { e.preventDefault(); reverse.mutate({ body: { reason } }); }}><p className="text-sm">Chỉ đảo phiếu khi toàn bộ hàng chưa được giữ/xuất/bán. Thao tác loại số lượng khỏi tồn và giữ lịch sử phiếu.</p><label className="block">Lý do đảo phiếu<input required maxLength={1000} disabled={busy} className={inputClass} value={reason} onChange={e => setReason(e.target.value)} /></label><button className="rounded-full border border-d-error text-d-error px-5 py-2.5" disabled={busy}>Xác nhận đảo toàn bộ phiếu nhập</button></form>}
+      {receipt.status === 'POSTED' && <BatchDetailSection title="Thao tác khác: sửa sai và điều chỉnh">
+      <BatchDetailSection title="Đảo phiếu nhập còn nguyên hàng"><form className="space-y-3" onSubmit={e => { e.preventDefault(); reverse.mutate({ body: { reason } }); }}><p className="text-sm">Chỉ đảo phiếu khi toàn bộ hàng chưa được giữ/xuất/bán. Thao tác loại số lượng khỏi tồn và giữ lịch sử phiếu.</p><label className="block">Lý do đảo phiếu<input required maxLength={1000} disabled={busy} className={inputClass} value={reason} onChange={e => setReason(e.target.value)} /></label><button className="rounded-full border border-d-error text-d-error px-5 py-2.5" disabled={busy}>Xác nhận đảo toàn bộ phiếu nhập</button></form></BatchDetailSection>
+      <BatchDetailSection title="Điều chỉnh chi phí có lịch sử"><StockCostAdjustments receipt={receipt} onBusyChange={setAdjusting} /></BatchDetailSection>
+      </BatchDetailSection>}
       <MutationError mutation={post} /><MutationError mutation={reject} /><MutationError mutation={reverse} />
-      {receipt.status === 'POSTED' && <StockCostAdjustments receipt={receipt} onBusyChange={setAdjusting} />}
       <p className="text-sm text-d-on-surface-variant">Nguồn do kho tự khai báo. Tài liệu/phiếu nội bộ không thay hóa đơn thuế. Chi phí đã ghi không đồng nghĩa đã gồm mọi thuế và chi phí vận hành.</p>
     </div>
   </Dialog>;

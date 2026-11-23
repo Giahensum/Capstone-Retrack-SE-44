@@ -50,18 +50,25 @@ export default function StockReceiptForm({ onClose, agreement, receipt }) {
               : <label>Tên đồ / hãng / model<input required maxLength={255} className={inputClass} value={line.name} onChange={e => lineField(line.key, { name: e.target.value })} placeholder="Tivi, tủ lạnh, điều hòa, bàn ghế…" /></label>}
             <label>Số lượng ({line.unit})<input required type="number" min={line.kind === 'MATERIAL' ? '0.001' : '1'} step={line.kind === 'MATERIAL' ? '0.001' : '1'} max="1000000000" className={inputClass} value={line.quantity} onChange={e => lineField(line.key, { quantity: e.target.value })} /></label>
             {line.kind === 'REUSABLE' && <label>Đơn vị<select className={inputClass} value={line.unit} onChange={e => lineField(line.key, { unit: e.target.value })}><option>cái</option><option>bộ</option></select></label>}
-            <label className="sm:col-span-2">Tình trạng / lỗi đã biết / serial nếu có<input maxLength={1000} className={inputClass} value={line.conditionNote} onChange={e => lineField(line.key, { conditionNote: e.target.value })} /></label>
-            {form.costsConfirmed && <><label>Giá bán tham khảo / {line.unit} (đ)<input required type="number" min="1" step="1" max="1000000000000" className={inputClass} value={line.referencePrice} onChange={e => lineField(line.key, { referencePrice: e.target.value })} /></label>
-              <label>Chi phí riêng dòng này (đ)<input type="number" min="0" step="1" max="1000000000000" className={inputClass} value={line.directCost} onChange={e => lineField(line.key, { directCost: e.target.value })} /></label></>}
+            {line.kind === 'REUSABLE' && <label className="sm:col-span-2">Tình trạng / lỗi đã biết (tùy chọn)<input maxLength={1000} className={inputClass} value={line.conditionNote} onChange={e => lineField(line.key, { conditionNote: e.target.value })} /></label>}
           </div>
         </section>)}
-        <label className="block">Giá mua cả lô / giá trị tồn đầu kỳ (đ)<input type="number" min="0" step="1" max="1000000000000" className={inputClass} readOnly={linkedAgreement} value={form.purchaseCost} onChange={e => update('purchaseCost', e.target.value)} /></label>
-        <StockExpenseFields expenses={expenses} setExpenses={setExpenses} />
-        <label className="flex gap-3 items-start"><input type="checkbox" className="mt-1" checked={form.costsConfirmed} onChange={e => update('costsConfirmed', e.target.checked)} /><span>Đủ dữ liệu chi phí để phân bổ theo giá trị bán tham khảo.<span className="block text-sm text-d-on-surface-variant">Không chọn: giá vốn chưa xác định, hệ thống không báo lợi nhuận bằng cách coi giá vốn là 0.</span></span></label>
-        <p className="text-sm text-d-on-surface-variant">Một món đồ chỉ nhập theo cái/bộ hoặc vật liệu thực cân, không nhập trùng cả hai. Chi phí nhân công/xăng xe do kho khai thực tế; thuế chỉ ghi khoản không được thu hồi đã xác định, không tự áp thuế suất.</p>
+        {linkedAgreement && <p className="rounded-xl bg-d-surface-accent p-3 text-sm">Giá mua cả lô được lấy từ thỏa thuận: <strong>{Number(form.purchaseCost).toLocaleString('vi-VN')} đ</strong>. Không tính lại theo kg.</p>}
+        <details className="rounded-2xl border border-d-border-subtle bg-white p-4">
+          <summary className="cursor-pointer min-h-11 font-semibold text-d-primary">Chi phí và giá vốn (tùy chọn nâng cao)</summary>
+          <div className="space-y-4 pt-3">
+            <p className="text-sm text-d-on-surface-variant">Có thể ghi hàng vào kho trước mà chưa phân bổ vốn. Nếu chưa đủ dữ liệu, báo cáo sẽ ghi rõ chưa xác định; đóng mục này không xóa các khoản đã nhập.</p>
+            <label className="block">Giá mua cả lô / giá trị tồn đầu kỳ (đ)<input type="number" min="0" step="1" max="1000000000000" className={inputClass} readOnly={linkedAgreement} value={form.purchaseCost} onChange={e => update('purchaseCost', e.target.value)} /></label>
+            <StockExpenseFields expenses={expenses} setExpenses={setExpenses} />
+            <label className="flex gap-3 items-start"><input type="checkbox" className="mt-1" checked={form.costsConfirmed} onChange={e => update('costsConfirmed', e.target.checked)} /><span>Đủ dữ liệu chi phí để phân bổ theo giá trị bán tham khảo.<span className="block text-sm text-d-on-surface-variant">Không chọn: giá vốn chưa xác định, không coi là 0 để báo lãi.</span></span></label>
+            {form.costsConfirmed && lines.map(line => <div key={line.key} className="grid sm:grid-cols-2 gap-3 rounded-xl border border-d-border-subtle p-3"><p className="sm:col-span-2 font-medium">{line.name || 'Dòng hàng chưa đặt tên'}</p><label>Giá bán tham khảo / {line.unit} (đ)<input required type="number" min="1" step="1" max="1000000000000" className={inputClass} value={line.referencePrice} onChange={e => lineField(line.key, { referencePrice: e.target.value })} /></label><label>Chi phí riêng dòng này (đ)<input type="number" min="0" step="1" max="1000000000000" className={inputClass} value={line.directCost} onChange={e => lineField(line.key, { directCost: e.target.value })} /></label></div>)}
+            {form.costsConfirmed && <CostAllocationPanel purchaseCost={form.purchaseCost} lines={lines} expenses={expenses} enabled />}
+            <p className="text-sm text-d-on-surface-variant">Chi phí nhập đã nằm trong giá vốn không ghi lại khi bán. Thuế chỉ ghi khoản không thu hồi đã xác định, không tự áp thuế suất.</p>
+          </div>
+        </details>
+        <p className="text-sm text-d-on-surface-variant">Đồ còn dùng được ghi cái/bộ; phế liệu ghi kg. Không nhập trùng cùng một món đồ vào cả hai nhóm.</p>
         {!receipt && <label className="flex gap-3 items-start rounded-2xl border border-d-border-subtle bg-white p-4"><input type="checkbox" className="mt-1" checked={stockConfirmed} onChange={e => setStockConfirmed(e.target.checked)} /><span>Tôi đã kiểm tra hàng thực nhận và đồng ý ghi nhận vào kho.<span className="block text-sm text-d-on-surface-variant">Ghi nhận sẽ tăng tồn ngay. Nếu cần kiểm tra tiếp, chọn Lưu phiếu nháp; phiếu đã ghi sổ không sửa trực tiếp số lượng.</span></span></label>}
       </fieldset>
-      <CostAllocationPanel purchaseCost={form.purchaseCost} lines={lines} expenses={expenses} enabled={form.costsConfirmed} />
       <MutationError mutation={save} />
 
     </form>
