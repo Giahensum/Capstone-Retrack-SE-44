@@ -106,4 +106,73 @@ namespace Retrack.API.DTOs
         [JsonPropertyName("upload_to_cloud")]
         public bool UploadToCloud { get; set; } = false;
     }
+
+    public class PriceForecastPointDto
+    {
+        [JsonPropertyName("date")]
+        public string Date { get; set; } = string.Empty;
+
+        [JsonPropertyName("day_label")]
+        public string DayLabel { get; set; } = string.Empty;
+
+        [JsonPropertyName("price")]
+        public decimal Price { get; set; }
+
+        [JsonPropertyName("min_price")]
+        public decimal MinPrice { get; set; }
+
+        [JsonPropertyName("max_price")]
+        public decimal MaxPrice { get; set; }
+
+        [JsonPropertyName("is_forecast")]
+        public bool IsForecast { get; set; }
+    }
+
+    public class MaterialPriceForecastDto
+    {
+        [JsonPropertyName("material_type")]
+        public string MaterialType { get; set; } = string.Empty;
+
+        [JsonPropertyName("material_name_vi")]
+        public string MaterialNameVi { get; set; } = string.Empty;
+
+        [JsonPropertyName("unit")]
+        public string Unit { get; set; } = "kg";
+
+        [JsonPropertyName("current_price")]
+        public decimal CurrentPrice { get; set; }
+
+        [JsonPropertyName("projected_price_7d")]
+        public decimal ProjectedPrice7d { get; set; }
+
+        [JsonPropertyName("projected_change_pct")]
+        public decimal ProjectedChangePct { get; set; }
+
+        [JsonPropertyName("trend")]
+        public string Trend { get; set; } = "STABLE"; // UPWARD | STABLE | DOWNWARD
+
+        [JsonPropertyName("recommendation_code")]
+        public string RecommendationCode { get; set; } = "NEUTRAL"; // SELL_NOW | HOLD_ACCUMULATE | NEUTRAL
+
+        [JsonPropertyName("recommendation_title")]
+        public string RecommendationTitle { get; set; } = string.Empty;
+
+        [JsonPropertyName("recommendation_detail")]
+        public string RecommendationDetail { get; set; } = string.Empty;
+
+        [JsonPropertyName("optimal_time_window")]
+        public string OptimalTimeWindow { get; set; } = string.Empty;
+
+        [JsonPropertyName("estimated_profit_increase_pct")]
+        public decimal EstimatedProfitIncreasePct { get; set; }
+
+        [JsonPropertyName("factory_demand_weight_kg")]
+        public decimal FactoryDemandWeightKg { get; set; }
+
+        [JsonPropertyName("active_depots_buying")]
+        public int ActiveDepotsBuying { get; set; }
+
+        [JsonPropertyName("timeline")]
+        public List<PriceForecastPointDto> Timeline { get; set; } = new();
+    }
 }

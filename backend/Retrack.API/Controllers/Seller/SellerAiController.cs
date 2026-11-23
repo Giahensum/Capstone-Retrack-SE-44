@@ -99,5 +99,25 @@ namespace Retrack.API.Controllers.Seller
             var classes = await _aiService.GetClassesAsync();
             return Ok(ApiResponse<object>.Ok(classes));
         }
+
+        /// <summary>
+        /// Dự báo xu hướng giá phế liệu & Gợi ý thời điểm bán tối ưu dựa trên dữ liệu thị trường và nhu cầu nhà máy
+        /// </summary>
+        [HttpGet("price-forecast")]
+        public async Task<IActionResult> GetPriceForecast([FromQuery] string? materialType, [FromQuery] decimal? weightKg)
+        {
+            var forecast = await _aiService.GetPriceForecastAsync(materialType, weightKg);
+            return Ok(ApiResponse<MaterialPriceForecastDto>.Ok(forecast, "Đã tính toán dự báo xu hướng giá và thời điểm bán tối ưu."));
+        }
+
+        /// <summary>
+        /// Lấy tổng quan dự báo xu hướng giá cho tất cả các loại phế liệu chủ lực
+        /// </summary>
+        [HttpGet("price-forecast/all")]
+        public async Task<IActionResult> GetAllPriceForecasts()
+        {
+            var forecasts = await _aiService.GetAllPriceForecastsAsync();
+            return Ok(ApiResponse<List<MaterialPriceForecastDto>>.Ok(forecasts));
+        }
     }
 }

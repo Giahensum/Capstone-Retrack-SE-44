@@ -67,5 +67,11 @@ export const sellerApi = {
   },
   getAiStatus: () => api.get('/seller/ai/status').then(r => r.data.data),
   getAiClasses: () => api.get('/seller/ai/classes').then(r => r.data.data),
+  getPriceForecast: (materialType, weightKg) =>
+    api.get('/seller/ai/price-forecast', {
+      params: { materialType, weightKg },
+    }).then(r => r.data.data),
+  getAllPriceForecasts: () =>
+    api.get('/seller/ai/price-forecast/all').then(r => r.data.data),
 };
 

@@ -8,5 +8,7 @@ namespace Retrack.API.Services.Interfaces
         Task<SellerAiClassifyResponseDto> ClassifyBase64Async(string imageBase64, bool uploadToCloud = false);
         Task<object> GetStatusAsync();
         Task<object> GetClassesAsync();
+        Task<MaterialPriceForecastDto> GetPriceForecastAsync(string? materialType, decimal? userWeightKg = null);
+        Task<List<MaterialPriceForecastDto>> GetAllPriceForecastsAsync();
     }
 }

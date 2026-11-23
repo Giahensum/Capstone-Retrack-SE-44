@@ -1,10 +1,16 @@
 using System.Text;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Retrack.API.Controllers.Seller;
+using Retrack.API.Data;
 using Retrack.API.DTOs;
+using Retrack.API.Models;
+using Retrack.API.Models.Enums;
 using Retrack.API.Services.Interfaces;
+using Retrack.API.Services.Seller;
 using Xunit;
 
 namespace Retrack.API.Tests
@@ -35,6 +41,37 @@ namespace Retrack.API.Tests
         public Task<object> GetClassesAsync()
         {
             return Task.FromResult<object>(new { classes = new[] { "cardboard", "plastic" } });
+        }
+
+        public Task<MaterialPriceForecastDto> GetPriceForecastAsync(string? materialType, decimal? userWeightKg = null)
+        {
+            return Task.FromResult(new MaterialPriceForecastDto
+            {
+                MaterialType = materialType ?? "CARDBOARD",
+                MaterialNameVi = "Bìa Carton & Thùng giấy",
+                CurrentPrice = 4200m,
+                ProjectedPrice7d = 4400m,
+                ProjectedChangePct = 4.8m,
+                Trend = "UPWARD",
+                RecommendationCode = "HOLD_ACCUMULATE",
+                RecommendationTitle = "Nên gom thêm 3 - 5 ngày để đón đỉnh giá",
+                OptimalTimeWindow = "Trong 3 - 5 ngày tới",
+                Timeline = new List<PriceForecastPointDto>
+                {
+                    new() { Date = "2026-11-23", DayLabel = "Hôm nay", Price = 4200m, IsForecast = false },
+                    new() { Date = "2026-11-24", DayLabel = "Mai", Price = 4250m, IsForecast = true },
+                    new() { Date = "2026-11-25", DayLabel = "T4", Price = 4350m, IsForecast = true }
+                }
+            });
+        }
+
+        public Task<List<MaterialPriceForecastDto>> GetAllPriceForecastsAsync()
+        {
+            return Task.FromResult(new List<MaterialPriceForecastDto>
+            {
+                new() { MaterialType = "CARDBOARD", CurrentPrice = 4200m, Trend = "UPWARD" },
+                new() { MaterialType = "PET", CurrentPrice = 9000m, Trend = "STABLE" }
+            });
         }
     }
 
@@ -160,6 +197,100 @@ namespace Retrack.API.Tests
             var okResult = Assert.IsType<OkObjectResult>(result);
             var apiResponse = Assert.IsType<ApiResponse<object>>(okResult.Value);
             Assert.True(apiResponse.Success);
+        }
+
+        [Fact]
+        public async Task GetPriceForecast_ReturnsForecastData()
+        {
+            var result = await _controller.GetPriceForecast("CARDBOARD", 25m);
+            var okResult = Assert.IsType<OkObjectResult>(result);
+            var apiResponse = Assert.IsType<ApiResponse<MaterialPriceForecastDto>>(okResult.Value);
+            Assert.True(apiResponse.Success);
+            Assert.NotNull(apiResponse.Data);
+            Assert.Equal("CARDBOARD", apiResponse.Data.MaterialType);
+            Assert.Equal("UPWARD", apiResponse.Data.Trend);
+            Assert.Equal("HOLD_ACCUMULATE", apiResponse.Data.RecommendationCode);
+            Assert.NotEmpty(apiResponse.Data.Timeline);
+        }
+
+        [Fact]
+        public async Task GetAllPriceForecasts_ReturnsMultipleForecasts()
+        {
+            var result = await _controller.GetAllPriceForecasts();
+            var okResult = Assert.IsType<OkObjectResult>(result);
+            var apiResponse = Assert.IsType<ApiResponse<List<MaterialPriceForecastDto>>>(okResult.Value);
+            Assert.True(apiResponse.Success);
+            Assert.NotNull(apiResponse.Data);
+            Assert.Equal(2, apiResponse.Data.Count);
+        }
+
+        [Fact]
+        public async Task Service_GetPriceForecast_ComputesEconomicLogic_Accurately()
+        {
+            var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
+
+            // Seed market price
+            db.MarketPrices.Add(new MarketPrice
+            {
+                MaterialType = MaterialType.CARDBOARD,
+                PricePerKg = 4000m,
+                EffectiveDate = DateTime.UtcNow
+            });
+
+            // Seed active factory demand with higher price (creating demand-pull)
+            db.FactoryDemands.Add(new FactoryDemand
+            {
+                Id = Guid.NewGuid(),
+                FactoryId = Guid.NewGuid(),
+                MaterialType = "CARDBOARD",
+                RequiredWeightKg = 15000,
+                MinPricePerKg = 4200,
+                MaxPricePerKg = 5200, // +30% above market
+                IsActive = true,
+                Deadline = DateTime.UtcNow.AddDays(10)
+            });
+
+            // Seed depot buying prices
+            db.DepotBuyingPrices.Add(new DepotBuyingPrice
+            {
+                DepotId = Guid.NewGuid(),
+                MaterialType = "CARDBOARD",
+                PricePerKg = 4200m,
+                IsActive = true
+            });
+
+            await db.SaveChangesAsync();
+
+            var config = new ConfigurationBuilder().Build();
+            var service = new SellerAiService(
+                new HttpClient(),
+                config,
+                db,
+                null!,
+                NullLogger<SellerAiService>.Instance);
+
+            // Test 1: User with small weight (< 20kg) -> should recommend HOLD_ACCUMULATE to optimize shipping
+            var forecastSmall = await service.GetPriceForecastAsync("CARDBOARD", 10m);
+            Assert.NotNull(forecastSmall);
+            Assert.Equal("CARDBOARD", forecastSmall.MaterialType);
+            Assert.Equal("HOLD_ACCUMULATE", forecastSmall.RecommendationCode);
+            Assert.Contains("20 – 30 kg", forecastSmall.RecommendationTitle);
+            Assert.True(forecastSmall.EstimatedProfitIncreasePct > 0);
+            Assert.Equal(15, forecastSmall.Timeline.Count); // 7 past + today + 7 future
+
+            // Test 2: User with sufficient weight (25kg) under strong factory demand -> should show UPWARD trend
+            var forecastSufficient = await service.GetPriceForecastAsync("CARDBOARD", 25m);
+            Assert.NotNull(forecastSufficient);
+            Assert.Equal("UPWARD", forecastSufficient.Trend);
+            Assert.True(forecastSufficient.ProjectedPrice7d > forecastSufficient.CurrentPrice);
+            Assert.Equal(15000, forecastSufficient.FactoryDemandWeightKg);
+            Assert.Equal(1, forecastSufficient.ActiveDepotsBuying);
+
+            // Verify timeline formatting and confidence intervals
+            var futurePoint = forecastSufficient.Timeline.First(p => p.IsForecast);
+            Assert.True(futurePoint.MaxPrice >= futurePoint.Price);
+            Assert.True(futurePoint.MinPrice <= futurePoint.Price);
         }
     }
 }

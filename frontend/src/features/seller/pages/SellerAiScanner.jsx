@@ -17,6 +17,7 @@ import {
   QUALITY_CONDITIONS,
   FULFILLMENT_METHODS,
 } from '../pricingRecommendation';
+import PriceForecastWidget from '../components/PriceForecastWidget';
 
 const DEMO_SAMPLES = [
   {
@@ -1051,6 +1052,16 @@ export default function SellerAiScanner() {
                       )}
                     </div>
                   </div>
+                )}
+
+                {/* ── AI Price Trend Forecasting & Optimal Timing Engine ── */}
+                {currentSelected.is_recyclable && (
+                  <PriceForecastWidget
+                    initialMaterial={currentSelected.material_type || 'CARDBOARD'}
+                    weightKg={Number(estimatedWeight) || 15}
+                    onApplyPrice={null}
+                    className="mt-3"
+                  />
                 )}
 
                 {/* Recycling Tips */}
