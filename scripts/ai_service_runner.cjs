@@ -147,6 +147,8 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`🤖 ReTrack AI Microservice running on http://127.0.0.1:${PORT}`);
+  console.log(`⚠️  [CẢNH BÁO] Đang chạy ReTrack AI Mock Runner (Fallback) trên http://127.0.0.1:${PORT}`);
+  console.log(`💡 Để chạy AI thật (PyTorch + YOLOv8 + CUDA), hãy chạy:`);
+  console.log(`   cd AI_Garbage_Classification/Pytorch-Garbage-Classification && python server.py`);
 });
 

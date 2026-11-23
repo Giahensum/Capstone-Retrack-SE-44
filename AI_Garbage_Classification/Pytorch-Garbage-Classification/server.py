@@ -729,6 +729,8 @@ def _run_mixed_classification(image_np_rgb: np.ndarray):
             }
         })
 
+    obj_summary = ", ".join([f"{o.get('name_vi', '')} ~{o.get('estimated_share_percent', 0)} %" for o in detected_objects])
+
     return {
         "success": True,
         "scan_mode": "mixed_pile",
@@ -750,7 +752,7 @@ def _run_mixed_classification(image_np_rgb: np.ndarray):
         "unit": "kg",
         "price_range": "3.000 - 26.000 đ/kg (Định giá tổng hợp)",
         "recycling_tip": "Đống phế liệu có nhiều thành phần giá trị cao. Tỷ lệ % đã được chuẩn hóa theo hệ số tỷ trọng khối lượng riêng vật lý.",
-        "suggested_description": f"Đống phế liệu hỗn hợp ({', '.join([f'{o[\"name_vi\"]} ~{o[\"estimated_share_percent\"]} %' for o in detected_objects])} - Chuẩn hóa tỷ trọng vật lý), cần xe thu gom toàn bộ.",
+        "suggested_description": f"Đống phế liệu hỗn hợp ({obj_summary} - Chuẩn hóa tỷ trọng vật lý), cần xe thu gom toàn bộ.",
         "top_predictions": [],
         "detected_objects": detected_objects,
         "mixed_summary": f"Đống phế liệu hỗn hợp gồm {len(detected_objects)} nhóm vật liệu, đã áp dụng chuẩn hóa tỷ trọng khối lượng riêng (Bulk Density Factor).",
