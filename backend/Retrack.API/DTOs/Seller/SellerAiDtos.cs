@@ -41,49 +41,10 @@ namespace Retrack.API.DTOs
         public int Height { get; set; }
     }
 
-    public class AiDetectedObjectDto
-    {
-        [JsonPropertyName("id")]
-        public string Id { get; set; } = string.Empty;
-
-        [JsonPropertyName("class_key")]
-        public string ClassKey { get; set; } = string.Empty;
-
-        [JsonPropertyName("name_vi")]
-        public string NameVi { get; set; } = string.Empty;
-
-        [JsonPropertyName("material_type")]
-        public string MaterialType { get; set; } = string.Empty;
-
-        [JsonPropertyName("confidence")]
-        public double Confidence { get; set; }
-
-        [JsonPropertyName("bounding_box")]
-        public AiBoundingBoxDto BoundingBox { get; set; } = new();
-
-        [JsonPropertyName("estimated_share_percent")]
-        public double EstimatedSharePercent { get; set; }
-
-        [JsonPropertyName("color")]
-        public string Color { get; set; } = "#10b981";
-
-        [JsonPropertyName("is_recyclable")]
-        public bool IsRecyclable { get; set; } = true;
-
-        [JsonPropertyName("unit_price")]
-        public decimal? UnitPrice { get; set; }
-
-        [JsonPropertyName("price_range")]
-        public string PriceRange { get; set; } = string.Empty;
-    }
-
     public class SellerAiClassifyResponseDto
     {
         [JsonPropertyName("success")]
         public bool Success { get; set; } = true;
-
-        [JsonPropertyName("scan_mode")]
-        public string ScanMode { get; set; } = "single";
 
         [JsonPropertyName("primary_class")]
         public string PrimaryClass { get; set; } = string.Empty;
@@ -130,20 +91,20 @@ namespace Retrack.API.DTOs
         [JsonPropertyName("top_predictions")]
         public List<AiPredictionItemDto> TopPredictions { get; set; } = new();
 
-        [JsonPropertyName("detected_objects")]
-        public List<AiDetectedObjectDto> DetectedObjects { get; set; } = new();
-
-        [JsonPropertyName("mixed_summary")]
-        public string MixedSummary { get; set; } = string.Empty;
-
         [JsonPropertyName("annotated_image")]
         public string AnnotatedImage { get; set; } = string.Empty;
 
         [JsonPropertyName("uploaded_url")]
         public string? UploadedUrl { get; set; }
+    }
 
-        [JsonPropertyName("price_forecast")]
-        public PriceTrendForecastDto? PriceForecast { get; set; }
+    public class AiClassifyBase64RequestDto
+    {
+        [JsonPropertyName("image_base64")]
+        public string ImageBase64 { get; set; } = string.Empty;
+
+        [JsonPropertyName("upload_to_cloud")]
+        public bool UploadToCloud { get; set; } = false;
     }
 
     public class PriceForecastPointDto
@@ -157,11 +118,17 @@ namespace Retrack.API.DTOs
         [JsonPropertyName("price")]
         public decimal Price { get; set; }
 
+        [JsonPropertyName("min_price")]
+        public decimal MinPrice { get; set; }
+
+        [JsonPropertyName("max_price")]
+        public decimal MaxPrice { get; set; }
+
         [JsonPropertyName("is_forecast")]
         public bool IsForecast { get; set; }
     }
 
-    public class PriceTrendForecastDto
+    public class MaterialPriceForecastDto
     {
         [JsonPropertyName("material_type")]
         public string MaterialType { get; set; } = string.Empty;
@@ -169,52 +136,43 @@ namespace Retrack.API.DTOs
         [JsonPropertyName("material_name_vi")]
         public string MaterialNameVi { get; set; } = string.Empty;
 
+        [JsonPropertyName("unit")]
+        public string Unit { get; set; } = "kg";
+
         [JsonPropertyName("current_price")]
         public decimal CurrentPrice { get; set; }
 
-        [JsonPropertyName("forecast_price_7d")]
-        public decimal ForecastPrice7d { get; set; }
+        [JsonPropertyName("projected_price_7d")]
+        public decimal ProjectedPrice7d { get; set; }
 
-        [JsonPropertyName("trend_direction")]
-        public string TrendDirection { get; set; } = "UP"; // UP, DOWN, STABLE
+        [JsonPropertyName("projected_change_pct")]
+        public decimal ProjectedChangePct { get; set; }
 
-        [JsonPropertyName("trend_percentage")]
-        public double TrendPercentage { get; set; }
+        [JsonPropertyName("trend")]
+        public string Trend { get; set; } = "STABLE"; // UPWARD | STABLE | DOWNWARD
 
-        [JsonPropertyName("confidence_score")]
-        public double ConfidenceScore { get; set; }
+        [JsonPropertyName("recommendation_code")]
+        public string RecommendationCode { get; set; } = "NEUTRAL"; // SELL_NOW | HOLD_ACCUMULATE | NEUTRAL
 
-        [JsonPropertyName("optimal_action")]
-        public string OptimalAction { get; set; } = "HOLD_AND_ACCUMULATE"; // SELL_NOW, HOLD_AND_ACCUMULATE, SELL_BEFORE_WEEKEND
+        [JsonPropertyName("recommendation_title")]
+        public string RecommendationTitle { get; set; } = string.Empty;
 
-        [JsonPropertyName("optimal_timing_title")]
-        public string OptimalTimingTitle { get; set; } = string.Empty;
+        [JsonPropertyName("recommendation_detail")]
+        public string RecommendationDetail { get; set; } = string.Empty;
 
-        [JsonPropertyName("optimal_timing_advice")]
-        public string OptimalTimingAdvice { get; set; } = string.Empty;
+        [JsonPropertyName("optimal_time_window")]
+        public string OptimalTimeWindow { get; set; } = string.Empty;
 
-        [JsonPropertyName("optimal_day")]
-        public string OptimalDay { get; set; } = string.Empty;
+        [JsonPropertyName("estimated_profit_increase_pct")]
+        public decimal EstimatedProfitIncreasePct { get; set; }
 
-        [JsonPropertyName("potential_gain_amount")]
-        public decimal PotentialGainAmount { get; set; }
+        [JsonPropertyName("factory_demand_weight_kg")]
+        public decimal FactoryDemandWeightKg { get; set; }
 
-        [JsonPropertyName("market_drivers")]
-        public List<string> MarketDrivers { get; set; } = new();
+        [JsonPropertyName("active_depots_buying")]
+        public int ActiveDepotsBuying { get; set; }
 
-        [JsonPropertyName("points")]
-        public List<PriceForecastPointDto> Points { get; set; } = new();
-    }
-
-    public class AiClassifyBase64RequestDto
-    {
-        [JsonPropertyName("image_base64")]
-        public string ImageBase64 { get; set; } = string.Empty;
-
-        [JsonPropertyName("upload_to_cloud")]
-        public bool UploadToCloud { get; set; } = false;
-
-        [JsonPropertyName("scan_mode")]
-        public string ScanMode { get; set; } = "single";
+        [JsonPropertyName("timeline")]
+        public List<PriceForecastPointDto> Timeline { get; set; } = new();
     }
 }

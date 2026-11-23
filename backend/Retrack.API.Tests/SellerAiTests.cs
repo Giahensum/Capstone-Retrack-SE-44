@@ -1,10 +1,16 @@
 using System.Text;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Retrack.API.Controllers.Seller;
+using Retrack.API.Data;
 using Retrack.API.DTOs;
+using Retrack.API.Models;
+using Retrack.API.Models.Enums;
 using Retrack.API.Services.Interfaces;
+using Retrack.API.Services.Seller;
 using Xunit;
 
 namespace Retrack.API.Tests
@@ -15,52 +21,56 @@ namespace Retrack.API.Tests
         public bool ShouldThrow { get; set; }
         public string ErrorMessage { get; set; } = "Dịch vụ AI không phản hồi";
 
-        public Task<SellerAiClassifyResponseDto> ClassifyAsync(Stream imageStream, string fileName, string contentType, bool uploadToCloud = false, string scanMode = "single")
+        public Task<SellerAiClassifyResponseDto> ClassifyAsync(Stream imageStream, string fileName, string contentType, bool uploadToCloud = false)
         {
             if (ShouldThrow) throw new InvalidOperationException(ErrorMessage);
-            var res = MockResponse ?? new SellerAiClassifyResponseDto();
-            res.ScanMode = scanMode;
-            return Task.FromResult(res);
+            return Task.FromResult(MockResponse ?? new SellerAiClassifyResponseDto());
         }
 
-        public Task<SellerAiClassifyResponseDto> ClassifyBase64Async(string imageBase64, bool uploadToCloud = false, string scanMode = "single")
+        public Task<SellerAiClassifyResponseDto> ClassifyBase64Async(string imageBase64, bool uploadToCloud = false)
         {
             if (ShouldThrow) throw new InvalidOperationException(ErrorMessage);
-            var res = MockResponse ?? new SellerAiClassifyResponseDto();
-            res.ScanMode = scanMode;
-            return Task.FromResult(res);
+            return Task.FromResult(MockResponse ?? new SellerAiClassifyResponseDto());
         }
 
         public Task<object> GetStatusAsync()
         {
-            return Task.FromResult<object>(new { status = "healthy", model = "EfficientNet-B4 + YOLOv8n" });
+            return Task.FromResult<object>(new { status = "healthy", model = "EfficientNet-B4" });
         }
 
         public Task<object> GetClassesAsync()
         {
-            return Task.FromResult<object>(new { classes = new[] { "cardboard", "plastic", "metal" } });
+            return Task.FromResult<object>(new { classes = new[] { "cardboard", "plastic" } });
         }
 
-        public Task<PriceTrendForecastDto> GetPriceTrendForecastAsync(string materialType, decimal currentPrice, double weightKg = 10)
+        public Task<MaterialPriceForecastDto> GetPriceForecastAsync(string? materialType, decimal? userWeightKg = null)
         {
-            return Task.FromResult(new PriceTrendForecastDto
+            return Task.FromResult(new MaterialPriceForecastDto
             {
-                MaterialType = materialType,
-                CurrentPrice = currentPrice > 0 ? currentPrice : 4200,
-                ForecastPrice7d = (currentPrice > 0 ? currentPrice : 4200) * 1.05m,
-                TrendDirection = "UP",
-                TrendPercentage = 5.0,
-                ConfidenceScore = 88.0,
-                OptimalAction = "HOLD_AND_ACCUMULATE",
-                OptimalTimingTitle = "Nên tích trữ thêm 3 - 5 ngày để gom lô lớn",
-                OptimalTimingAdvice = "Giá kim loại và carton đang có xu hướng tăng trong 7 ngày tới.",
-                OptimalDay = "Thứ Năm",
-                Points = new List<PriceForecastPointDto>
+                MaterialType = materialType ?? "CARDBOARD",
+                MaterialNameVi = "Bìa Carton & Thùng giấy",
+                CurrentPrice = 4200m,
+                ProjectedPrice7d = 4400m,
+                ProjectedChangePct = 4.8m,
+                Trend = "UPWARD",
+                RecommendationCode = "HOLD_ACCUMULATE",
+                RecommendationTitle = "Nên gom thêm 3 - 5 ngày để đón đỉnh giá",
+                OptimalTimeWindow = "Trong 3 - 5 ngày tới",
+                Timeline = new List<PriceForecastPointDto>
                 {
-                    new() { DayLabel = "Hôm nay", Price = 4200, IsForecast = false },
-                    new() { DayLabel = "+3 ngày", Price = 4350, IsForecast = true },
-                    new() { DayLabel = "+7 ngày", Price = 4410, IsForecast = true },
+                    new() { Date = "2026-11-23", DayLabel = "Hôm nay", Price = 4200m, IsForecast = false },
+                    new() { Date = "2026-11-24", DayLabel = "Mai", Price = 4250m, IsForecast = true },
+                    new() { Date = "2026-11-25", DayLabel = "T4", Price = 4350m, IsForecast = true }
                 }
+            });
+        }
+
+        public Task<List<MaterialPriceForecastDto>> GetAllPriceForecastsAsync()
+        {
+            return Task.FromResult(new List<MaterialPriceForecastDto>
+            {
+                new() { MaterialType = "CARDBOARD", CurrentPrice = 4200m, Trend = "UPWARD" },
+                new() { MaterialType = "PET", CurrentPrice = 9000m, Trend = "STABLE" }
             });
         }
     }
@@ -137,45 +147,6 @@ namespace Retrack.API.Tests
             Assert.Equal("cardboard", apiResponse.Data.PrimaryClass);
             Assert.Equal("Bìa Carton & Thùng giấy", apiResponse.Data.NameVi);
             Assert.Equal(85.5, apiResponse.Data.Confidence);
-            Assert.Equal("single", apiResponse.Data.ScanMode);
-        }
-
-        [Fact]
-        public async Task Classify_ReturnsMixedPileWithMultipleBoxes_WhenMixedMode()
-        {
-            var bytes = new byte[] { 0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46 };
-            var stream = new MemoryStream(bytes);
-            var file = new FormFile(stream, 0, bytes.Length, "file", "mixed_waste.jpg")
-            {
-                Headers = new HeaderDictionary(),
-                ContentType = "image/jpeg"
-            };
-
-            _aiService.MockResponse = new SellerAiClassifyResponseDto
-            {
-                PrimaryClass = "mixed_pile",
-                NameVi = "Đống phế liệu hỗn hợp đa vật thể",
-                MaterialType = "MIXED",
-                Confidence = 92.0,
-                ScanMode = "mixed_pile",
-                DetectedObjects = new List<AiDetectedObjectDto>
-                {
-                    new() { Id = "obj_1", ClassKey = "cardboard", NameVi = "Bìa Carton", MaterialType = "CARDBOARD", Confidence = 95.0, EstimatedSharePercent = 50.0, Color = "#10b981" },
-                    new() { Id = "obj_2", ClassKey = "plastic", NameVi = "Chai nhựa PET", MaterialType = "PLASTIC", Confidence = 91.5, EstimatedSharePercent = 30.0, Color = "#3b82f6" },
-                    new() { Id = "obj_3", ClassKey = "metal", NameVi = "Vỏ lon nhôm", MaterialType = "METAL", Confidence = 88.0, EstimatedSharePercent = 20.0, Color = "#f59e0b" },
-                }
-            };
-
-            var result = await _controller.Classify(file, false, "mixed_pile");
-            var okResult = Assert.IsType<OkObjectResult>(result);
-            var apiResponse = Assert.IsType<ApiResponse<SellerAiClassifyResponseDto>>(okResult.Value);
-
-            Assert.True(apiResponse.Success);
-            Assert.NotNull(apiResponse.Data);
-            Assert.Equal("mixed_pile", apiResponse.Data.ScanMode);
-            Assert.Equal(3, apiResponse.Data.DetectedObjects.Count);
-            Assert.Equal("Bìa Carton", apiResponse.Data.DetectedObjects[0].NameVi);
-            Assert.Equal(50.0, apiResponse.Data.DetectedObjects[0].EstimatedSharePercent);
         }
 
         [Fact]
@@ -229,17 +200,97 @@ namespace Retrack.API.Tests
         }
 
         [Fact]
-        public async Task GetPriceForecast_ReturnsOptimalTiming_WhenValidMaterial()
+        public async Task GetPriceForecast_ReturnsForecastData()
         {
-            var result = await _controller.GetPriceForecast("ALUMINUM", 24000, 20);
+            var result = await _controller.GetPriceForecast("CARDBOARD", 25m);
             var okResult = Assert.IsType<OkObjectResult>(result);
-            var apiResponse = Assert.IsType<ApiResponse<PriceTrendForecastDto>>(okResult.Value);
+            var apiResponse = Assert.IsType<ApiResponse<MaterialPriceForecastDto>>(okResult.Value);
             Assert.True(apiResponse.Success);
             Assert.NotNull(apiResponse.Data);
-            Assert.Equal("ALUMINUM", apiResponse.Data.MaterialType);
-            Assert.Equal("UP", apiResponse.Data.TrendDirection);
-            Assert.Equal("HOLD_AND_ACCUMULATE", apiResponse.Data.OptimalAction);
-            Assert.NotEmpty(apiResponse.Data.Points);
+            Assert.Equal("CARDBOARD", apiResponse.Data.MaterialType);
+            Assert.Equal("UPWARD", apiResponse.Data.Trend);
+            Assert.Equal("HOLD_ACCUMULATE", apiResponse.Data.RecommendationCode);
+            Assert.NotEmpty(apiResponse.Data.Timeline);
+        }
+
+        [Fact]
+        public async Task GetAllPriceForecasts_ReturnsMultipleForecasts()
+        {
+            var result = await _controller.GetAllPriceForecasts();
+            var okResult = Assert.IsType<OkObjectResult>(result);
+            var apiResponse = Assert.IsType<ApiResponse<List<MaterialPriceForecastDto>>>(okResult.Value);
+            Assert.True(apiResponse.Success);
+            Assert.NotNull(apiResponse.Data);
+            Assert.Equal(2, apiResponse.Data.Count);
+        }
+
+        [Fact]
+        public async Task Service_GetPriceForecast_ComputesEconomicLogic_Accurately()
+        {
+            var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
+
+            // Seed market price
+            db.MarketPrices.Add(new MarketPrice
+            {
+                MaterialType = MaterialType.CARDBOARD,
+                PricePerKg = 4000m,
+                EffectiveDate = DateTime.UtcNow
+            });
+
+            // Seed active factory demand with higher price (creating demand-pull)
+            db.FactoryDemands.Add(new FactoryDemand
+            {
+                Id = Guid.NewGuid(),
+                FactoryId = Guid.NewGuid(),
+                MaterialType = "CARDBOARD",
+                RequiredWeightKg = 15000,
+                MinPricePerKg = 4200,
+                MaxPricePerKg = 5200, // +30% above market
+                IsActive = true,
+                Deadline = DateTime.UtcNow.AddDays(10)
+            });
+
+            // Seed depot buying prices
+            db.DepotBuyingPrices.Add(new DepotBuyingPrice
+            {
+                DepotId = Guid.NewGuid(),
+                MaterialType = "CARDBOARD",
+                PricePerKg = 4200m,
+                IsActive = true
+            });
+
+            await db.SaveChangesAsync();
+
+            var config = new ConfigurationBuilder().Build();
+            var service = new SellerAiService(
+                new HttpClient(),
+                config,
+                db,
+                null!,
+                NullLogger<SellerAiService>.Instance);
+
+            // Test 1: User with small weight (< 20kg) -> should recommend HOLD_ACCUMULATE to optimize shipping
+            var forecastSmall = await service.GetPriceForecastAsync("CARDBOARD", 10m);
+            Assert.NotNull(forecastSmall);
+            Assert.Equal("CARDBOARD", forecastSmall.MaterialType);
+            Assert.Equal("HOLD_ACCUMULATE", forecastSmall.RecommendationCode);
+            Assert.Contains("20 – 30 kg", forecastSmall.RecommendationTitle);
+            Assert.True(forecastSmall.EstimatedProfitIncreasePct > 0);
+            Assert.Equal(15, forecastSmall.Timeline.Count); // 7 past + today + 7 future
+
+            // Test 2: User with sufficient weight (25kg) under strong factory demand -> should show UPWARD trend
+            var forecastSufficient = await service.GetPriceForecastAsync("CARDBOARD", 25m);
+            Assert.NotNull(forecastSufficient);
+            Assert.Equal("UPWARD", forecastSufficient.Trend);
+            Assert.True(forecastSufficient.ProjectedPrice7d > forecastSufficient.CurrentPrice);
+            Assert.Equal(15000, forecastSufficient.FactoryDemandWeightKg);
+            Assert.Equal(1, forecastSufficient.ActiveDepotsBuying);
+
+            // Verify timeline formatting and confidence intervals
+            var futurePoint = forecastSufficient.Timeline.First(p => p.IsForecast);
+            Assert.True(futurePoint.MaxPrice >= futurePoint.Price);
+            Assert.True(futurePoint.MinPrice <= futurePoint.Price);
         }
     }
 }

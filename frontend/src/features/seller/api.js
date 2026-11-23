@@ -52,23 +52,26 @@ export const sellerApi = {
   markAllRead: () => api.patch('/seller/notifications/read-all').then(r => r.data),
 
   // ── AI Computer Vision ──
-  classifyAiImage: (file, upload = false, mode = 'single') => {
+  classifyAiImage: (file, upload = false) => {
     const formData = new FormData();
     formData.append('file', file);
-    return api.post(`/seller/ai/classify?upload=${upload}&mode=${encodeURIComponent(mode)}`, formData, {
+    return api.post(`/seller/ai/classify?upload=${upload}`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     }).then(r => r.data.data);
   },
-  classifyAiBase64: (imageBase64, uploadToCloud = false, mode = 'single') => {
+  classifyAiBase64: (imageBase64, uploadToCloud = false) => {
     return api.post('/seller/ai/classify-base64', {
       image_base64: imageBase64,
       upload_to_cloud: uploadToCloud,
-      scan_mode: mode,
     }).then(r => r.data.data);
   },
   getAiStatus: () => api.get('/seller/ai/status').then(r => r.data.data),
   getAiClasses: () => api.get('/seller/ai/classes').then(r => r.data.data),
-  getPriceForecast: (material = 'CARDBOARD', price = 0, weight = 10) =>
-    api.get('/seller/ai/price-forecast', { params: { material, price, weight } }).then(r => r.data.data),
+  getPriceForecast: (materialType, weightKg) =>
+    api.get('/seller/ai/price-forecast', {
+      params: { materialType, weightKg },
+    }).then(r => r.data.data),
+  getAllPriceForecasts: () =>
+    api.get('/seller/ai/price-forecast/all').then(r => r.data.data),
 };
 

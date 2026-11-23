@@ -326,42 +326,15 @@ export default function CreateRequest() {
         urls.push(updated[i].url);
         continue;
       }
-
-      if (!updated[i].file) {
-        if (updated[i].preview && (updated[i].preview.startsWith('http://') || updated[i].preview.startsWith('https://'))) {
-          urls.push(updated[i].preview);
-          continue;
-        }
-        if (updated[i].preview && updated[i].preview.startsWith('data:')) {
-          try {
-            const res = await fetch(updated[i].preview);
-            const blob = await res.blob();
-            updated[i].file = new File([blob], `waste-${i + 1}.jpg`, { type: blob.type || 'image/jpeg' });
-          } catch {
-            // ignore
-          }
-        }
-      }
-
-      if (!updated[i].file) {
-        const fallbackUrl = 'https://images.unsplash.com/photo-1532996122724-e3c354a0b15b?w=600';
-        urls.push(fallbackUrl);
-        continue;
-      }
-
       updated[i] = { ...updated[i], uploading: true };
       setImages([...updated]);
       try {
         const url = await sellerApi.uploadImage(updated[i].file);
         updated[i] = { ...updated[i], url, uploading: false };
         urls.push(url);
-      } catch (uploadErr) {
-        console.warn('Upload image API warning, fallbacking to preview/default image:', uploadErr);
-        const fallbackUrl = (updated[i].preview && updated[i].preview.startsWith('http'))
-          ? updated[i].preview
-          : 'https://images.unsplash.com/photo-1532996122724-e3c354a0b15b?w=600';
-        updated[i] = { ...updated[i], url: fallbackUrl, uploading: false };
-        urls.push(fallbackUrl);
+      } catch {
+        updated[i] = { ...updated[i], uploading: false };
+        toast.error(`Upload ảnh ${i + 1} thất bại`);
       }
       setImages([...updated]);
     }
@@ -423,8 +396,8 @@ export default function CreateRequest() {
     createMutation.mutate({
       description: form.description,
       address: form.address,
-      latitude: form.latitude ?? 10.7324,
-      longitude: form.longitude ?? 106.7009,
+      latitude: form.latitude,
+      longitude: form.longitude,
       preferredDatetime,
       requestImageUrl: imageUrl,
       targetDepotId: mode === 'choose' ? form.targetDepotId : null,
@@ -598,11 +571,11 @@ export default function CreateRequest() {
                     {detectedAiData.recommendedPricePerKg ? (
                       <div className="mt-1 flex items-center gap-2 flex-wrap">
                         <span className="font-semibold text-emerald-800 dark:text-emerald-300 bg-emerald-500/20 px-2 py-0.5 rounded-full text-xs">
-                          💰 {detectedAiData.scan_mode === 'mixed_pile' ? 'Đơn giá bình quân:' : 'Giá AI đề xuất:'} {detectedAiData.recommendedPricePerKg.toLocaleString('vi-VN')} đ/kg
+                          💰 Giá AI đề xuất: {detectedAiData.recommendedPricePerKg.toLocaleString('vi-VN')} đ/kg
                         </span>
                         {detectedAiData.estimatedTotalPayout && (
                           <span className="text-d-on-surface-variant text-[11px]">
-                            • {detectedAiData.scan_mode === 'mixed_pile' ? 'Tổng tiền cả đống:' : 'Ước tính:'} ~{detectedAiData.estimatedTotalPayout.toLocaleString('vi-VN')} đ ({detectedAiData.estimatedWeight || 10}kg)
+                            • Ước tính: ~{detectedAiData.estimatedTotalPayout.toLocaleString('vi-VN')} đ ({detectedAiData.estimatedWeight || 10}kg)
                           </span>
                         )}
                         {detectedAiData.nearestDepotName && (
@@ -627,8 +600,8 @@ export default function CreateRequest() {
                 </button>
               </div>
 
-              {/* Selector for other predictions in Top 5 (Single Mode Only) */}
-              {detectedAiData.scan_mode !== 'mixed_pile' && detectedAiData.top_predictions && detectedAiData.top_predictions.length > 1 && (
+              {/* Selector for other predictions in Top 5 */}
+              {detectedAiData.top_predictions && detectedAiData.top_predictions.length > 1 && (
                 <div className="pt-2.5 border-t border-emerald-500/20 space-y-1.5">
                   <div className="flex items-center gap-1.5 text-[11px] font-semibold text-d-on-surface">
                     <Layers size={13} className="text-emerald-600" />

@@ -40,8 +40,7 @@ namespace Retrack.API.Services.Seller
             Stream imageStream,
             string fileName,
             string contentType,
-            bool uploadToCloud = false,
-            string scanMode = "single")
+            bool uploadToCloud = false)
         {
             // Copy stream for Cloudinary if needed
             byte[] imageBytes;
@@ -52,7 +51,7 @@ namespace Retrack.API.Services.Seller
             }
 
             var aiBaseUrl = GetAiBaseUrl();
-            _logger.LogInformation("Gửi ảnh {FileName} (chế độ: {Mode}) tới AI microservice tại {Url}...", fileName, scanMode, aiBaseUrl);
+            _logger.LogInformation("Gửi ảnh {FileName} tới AI microservice tại {Url}...", fileName, aiBaseUrl);
 
             using var content = new MultipartFormDataContent();
             var byteContent = new ByteArrayContent(imageBytes);
@@ -62,8 +61,7 @@ namespace Retrack.API.Services.Seller
             HttpResponseMessage response;
             try
             {
-                var queryMode = Uri.EscapeDataString(scanMode ?? "single");
-                response = await _httpClient.PostAsync($"{aiBaseUrl}/api/ai/classify?mode={queryMode}", content);
+                response = await _httpClient.PostAsync($"{aiBaseUrl}/api/ai/classify", content);
             }
             catch (Exception ex)
             {
@@ -85,9 +83,7 @@ namespace Retrack.API.Services.Seller
             var result = JsonSerializer.Deserialize<SellerAiClassifyResponseDto>(json, options)
                          ?? throw new InvalidOperationException("Không thể giải mã phản hồi từ dịch vụ AI.");
 
-            result.ScanMode = scanMode ?? "single";
-
-            // Tra cứu giá thị trường thực tế từ Database cho cả đơn vật thể và đống hỗn hợp
+            // Tra cứu giá thị trường thực tế từ Database
             await EnrichWithMarketPrice(result);
 
             // Tải lên Cloudinary nếu người dùng yêu cầu
@@ -107,10 +103,10 @@ namespace Retrack.API.Services.Seller
             return result;
         }
 
-        public async Task<SellerAiClassifyResponseDto> ClassifyBase64Async(string imageBase64, bool uploadToCloud = false, string scanMode = "single")
+        public async Task<SellerAiClassifyResponseDto> ClassifyBase64Async(string imageBase64, bool uploadToCloud = false)
         {
             var aiBaseUrl = GetAiBaseUrl();
-            var payload = new { image_base64 = imageBase64, scan_mode = scanMode ?? "single" };
+            var payload = new { image_base64 = imageBase64 };
             var jsonPayload = JsonSerializer.Serialize(payload);
             using var httpContent = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
 
@@ -137,8 +133,6 @@ namespace Retrack.API.Services.Seller
             var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
             var result = JsonSerializer.Deserialize<SellerAiClassifyResponseDto>(json, options)
                          ?? throw new InvalidOperationException("Không thể giải mã phản hồi từ dịch vụ AI.");
-
-            result.ScanMode = scanMode ?? "single";
 
             await EnrichWithMarketPrice(result);
 
@@ -167,11 +161,6 @@ namespace Retrack.API.Services.Seller
             try
             {
                 var res = await _httpClient.GetAsync($"{aiBaseUrl}/api/ai/health");
-                if (!res.IsSuccessStatusCode)
-                {
-                    res = await _httpClient.GetAsync($"{aiBaseUrl}/api/ai/status");
-                }
-
                 if (res.IsSuccessStatusCode)
                 {
                     var body = await res.Content.ReadAsStringAsync();
@@ -205,11 +194,268 @@ namespace Retrack.API.Services.Seller
             return new { classes = Array.Empty<string>() };
         }
 
+        public async Task<MaterialPriceForecastDto> GetPriceForecastAsync(string? materialType, decimal? userWeightKg = null)
+        {
+            var norm = NormalizeMaterialType(materialType);
+            var meta = GetMaterialMetadata(norm);
+
+            // 1. Lấy giá niêm yết hiện tại từ MarketPrices
+            decimal marketPrice = meta.DefaultPrice;
+            if (Enum.TryParse<MaterialType>(norm, true, out var matEnum))
+            {
+                var dbMarketPrice = await _db.MarketPrices
+                    .Where(p => p.MaterialType == matEnum)
+                    .OrderByDescending(p => p.EffectiveDate)
+                    .Select(p => (decimal?)p.PricePerKg)
+                    .FirstOrDefaultAsync();
+
+                if (dbMarketPrice.HasValue && dbMarketPrice.Value > 0)
+                {
+                    marketPrice = dbMarketPrice.Value;
+                }
+            }
+
+            // 2. Lấy dữ liệu nhu cầu từ các nhà máy đang hoạt động (Factory Demands)
+            var activeDemands = await _db.FactoryDemands
+                .Where(d => d.IsActive && d.MaterialType == norm)
+                .Select(d => new { d.RequiredWeightKg, d.MaxPricePerKg })
+                .ToListAsync();
+
+            decimal totalDemandKg = activeDemands.Sum(d => d.RequiredWeightKg);
+            decimal? maxFactoryPrice = activeDemands.Max(d => d.MaxPricePerKg);
+
+            // 3. Lấy dữ liệu giá thu mua thực tế của các kho vựa (Depot Buying Prices)
+            var depotPrices = await _db.DepotBuyingPrices
+                .Where(p => p.IsActive && p.MaterialType == norm)
+                .Select(p => p.PricePerKg)
+                .ToListAsync();
+
+            int activeDepots = depotPrices.Count;
+            decimal avgDepotPrice = activeDepots > 0 ? depotPrices.Average() : marketPrice;
+
+            // Tổng hợp giá cơ sở hiện tại (Ưu tiên bình quân có trọng số giữa thị trường và kho vựa)
+            decimal currentBaseline = activeDepots > 0
+                ? Math.Round((marketPrice * 0.35m + avgDepotPrice * 0.65m) / 50m) * 50m
+                : marketPrice;
+
+            // 4. Tính toán áp lực cầu (Demand-Pull Momentum)
+            decimal demandDrift = 0m;
+            if (maxFactoryPrice.HasValue && maxFactoryPrice.Value > currentBaseline)
+            {
+                decimal premium = (maxFactoryPrice.Value - currentBaseline) / currentBaseline;
+                demandDrift = Math.Min(0.012m, premium * 0.08m);
+            }
+            else if (totalDemandKg >= 8000)
+            {
+                demandDrift = 0.006m;
+            }
+            else if (totalDemandKg > 0)
+            {
+                demandDrift = 0.002m;
+            }
+            else
+            {
+                demandDrift = -0.0025m;
+            }
+
+            // 5. Xây dựng trục thời gian: 7 ngày quá khứ (-7..-1), hôm nay (0) và 7 ngày dự báo (+1..+7)
+            var today = DateTime.UtcNow.Date;
+            var timeline = new List<PriceForecastPointDto>();
+            int seed = Math.Abs(norm.GetHashCode()) % 7;
+
+            // Quá khứ: -7 đến -1
+            for (int i = -7; i < 0; i++)
+            {
+                var dt = today.AddDays(i);
+                decimal cycle = 0.014m * (decimal)Math.Sin((i + seed) * 0.95);
+                decimal histPrice = currentBaseline * (1m + demandDrift * i + cycle);
+                histPrice = Math.Round(histPrice / 50m) * 50m;
+
+                timeline.Add(new PriceForecastPointDto
+                {
+                    Date = dt.ToString("yyyy-MM-dd"),
+                    DayLabel = GetDayOfWeekLabel(dt, false),
+                    Price = histPrice,
+                    MinPrice = histPrice,
+                    MaxPrice = histPrice,
+                    IsForecast = false
+                });
+            }
+
+            // Hôm nay: 0
+            timeline.Add(new PriceForecastPointDto
+            {
+                Date = today.ToString("yyyy-MM-dd"),
+                DayLabel = "Hôm nay",
+                Price = currentBaseline,
+                MinPrice = currentBaseline,
+                MaxPrice = currentBaseline,
+                IsForecast = false
+            });
+
+            // Tương lai: +1 đến +7
+            decimal highestFuturePrice = currentBaseline;
+            int peakDayOffset = 0;
+
+            for (int i = 1; i <= 7; i++)
+            {
+                var dt = today.AddDays(i);
+                decimal damp = 1.0m / (1.0m + 0.035m * i);
+                decimal cycle = 0.012m * (decimal)Math.Sin(i * 0.85);
+                decimal projected = currentBaseline * (1m + demandDrift * i * damp + cycle);
+                projected = Math.Round(projected / 50m) * 50m;
+
+                decimal spread = 0.015m * (decimal)Math.Sqrt(i);
+                decimal minP = Math.Round(projected * (1m - spread) / 50m) * 50m;
+                decimal maxP = Math.Round(projected * (1m + spread) / 50m) * 50m;
+
+                if (projected > highestFuturePrice)
+                {
+                    highestFuturePrice = projected;
+                    peakDayOffset = i;
+                }
+
+                timeline.Add(new PriceForecastPointDto
+                {
+                    Date = dt.ToString("yyyy-MM-dd"),
+                    DayLabel = GetDayOfWeekLabel(dt, true),
+                    Price = projected,
+                    MinPrice = minP,
+                    MaxPrice = maxP,
+                    IsForecast = true
+                });
+            }
+
+            decimal priceAtDay7 = timeline.Last().Price;
+            decimal projectedChangePct = currentBaseline > 0
+                ? Math.Round((priceAtDay7 - currentBaseline) / currentBaseline * 100m, 1)
+                : 0m;
+
+            string trend;
+            if (projectedChangePct >= 1.5m) trend = "UPWARD";
+            else if (projectedChangePct <= -1.5m) trend = "DOWNWARD";
+            else trend = "STABLE";
+
+            // 6. Gợi ý thời điểm bán tối ưu dựa trên logic kinh tế học và khối lượng
+            decimal effectiveWeight = userWeightKg ?? 15m;
+            string recCode;
+            string recTitle;
+            string recDetail;
+            string optWindow;
+            decimal profitBoostPct = 0m;
+
+            if (effectiveWeight < 20m)
+            {
+                recCode = "HOLD_ACCUMULATE";
+                recTitle = "Nên gom thêm để đạt mốc 20 – 30 kg nhận ưu đãi lớn";
+                recDetail = $"Khối lượng hiện tại (~{effectiveWeight:0} kg) chưa tối ưu cước vận chuyển. Khi gom thêm để đạt tối thiểu 20 kg (hoặc 30 kg), bạn sẽ được miễn phí điều phối xe tận nơi và nhận trợ giá số lượng lớn (+2.5% đến +5%).";
+                optWindow = $"Trong 3 – 5 ngày tới ({today.AddDays(3):dd/MM} – {today.AddDays(5):dd/MM})";
+                profitBoostPct = Math.Max(3.5m, projectedChangePct + 4.5m);
+            }
+            else if (trend == "UPWARD" && peakDayOffset >= 2)
+            {
+                recCode = "HOLD_ACCUMULATE";
+                recTitle = "Nên gom thêm 3 – 5 ngày để đón đỉnh giá thị trường";
+                var peakDate = today.AddDays(peakDayOffset);
+                recDetail = $"Lực cầu từ các nhà máy tái chế đang tăng mạnh (tổng cầu đang mở: {totalDemandKg:N0} kg). Dự báo giá sẽ đạt đỉnh khoảng ~{highestFuturePrice:N0} đ/kg vào ngày {peakDate:dd/MM}.";
+                optWindow = $"Khoảng ngày {today.AddDays(Math.Max(1, peakDayOffset - 1)):dd/MM} – {today.AddDays(Math.Min(7, peakDayOffset + 1)):dd/MM}";
+                profitBoostPct = Math.Round((highestFuturePrice - currentBaseline) / currentBaseline * 100m, 1);
+            }
+            else if (trend == "DOWNWARD" || peakDayOffset <= 1)
+            {
+                recCode = "SELL_NOW";
+                recTitle = "Thời điểm vàng: Bán ngay hôm nay để chốt giá cao nhất";
+                recDetail = $"Giá phế liệu hiện tại ({currentBaseline:N0} đ/kg) đang ở vùng đỉnh chu kỳ ngắn hạn. Bán ngay hôm nay giúp bạn bảo toàn lợi nhuận tối đa và tránh rủi ro giá điều chỉnh giảm ({projectedChangePct}%).";
+                optWindow = "Trong vòng 24 – 48 giờ tới";
+                profitBoostPct = 0m;
+            }
+            else
+            {
+                recCode = "NEUTRAL";
+                recTitle = "Giá thị trường ổn định — Có thể bán bất kỳ lúc nào";
+                recDetail = $"Biên độ giá dao động dưới 1.5%. Các kho vựa đối tác đang thu mua đều đặn, bạn có thể chủ động đặt lịch theo thời gian rảnh của gia đình.";
+                optWindow = "Linh hoạt trong 7 ngày tới";
+                profitBoostPct = 0m;
+            }
+
+            return new MaterialPriceForecastDto
+            {
+                MaterialType = norm,
+                MaterialNameVi = meta.NameVi,
+                Unit = "kg",
+                CurrentPrice = currentBaseline,
+                ProjectedPrice7d = priceAtDay7,
+                ProjectedChangePct = projectedChangePct,
+                Trend = trend,
+                RecommendationCode = recCode,
+                RecommendationTitle = recTitle,
+                RecommendationDetail = recDetail,
+                OptimalTimeWindow = optWindow,
+                EstimatedProfitIncreasePct = profitBoostPct,
+                FactoryDemandWeightKg = totalDemandKg,
+                ActiveDepotsBuying = activeDepots,
+                Timeline = timeline
+            };
+        }
+
+        public async Task<List<MaterialPriceForecastDto>> GetAllPriceForecastsAsync()
+        {
+            var majorMaterials = new[] { "CARDBOARD", "PET", "ALUMINUM", "IRON", "COPPER", "PAPER", "HDPE" };
+            var list = new List<MaterialPriceForecastDto>();
+            foreach (var mat in majorMaterials)
+            {
+                list.Add(await GetPriceForecastAsync(mat, 25m));
+            }
+            return list;
+        }
+
+        private static string NormalizeMaterialType(string? raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) return "CARDBOARD";
+            var upper = raw.Trim().ToUpperInvariant();
+            if (upper.Contains("CARTON") || upper.Contains("BÌA") || upper.Contains("BIA")) return "CARDBOARD";
+            if (upper.Contains("PET") || upper.Contains("CHAI")) return "PET";
+            if (upper.Contains("HDPE") || upper.Contains("CAN")) return "HDPE";
+            if (upper.Contains("NHÔM") || upper.Contains("NHOM") || upper.Contains("ALU")) return "ALUMINUM";
+            if (upper.Contains("SẮT") || upper.Contains("SAT") || upper.Contains("THÉP") || upper.Contains("STEEL") || upper.Contains("IRON")) return "IRON";
+            if (upper.Contains("ĐỒNG") || upper.Contains("DONG") || upper.Contains("COPPER")) return "COPPER";
+            if (upper.Contains("GIẤY") || upper.Contains("GIAY") || upper.Contains("PAPER")) return "PAPER";
+            return upper;
+        }
+
+        private static (string NameVi, decimal DefaultPrice) GetMaterialMetadata(string norm) => norm switch
+        {
+            "CARDBOARD" => ("Bìa Carton & Thùng giấy", 4000m),
+            "PET" => ("Nhựa PET tái chế (Chai nước)", 9000m),
+            "HDPE" => ("Nhựa HDPE gia dụng (Can dầu)", 12000m),
+            "ALUMINUM" => ("Nhôm phế liệu (Vỏ lon bia)", 28000m),
+            "IRON" => ("Sắt & Thép phế liệu", 7500m),
+            "COPPER" => ("Đồng phế liệu (Dây điện)", 75000m),
+            "PAPER" => ("Giấy & Sách báo cũ", 3000m),
+            _ => (norm, 5000m)
+        };
+
+        private static string GetDayOfWeekLabel(DateTime dt, bool isFuture)
+        {
+            string day = dt.DayOfWeek switch
+            {
+                DayOfWeek.Monday => "T2",
+                DayOfWeek.Tuesday => "T3",
+                DayOfWeek.Wednesday => "T4",
+                DayOfWeek.Thursday => "T5",
+                DayOfWeek.Friday => "T6",
+                DayOfWeek.Saturday => "T7",
+                DayOfWeek.Sunday => "CN",
+                _ => ""
+            };
+            return $"{day} ({dt:dd/MM})";
+        }
+
         private async Task EnrichWithMarketPrice(SellerAiClassifyResponseDto result)
         {
-            // 1. Enrich for primary material (Single Mode)
-            if (!string.IsNullOrWhiteSpace(result.MaterialType) &&
-                Enum.TryParse<MaterialType>(result.MaterialType, true, out var matEnum))
+            if (string.IsNullOrWhiteSpace(result.MaterialType)) return;
+
+            if (Enum.TryParse<MaterialType>(result.MaterialType, true, out var matEnum))
             {
                 try
                 {
@@ -229,232 +475,6 @@ namespace Retrack.API.Services.Seller
                     _logger.LogWarning(ex, "Lỗi truy vấn giá thị trường cho {MaterialType}", result.MaterialType);
                 }
             }
-
-            // 2. Enrich for each detected object in Mixed Pile Mode
-            if (result.DetectedObjects != null && result.DetectedObjects.Count > 0)
-            {
-                foreach (var obj in result.DetectedObjects)
-                {
-                    if (!string.IsNullOrWhiteSpace(obj.MaterialType) &&
-                        Enum.TryParse<MaterialType>(obj.MaterialType, true, out var objEnum))
-                    {
-                        try
-                        {
-                            var price = await _db.MarketPrices
-                                .Where(p => p.MaterialType == objEnum)
-                                .OrderByDescending(p => p.EffectiveDate)
-                                .Select(p => (decimal?)p.PricePerKg)
-                                .FirstOrDefaultAsync();
-
-                            if (price.HasValue && price.Value > 0)
-                            {
-                                obj.UnitPrice = price.Value;
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.LogWarning(ex, "Lỗi truy vấn giá thị trường cho đối tượng con {MaterialType}", obj.MaterialType);
-                        }
-                    }
-                }
-            }
-
-            // 3. Enrich Price Trend & Optimal Selling Timing Forecast
-            try
-            {
-                var targetMat = result.ScanMode == "mixed_pile" ? "MIXED" : (!string.IsNullOrWhiteSpace(result.MaterialType) ? result.MaterialType : result.PrimaryClass);
-                var basePrice = result.CurrentMarketPrice ?? (result.ScanMode == "mixed_pile" ? 7500 : 4200);
-                result.PriceForecast = await GetPriceTrendForecastAsync(targetMat, basePrice, 20);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Lỗi dự báo xu hướng giá cho {MaterialType}", result.MaterialType);
-            }
-        }
-
-        public async Task<PriceTrendForecastDto> GetPriceTrendForecastAsync(string materialType, decimal currentPrice, double weightKg = 10)
-        {
-            var matUpper = (materialType ?? string.Empty).ToUpperInvariant();
-            decimal effectivePrice = currentPrice;
-
-            if (effectivePrice <= 0 && Enum.TryParse<MaterialType>(matUpper, true, out var matEnum))
-            {
-                var latest = await _db.MarketPrices
-                    .Where(p => p.MaterialType == matEnum)
-                    .OrderByDescending(p => p.EffectiveDate)
-                    .Select(p => (decimal?)p.PricePerKg)
-                    .FirstOrDefaultAsync();
-
-                if (latest.HasValue && latest.Value > 0)
-                {
-                    effectivePrice = latest.Value;
-                }
-            }
-
-            if (effectivePrice <= 0)
-            {
-                effectivePrice = matUpper switch
-                {
-                    "CARDBOARD" => 3500,
-                    "PAPER" => 4000,
-                    "PLASTIC" or "PET" or "HDPE" => 8500,
-                    "METAL" or "ALUMINUM" => 24000,
-                    "IRON" or "STEEL" => 12000,
-                    "MIXED" => 7800,
-                    _ => 5000
-                };
-            }
-
-            string trendDirection;
-            double trendPercentage;
-            double confidenceScore;
-            string optimalAction;
-            string optimalTimingTitle;
-            string optimalTimingAdvice;
-            string optimalDay;
-            var drivers = new List<string>();
-
-            if (matUpper.Contains("METAL") || matUpper.Contains("ALUMINUM") || matUpper.Contains("IRON") || matUpper.Contains("STEEL") || matUpper.Contains("COPPER"))
-            {
-                trendDirection = "UP";
-                trendPercentage = 4.8;
-                confidenceScore = 86.5;
-                optimalAction = "HOLD_AND_ACCUMULATE";
-                optimalTimingTitle = "Nên tích trữ thêm 3 - 5 ngày để gom lô lớn";
-                optimalDay = "Thứ Năm tuần này";
-                optimalTimingAdvice = "Giá kim loại đang có xu hướng tăng +4.8% trong 7 ngày tới do nhu cầu từ các nhà máy phôi thép. Bạn nên giữ và tích thêm số lượng lớn để nhận thêm trợ giá sản lượng.";
-                drivers.Add("Nhu cầu lò tái chế phôi kim loại tăng cao vào chu kỳ sản xuất giữa tuần.");
-                drivers.Add("Chỉ số giá nhập khẩu kim loại nguyên liệu đang có xu hướng phục hồi.");
-                drivers.Add("Trợ giá khối lượng lớn (+300 đ - 500 đ/kg) khi gom trên 50kg.");
-            }
-            else if (matUpper.Contains("CARDBOARD") || matUpper.Contains("PAPER"))
-            {
-                trendDirection = "UP";
-                trendPercentage = 3.2;
-                confidenceScore = 84.0;
-                optimalAction = "SELL_BEFORE_WEEKEND";
-                optimalTimingTitle = "Nên đặt lịch thu gom trước Thứ Sáu";
-                optimalDay = "Thứ Sáu";
-                optimalTimingAdvice = "Các kho vựa đối tác thường hoàn tất đóng kiện xuất đi nhà máy giấy bao bì vào cuối tuần. Bán trước Thứ Sáu sẽ được ưu tiên điều phối xe và chốt giá tốt nhất.";
-                drivers.Add("Nhu cầu nguyên liệu giấy tái sinh của các nhà máy bao bì carton duy trì ổn định.");
-                drivers.Add("Kho vựa đang cần bổ sung tồn kho giấy carton để chạy dây chuyền ép kiện.");
-            }
-            else if (matUpper.Contains("PLASTIC") || matUpper.Contains("PET") || matUpper.Contains("HDPE"))
-            {
-                trendDirection = "STABLE";
-                trendPercentage = 0.5;
-                confidenceScore = 91.0;
-                optimalAction = "SELL_NOW";
-                optimalTimingTitle = "Nên bán ngay hôm nay";
-                optimalDay = "Hôm nay";
-                optimalTimingAdvice = "Giá nhựa tái sinh đang ở vùng đỉnh ổn định 14 ngày qua. Đặt lịch bán ngay hôm nay giúp bạn giải phóng không gian lưu trữ và tránh suy giảm phẩm chất nhựa.";
-                drivers.Add("Chỉ số giá hạt nhựa tái sinh PET/HDPE đang đi ngang ổn định.");
-                drivers.Add("Nguồn cung chai nhựa sinh hoạt dồi dào, ít có biến động lớn trong ngắn hạn.");
-            }
-            else if (matUpper.Contains("MIXED"))
-            {
-                trendDirection = "UP";
-                trendPercentage = 3.6;
-                confidenceScore = 85.0;
-                optimalAction = "HOLD_AND_ACCUMULATE";
-                optimalTimingTitle = "Xu hướng đống hỗn hợp tăng nhẹ (+3.6%)";
-                optimalDay = "3 ngày tới";
-                optimalTimingAdvice = "Đống phế liệu hỗn hợp của bạn có tỷ trọng thành phần kim loại và carton đang tăng giá. Nên phân loại sơ bộ và tích thêm để tối ưu hóa giá trị thanh toán.";
-                drivers.Add("Thành phần kim loại trong đống kéo giá bình quân tăng theo sóng tuần.");
-                drivers.Add("Hỗ trợ thu gom trọn gói tận nơi khi đạt khối lượng trên 30kg.");
-            }
-            else
-            {
-                trendDirection = "STABLE";
-                trendPercentage = 0.0;
-                confidenceScore = 80.0;
-                optimalAction = "SELL_NOW";
-                optimalTimingTitle = "Giá thị trường duy trì ổn định";
-                optimalDay = "Linh hoạt";
-                optimalTimingAdvice = "Mức giá hiện tại tương ứng với giá sàn thị trường chuẩn. Bạn có thể đặt đơn bất cứ lúc nào thuận tiện.";
-                drivers.Add("Thị trường phế liệu đang trong giai đoạn bình ổn giá.");
-            }
-
-            var now = DateTime.UtcNow;
-            var points = new List<PriceForecastPointDto>();
-            decimal peakPrice = effectivePrice;
-
-            for (int offset = -3; offset <= 7; offset++)
-            {
-                var dt = now.AddDays(offset);
-                decimal pointPrice;
-
-                if (offset < 0)
-                {
-                    var pastFactor = trendDirection == "UP" ? (1.0m - (decimal)(Math.Abs(offset) * 0.012)) : (1.0m + (decimal)(Math.Abs(offset) * 0.008));
-                    pointPrice = Math.Round(effectivePrice * pastFactor, 0);
-                }
-                else if (offset == 0)
-                {
-                    pointPrice = effectivePrice;
-                }
-                else
-                {
-                    var growthRatio = (decimal)(trendPercentage / 100.0) * (offset / 7.0m);
-                    pointPrice = Math.Round(effectivePrice * (1.0m + growthRatio), 0);
-                }
-
-                if (pointPrice > peakPrice) peakPrice = pointPrice;
-
-                string dayLabel = offset switch
-                {
-                    -3 => "T-3",
-                    -2 => "T-2",
-                    -1 => "Hôm qua",
-                    0 => "Hôm nay",
-                    1 => "+1 ngày",
-                    2 => "+2 ngày",
-                    3 => "+3 ngày",
-                    4 => "+4 ngày",
-                    5 => "+5 ngày",
-                    6 => "+6 ngày",
-                    7 => "+7 ngày",
-                    _ => dt.ToString("dd/MM")
-                };
-
-                points.Add(new PriceForecastPointDto
-                {
-                    Date = dt.ToString("yyyy-MM-dd"),
-                    DayLabel = dayLabel,
-                    Price = pointPrice,
-                    IsForecast = offset > 0
-                });
-            }
-
-            var forecastPrice7d = points.Last().Price;
-            decimal potentialGain = Math.Max(0, (peakPrice - effectivePrice) * (decimal)weightKg);
-
-            return new PriceTrendForecastDto
-            {
-                MaterialType = materialType,
-                MaterialNameVi = matUpper switch
-                {
-                    "CARDBOARD" => "Bìa Carton",
-                    "PAPER" => "Giấy phế liệu",
-                    "PLASTIC" or "PET" => "Nhựa PET",
-                    "METAL" or "ALUMINUM" => "Nhôm / Kim loại",
-                    "IRON" => "Sắt phế liệu",
-                    "MIXED" => "Đống phế liệu hỗn hợp",
-                    _ => materialType
-                },
-                CurrentPrice = effectivePrice,
-                ForecastPrice7d = forecastPrice7d,
-                TrendDirection = trendDirection,
-                TrendPercentage = trendPercentage,
-                ConfidenceScore = confidenceScore,
-                OptimalAction = optimalAction,
-                OptimalTimingTitle = optimalTimingTitle,
-                OptimalTimingAdvice = optimalTimingAdvice,
-                OptimalDay = optimalDay,
-                PotentialGainAmount = potentialGain,
-                MarketDrivers = drivers,
-                Points = points
-            };
         }
     }
 }
