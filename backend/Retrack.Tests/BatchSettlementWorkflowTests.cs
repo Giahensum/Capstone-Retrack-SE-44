@@ -112,7 +112,7 @@ public sealed class BatchSettlementWorkflowTests : IAsyncLifetime
         Assert.Equal(1, (await finalReports.CostChannelsAsync(f.Depot, finalStart, finalEnd)).Single(x => x.Channel == "FACTORY").TransactionCount);
         Assert.Equal(0, (await new FactoryDashboardService(check).GetAsync(f.FactoryOwner, default)).Data!.PendingSettlementCount);
         var fee = Assert.Single(await check.PlatformTransactions.ToListAsync());
-        Assert.Equal(500m, fee.FeeAmount); Assert.Equal(f.FactoryOwner, fee.PayerId);
+        Assert.Equal(0m, fee.FeeAmount); Assert.Equal(f.FactoryOwner, fee.PayerId);
         Assert.Equal(4, await check.BatchWorkflowEvents.CountAsync());
     }
     [Fact]

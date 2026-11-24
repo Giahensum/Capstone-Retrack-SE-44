@@ -498,24 +498,20 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Success, (await orders.InvoiceAsync(factoryOwnerId, first.Id,
             new() { InvoiceNumber = "HD-TEST-001", InvoiceFileUrl = "https://example.com/factory-invoice-test.pdf" }, default)).Outcome);
         var settled = await orders.SettleAsync(factoryOwnerId, first.Id,
-            new() { AgreedPricePerKg = 12000, VatTreatment = "TAXABLE", VatPercentage = 10,
-                InvoiceNumber = "HD-TEST-001", InvoiceDate = DateOnly.FromDateTime(DateTime.UtcNow),
-                SellerTaxCode = "0314892841" }, default);
+            new() { AgreedPricePerKg = 12000 }, default);
         Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Success, settled.Outcome);
         Assert.Equal(720000m, settled.Data!.TotalAmount);
-        Assert.Equal(72000m, settled.Data.VatAmount);
-        Assert.Equal(792000m, settled.Data.InvoiceTotalAmount);
-        Assert.Equal(36000m, settled.Data.FeeAmount);
-        Assert.Equal(792000m, settled.Data.NetPayableAmount);
-        Assert.Equal(828000m, settled.Data.BuyerTotalAmount);
+        Assert.Equal(0m, settled.Data.VatAmount);
+        Assert.Equal(720000m, settled.Data.InvoiceTotalAmount);
+        Assert.Equal(0m, settled.Data.FeeAmount);
+        Assert.Equal(720000m, settled.Data.NetPayableAmount);
+        Assert.Equal(720000m, settled.Data.BuyerTotalAmount);
         Assert.Equal(Retrack.API.Services.Shared.PlatformFees.BuyerSeparate, settled.Data.FeePolicy);
         Assert.Equal("SETTLEMENT_PENDING", settled.Data.Status);
         Assert.Null((await orders.GetAsync(factoryOwnerId, first.Id, default)).Data!.SettledAt);
         Assert.False(await db.PlatformTransactions.AnyAsync(x => x.SourceId == first.Id));
         var retried = await orders.SettleAsync(factoryOwnerId, first.Id,
-            new() { AgreedPricePerKg = 12000, VatTreatment = "TAXABLE", VatPercentage = 10,
-                InvoiceNumber = "HD-TEST-001", InvoiceDate = DateOnly.FromDateTime(DateTime.UtcNow),
-                SellerTaxCode = "0314892841" }, default);
+            new() { AgreedPricePerKg = 12000 }, default);
         Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Success, retried.Outcome);
         Assert.Equal("SETTLEMENT_PENDING", retried.Data!.Status);
         Assert.False(await db.PlatformTransactions.AnyAsync(x => x.SourceId == first.Id));
@@ -546,8 +542,8 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         Assert.Equal("HD-TEST-001", detail.Quality.InvoiceNumber);
         Assert.Equal("https://example.com/ticket-test.png", detail.Quality.TicketImageUrl);
         Assert.Equal(settled.Data!.TotalAmount, detail.Settlement!.GrossAmount);
-        Assert.Equal("TAXABLE", detail.Settlement.VatTreatment);
-        Assert.Equal(10m, detail.Settlement.VatPercentage);
+        Assert.Equal("NOT_CALCULATED", detail.Settlement.VatTreatment);
+        Assert.Equal(0m, detail.Settlement.VatPercentage);
         Assert.Equal(settled.Data.VatAmount, detail.Settlement.VatAmount);
         Assert.Equal(settled.Data.InvoiceTotalAmount, detail.Settlement.InvoiceTotalAmount);
         Assert.Equal(settled.Data.FeeAmount, detail.Settlement.FeeAmount);
@@ -576,7 +572,7 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         var platformTransaction = Assert.Single(await db.PlatformTransactions.Where(x => x.SourceType == "BATCH_ORDER" && x.SourceId == first.Id).ToListAsync());
         Assert.Equal(factoryOwnerId, platformTransaction.PayerId);
         Assert.Equal(720000m, platformTransaction.TransactionAmount);
-        Assert.Equal(5m, platformTransaction.FeePercentage);
+        Assert.Equal(0m, platformTransaction.FeePercentage);
         var history = await db.BatchWorkflowEvents.Where(x => x.BatchId == first.Id).OrderBy(x => x.CreatedAt).Select(x => x.Action).ToListAsync();
         Assert.Equal(new[] { "QC_ACCEPTED", "PRICE_PROPOSED", "PRICE_ACCEPTED", "PAYMENT_REPORTED", "PAYMENT_CONFIRMED" }, history);
         db.ChangeTracker.Clear();
@@ -586,7 +582,7 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         Assert.NotNull(paidBatch.SettledAt);
         Assert.Equal(paidBatch.DepotPaymentConfirmedAt, paidBatch.SettledAt);
         Assert.Equal("https://example.com/factory-invoice-test.pdf", paidDetail.Quality!.InvoiceFileUrl);
-        Assert.Equal(792000m, paidDetail.Settlement!.NetAmount);
+        Assert.Equal(720000m, paidDetail.Settlement!.NetAmount);
         var notifications = new Retrack.API.Services.Factory.FactoryNotificationService(db);
         var factoryNotices = await notifications.ListAsync(factoryOwnerId, 1, 20, false, default);
         var paymentNotice = Assert.Single(factoryNotices.Items, x => x.BatchId == first.Id && x.Title == "Vựa đã xác nhận nhận tiền");
@@ -602,10 +598,10 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Success, (await qc.WeighAsync(factoryOwnerId, nextBatch.Id, new() { GrossWeightKg = 45, TareWeightKg = 5, TicketNumber = "VE-TEST-002" }, default)).Outcome);
         Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Success, (await qc.QualityAsync(factoryOwnerId, nextBatch.Id, new() { Accept = true, PurityPercent = 95, Grade = "A" }, default)).Outcome);
         await db.SystemConfigs.Where(x => x.ConfigKey == "PLATFORM_FEE_PERCENTAGE").ExecuteUpdateAsync(x => x.SetProperty(p => p.ConfigValue, "7.00"));
-        var secondSettlement = await orders.SettleAsync(factoryOwnerId, nextBatch.Id, new() { AgreedPricePerKg = 12000, VatTreatment = "TAXABLE", VatPercentage = 10, InvoiceNumber = "HD-TEST-002", InvoiceDate = DateOnly.FromDateTime(DateTime.UtcNow), SellerTaxCode = "0314892841" }, default);
+        var secondSettlement = await orders.SettleAsync(factoryOwnerId, nextBatch.Id, new() { AgreedPricePerKg = 12000 }, default);
         Assert.Equal("SETTLEMENT_PENDING", secondSettlement.Data!.Status);
-        Assert.Equal(5m, secondSettlement.Data!.FeePercentage); // Lô đã tạo trước khi config đổi sang 7%.
-        Assert.Equal(5m, (await db.PlatformTransactions.SingleAsync(x => x.SourceId == first.Id)).FeePercentage);
+        Assert.Equal(0m, secondSettlement.Data!.FeePercentage);
+        Assert.Equal(0m, (await db.PlatformTransactions.SingleAsync(x => x.SourceId == first.Id)).FeePercentage);
         Assert.Equal("SETTLEMENT_PENDING", (await orders.GetAsync(factoryOwnerId, nextBatch.Id, default)).Data!.Status);
         Assert.False(await db.PlatformTransactions.AnyAsync(x => x.SourceId == nextBatch.Id));
         Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Success, (await orders.InvoiceAsync(factoryOwnerId, nextBatch.Id,
@@ -618,8 +614,8 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         Assert.False(await db.PlatformTransactions.AnyAsync(x => x.SourceId == nextBatch.Id));
         await Batches(db).ConfirmPaymentAsync(ownerId, depotId, nextBatch.Id, secondSettlement.Data.NetPayableAmount, "ACTUAL-TRANSFER-002");
         var secondFee = Assert.Single(await db.PlatformTransactions.Where(x => x.SourceId == nextBatch.Id).ToListAsync());
-        Assert.Equal(5m, secondFee.FeePercentage);
-        Assert.Equal(24000m, secondFee.FeeAmount);
+        Assert.Equal(0m, secondFee.FeePercentage);
+        Assert.Equal(0m, secondFee.FeeAmount);
         }
         finally
         {
@@ -1144,7 +1140,8 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         var demand = new FactoryDemand { Factory = factory, MaterialType = "Nhựa PET", RequiredWeightKg = 50, MinPricePerKg = 5000, MaxPricePerKg = 8000, Deadline = DateTime.UtcNow.AddDays(1) };
         db.FactoryDemands.Add(demand); await db.SaveChangesAsync();
         var ownerService = new DepotService(new Retrack.API.Repositories.DepotOwnerRepository(db), new Retrack.API.Repositories.DepotPaymentReadRepository(db));
-        Assert.Equal("PET", Assert.Single((await ownerService.GetDemandsAsync(ownerId, depotId, new())).Items).MaterialType);
+        Assert.Contains((await ownerService.GetDemandsAsync(ownerId, depotId, new())).Items,
+            item => item.Id == demand.Id && item.MaterialType == "PET");
         var input = Input(10); input.TargetFactoryId = factory.Id; input.SourceDemandId = demand.Id;
         var created = await Batches(db).CreateAsync(ownerId, depotId, input);
         Assert.Equal("PENDING_APPROVAL", created.Status);
@@ -1319,7 +1316,7 @@ public sealed class InventoryBatchTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Settlement_failure_rolls_back_batch_quality_and_orphan_transaction()
+    public async Task Legacy_unsettled_batch_requires_depot_approval_before_payment()
     {
         Guid batchId;
         await using (var db = Open())
@@ -1329,14 +1326,19 @@ public sealed class InventoryBatchTests : IAsyncLifetime
             var batch = new InventoryBatch { DepotId = depotId, TargetFactory = factory, MaterialType = "PET", DeclaredWeightKg = 10, Status = "VERIFIED" };
             batch.QualityCheck = new BatchQualityCheck { Batch = batch, Factory = factory, ActualWeightKg = 10, Grade = "A", IsAccepted = true };
             db.InventoryBatches.Add(batch); await db.SaveChangesAsync(); batchId = batch.Id;
-            db.PlatformTransactions.Add(new PlatformTransaction { SourceType = "BATCH_ORDER", SourceId = batch.Id, PayerId = factoryOwnerId, TransactionAmount = 1, FeeAmount = 1 });
-            await db.SaveChangesAsync();
-            await Assert.ThrowsAsync<DbUpdateException>(() => new Retrack.API.Services.Factory.FactoryOrderService(db).SettleAsync(factoryOwnerId, batch.Id,
-                new() { AgreedPricePerKg = 1000, VatTreatment = "TAXABLE", VatPercentage = 10, InvoiceNumber = "HD-ROLLBACK", InvoiceDate = DateOnly.FromDateTime(DateTime.UtcNow), SellerTaxCode = "0314892841", PaymentReference = "ROLLBACK", PaymentProofUrl = "https://example.invalid/proof.pdf" }, default));
+            var orders = new Retrack.API.Services.Factory.FactoryOrderService(db);
+            var result = await orders.SettleAsync(factoryOwnerId, batch.Id, new() { AgreedPricePerKg = 1000 }, default);
+            Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Success, result.Outcome);
+            Assert.Equal("SETTLEMENT_PENDING", result.Data!.Status);
+            var payment = await orders.ReportPaymentAsync(factoryOwnerId, batch.Id,
+                new() { PaymentReference = "CK-TEST", PaymentProofUrl = "https://example.invalid/proof.pdf" }, default);
+            Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Conflict, payment.Outcome);
         }
         await using var verify = Open();
         var saved = await verify.InventoryBatches.Include(x => x.QualityCheck).SingleAsync(x => x.Id == batchId);
-        Assert.Equal("VERIFIED", saved.Status); Assert.Null(saved.SettledAt); Assert.Equal(0, saved.QualityCheck!.GrossAmount);
-        Assert.Equal(1, await verify.PlatformTransactions.CountAsync(x => x.SourceType == "BATCH_ORDER" && x.SourceId == batchId));
+        Assert.Equal("SETTLEMENT_PENDING", saved.Status); Assert.Equal(1, saved.SettlementWorkflowVersion);
+        Assert.Null(saved.SettledAt); Assert.Null(saved.SettlementApprovedAt);
+        Assert.Equal(10000, saved.QualityCheck!.GrossAmount);
+        Assert.Equal(0, await verify.PlatformTransactions.CountAsync(x => x.SourceType == "BATCH_ORDER" && x.SourceId == batchId));
     }
 }

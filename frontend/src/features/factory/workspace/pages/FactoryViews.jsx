@@ -35,8 +35,6 @@ export function Dashboard({ navigate }) {
   const dashboard = data || (period === "month" ? state.dashboard : null);
   const weight = dashboard?.periodPurchasedKg ?? 0;
   const spend = dashboard?.periodNetPayment ?? 0;
-  const fees = dashboard?.periodFeeAmount ?? 0;
-  const feePercentage = state.profile?.platformFeePercentage ?? 5;
   const pending = (dashboard?.priorityOrders || []).map(mapOrder).filter((o) => ["DELIVERED", "RECEIVED", "WEIGHED"].includes(o.status));
   const ready = (dashboard?.priorityOrders || []).map(mapOrder).filter((o) => o.status === "VERIFIED");
   const volume = (dashboard?.materialVolumes || []).map((item) => ({ material: item.materialType, kg: item.weightKg }));
@@ -93,17 +91,12 @@ export function Dashboard({ navigate }) {
             "Theo đơn đã quyết toán",
           ],
           ["Thực trả cho vựa", money(spend), "Theo số tiền phải chuyển đã chốt từng lô"],
-          [
-            "Phí nền tảng tích lũy",
-            money(fees),
-            `Tỷ lệ tham khảo ${feePercentage}% • Chưa đối soát`,
-          ],
           ["Chờ quyết toán", `${dashboard?.pendingSettlementCount ?? 0} đơn`, "Đã nghiệm thu chất lượng"],
         ].map(([label, value, hint], i) => (
           <div className="kpi" key={label}>
             <div className="kpi-label">
               <span>{label}</span>
-              <span className="kpi-icon">{["↙", "₫", "▤", "◷"][i]}</span>
+              <span className="kpi-icon">{["↙", "₫", "◷"][i]}</span>
             </div>
             <strong>{value}</strong>
             <small>{hint}</small>
@@ -131,7 +124,7 @@ export function Dashboard({ navigate }) {
             <Empty text="Chưa có giao dịch trong kỳ" />
           )}
           <div className="summary-line">
-            Giá mua trung bình trước phí{" "}
+            Giá mua trung bình{" "}
             <strong>
               {money(
                 weight ? (dashboard?.periodGrossAmount ?? 0) / weight : 0,
@@ -157,7 +150,7 @@ export function Dashboard({ navigate }) {
             ))}
           </div>
           <p className="muted">
-            Tiền chuyển cho vựa theo từng quyết toán. Lô mới: phí Factory trả riêng, không trừ tiền của vựa.
+            Tiền chuyển cho vựa theo từng quyết toán; lô mới chỉ tính khối lượng nghiệm thu × đơn giá.
           </p>
         </Card>
       </div>
@@ -690,7 +683,7 @@ export function Partners({ navigate }) {
                   {d.contractTerms && <Button secondary onClick={() => setContractView(d)}>Xem hợp đồng</Button>}
                   {d.contractStatus === "ACTIVE" && !["PENDING_DEPOT", "PENDING_FACTORY"].includes(d.terminationStatus) && <Button danger onClick={() => setTermination({ ...d, mode: "request", reason: "" })}>Đề nghị chấm dứt</Button>}
                   {d.terminationStatus === "PENDING_FACTORY" && <Button danger onClick={() => setTermination({ ...d, mode: "decision" })}>Xử lý đề nghị chấm dứt</Button>}
-                  {d.status !== "BLOCKED" && (d.contractStatus !== "ACTIVE" || contractExpired) && <><Button onClick={() => setContract({ ...d, terms: d.contractTerms || `HỢP ĐỒNG HỢP TÁC THU MUA NGUYÊN LIỆU TÁI CHẾ\n\nBên mua: Nhà máy trên hệ thống RETRACK.\nBên bán: ${d.name}.\n\nHai bên thống nhất giao nhận nguyên liệu theo từng lô trên RETRACK; khối lượng và chất lượng được chốt theo kết quả cân và KCS; đơn giá, VAT, phí nền tảng và thanh toán được ghi nhận riêng cho từng lô. Hai bên cam kết cung cấp thông tin hợp pháp, bảo mật dữ liệu và xử lý tranh chấp theo pháp luật Việt Nam.`, validMonths: 12, confirmed: false })}>{contractExpired ? "Đề nghị gia hạn hợp đồng" : d.contractStatus === "PENDING_DEPOT" ? "Cập nhật và gửi lại" : "Lập hợp đồng điện tử"}</Button>
+                  {d.status !== "BLOCKED" && (d.contractStatus !== "ACTIVE" || contractExpired) && <><Button onClick={() => setContract({ ...d, terms: d.contractTerms || `HỢP ĐỒNG HỢP TÁC THU MUA NGUYÊN LIỆU TÁI CHẾ\n\nBên mua: Nhà máy trên hệ thống RETRACK.\nBên bán: ${d.name}.\n\nHai bên thống nhất giao nhận nguyên liệu theo từng lô trên RETRACK; khối lượng và chất lượng được chốt theo kết quả cân và KCS; tiền quyết toán được xác định từ khối lượng nghiệm thu nhân đơn giá đã thống nhất. Hai bên cam kết cung cấp thông tin hợp pháp, bảo mật dữ liệu và xử lý tranh chấp theo pháp luật Việt Nam.`, validMonths: 12, confirmed: false })}>{contractExpired ? "Đề nghị gia hạn hợp đồng" : d.contractStatus === "PENDING_DEPOT" ? "Cập nhật và gửi lại" : "Lập hợp đồng điện tử"}</Button>
                   <Button secondary onClick={() => setChange({...d, action:'DECLINED', title:'Không hợp tác lâu dài?', message:'Các lô sau phải qua quy trình duyệt lô đầu. Quyết định này không hủy lô đã nhận và không chặn mọi giao dịch.'})}>Không hợp tác</Button></>}
                   <Button danger={!d.blockedByFactory} onClick={() => setChange({...d, action:d.blockedByFactory?'UNBLOCKED':'BLOCKED', title:d.blockedByFactory?'Bỏ chặn của nhà máy?':'Chặn vựa?', message:d.blockedByFactory?'Chỉ bỏ chặn của nhà máy. Kho còn chặn hoặc trạng thái chặn cũ chưa đối chiếu thì vẫn không giao dịch mới.':'Ngừng nhận lô mới; không tự hủy các lô đang xử lý.'})}>{d.blockedByFactory?'Bỏ chặn của nhà máy':'Chặn vựa'}</Button>
                   {d.blockedByDepot && <p>Kho đang chặn giao dịch.</p>}{d.legacyBlocked && <p>Trạng thái chặn cũ cần đối chiếu với quản trị viên.</p>}
@@ -783,7 +776,6 @@ export function Profile() {
           <div><span>Mã hồ sơ nhà máy</span><strong>{form.id}</strong></div>
           <div><span>Ngày tạo hồ sơ</span><strong>{form.createdAt || "Chưa xác định"}</strong></div>
           <div><span>Điểm đánh giá</span><strong>{Number(form.rating || 0).toFixed(1)} / 5</strong></div>
-          <div><span>Phí nền tảng hiện tại</span><strong>{number(form.platformFeePercentage)}%</strong></div>
         </div>
         <p className="muted">Tên, email và số điện thoại tài khoản được quản lý bởi phiên đăng nhập chung.</p>
       </Card>

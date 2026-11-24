@@ -27,7 +27,7 @@ public sealed class BatchSettlementService(IDepotBatchRepository repository, IDe
         if ((dto.Accept && batch.SettlementApprovedAt != null && batch.Status is "SETTLEMENT_ACCEPTED" or "COMPLETED" or "PAID") ||
             (!dto.Accept && batch.Status == "SETTLEMENT_DISPUTED" && batch.SettlementDecisionReason == dto.Reason?.Trim())) return;
         if (batch.Status != "SETTLEMENT_PENDING") throw new DepotConflictException("Chỉ phản hồi đề xuất giá đang chờ kho xác nhận.");
-        if (dto.Accept && batch.VatTreatment != "NOT_APPLICABLE" && string.IsNullOrWhiteSpace(batch.QualityCheck?.InvoiceFileUrl))
+        if (dto.Accept && batch.VatTreatment is not ("NOT_APPLICABLE" or "NOT_CALCULATED") && string.IsNullOrWhiteSpace(batch.QualityCheck?.InvoiceFileUrl))
             throw new DepotConflictException("Đề xuất có VAT cần tệp hóa đơn để kho đối chiếu trước khi đồng ý.");
         var from = batch.Status;
         batch.Status = dto.Accept ? "SETTLEMENT_ACCEPTED" : "SETTLEMENT_DISPUTED";

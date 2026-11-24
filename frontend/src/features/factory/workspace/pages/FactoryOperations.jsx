@@ -39,7 +39,7 @@ const modes = {
   },
   settlements: {
     title: "Quyết toán thu mua",
-    text: "Chốt đơn giá sau KCS, đối chiếu phí theo chính sách của lô và ghi nhận thanh toán cho vựa.",
+    text: "Chốt đơn giá sau KCS và ghi nhận thanh toán cho vựa.",
     states: ["VERIFIED", "NEGOTIATING", "SETTLEMENT_PENDING", "SETTLEMENT_DISPUTED", "SETTLEMENT_ACCEPTED", "SETTLEMENT_RECORDED", "PAYMENT_REPORTED", "PAID"],
   },
 };
@@ -63,11 +63,8 @@ export function Operations({ mode, focusId, navigate }) {
       <PageHead title={config.title} text={config.text} />
       {mode === "settlements" && (
         <div className="info-box">
-          <strong>Phí nền tảng được tính trên từng đơn đã quyết toán.</strong>
-          <span>
-            Lô mới: Factory trả phí riêng, không trừ tiền của vựa. Xem hóa đơn
-            và gửi chứng từ tại mục Phí nền tảng; chỉ PayOS hoặc Admin mới xác nhận đã thanh toán.
-          </span>
+          <strong>Tiền quyết toán = khối lượng nghiệm thu × đơn giá.</strong>
+          <span>Factory gửi đề xuất để vựa đồng ý, sau đó chuyển đúng số tiền đã chốt và gửi chứng từ.</span>
         </div>
       )}
       <div className="filter-bar">
@@ -260,7 +257,7 @@ export function Operations({ mode, focusId, navigate }) {
                 )}
                 {["VERIFIED", "NEGOTIATING", "SETTLEMENT_DISPUTED"].includes(order.status) && (
                   <Button onClick={() => setAction("settle")}>
-                    {order.settlementWorkflowVersion ? "Gửi đề xuất giá cho vựa" : "Thỏa thuận giá & Quyết toán"}
+                    Gửi đề xuất giá cho vựa
                   </Button>
                 )}
                 {["SETTLEMENT_RECORDED", "SETTLEMENT_ACCEPTED"].includes(order.status) && !platformPay && (
@@ -382,6 +379,7 @@ export function Operations({ mode, focusId, navigate }) {
   );
 }
 function Financial({ values, net }) {
+  const simple = Number(values.vat || 0) === 0 && Number(values.fee || 0) === 0;
   return (
     <dl className="financial">
       <div>
@@ -396,23 +394,23 @@ function Financial({ values, net }) {
         <dt>Tổng tiền hàng</dt>
         <dd>{money(values.total)}</dd>
       </div>
-      <div>
+      {!simple && <div>
         <dt>{values.vatTreatment === "NOT_APPLICABLE" ? "VAT" : `VAT (${values.vatPercentage}%)`}</dt>
         <dd>{values.vatTreatment === "NOT_APPLICABLE" ? "Không áp dụng" : `+ ${money(values.vat)}`}</dd>
-      </div>
-      <div>
+      </div>}
+      {!simple && <div>
         <dt>Tổng giá trị hóa đơn</dt>
         <dd>{money(values.invoiceTotal)}</dd>
-      </div>
-      <div>
+      </div>}
+      {!simple && <div>
         <dt>{values.feePolicy === 'BUYER_SEPARATE_V1' ? 'Phí Factory trả riêng' : 'Phí khấu trừ — lô cũ'} ({values.feePercentage}%)</dt>
         <dd>{values.feePolicy === 'BUYER_SEPARATE_V1' ? '+ ' : '− '}{money(values.fee)}</dd>
-      </div>
+      </div>}
       <div className="financial-total">
         <dt>Thực trả cho vựa</dt>
         <dd>{money(values.payable)}</dd>
       </div>
-      <div><dt>Tổng chi gồm nghĩa vụ phí nền tảng</dt><dd>{money(values.buyerTotal ?? (values.payable + values.fee))}</dd></div>
+      {!simple && <div><dt>Tổng chi gồm nghĩa vụ phí nền tảng</dt><dd>{money(values.buyerTotal ?? (values.payable + values.fee))}</dd></div>}
     </dl>
   );
 }
@@ -623,19 +621,12 @@ function QualityForm({ order, close }) {
   );
 }
 function SettlementForm({ order, close }) {
-  const { act, state } = useFactory();
+  const { act } = useFactory();
   const [price, setPrice] = useState("");
-  const [vatOption, setVatOption] = useState("NOT_APPLICABLE:0");
-  const [priceIncludesVat, setPriceIncludesVat] = useState(false);
-  const [invoiceNumber, setInvoiceNumber] = useState("");
-  const [invoiceDate, setInvoiceDate] = useState("");
-  const [sellerTaxCode, setSellerTaxCode] = useState("");
-  const [vatLegalBasis, setVatLegalBasis] = useState("");
   const [confirmed, setConfirmed] = useState(false);
-  const [vatTreatment, vatPercentage] = vatOption.split(":");
   let preview;
   try {
-    preview = settlement(order.weight.net, Number(price), order.feePercentage ?? state?.profile?.platformFeePercentage ?? order.payment?.feePercentage ?? 5, vatTreatment, Number(vatPercentage), priceIncludesVat, order.feePolicy);
+    preview = settlement(order.weight.net, Number(price), 0, "NOT_CALCULATED", 0, false, order.feePolicy);
   } catch {
     /* Price has not been entered. */
   }
@@ -646,16 +637,16 @@ function SettlementForm({ order, close }) {
         if (!confirmed) return;
         if (await act(
             "SETTLE",
-            { id: order.id, price, priceIncludesVat, vatTreatment, vatPercentage, invoiceNumber, invoiceDate, sellerTaxCode, vatLegalBasis },
-            order.settlementWorkflowVersion ? "Đã gửi đề xuất; chờ vựa xác nhận giá." : "Đã chốt quyết toán. Bước tiếp theo: xác nhận đã chuyển tiền và gửi chứng từ.",
+            { id: order.id, price, priceIncludesVat: false, vatTreatment: "NOT_CALCULATED", vatPercentage: 0 },
+            "Đã gửi đề xuất; chờ vựa xác nhận giá.",
           )) close();
       }}
     >
       <div className="info-box">
-        {order.qc.decision === "reject" ? "Mua theo hiện trạng KCS không đạt" : "KCS đạt"} · Grade {order.qc.grade}. Chốt giá và tiền phải trả cho vựa. Sau bước này, Factory xác nhận chuyển tiền và gửi chứng từ riêng.
+        {order.qc.decision === "reject" ? "Mua theo hiện trạng KCS không đạt" : "KCS đạt"} · Grade {order.qc.grade}. Gửi đề xuất giá để vựa xác nhận trước khi Factory chuyển tiền và gửi chứng từ.
       </div>
       <Field
-        label={`Đơn giá đã thỏa thuận sau KCS (đ/kg${priceIncludesVat ? ", đã gồm VAT" : ", chưa VAT"})`}
+        label="Đơn giá đã thỏa thuận sau KCS (đ/kg)"
         required
         type="number"
         min="1"
@@ -663,44 +654,7 @@ function SettlementForm({ order, close }) {
         value={price}
         onChange={(e) => setPrice(e.target.value)}
       />
-      <label className="checkbox-line">
-        <input type="checkbox" checked={priceIncludesVat} onChange={(e) => setPriceIncludesVat(e.target.checked)} />
-        Đơn giá trên đã bao gồm VAT
-      </label>
-      <Field label="VAT theo hóa đơn của vựa">
-        <select value={vatOption} onChange={(e) => setVatOption(e.target.value)}>
-          <option value="NOT_APPLICABLE:0">Không áp dụng VAT</option>
-          <option value="ZERO_RATE:0">VAT 0%</option>
-          <option value="TAXABLE:5">VAT 5%</option>
-          <option value="TAXABLE:8">VAT 8%</option>
-          <option value="TAXABLE:10">VAT 10%</option>
-        </select>
-      </Field>
-      {vatTreatment !== "NOT_APPLICABLE" && (
-        <>
-          <Field label="Số hóa đơn điện tử" required value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} />
-          <Field label="Ngày hóa đơn" required type="date" max={new Date().toLocaleDateString("en-CA")} value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
-          <Field label="Mã số thuế bên bán (vựa)">
-            <input
-              required
-              inputMode="numeric"
-              pattern="[0-9]{10}(-[0-9]{3})?"
-              maxLength={14}
-              placeholder="Ví dụ: 0314892841"
-              title="Nhập 10 chữ số hoặc 10 chữ số kèm mã đơn vị phụ thuộc, ví dụ 0314892841-001."
-              value={sellerTaxCode}
-              onChange={(e) => setSellerTaxCode(e.target.value)}
-            />
-            <small>Gồm 10 chữ số; đơn vị phụ thuộc có thể thêm “-001”.</small>
-          </Field>
-        </>
-      )}
-      {(vatTreatment === "NOT_APPLICABLE" || Number(vatPercentage) === 8) && (
-        <Field label={vatTreatment === "NOT_APPLICABLE" ? "Căn cứ không áp dụng VAT" : "Căn cứ áp dụng mức giảm 8%"} required>
-          <textarea value={vatLegalBasis} onChange={(e) => setVatLegalBasis(e.target.value)} maxLength={500} />
-        </Field>
-      )}
-      <p className="muted">Thuế suất được ghi nhận theo hóa đơn do vựa cung cấp. Hệ thống không tự xác định nghĩa vụ thuế.</p>
+      <p className="muted">Số tiền quyết toán = khối lượng nghiệm thu × đơn giá thỏa thuận. Phần này không cộng VAT hoặc phí nền tảng.</p>
       {preview && <Financial values={preview} net={order.weight.net} />}
       <label className="checkbox-line">
         <input
@@ -709,14 +663,14 @@ function SettlementForm({ order, close }) {
           checked={confirmed}
           onChange={(e) => setConfirmed(e.target.checked)}
         />
-        {order.settlementWorkflowVersion ? "Tôi đã kiểm tra đơn giá, khối lượng và VAT; gửi đề xuất để vựa xác nhận." : "Tôi xác nhận giá và số tiền quyết toán đã thống nhất với vựa."}
+        Tôi đã kiểm tra đơn giá và khối lượng; gửi đề xuất để vựa xác nhận.
       </label>
       <div className="form-actions">
         <Button secondary onClick={close}>
           Hủy
         </Button>
         <Button type="submit" disabled={!preview || !confirmed}>
-          {order.settlementWorkflowVersion ? "Gửi đề xuất giá" : "Chốt quyết toán"}
+          Gửi đề xuất giá
         </Button>
       </div>
     </form>
