@@ -12,7 +12,7 @@ namespace Retrack.Tests;
 
 public sealed partial class StockReceiptTests : IAsyncLifetime
 {
-    private readonly Guid owner = Guid.NewGuid(), depot = Guid.NewGuid(), employee = Guid.NewGuid();
+    private readonly Guid owner = Guid.NewGuid(), depot = Guid.NewGuid(), employee = Guid.NewGuid(), bulkSeller = Guid.NewGuid();
     private static AppDbContext Open()
     {
         var connection = Environment.GetEnvironmentVariable("RETRACK_TEST_CONNECTION") ?? throw new InvalidOperationException("RETRACK_TEST_CONNECTION required");
@@ -28,7 +28,8 @@ public sealed partial class StockReceiptTests : IAsyncLifetime
     {
         await using var db = Open(); await TestDatabase.MigrateAsync(db);
         db.Users.AddRange(new User { Id = owner, Email = $"stock-{owner}@test.invalid", FullName = "Chủ kho test", Role = "DEPOT_OWNER" },
-            new User { Id = employee, Email = $"stock-{employee}@test.invalid", FullName = "Nhân viên test", Role = "DEPOT_EMPLOYEE" });
+            new User { Id = employee, Email = $"stock-{employee}@test.invalid", FullName = "Nhân viên test", Role = "DEPOT_EMPLOYEE" },
+            new User { Id = bulkSeller, Email = $"stock-{bulkSeller}@test.invalid", FullName = "Seller lô thử", Role = "SELLER" });
         db.Depots.Add(new Depot { VerificationStatus = "APPROVED", Id = depot, OwnerId = owner, Name = "Kho thử nhập nguồn", Address = "Đà Nẵng" });
         db.DepotStaffs.Add(new DepotStaff { DepotId = depot, UserId = employee, StaffType = "DEPOT_EMPLOYEE" });
         await db.SaveChangesAsync();
@@ -38,11 +39,15 @@ public sealed partial class StockReceiptTests : IAsyncLifetime
         await using var db = Open();
         await db.DepotReuseSales.Where(x => x.Line.Receipt.DepotId == depot).ExecuteDeleteAsync();
         await db.DepotStockReceipts.Where(x => x.DepotId == depot).ExecuteDeleteAsync();
+        await db.Notifications.Where(x => x.UserId == bulkSeller).ExecuteDeleteAsync();
+        await db.LiquidationAgreements.Where(x => x.DepotId == depot).ExecuteDeleteAsync();
+        await db.LiquidationBids.Where(x => x.DepotId == depot).ExecuteDeleteAsync();
+        await db.LiquidationLots.Where(x => x.SellerId == bulkSeller).ExecuteDeleteAsync();
         await db.TransportJobs.Where(x => x.Batch.DepotId == depot).ExecuteDeleteAsync();
         await db.InventoryBatches.Where(x => x.DepotId == depot).ExecuteDeleteAsync();
         await db.DepotStaffs.Where(x => x.DepotId == depot).ExecuteDeleteAsync();
         await db.Depots.Where(x => x.Id == depot).ExecuteDeleteAsync();
-        await db.Users.Where(x => x.Id == owner || x.Id == employee).ExecuteDeleteAsync();
+        await db.Users.Where(x => x.Id == owner || x.Id == employee || x.Id == bulkSeller).ExecuteDeleteAsync();
     }
     private static CreateStockReceiptDto Input(decimal quantity = 1000, decimal unitCost = 5000, bool reusable = false) => new() {
         OperationId = Guid.NewGuid(), Reference = "Phiếu thử " + Guid.NewGuid().ToString("N"), ReceivedAt = DateTime.UtcNow.AddMinutes(-2),

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import {
-  Handshake, FileSignature, Wallet, Banknote, Truck, Warehouse, MapPin, Phone, CalendarClock, FileText, Layers,
+  Handshake, FileSignature, Wallet, Banknote, Warehouse, MapPin, Phone, CalendarClock, FileText, Layers,
   AlertTriangle, CheckCircle2, Hourglass, ReceiptText, BadgePercent, Coins, ArrowRight,
 } from 'lucide-react';
 import { QueryState, MutationError, inputClass } from '@/features/depot/components/DepotUI';
@@ -31,19 +31,17 @@ export default function LiquidationAgreement({ id, onClose }) {
   const [docOpen, setDocOpen] = useState(false);
   const reset = () => setConfirmed(false);
   const report = useLiquidationMutation('patch', `/agreements/${id}/report-payment`, reset);
-  const handover = useLiquidationMutation('patch', `/agreements/${id}/confirm-collected`, reset);
   const sign = useLiquidationMutation('patch', `/agreements/${id}/sign`, reset);
   const reportDeposit = useLiquidationMutation('patch', `/agreements/${id}/report-deposit`, reset);
   const d = query.data;
   const esign = useLiquidationEsign(id);
   const esignOn = isEsignActive(esign.data);
   const onEsignChanged = () => client.invalidateQueries({ queryKey: ['liquidation', userId, depotId] });
-  const busy = report.isPending || handover.isPending || sign.isPending || reportDeposit.isPending;
+  const busy = report.isPending || sign.isPending || reportDeposit.isPending;
 
   const hasDeposit = d?.depositAmount > 0;
   const bothSigned = !!(d?.sellerSignedAt && d?.buyerSignedAt);
   const depositOk = !hasDeposit || !!d?.depositConfirmedAt;
-  const collected = !!(d?.paymentConfirmedAt && d?.sellerHandedOverAt && d?.ownerCollectedAt);
   const posted = d?.receiptStatus === 'POSTED';
   // Chế độ PLATFORM: trả cọc / phần còn lại qua PayOS vào sàn; luồng "báo đã chuyển" thủ công chỉ dùng khi LEGACY.
   const depositPay = usePlatformCollection('LIQUIDATION_DEPOSIT', id, { enabled: !!d && hasDeposit && bothSigned && !d.depositConfirmedAt });
@@ -53,11 +51,11 @@ export default function LiquidationAgreement({ id, onClose }) {
     : d?.receiptId ? 'Phiếu nháp · chờ ghi sổ' : 'Chưa lập';
 
   const flags = hasDeposit
-    ? [bothSigned, !!d?.depositConfirmedAt, !!d?.paymentConfirmedAt, !!d?.ownerCollectedAt, posted]
-    : [!!d?.paymentConfirmedAt, !!d?.ownerCollectedAt, posted];
+    ? [bothSigned, !!d?.depositConfirmedAt, !!d?.paymentConfirmedAt, posted]
+    : [!!d?.paymentConfirmedAt, posted];
   const defs = hasDeposit
-    ? [['sign', 'Ký hợp đồng', FileSignature], ['deposit', 'Chuyển cọc', Wallet], ['pay', 'Thanh toán', Banknote], ['collect', 'Nhận hàng', Truck], ['receipt', 'Nhập kho', Warehouse]]
-    : [['pay', 'Thanh toán', Banknote], ['collect', 'Nhận hàng', Truck], ['receipt', 'Nhập kho', Warehouse]];
+    ? [['sign', 'Ký hợp đồng', FileSignature], ['deposit', 'Chuyển cọc', Wallet], ['pay', 'Thanh toán', Banknote], ['receipt', 'Nhận hàng và nhập kho', Warehouse]]
+    : [['pay', 'Thanh toán', Banknote], ['receipt', 'Nhận hàng và nhập kho', Warehouse]];
   const firstOpen = flags.findIndex((f) => !f);
   const steps = defs.map(([key, label, icon], i) => ({ key, label, icon, state: flags[i] ? 'done' : i === firstOpen ? 'current' : 'todo' }));
 
@@ -114,16 +112,10 @@ export default function LiquidationAgreement({ id, onClose }) {
       );
     } else if (d.paymentReportedAt && !d.paymentConfirmedAt) {
       waiting = 'Đã báo chuyển tiền. Chờ Seller xác nhận nhận đủ tiền.';
-    } else if (d.paymentConfirmedAt && !d.ownerCollectedAt) {
-      action = (
-        <div className="space-y-2.5">
-          <label className={checkLabel}><input type="checkbox" className={checkbox} disabled={busy} checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />Tôi đã thu gom đủ và chở hàng thực tế về kho.</label>
-          <div className="flex justify-end"><button type="button" className={primaryBtn} disabled={busy || !confirmed} onClick={() => handover.mutate()}><Truck size={16} />Xác nhận đã nhận đủ hàng về kho</button></div>
-          <MutationError mutation={handover} />
-        </div>
-      );
-    } else if (collected && !d.receiptId) {
-      action = <div className="flex justify-end"><button type="button" className={primaryBtn} onClick={() => setReceiving(true)}><Warehouse size={16} />Lập phiếu nhập từ lô trúng</button></div>;
+    } else if (d.paymentConfirmedAt && !d.sellerHandedOverAt && !d.receiptId) {
+      waiting = 'Chờ Seller xác nhận đã bàn giao đủ toàn bộ lô. Sau đó bạn xác nhận thực nhận và nhập kho trong một lần.';
+    } else if (d.paymentConfirmedAt && d.sellerHandedOverAt && !d.receiptId) {
+      action = <div className="flex justify-end"><button type="button" className={primaryBtn} onClick={() => setReceiving(true)}><Warehouse size={16} />{d.ownerCollectedAt ? 'Nhập kho từ lô đã nhận' : 'Nhận hàng và nhập kho'}</button></div>;
     } else if (d.receiptId) {
       action = <div className="flex justify-end"><Link to={`/depot/inventory?tab=receipts&receiptId=${d.receiptId}`} className={primaryBtn}><ReceiptText size={16} />{posted ? 'Xem phiếu đã ghi sổ' : 'Đến phiếu nhập để kiểm tra / duyệt'}<ArrowRight size={15} /></Link></div>;
     }
@@ -200,7 +192,7 @@ export default function LiquidationAgreement({ id, onClose }) {
         )}</QueryState>
       </Modal>
       {docOpen && d && <ContractViewer contract={toContract(d, d)} onClose={() => setDocOpen(false)} />}
-      {receiving && <StockReceiptForm agreement={d} onClose={() => {
+      {receiving && <StockReceiptForm agreement={d} confirmBulkReceived={!d.ownerCollectedAt} onClose={() => {
         setReceiving(false);
         client.invalidateQueries({ queryKey: ['liquidation', userId, depotId] });
       }} />}

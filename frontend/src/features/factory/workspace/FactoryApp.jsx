@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { FactoryProvider, useFactory } from "./components/FactoryUI";
 import {
@@ -13,6 +14,7 @@ import { Operations } from "./pages/FactoryOperations";
 import FactoryPlatformFees from "./pages/FactoryPlatformFees";
 import FactoryNotifications, { FactoryNotificationBell } from "./pages/FactoryNotifications";
 import MoneyEarnings from "@/features/money-payee/EarningsPage";
+import { request } from "./data/factoryApi";
 import "./factory.css";
 
 const tabs = [
@@ -22,7 +24,7 @@ const tabs = [
   ["orders", "Đơn hàng & Vận chuyển", "⇄"],
   ["qc", "Trạm cân & KCS", "⚖"],
   ["settlements", "Quyết toán", "▣"],
-  ["platform-fees", "Phí nền tảng", "₫"],
+  ["platform-fees", "Hóa đơn phí cũ", "₫"],
   ["earnings", "Thu nhập & chi trả", "₫"],
   ["notifications", "Thông báo", "♧"],
   ["partners", "Vựa đối tác", "♧"],
@@ -31,6 +33,12 @@ const tabs = [
 ];
 function Workspace() {
   const { state, user, logout, loading, retry } = useFactory();
+  const historicalInvoices = useQuery({
+    queryKey: ["factory", "platform-fees", "invoice-count"],
+    queryFn: () => request("/api/factory/platform-fees/invoices?page=1&pageSize=1"),
+    enabled: Boolean(state),
+    staleTime: 60_000,
+  });
   const navigateRoute = useNavigate();
   // DocuSign đưa người dùng quay lại với ?esign=return: mở thẳng tab đối tác để thấy kết quả ký.
   const [tab, setTab] = useState(() => {
@@ -73,7 +81,7 @@ function Workspace() {
         </div>
         <div className="nav-caption">KHÔNG GIAN LÀM VIỆC</div>
         <nav aria-label="Điều hướng nhà máy">
-          {tabs.filter(([key]) => key !== "notifications").map(([key, label, icon]) => (
+          {tabs.filter(([key]) => key !== "notifications" && (key !== "platform-fees" || historicalInvoices.isError || (historicalInvoices.data?.totalCount ?? 0) > 0)).map(([key, label, icon]) => (
             <button
               key={key}
               className={tab === key ? "active" : ""}

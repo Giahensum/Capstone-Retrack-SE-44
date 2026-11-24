@@ -105,9 +105,9 @@ public sealed class BuyerFeeWorkflowTests : IAsyncLifetime
     }
 
     [Theory]
-    [InlineData(PlatformFees.BuyerSeparate, 11000, 11500)]
-    [InlineData(PlatformFees.Legacy, 10500, 11000)]
-    public async Task Factory_settlement_race_preserves_vat_and_separate_fee_after_reload(string policy, decimal receives, decimal buyerTotal)
+    [InlineData(PlatformFees.BuyerSeparate, 10000, 10000)]
+    [InlineData(PlatformFees.Legacy, 10000, 10000)]
+    public async Task Factory_settlement_race_keeps_goods_total_without_vat_or_fee(string policy, decimal receives, decimal buyerTotal)
     {
         await using var db = Open();
         var factory = new Factory { Owner = User("FACTORY"), Name = "Nhà máy test" };
@@ -119,9 +119,7 @@ public sealed class BuyerFeeWorkflowTests : IAsyncLifetime
         var configured = policy == PlatformFees.BuyerSeparate ? "7.00" : "5.00";
         await db.SystemConfigs.Where(x => x.ConfigKey == "PLATFORM_FEE_PERCENTAGE").ExecuteUpdateAsync(x => x.SetProperty(p => p.ConfigValue, configured));
         await db.SaveChangesAsync();
-        var request = new Retrack.API.DTOs.Factory.SettlementRequest { AgreedPricePerKg = 1000, PaymentReference = "FIXTURE-CK", PaymentProofUrl = "https://example.invalid/proof.pdf",
-            VatTreatment = "TAXABLE", VatPercentage = 10, InvoiceNumber = "FIXTURE-HD", SellerTaxCode = "TEST",
-            InvoiceDate = DateOnly.FromDateTime(DateTime.UtcNow) };
+        var request = new Retrack.API.DTOs.Factory.SettlementRequest { AgreedPricePerKg = 1000 };
         async Task<Retrack.API.DTOs.Factory.OrderSettlementResponse> Settle()
         {
             await using var other = Open();
@@ -129,20 +127,17 @@ public sealed class BuyerFeeWorkflowTests : IAsyncLifetime
             Assert.Equal(ServiceOutcome.Success, result.Outcome); return result.Data!;
         }
         var results = await Task.WhenAll(Settle(), Settle());
-        Assert.All(results, x => { Assert.Equal(receives, x.NetPayableAmount); Assert.Equal(buyerTotal, x.BuyerTotalAmount); Assert.Equal(500, x.FeeAmount); Assert.Equal(policy, x.FeePolicy); });
+        Assert.All(results, x => { Assert.Equal("SETTLEMENT_PENDING", x.Status); Assert.Equal(receives, x.NetPayableAmount); Assert.Equal(buyerTotal, x.BuyerTotalAmount); Assert.Equal(0, x.FeeAmount); Assert.Equal(0, x.VatAmount); Assert.Equal(policy, x.FeePolicy); });
         await using var saved = Open();
-        Assert.Single(await saved.PlatformTransactions.Where(t => t.SourceId == batch.Id).ToListAsync());
+        Assert.Empty(await saved.PlatformTransactions.Where(t => t.SourceId == batch.Id).ToListAsync());
         var view = (await new FactoryOrderService(saved).GetAsync(factory.OwnerId, batch.Id, default)).Data!;
-        Assert.Equal(5, view.PlatformFeePercentage); Assert.Equal(buyerTotal, view.BuyerTotalAmount);
-        var report = Assert.Single(await new DepotReportRepository(saved).CostChannelsAsync(depot.Id, DateTime.UtcNow.AddDays(-1), DateTime.UtcNow.AddDays(1)), x => x.Channel == "FACTORY");
-        Assert.Equal(receives - 1000, report.NetRevenue);
-        Assert.Equal(policy == PlatformFees.BuyerSeparate ? 0 : 500, report.PlatformFees);
+        Assert.Equal("SETTLEMENT_PENDING", view.Status); Assert.Equal(0, view.PlatformFeePercentage); Assert.Equal(buyerTotal, view.BuyerTotalAmount);
+        Assert.Equal(0, (await new DepotReportRepository(saved).CostChannelsAsync(depot.Id, DateTime.UtcNow.AddDays(-1), DateTime.UtcNow.AddDays(1))).Single(x => x.Channel == "FACTORY").TransactionCount);
         var otherFactory = new Factory { Owner = User("FACTORY"), Name = "Nhà máy khác" };
         saved.Factories.Add(otherFactory); await saved.SaveChangesAsync();
         var wrong = await new FactoryOrderService(saved).SettleAsync(otherFactory.OwnerId, batch.Id, request, default);
         Assert.Equal(ServiceOutcome.NotFound, wrong.Outcome);
-        // Đổi owner sau quyết toán không được chuyển nghĩa vụ phí đã chốt sang tài khoản khác.
-        var chargedOwnerId = factory.OwnerId;
+        // Đổi chủ sở hữu sau khi gửi đề xuất không phát sinh hóa đơn phí.
         var successor = User("FACTORY"); saved.Users.Add(successor); await saved.SaveChangesAsync();
         await saved.Factories.Where(x => x.Id == factory.Id).ExecuteUpdateAsync(x => x.SetProperty(p => p.OwnerId, successor.Id));
         var now = DateTime.UtcNow.AddHours(7);
@@ -151,12 +146,7 @@ public sealed class BuyerFeeWorkflowTests : IAsyncLifetime
         var adminService = new AdminService(new UserRepository(saved), new MarketPriceRepository(saved),
             new AuditLogRepository(saved), new PlatformInvoiceRepository(saved), new NotificationService(saved), saved, new BillingClock(closedAt));
         var invoices = await adminService.GenerateMonthlyInvoicesAsync(now.Year, now.Month, depot.OwnerId);
-        if (policy == PlatformFees.BuyerSeparate)
-        {
-            var invoice = Assert.Single(invoices);
-            Assert.Equal(chargedOwnerId, invoice.PayerId); Assert.Equal(500, invoice.TotalFeeAmount);
-        }
-        else Assert.Empty(invoices); // Lô cũ đã khấu trừ phí, không phát hành hóa đơn thu lần hai.
+        Assert.Empty(invoices);
         Assert.Empty(await adminService.GenerateMonthlyInvoicesAsync(now.Year, now.Month, depot.OwnerId));
     }
 

@@ -3,3 +3,6 @@
 deploy/Caddyfile text eol=lf
 deploy/*.yml text eol=lf
 deploy/.env.production.example text eol=lf
+
+# Track custom weights.pt checkpoint via Git LFS
+AI_Garbage_Classification/Pytorch-Garbage-Classification/weights.pt filter=lfs diff=lfs merge=lfs -text

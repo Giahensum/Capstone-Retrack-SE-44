@@ -25,6 +25,9 @@ public class DepotInventoryController(IInventoryService inventory, IDepotService
         query.Status = "DONE";
         return Ok(ApiResponse<PagedResult<DepotPaymentDto>>.Ok(await depot.GetPaymentsAsync(OwnerId, depotId, query)));
     }
+    [HttpGet("history")]
+    public async Task<IActionResult> History([FromQuery] Guid depotId, [FromQuery] InventoryHistoryQuery query) =>
+        Ok(ApiResponse<PagedResult<InventoryHistoryDto>>.Ok(await inventory.HistoryAsync(OwnerId, depotId, query)));
 }
 
 
