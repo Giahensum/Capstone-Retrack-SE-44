@@ -7,7 +7,7 @@ import { request } from "../data/factoryApi";
 const time = (value) => new Date(value).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
 const targetFor = (notice) => notice.targetType === "PARTNERS" && notice.depotId
   ? { tab: "partners", label: "Xem vựa đối tác" }
-  : notice.targetType === "FEES" ? { tab: "platform-fees", label: "Xem phí nền tảng" }
+  : notice.targetType === "FEES" ? { tab: "platform-fees", label: "Xem hóa đơn phí cũ" }
     : notice.targetType === "MARKETPLACE" ? { tab: "marketplace", label: "Xem yêu cầu chỉ định", id: notice.batchId }
     : notice.targetType === "NONE" ? null
     : notice.batchId ? { tab: "orders", label: "Xem lô hàng", id: notice.batchId } : null;

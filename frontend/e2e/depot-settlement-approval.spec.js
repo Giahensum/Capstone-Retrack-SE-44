@@ -46,7 +46,6 @@ test('Giá cần kho đồng ý, Factory gửi chứng từ, kho xác nhận nh�
     await factory.getByRole('button', { name: 'Gửi đề xuất giá cho vựa', exact: true }).click();
     const price = factory.getByRole('dialog');
     await price.getByLabel(/^Đơn giá đã thỏa thuận/).fill('12000');
-    await price.getByLabel('Căn cứ không áp dụng VAT').fill('Tài liệu giả lập kiểm thử, không phải căn cứ thuế thật');
     await price.getByRole('checkbox', { name: /Tôi đã kiểm tra đơn giá/ }).check();
     await price.getByRole('button', { name: 'Gửi đề xuất giá', exact: true }).click(); await expect(price).toHaveCount(0);
     async function depotDetail() {
@@ -72,7 +71,8 @@ test('Giá cần kho đồng ý, Factory gửi chứng từ, kho xác nhận nh�
     await depotDetail(); await page.getByLabel('Tôi đã kiểm tra tài khoản và nhận đủ số tiền trên.').check();
     await page.getByRole('button', { name: 'Xác nhận đã nhận tiền', exact: true }).click();
     await expect(page.getByRole('dialog')).toContainText('Đã nhận tiền');
-    await page.reload(); await page.getByRole('row').filter({ hasText: batch.code }).getByTitle('Chi tiết lô hàng').click();
+    await page.reload(); await page.getByLabel('Kho đang quản lý').selectOption(process.env.E2E_DEPOT_ID);
+    await page.getByRole('row').filter({ hasText: batch.code }).getByTitle('Chi tiết lô hàng').click();
     await expect(page.getByRole('dialog')).toContainText('Kho xác nhận nhận đủ tiền');
     await page.screenshot({ path: test.info().outputPath('depot-da-nhan-tien.png'), fullPage: true });
     await page.setViewportSize({ width: 390, height: 844 });

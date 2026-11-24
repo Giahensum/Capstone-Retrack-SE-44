@@ -64,7 +64,7 @@ public static class FactoryOrderMapper
             RejectionReason = batch.RejectionReason,
             SettledAt = batch.SettledAt,
             FeeAmount = qc?.PlatformFeeAmount,
-            PlatformFeePercentage = batch.SettledAt != null ? qc?.PlatformFeePercentage : batch.FeePercentageSnapshot,
+            PlatformFeePercentage = qc is { AgreedPricePerKg: > 0 } ? qc.PlatformFeePercentage : batch.FeePercentageSnapshot,
             FeePolicy = batch.FeePolicy,
             BuyerTotalAmount = qc?.NetAmount + qc?.PlatformFeeAmount,
             NetPayableAmount = qc?.NetAmount,

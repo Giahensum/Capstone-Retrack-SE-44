@@ -505,7 +505,7 @@ namespace Retrack.API.Services
             await using var transaction = _db.Database.IsRelational() ? await _db.Database.BeginTransactionAsync() : null;
 
             var transactions = await _db.PlatformTransactions
-                .Where(t => t.CreatedAt >= periodStart && t.CreatedAt < periodEnd
+                .Where(t => t.FeeAmount > 0 && t.CreatedAt >= periodStart && t.CreatedAt < periodEnd
                     && (t.SourceType != "BATCH_ORDER" || t.FeePolicy == Retrack.API.Services.Shared.PlatformFees.BuyerSeparate))
                 .ToListAsync();
 

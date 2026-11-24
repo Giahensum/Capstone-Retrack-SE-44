@@ -85,8 +85,8 @@ public class SettlementRequest
 {
     [Range(0, 1000000000)] public decimal AgreedPricePerKg { get; set; }
     public bool PriceIncludesVat { get; set; }
-    [Required, RegularExpression("^(NOT_APPLICABLE|ZERO_RATE|TAXABLE)$")]
-    public string VatTreatment { get; set; } = "NOT_APPLICABLE";
+    [Required, RegularExpression("^(NOT_CALCULATED|NOT_APPLICABLE|ZERO_RATE|TAXABLE)$")]
+    public string VatTreatment { get; set; } = "NOT_CALCULATED";
     [Range(0, 100)] public decimal VatPercentage { get; set; }
     [StringLength(100)] public string? InvoiceNumber { get; set; }
     public DateOnly? InvoiceDate { get; set; }

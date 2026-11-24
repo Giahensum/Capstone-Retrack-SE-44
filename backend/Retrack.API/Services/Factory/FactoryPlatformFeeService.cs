@@ -25,7 +25,7 @@ public sealed class FactoryPlatformFeeService(AppDbContext db, FactoryAttachment
     public async Task<PagedResult<FactoryFeeEntry>> FeesAsync(Guid userId, int page, int pageSize, CancellationToken ct)
     {
         await RequireFactory(userId, ct);
-        var rows = Db.PlatformTransactions.AsNoTracking().Where(t => t.SourceType == "BATCH_ORDER" && t.PayerId == userId
+        var rows = Db.PlatformTransactions.AsNoTracking().Where(t => t.FeeAmount > 0 && t.SourceType == "BATCH_ORDER" && t.PayerId == userId
             && t.FeePolicy == PlatformFees.BuyerSeparate);
         var count = await rows.CountAsync(ct);
         var items = await (from t in rows
