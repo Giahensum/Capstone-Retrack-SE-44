@@ -73,19 +73,20 @@ const DepotLayout = () => {
       {/* SideNavBar */}
       {menuOpen && <button aria-label="Đóng menu" className="fixed inset-0 bg-black/30 z-40 lg:hidden" onClick={() => setMenuOpen(false)} />}
       <aside aria-label="Menu kho vựa" inert={!desktop && !menuOpen} aria-hidden={!desktop && !menuOpen} onKeyDown={e => { if (e.key === 'Escape') setMenuOpen(false); }} className={clsx("w-64 bg-d-surface-container-lowest border-r border-d-border-subtle h-screen fixed top-0 left-0 flex flex-col z-50 transition-transform lg:translate-x-0", menuOpen ? "translate-x-0" : "-translate-x-full")}>
-        <div className="h-16 flex items-center px-6 border-b border-d-border-subtle">
+        <div className="h-16 flex items-center justify-between gap-2 px-6 border-b border-d-border-subtle">
           <Link to="/depot/dashboard" className="inline-flex items-center gap-2 font-d-headline-md text-d-headline-md font-bold tracking-tighter text-d-primary" aria-label="ReTrack — về tổng quan kho">
             <DepotBrandLogo /> <span>RETRACK</span>
           </Link>
+          <button type="button" aria-label="Đóng menu điều hướng" className="lg:hidden shrink-0 size-10 inline-flex items-center justify-center rounded-full text-d-primary hover:bg-d-surface-container" onClick={() => setMenuOpen(false)}><MaterialIcon name="close" /></button>
         </div>
         
         <div className="flex-1 overflow-y-auto py-6">
-          <nav className="px-4 space-y-2" onClick={() => setMenuOpen(false)}>
+          <nav className="px-4 space-y-2" onClick={e => { if (e.target.closest('a')) setMenuOpen(false); }}>
             {menuGroups.map(group => <details key={group.label} open={group.label === 'Chung' || group.items.some(item => item.to === location.pathname)} className="mb-3">
               <summary className="min-h-11 cursor-pointer px-3 py-2 text-sm font-semibold text-d-primary rounded-xl focus-visible:outline-2 focus-visible:outline-d-primary">{group.label}</summary>
               <div className="space-y-1 mt-1">{group.items.map(item => <SidebarItem key={item.to} {...item} active={location.pathname === item.to || (location.pathname === '/depot' && item.to === '/depot/dashboard')} />)}</div>
             </details>)}
-            <button className="w-full text-left rounded-xl px-4 py-3 text-d-primary hover:bg-d-surface-container" onClick={() => setCreateDepot(true)}>＋ Thêm kho vựa</button>
+            <button className="w-full text-left rounded-xl px-4 py-3 text-d-primary hover:bg-d-surface-container" onClick={() => { setCreateDepot(true); setMenuOpen(false); }}>＋ Thêm kho vựa</button>
           </nav>
         </div>
         
