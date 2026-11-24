@@ -11,7 +11,7 @@ using Retrack.API.Services.Shared;
 namespace Retrack.API.Services.Depot;
 
 public sealed partial class DepotStockService(IDepotStockRepository repository, IDepotBatchRepository batches,
-    IDepotUnitOfWork work, IDepotService scope) : IDepotStockService
+    IDepotUnitOfWork work, IDepotService scope, Retrack.API.Services.Money.PlatformMoneyHooks? money = null) : IDepotStockService
 {
     private static void ValidatePage(DepotQuery query)
     {
@@ -43,6 +43,8 @@ public sealed partial class DepotStockService(IDepotStockRepository repository, 
     {
         var isOwner = await RequireAccessAsync(userId, depotId);
         ValidateReceipt(dto, isOwner);
+        if (dto.ConfirmBulkReceived && (!isOwner || !dto.PostImmediately || !dto.BulkAgreementId.HasValue))
+            throw new ArgumentException("Nhận lô và nhập kho một bước chỉ dành cho chủ kho, có thỏa thuận liên kết và ghi kho ngay.");
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(dto))));
         await using var tx = await work.BeginAsync();
         await batches.LockDepotAsync(depotId);
@@ -54,14 +56,18 @@ public sealed partial class DepotStockService(IDepotStockRepository repository, 
             return Map(old, isOwner);
         }
         var purchaseCost = dto.PurchaseCost;
+        LiquidationAgreement? receivedAgreement = null;
         if (dto.BulkAgreementId.HasValue)
         {
-            var source = await repository.BulkSourceAsync(dto.BulkAgreementId.Value);
-            if (source == null || source.DepotId != depotId) throw new DepotForbiddenException();
-            if (!source.Ready || dto.SourceType != "BULK_PURCHASE") throw new DepotConflictException("Lô trúng cần xác nhận đủ tiền và hai bên xác nhận giao nhận trước khi lập phiếu nhập.");
+            var source = await repository.LockBulkSourceAsync(dto.BulkAgreementId.Value);
+            if (source == null || source.DepotId != depotId || source.BuyerId != userId && isOwner) throw new DepotForbiddenException();
+            if (source.PaymentConfirmedAt == null || source.SellerHandedOverAt == null ||
+                source.OwnerCollectedAt == null && !dto.ConfirmBulkReceived || dto.SourceType != "BULK_PURCHASE")
+                throw new DepotConflictException("Lô trúng cần xác nhận đủ tiền và Seller bàn giao đủ; chủ kho xác nhận thực nhận khi ghi kho.");
             if (await repository.HasBulkReceiptAsync(dto.BulkAgreementId.Value)) throw new DepotConflictException("Thỏa thuận đã có phiếu nhập đang hoạt động; không được nhập cả lô lần hai.");
             if (dto.PurchaseCost != 0 && dto.PurchaseCost != source.Amount) throw new ArgumentException("Giá mua phải bằng giá trúng trọn lô, không tính lại theo kg.");
             purchaseCost = source.Amount;
+            if (dto.ConfirmBulkReceived && source.OwnerCollectedAt == null) receivedAgreement = source;
         }
         var costs = dto.CostsConfirmed ? DepotCosting.Allocate(purchaseCost, dto.Expenses.Sum(x => x.Amount),
             dto.Lines.Select(x => new CostingLine(x.Quantity, x.ReferencePrice, x.DirectCost)).ToArray()) : null;
@@ -78,6 +84,13 @@ public sealed partial class DepotStockService(IDepotStockRepository repository, 
             receipt.ReviewedAt = receipt.PostedAt; receipt.ReviewedBy = userId;
         }
         repository.AddReceipt(receipt);
+        if (receivedAgreement != null)
+        {
+            receivedAgreement.OwnerCollectedAt = receipt.PostedAt;
+            if (money != null) await money.OnLiquidationCollectedAsync(receivedAgreement, receipt.PostedAt!.Value);
+            repository.AddNotice(Notification.ForLiquidation(receivedAgreement.Lot.SellerId, receivedAgreement.LotId,
+                "Chủ kho đã nhận đủ lô và nhập kho", $"Kho xác nhận nhận đủ lô {receivedAgreement.Lot.Title} và đã ghi nhận hàng vào kho."));
+        }
         await work.SaveAsync(); await tx.CommitAsync();
         return Map(receipt, isOwner);
     }

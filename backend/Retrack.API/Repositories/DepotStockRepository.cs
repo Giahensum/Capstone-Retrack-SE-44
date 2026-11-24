@@ -46,6 +46,16 @@ public sealed partial class DepotStockRepository(AppDbContext db) : IDepotStockR
         .Where(x => x.Id == agreementId).Select(x => new DepotBulkStockSource(x.DepotId, x.Amount,
             x.PaymentConfirmedAt != null && x.OwnerCollectedAt != null && x.SellerHandedOverAt != null)).SingleOrDefaultAsync();
     public Task<bool> HasBulkReceiptAsync(Guid agreementId) => db.DepotStockReceipts.AnyAsync(x => x.BulkAgreementId == agreementId && x.Status != "VOIDED" && x.Status != "REJECTED");
+    // Caller đã khóa Depot. Khóa phiên cùng thứ tự với Seller/Owner xác nhận thỏa thuận.
+    public async Task<LiquidationAgreement?> LockBulkSourceAsync(Guid agreementId)
+    {
+        var lotId = await db.LiquidationAgreements.AsNoTracking().Where(x => x.Id == agreementId).Select(x => (Guid?)x.LotId).SingleOrDefaultAsync();
+        if (lotId == null) return null;
+        await db.LiquidationLots.FromSqlInterpolated($"SELECT * FROM liquidation_lots WHERE id = {lotId.Value} FOR UPDATE").LoadAsync();
+        var tracked = db.ChangeTracker.Entries<LiquidationAgreement>().SingleOrDefault(x => x.Entity.Id == agreementId);
+        if (tracked != null) await tracked.ReloadAsync();
+        return await db.LiquidationAgreements.Include(x => x.Lot).SingleOrDefaultAsync(x => x.Id == agreementId);
+    }
     public void ReplaceExpenses(DepotStockReceipt receipt, List<StockExpenseInput> expenses)
     {
         db.DepotStockExpenses.RemoveRange(receipt.Expenses);

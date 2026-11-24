@@ -17,7 +17,7 @@ public sealed class PostgresMoneyFactAttribute : FactAttribute
 }
 
 /// <summary>Mỗi lớp test chạy trong schema riêng, xóa sau khi xong (mẫu của ContractEsignGuardsPostgresTests).</summary>
-public sealed class MoneyLedgerPostgresTests : IAsyncLifetime
+public sealed partial class MoneyLedgerPostgresTests : IAsyncLifetime
 {
     private readonly string schema = "money_" + Guid.NewGuid().ToString("N");
     private NpgsqlConnection admin = null!;
