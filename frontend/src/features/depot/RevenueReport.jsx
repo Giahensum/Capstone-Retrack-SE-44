@@ -11,7 +11,7 @@ export default function RevenueReport(){
  const tableRows = points.slice((page - 1) * pageSize, page * pageSize);
  const max=Math.max(1,...(report?.points??[]).flatMap((p)=>[p.revenue,p.purchaseCost]));
  return <Page title="Báo cáo doanh thu" description="Đối chiếu quyết toán, thu mua và giá vốn các giao dịch theo giờ Việt Nam.">
-  <div role="tablist" aria-label="Loại báo cáo" className="flex gap-2 border-b border-d-border-subtle overflow-x-auto">{[['cash','Quyết toán và thu mua'],['costs','Giá vốn và chênh lệch']].map(([key,label])=><button key={key} type="button" role="tab" aria-selected={tab===key} className={`whitespace-nowrap px-4 py-3 border-b-2 font-semibold ${tab===key?'border-d-primary text-d-primary':'border-transparent text-d-on-surface-variant'}`} onClick={()=>setTab(key)}>{label}</button>)}</div>
+  <div role="tablist" aria-label="Loại báo cáo" className="flex gap-2 border-b border-d-border-subtle overflow-x-auto">{[['cash','Quyết toán và thu mua'],['costs','Giá vốn và chênh lệch (nâng cao)']].map(([key,label])=><button key={key} type="button" role="tab" aria-selected={tab===key} className={`whitespace-nowrap px-4 py-3 border-b-2 font-semibold ${tab===key?'border-d-primary text-d-primary':'border-transparent text-d-on-surface-variant'}`} onClick={()=>setTab(key)}>{label}</button>)}</div>
   <PeriodFilter period={period} setPeriod={next => { setPeriod(next); setPage(1); }} showGroupBy={tab==='cash'}/>
   {tab==='costs'?<CostReportPanel period={period}/>:<QueryState query={query}><Cards items={[
     {label:'Giá trị lô đã quyết toán',value:money(report?.revenue),icon:'payments',description:'Tiền ròng theo quyết toán nhà máy trong kỳ; chưa xác nhận tiền đã về tài khoản kho.'},

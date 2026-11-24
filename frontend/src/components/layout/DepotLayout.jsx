@@ -60,6 +60,14 @@ const DepotLayout = () => {
     { iconName: 'bar_chart', label: 'Báo cáo doanh thu', to: '/depot/reports' },
   ];
 
+  const menuGroups = [
+    ['Chung', ['dashboard', 'notifications']],
+    ['Giao dịch', ['liquidations', 'buying-prices', 'batches', 'partners']],
+    ['Kho và hồ sơ', ['inventory', 'profile']],
+    ['Đội ngũ', ['staff', 'dispatch', 'staff/performance']],
+    ['Tài chính', ['payments', 'payments/fees', 'earnings', 'reports']],
+  ].map(([label, paths]) => ({ label, items: paths.map(path => navItems.find(item => item.to === '/depot/' + path)) }));
+
   return (
     <div className="bg-d-background flex h-screen overflow-hidden font-d-body-md text-d-on-background">
       {/* SideNavBar */}
@@ -73,13 +81,10 @@ const DepotLayout = () => {
         
         <div className="flex-1 overflow-y-auto py-6">
           <nav className="px-4 space-y-2" onClick={() => setMenuOpen(false)}>
-            {navItems.map((item) => (
-              <SidebarItem 
-                key={item.to}
-                {...item}
-                active={location.pathname === item.to || (location.pathname === '/depot' && item.to === '/depot/dashboard')}
-              />
-            ))}
+            {menuGroups.map(group => <details key={group.label} open={group.label === 'Chung' || group.items.some(item => item.to === location.pathname)} className="mb-3">
+              <summary className="min-h-11 cursor-pointer px-3 py-2 text-sm font-semibold text-d-primary rounded-xl focus-visible:outline-2 focus-visible:outline-d-primary">{group.label}</summary>
+              <div className="space-y-1 mt-1">{group.items.map(item => <SidebarItem key={item.to} {...item} active={location.pathname === item.to || (location.pathname === '/depot' && item.to === '/depot/dashboard')} />)}</div>
+            </details>)}
             <button className="w-full text-left rounded-xl px-4 py-3 text-d-primary hover:bg-d-surface-container" onClick={() => setCreateDepot(true)}>＋ Thêm kho vựa</button>
           </nav>
         </div>

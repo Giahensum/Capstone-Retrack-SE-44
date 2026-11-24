@@ -7,6 +7,15 @@ namespace Retrack.API.Services.Depot;
 
 public sealed class InventoryService(IDepotInventoryRepository repository, IDepotService scope) : IInventoryService
 {
+    public async Task<Retrack.API.DTOs.PagedResult<InventoryHistoryDto>> HistoryAsync(Guid ownerId, Guid depotId, InventoryHistoryQuery query)
+    {
+        await scope.RequireOwnerAsync(ownerId, depotId);
+        if (query.Page < 1 || query.PageSize is < 1 or > 100 || (long)(query.Page - 1) * query.PageSize > int.MaxValue || query.Search?.Length > 255 ||
+            query.Source is not (null or "" or "PICKUP" or "RECEIPT" or "EXTERNAL_PURCHASE" or "OPENING_BALANCE" or "BULK_PURCHASE") ||
+            query.Status is not (null or "" or "DONE" or "DRAFT" or "SUBMITTED" or "POSTED" or "REJECTED" or "VOIDED"))
+            throw new ArgumentException("Bộ lọc lịch sử nhập hoặc phân trang không hợp lệ.");
+        return await repository.HistoryAsync(depotId, query);
+    }
     public async Task<List<InventoryRowDto>> GetAsync(Guid ownerId, Guid depotId)
     {
         await scope.RequireOwnerAsync(ownerId, depotId);

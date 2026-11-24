@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import {
-  Handshake, FileSignature, Wallet, Banknote, Truck, Warehouse, MapPin, Phone, CalendarClock, FileText, Layers,
+  Handshake, FileSignature, Wallet, Banknote, Warehouse, MapPin, Phone, CalendarClock, FileText, Layers,
   AlertTriangle, CheckCircle2, Hourglass, ReceiptText, BadgePercent, Coins, ArrowRight,
 } from 'lucide-react';
 import { QueryState, MutationError, inputClass } from '@/features/depot/components/DepotUI';
@@ -51,11 +51,11 @@ export default function LiquidationAgreement({ id, onClose }) {
     : d?.receiptId ? 'Phiếu nháp · chờ ghi sổ' : 'Chưa lập';
 
   const flags = hasDeposit
-    ? [bothSigned, !!d?.depositConfirmedAt, !!d?.paymentConfirmedAt, !!d?.ownerCollectedAt, posted]
-    : [!!d?.paymentConfirmedAt, !!d?.ownerCollectedAt, posted];
+    ? [bothSigned, !!d?.depositConfirmedAt, !!d?.paymentConfirmedAt, posted]
+    : [!!d?.paymentConfirmedAt, posted];
   const defs = hasDeposit
-    ? [['sign', 'Ký hợp đồng', FileSignature], ['deposit', 'Chuyển cọc', Wallet], ['pay', 'Thanh toán', Banknote], ['collect', 'Nhận hàng', Truck], ['receipt', 'Nhập kho', Warehouse]]
-    : [['pay', 'Thanh toán', Banknote], ['collect', 'Nhận hàng', Truck], ['receipt', 'Nhập kho', Warehouse]];
+    ? [['sign', 'Ký hợp đồng', FileSignature], ['deposit', 'Chuyển cọc', Wallet], ['pay', 'Thanh toán', Banknote], ['receipt', 'Nhận hàng và nhập kho', Warehouse]]
+    : [['pay', 'Thanh toán', Banknote], ['receipt', 'Nhận hàng và nhập kho', Warehouse]];
   const firstOpen = flags.findIndex((f) => !f);
   const steps = defs.map(([key, label, icon], i) => ({ key, label, icon, state: flags[i] ? 'done' : i === firstOpen ? 'current' : 'todo' }));
 
