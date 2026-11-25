@@ -9,7 +9,7 @@ namespace Retrack.API.Services.Employee;
 public sealed record EmployeePoolResult(List<PickupPoolItemDto> Items, bool Automatic, int Total);
 
 public sealed class EmployeePickupService(IEmployeePickupRepository repository, EmployeeReportingService reports,
-    IStaffUnitOfWork work, INotificationService notify)
+    IStaffUnitOfWork work, INotificationService notify, IDepotSubscriptionService? subscriptions = null)
 {
     private async Task<Guid> GetDepotIdAsync(Guid userId, CancellationToken ct) =>
         await repository.PrimaryDepotAsync(userId, ct)
@@ -58,6 +58,7 @@ public sealed class EmployeePickupService(IEmployeePickupRepository repository, 
     public async Task<PickupPoolItemDto> AcceptAsync(Guid userId, Guid pickupId, CancellationToken ct)
     {
         var depotId = await GetDepotIdAsync(userId, ct);
+        if (subscriptions != null) await subscriptions.RequireAccessAsync(depotId);
         if (await repository.HasAreasAsync(depotId, ct))
             throw new DepotConflictException("Kho đang phân công tự động. Hãy mở danh sách đơn được giao cho bạn.");
         if (!await repository.IsApprovedAsync(depotId, ct))

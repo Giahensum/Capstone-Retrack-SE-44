@@ -66,6 +66,8 @@ namespace Retrack.API.Repositories
             var rawDepots = await _db.Depots
                 .Include(d => d.Owner)
                 .Where(d => d.Owner.IsActive && d.Owner.Role == "DEPOT_OWNER" && d.VerificationStatus == "APPROVED")
+                .Where(d => !_db.SystemConfigs.Any(c => c.ConfigKey == "BUSINESS_MODEL" && c.ConfigValue == "DEPOT_SUBSCRIPTION") ||
+                    _db.DepotSubscriptions.Any(s => s.DepotId == d.Id && (s.PaidUntil > DateTime.UtcNow || s.TrialEndsAt > DateTime.UtcNow)))
                 .Select(d => new
                 {
                     d.Id,

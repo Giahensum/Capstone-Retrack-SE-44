@@ -10,6 +10,7 @@ import { adminApi, apiErrorMessage } from '../api';
 import { previousClosedBillingMonth, isClosedBillingPeriod } from '../billingPeriod';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import RevenueAreaChart from '../components/RevenueAreaChart';
+import SubscriptionBilling from './SubscriptionBilling';
 import {
   PageHeader, FilterTabs, Panel, StatCard, DataTable, Th, Td, TableMessage, Field, Badge, ConfirmModal, PrimaryButton, Pagination, inputClass,
 } from '../components/AdminUI';
@@ -243,10 +244,13 @@ function FeeConfigTab() {
 
 export default function Billing() {
   const [tab, setTab] = useState('revenue');
+  const [legacy, setLegacy] = useState(false);
+  if (!legacy) return <SubscriptionBilling onLegacy={() => setLegacy(true)} />;
 
   return (
     <AdminLayout crumb="Phí & Doanh thu">
       <div className="flex w-full flex-col gap-6 p-4 md:p-6">
+        <button className="self-start min-h-11 rounded-full border border-d-border-subtle px-4 text-d-primary" onClick={() => setLegacy(false)}>← Quay lại gói dịch vụ Depot</button>
         <PageHeader icon={Banknote} title="Phí & Doanh thu" description="Doanh thu nền tảng, lịch sử giao dịch, hóa đơn phí và cấu hình phí." />
         <FilterTabs tabs={TABS} value={tab} onChange={setTab} />
         {tab === 'revenue' && <RevenueTab />}

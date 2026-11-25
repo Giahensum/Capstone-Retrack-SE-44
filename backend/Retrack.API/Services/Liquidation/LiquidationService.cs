@@ -196,7 +196,7 @@ public sealed class LiquidationService(ILiquidationRepository repository, IDepot
         else if (action == "REPORT_DEPOSIT")
         {
             // PLATFORM (money.mode): cọc trả qua PayOS, sàn tự ghi nhận; không báo chuyển tay. LEGACY: không đổi.
-            if (money != null && await money.IsPlatformAsync()) throw new DepotConflictException("Thanh toán qua sàn đang bật: vui lòng trả tiền cọc bằng PayOS.");
+            if (money != null && await money.IsPlatformAsync("LIQUIDATION_DEPOSIT", agreement.Id)) throw new DepotConflictException("Thanh toán qua sàn đang bật: vui lòng trả tiền cọc bằng PayOS.");
             if (agreement.SellerSignedAt == null || agreement.BuyerSignedAt == null) throw new DepotConflictException("Cần cả hai bên ký hợp đồng đặt cọc trước khi báo chuyển cọc.");
             if (string.IsNullOrWhiteSpace(reference) || reference.Length > 255) throw new ArgumentException("Cần tham chiếu chuyển cọc tối đa 255 ký tự.");
             if (agreement.DepositReportedAt != null && agreement.DepositReference != reference.Trim()) throw new DepotConflictException("Tham chiếu cọc đã ghi, không sửa ngầm bằng retry.");
@@ -210,7 +210,7 @@ public sealed class LiquidationService(ILiquidationRepository repository, IDepot
         else if (action == "REPORT_PAYMENT")
         {
             // PLATFORM (money.mode): phần còn lại trả qua PayOS; không báo chuyển tay. LEGACY: không đổi.
-            if (money != null && await money.IsPlatformAsync()) throw new DepotConflictException("Thanh toán qua sàn đang bật: vui lòng trả phần còn lại bằng PayOS.");
+            if (money != null && await money.IsPlatformAsync("LIQUIDATION_BALANCE", agreement.Id)) throw new DepotConflictException("Thanh toán qua sàn đang bật: vui lòng trả phần còn lại bằng PayOS.");
             if (agreement.DepositAmount > 0 && agreement.DepositConfirmedAt == null) throw new DepotConflictException("Cần Seller xác nhận đã nhận tiền cọc trước khi báo chuyển phần còn lại.");
             if (string.IsNullOrWhiteSpace(reference) || reference.Length > 255) throw new ArgumentException("Cần tham chiếu chuyển tiền tối đa 255 ký tự.");
             if (agreement.PaymentReportedAt != null && agreement.PaymentReference != reference.Trim()) throw new DepotConflictException("Tham chiếu đã ghi, không sửa ngầm bằng retry.");

@@ -45,6 +45,8 @@ public sealed partial class MoneyLedgerPostgresTests : IAsyncLifetime
         var sql = await File.ReadAllTextAsync(Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../db/bootstrap/retrack-system.sql")));
         schemaSql = sql[..sql.IndexOf("-- RETRACK_SCHEMA_END", StringComparison.Ordinal)] + "\nCOMMIT;";
         await ApplySchema();
+        // Bộ này bảo vệ cách tính hoa hồng/hoàn tiền cũ; kiểm thử gói mới ở DepotSubscriptionPostgresTests.
+        await SetConfig("BUSINESS_MODEL", "TRANSACTION_FEES");
         await using var db = Open();
         db.Users.AddRange(NewUser(payer, "DEPOT_OWNER"), NewUser(payee, "SELLER"));
         await db.SaveChangesAsync();

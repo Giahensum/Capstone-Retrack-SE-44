@@ -1312,6 +1312,48 @@ CREATE INDEX IF NOT EXISTS ix_money_refunds_payer ON money_refunds(payer_id, cre
 CREATE INDEX IF NOT EXISTS ix_money_refunds_status ON money_refunds(status, created_at DESC);
 -- RETRACK_MONEY_V4_END
 
+-- RETRACK_DEPOT_SUBSCRIPTION_V1_BEGIN
+-- Mô hình kinh doanh mới: chỉ bán gói quản lý kho. Không sửa snapshot phí/tiền hàng cũ.
+INSERT INTO system_configs(config_key, config_value, description) VALUES
+ ('BUSINESS_MODEL', 'DEPOT_SUBSCRIPTION', 'Chỉ thu tiền gói quản lý Depot; tiền hàng hai bên tự thanh toán'),
+ ('SUBSCRIPTION_MONTHLY_PRICE', '199000', 'Giá một tháng lịch cho một kho; đơn cũ giữ snapshot')
+ON CONFLICT (config_key) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS depot_subscriptions (
+ depot_id UUID PRIMARY KEY REFERENCES depots(id) ON DELETE RESTRICT,
+ trial_started_at TIMESTAMPTZ, trial_ends_at TIMESTAMPTZ, paid_until TIMESTAMPTZ,
+ updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+ CONSTRAINT ck_depot_subscription_trial CHECK ((trial_started_at IS NULL AND trial_ends_at IS NULL)
+   OR (trial_started_at IS NOT NULL AND trial_ends_at > trial_started_at))
+);
+-- Dải mã riêng, nằm trong số nguyên an toàn của JavaScript và tách bộ sinh mã tiền hàng/phí cũ.
+CREATE SEQUENCE IF NOT EXISTS depot_subscription_order_code_seq START 8000000000000000 MAXVALUE 8900000000000000;
+CREATE TABLE IF NOT EXISTS depot_subscription_orders (
+ id UUID PRIMARY KEY, depot_id UUID NOT NULL REFERENCES depots(id) ON DELETE RESTRICT,
+ payer_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+ amount NUMERIC(18,0) NOT NULL CHECK (amount BETWEEN 1000 AND 10000000),
+ status VARCHAR(20) NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING','PAID','CANCELLED')),
+ order_code BIGINT NOT NULL UNIQUE CHECK (order_code > 0 AND order_code <= 9007199254740991),
+ checkout_url TEXT, provider_started_at TIMESTAMPTZ, last_checked_at TIMESTAMPTZ, proof_url TEXT, payment_reference VARCHAR(255),
+ created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), paid_at TIMESTAMPTZ, period_start TIMESTAMPTZ, period_end TIMESTAMPTZ,
+ approved_by UUID REFERENCES users(id) ON DELETE RESTRICT,
+ review_note VARCHAR(1000),
+ CONSTRAINT ck_subscription_paid CHECK (status <> 'PAID' OR (paid_at IS NOT NULL AND period_start IS NOT NULL AND period_end > period_start))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_subscription_pending ON depot_subscription_orders(depot_id) WHERE status = 'PENDING';
+ALTER TABLE depot_subscription_orders ADD COLUMN IF NOT EXISTS last_checked_at TIMESTAMPTZ;
+ALTER TABLE depot_subscription_orders ADD COLUMN IF NOT EXISTS review_note VARCHAR(1000);
+CREATE INDEX IF NOT EXISTS ix_subscription_depot_created ON depot_subscription_orders(depot_id, created_at DESC, id);
+CREATE INDEX IF NOT EXISTS ix_subscription_paid ON depot_subscription_orders(paid_at, id) WHERE status = 'PAID';
+CREATE INDEX IF NOT EXISTS ix_subscription_payos_pending ON depot_subscription_orders((last_checked_at IS NOT NULL), last_checked_at, created_at, id) WHERE status = 'PENDING' AND provider_started_at IS NOT NULL;
+-- Owner chủ động bấm Bắt đầu dùng thử một lần/kho. Chạy SQL không tự bắt đầu/kéo dài gói.
+-- RETRACK_DEPOT_SUBSCRIPTION_V1_END
+
+-- Các bên tự thanh toán trực tiếp. Dòng cũ NULL được hiểu là chuyển khoản như trước.
+ALTER TABLE pickup_requests ADD COLUMN IF NOT EXISTS payment_method VARCHAR(20);
+ALTER TABLE pickup_requests ADD COLUMN IF NOT EXISTS payment_reference VARCHAR(255);
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS payment_method VARCHAR(20);
+
 -- RETRACK_SCHEMA_END
 
 -- RETRACK_SEED_BEGIN

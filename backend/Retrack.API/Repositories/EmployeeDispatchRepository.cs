@@ -81,7 +81,9 @@ public sealed class EmployeeDispatchRepository(AppDbContext db) : IEmployeeDispa
     public Task<List<EmployeeCollectionArea>> AreasAsync(Guid? depotId, CancellationToken ct) =>
         db.EmployeeCollectionAreas.Where(a => a.IsActive
             && (depotId == null || a.DepotId == depotId)
-            && db.Depots.Any(d => d.Id == a.DepotId && d.Owner.IsActive && d.VerificationStatus == "APPROVED"))
+            && db.Depots.Any(d => d.Id == a.DepotId && d.Owner.IsActive && d.VerificationStatus == "APPROVED")
+            && (depotId != null || !db.SystemConfigs.Any(c => c.ConfigKey == "BUSINESS_MODEL" && c.ConfigValue == "DEPOT_SUBSCRIPTION") ||
+                db.DepotSubscriptions.Any(s => s.DepotId == a.DepotId && (s.PaidUntil > DateTime.UtcNow || s.TrialEndsAt > DateTime.UtcNow))))
             .OrderBy(a => a.Id).ToListAsync(ct);
 
     public Task<List<DispatchDepotLocation>> DepotLocationsAsync(Guid[] depotIds, CancellationToken ct) =>

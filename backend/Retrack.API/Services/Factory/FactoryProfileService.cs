@@ -22,6 +22,7 @@ public class FactoryProfileService(AppDbContext db, FactoryAttachmentService? at
         var feePercentage = decimal.TryParse(feeText, System.Globalization.NumberStyles.Number,
             System.Globalization.CultureInfo.InvariantCulture, out var configuredFee) ? configuredFee : 5m;
         if (feePercentage is < 0 or > 100) feePercentage = 5m;
+        if (await BusinessModel.IsSubscriptionAsync(Db, ct)) feePercentage = 0;
         return ServiceResult<ProfileResponse>.Success(data: new ProfileResponse
         {
             Id = factory.Id,

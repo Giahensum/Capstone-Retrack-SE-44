@@ -128,6 +128,24 @@ public sealed class BatchSettlementWorkflowTests : IAsyncLifetime
         Assert.Equal(4, await db.BatchWorkflowEvents.CountAsync());
         Assert.Contains("1000", (await db.BatchWorkflowEvents.OrderBy(x => x.CreatedAt).FirstAsync()).SnapshotJson);
     }
+
+    [Fact]
+    public async Task Factory_cash_payment_requires_depot_confirmation_and_cannot_replace_report_on_retry()
+    {
+        var f = await Seed(); await using var db = Open(); var factory = new FactoryOrderService(db);
+        await factory.SettleAsync(f.FactoryOwner, f.Batch, Price(), default);
+        await Decisions(db).DecideAsync(f.Owner, f.Depot, f.Batch, new() { Revision = 1, Amount = 10000, Accept = true });
+        var payment = new BatchPaymentProofRequest { PaymentMethod = "CASH", PaymentReference = "BIEN-NHAN-001" };
+        Assert.Equal("Success", (await factory.ReportPaymentAsync(f.FactoryOwner, f.Batch, payment, default)).Outcome.ToString());
+        Assert.Equal("Success", (await factory.ReportPaymentAsync(f.FactoryOwner, f.Batch, payment, default)).Outcome.ToString());
+        Assert.Equal("Conflict", (await factory.ReportPaymentAsync(f.FactoryOwner, f.Batch, new() { PaymentMethod = "CASH", PaymentReference = "KHAC" }, default)).Outcome.ToString());
+        await Assert.ThrowsAsync<DepotConflictException>(() => Decisions(db).ConfirmPaymentAsync(f.Owner, f.Depot, f.Batch, 9999, "BIEN-NHAN-001"));
+        await Decisions(db).ConfirmPaymentAsync(f.Owner, f.Depot, f.Batch, 10000, "BIEN-NHAN-001");
+        await Decisions(db).ConfirmPaymentAsync(f.Owner, f.Depot, f.Batch, 10000, "BIEN-NHAN-001");
+        await using var check = Open(); var batch = await check.InventoryBatches.SingleAsync(x => x.Id == f.Batch);
+        Assert.Equal("PAID", batch.Status); Assert.Equal("CASH", batch.PaymentMethod); Assert.NotNull(batch.DepotPaymentConfirmedAt);
+        Assert.Single(await check.BatchWorkflowEvents.Where(x => x.Action == "PAYMENT_CONFIRMED").ToListAsync());
+    }
     [Fact]
     public async Task Retry_does_not_change_price_or_invoice_metadata_and_other_owner_cannot_approve()
     {

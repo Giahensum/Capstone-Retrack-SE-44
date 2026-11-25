@@ -1,5 +1,6 @@
 import { FactoryWorkflowHistory, QualityResolutionForm, ReturnHandoverForm, ReturnSummary } from "./FactoryQualityResolution";
 import { useState } from "react";
+import { paymentMethods } from '@/lib/paymentMethods';
 import {
   Attachment,
   Button,
@@ -682,23 +683,29 @@ function PaymentProofForm({ order, close }) {
   const [file, setFile] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [method, setMethod] = useState('BANK_TRANSFER');
+  const [confirmed, setConfirmed] = useState(false);
   return <form onSubmit={async (e) => {
     e.preventDefault();
-    if (!file || busy) return;
+    if ((method === 'BANK_TRANSFER' && !file) || !confirmed || busy) return;
     setBusy(true); setError("");
     try {
-      const paymentProofUrl = await uploadFactoryFeeProof(file);
-      if (await act("REPORT_PAYMENT", { id: order.id, reference, paymentProofUrl }, "Đã gửi chứng từ; chờ vựa xác nhận nhận tiền.")) close();
+      const paymentProofUrl = file ? await uploadFactoryFeeProof(file) : null;
+      if (await act("REPORT_PAYMENT", { id: order.id, reference, paymentProofUrl, paymentMethod: method }, "Đã ghi nhận thanh toán; chờ vựa xác nhận tiền thực nhận.")) close();
     } catch (cause) { setError(cause.message); }
     finally { setBusy(false); }
   }}>
-    <p className="muted">Sau khi chuyển khoản cho vựa, hãy đối chiếu số tiền {money(order.payment?.payable)} và gửi chứng từ thực tế. Vựa sẽ xác nhận khi tiền vào tài khoản.</p>
-    <Field label="Mã tham chiếu chuyển khoản" required value={reference} maxLength={200} onChange={(e) => setReference(e.target.value)} />
-    <Field label="Chứng từ chuyển khoản (PDF, JPG, PNG; tối đa 700 KB)" required>
-      <input type="file" required accept=".pdf,.jpg,.jpeg,.png" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+    <fieldset disabled={busy}>
+    <p className="muted">Hai bên tự thanh toán {money(order.payment?.payable)} theo thỏa thuận. RETRACK ghi nhận, không thu hộ tiền hàng mới. Vựa xác nhận sau khi đã nhận đủ tiền.</p>
+    <Field label="Hình thức đã thanh toán"><select value={method} onChange={e => { setMethod(e.target.value); setConfirmed(false); }}>{Object.entries(paymentMethods).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></Field>
+    <Field label="Mã giao dịch / căn cứ giao tiền" required value={reference} maxLength={200} onChange={(e) => setReference(e.target.value)} />
+    <Field label={method === 'BANK_TRANSFER' ? 'Chứng từ chuyển khoản (PDF, JPG, PNG; tối đa 700 KB)' : 'Biên nhận giao tiền (tùy chọn)'} required={method === 'BANK_TRANSFER'}>
+      <input type="file" required={method === 'BANK_TRANSFER'} accept=".pdf,.jpg,.jpeg,.png" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
     </Field>
+    <label className="check-line"><input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} />Tôi đã trả đủ số tiền theo thỏa thuận và chịu trách nhiệm về xác nhận này.</label>
     {error && <p role="alert" className="text-error">{error}</p>}
-    <div className="form-actions"><Button secondary onClick={close}>Hủy</Button><Button type="submit" disabled={!file || busy}>{busy ? "Đang gửi…" : "Xác nhận đã chuyển tiền"}</Button></div>
+    <div className="form-actions"><Button secondary onClick={close}>Hủy</Button><Button type="submit" disabled={method === 'BANK_TRANSFER' && !file || !confirmed || busy}>{busy ? "Đang gửi…" : "Xác nhận đã trả tiền"}</Button></div>
+    </fieldset>
   </form>;
 }
 function RatingForm({ order, close }) {

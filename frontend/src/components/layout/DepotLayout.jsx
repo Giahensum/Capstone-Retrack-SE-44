@@ -10,6 +10,7 @@ import CreateDepotModal from '@/features/depot/components/CreateDepotModal';
 import { useDepotQuery } from '@/features/depot/depotApi';
 import { verificationLabels } from '@/features/depot/components/VerificationPanel';
 import NotificationBell from '@/features/depot/components/NotificationBell';
+import SubscriptionBanner from '@/features/depot/components/SubscriptionBanner';
 
 const SidebarItem = ({ iconName, label, to, active }) => (
   <Link
@@ -36,7 +37,7 @@ const DepotLayout = () => {
     media.addEventListener('change', change); return () => media.removeEventListener('change', change);
   }, []);
   const [createDepot, setCreateDepot] = useState(false);
-  const { depotId } = useDepot();
+  const { depotId, query: ownedDepots } = useDepot();
   const profile = useDepotQuery('profile');
   const unread = useDepotQuery('notifications/unread-count', {}, true, 30000);
   const user = useAuthStore((s) => s.user);
@@ -55,8 +56,8 @@ const DepotLayout = () => {
     { iconName: 'assignment', label: 'Điều phối thu gom', to: '/depot/dispatch' },
     { iconName: 'monitoring', label: 'Hiệu suất nhân sự', to: '/depot/staff/performance' },
     { iconName: 'payments', label: 'Thanh toán chờ duyệt', to: '/depot/payments' },
-    { iconName: 'receipt', label: 'Phí nền tảng', to: '/depot/payments/fees' },
-    { iconName: 'account_balance_wallet', label: 'Thu nhập & chi trả', to: '/depot/earnings' },
+    { iconName: 'receipt', label: 'Gói dịch vụ', to: '/depot/subscription' },
+    { iconName: 'account_balance_wallet', label: 'Lịch sử chi trả qua sàn', to: '/depot/earnings' },
     { iconName: 'bar_chart', label: 'Báo cáo doanh thu', to: '/depot/reports' },
   ];
 
@@ -65,7 +66,7 @@ const DepotLayout = () => {
     ['Giao dịch', ['liquidations', 'buying-prices', 'batches', 'partners']],
     ['Kho và hồ sơ', ['inventory', 'profile']],
     ['Đội ngũ', ['staff', 'dispatch', 'staff/performance']],
-    ['Tài chính', ['payments', 'payments/fees', 'earnings', 'reports']],
+    ['Tài chính', ['payments', 'subscription', 'reports']],
   ].map(([label, paths]) => ({ label, items: paths.map(path => navItems.find(item => item.to === '/depot/' + path)) }));
 
   return (
@@ -123,10 +124,11 @@ const DepotLayout = () => {
 
         {/* Page Content */}
         <div className="flex-1 overflow-y-auto bg-d-background">
+          <SubscriptionBanner />
           {profile.data && profile.data.verificationStatus !== 'APPROVED' && <div role="status" className="m-4 rounded-xl border border-d-border-subtle bg-white p-4 text-sm">
             <strong>{verificationLabels[profile.data.verificationStatus] ?? 'Chưa xác minh kho'}.</strong> Giao dịch mới đang khóa. <Link className="underline text-d-primary" to="/depot/profile">Xem và nộp hồ sơ</Link>.
           </div>}
-          {depotId ? <Outlet key={depotId} /> : <div className="p-6 space-y-4"><h1 className="text-2xl font-bold">Bắt đầu với kho vựa của bạn</h1><p>Tạo kho đầu tiên, sau đó nộp hồ sơ để Admin xác minh.</p><button className="rounded-full bg-d-primary-container px-5 py-3 font-semibold" onClick={() => setCreateDepot(true)}>Tạo kho đầu tiên</button></div>}
+          {depotId ? <Outlet key={depotId} /> : ownedDepots.isPending ? <p role="status" className="p-6">Đang tải danh sách kho…</p> : ownedDepots.isError ? <p role="alert" className="p-6">Chưa tải được danh sách kho. Dùng nút Thử lại ở thanh chọn kho.</p> : <div className="p-6 space-y-4"><h1 className="text-2xl font-bold">Bắt đầu với kho vựa của bạn</h1><p>Tạo kho đầu tiên, sau đó nộp hồ sơ để Admin xác minh.</p><button className="rounded-full bg-d-primary-container px-5 py-3 font-semibold" onClick={() => setCreateDepot(true)}>Tạo kho đầu tiên</button></div>}
           {createDepot && <CreateDepotModal onClose={() => setCreateDepot(false)} />}
         </div>
       </main>
