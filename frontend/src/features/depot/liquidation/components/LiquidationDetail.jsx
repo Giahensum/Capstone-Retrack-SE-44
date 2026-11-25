@@ -12,11 +12,11 @@ import {
 import { useLiquidationQuery, useLiquidationMutation, useLiquidationScope, liquidationLabels, localTime } from '../liquidationApi';
 import LiquidationAgreement from './LiquidationAgreement';
 
-export default function LiquidationDetail({ id, onClose }) {
+export default function LiquidationDetail({ id, onClose, startWithAgreement = false }) {
   const scope = useLiquidationScope();
   const query = useLiquidationQuery(`/${id}`, {}, true, true);
   const [consent, setConsent] = useState(false);
-  const [agreement, setAgreement] = useState(false);
+  const [agreement, setAgreement] = useState(startWithAgreement);
   const register = useLiquidationMutation('post', `/${id}/participation`, () => setConsent(false));
   const survey = useLiquidationMutation('patch', `/${id}/survey-confirmation`, () => setConsent(false));
   const d = query.data, lot = d?.lot;
@@ -31,7 +31,7 @@ export default function LiquidationDetail({ id, onClose }) {
   ];
 
   return <>
-    <Modal
+    {(!agreement || !d?.agreementId) && <Modal
       icon={Gavel} tone={PHASE_TONE[lot?.phase] ?? 'primary'} title={lot?.title ?? 'Chi tiết lô thanh lý'} onClose={onClose} busy={busy}
       badge={lot && <Badge tone={PHASE_TONE[lot.phase] ?? 'slate'}>{liquidationLabels[lot.phase]}</Badge>}
       subtitle={lot && <span className="inline-flex items-center gap-1"><MapPin size={13} aria-hidden="true" />{lot.publicArea}</span>}
@@ -86,8 +86,8 @@ export default function LiquidationDetail({ id, onClose }) {
 
         <Notice tone="blue" icon={Info}>Giờ Việt Nam theo dữ liệu server. Mỗi lượt hợp lệ trong 2 phút cuối có thể gia hạn thêm, tổng không quá 10 phút. Giá trọn lô không thay đổi theo cân sau mua. Khảo sát do chủ kho thực hiện và tự xác nhận, chưa phải kiểm định của RETRACK.</Notice>
       </>}</QueryState>
-    </Modal>
-    {agreement && <LiquidationAgreement id={d.agreementId} onClose={() => setAgreement(false)} />}
+    </Modal>}
+    {agreement && d?.agreementId && <LiquidationAgreement id={d.agreementId} onClose={() => setAgreement(false)} />}
   </>;
 }
 

@@ -11,6 +11,9 @@ namespace Retrack.API.Controllers.Depot;
 public class DepotStockController(IDepotStockService service) : ControllerBase
 {
     private Guid UserId => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    [Authorize(Roles = "DEPOT_OWNER"), HttpPost("sale-preview")]
+    public async Task<IActionResult> PreviewSale(Guid depotId, BatchSalePreviewInput dto) =>
+        Ok(ApiResponse<BatchSalePreviewDto>.Ok(await service.PreviewSaleAsync(UserId, depotId, dto)));
     [Authorize(Roles = "DEPOT_OWNER"), HttpPost("cost-preview")]
     public async Task<IActionResult> PreviewCosts(Guid depotId, StockCostPreviewInput dto) =>
         Ok(ApiResponse<StockCostPreviewDto>.Ok(await service.PreviewCostsAsync(UserId, depotId, dto)));
