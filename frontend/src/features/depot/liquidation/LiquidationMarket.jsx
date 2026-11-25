@@ -106,7 +106,7 @@ function LiquidationList({ view, depotId }) {
                 <div><dt className="text-d-on-surface-variant">{view === 'OPEN' ? 'Hạn trả giá' : 'Kết thúc trả giá'}</dt><dd>{localTime(lot.biddingEnd)}</dd></div>
               </dl>
               <button type="button" className={buttonClass + ' mt-auto self-start'} onClick={() => { clearLink(); setSelected(lot.id); }}>
-                Xem lô và điều kiện
+                {view === 'PURCHASES' ? 'Tiếp tục mua và nhận hàng' : 'Xem lô và điều kiện'}
               </button>
             </div>
           </article>;
@@ -114,6 +114,6 @@ function LiquidationList({ view, depotId }) {
       </div>
       <Pager page={page} setPage={setPage} size={query.data?.pageSize ?? pageSize} total={query.data?.totalCount} />
     </QueryState>
-    {selected && <LiquidationDetail key={`${depotId}-${selected}`} id={selected} onClose={() => { setSelected(null); clearLink(); }} />}
+    {selected && <LiquidationDetail key={`${depotId}-${selected}`} id={selected} startWithAgreement={view === 'PURCHASES'} onClose={() => { setSelected(null); clearLink(); }} />}
   </>;
 }

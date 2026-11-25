@@ -2,6 +2,7 @@ import { materialLabel } from '../materialLabels';
 import { useEffect, useId, useState } from 'react';
 import { useDepotQuery, useDepotMutation, number, money, date } from '../depotApi';
 import { Dialog, QueryState, MutationError, inputClass, buttonClass, Pager } from './DepotUI';
+import BatchSalePreview from './BatchSalePreview';
 
 export default function CreateBatchModal({ isOpen, onClose, initialMaterial = '', initialFactoryId = '', initialDemand = null }) {
   return isOpen ? <CreateBatchForm onClose={onClose} initialMaterial={initialMaterial} initialFactoryId={initialFactoryId} initialDemand={initialDemand} /> : null;
@@ -82,6 +83,7 @@ function CreateBatchForm({ onClose, initialMaterial, initialFactoryId, initialDe
           <img key={url} src={url} alt={`Ảnh vật liệu ${index + 1}: ${photos[index].name}`} className="h-20 w-full rounded-lg object-cover border border-d-border-subtle" />)}</div>}
       </div>
       <p className="text-sm text-d-on-surface-variant sm:col-span-2">Giá được thỏa thuận sau QC tại nhà máy. Khối lượng tạo lô sẽ được giữ khỏi tồn khả dụng.</p>
+      <BatchSalePreview materialType={form.materialType} weightKg={form.weightKg} demand={initialDemand} />
       <div className="sm:col-span-2"><MutationError mutation={save} /></div>
     </form>
   </Dialog>;

@@ -8,6 +8,7 @@ import {
 import { QueryState, MutationError, inputClass } from '@/features/depot/components/DepotUI';
 import { money } from '@/features/depot/depotApi';
 import StockReceiptForm from '@/features/depot/components/StockReceiptForm';
+import BatchDetailSection from '@/features/depot/components/BatchDetailSection';
 import DepositContract from '@/components/liquidation/DepositContract';
 import ContractViewer from '@/components/liquidation/ContractViewer';
 import { toContract } from '@/components/liquidation/ContractDocument';
@@ -135,7 +136,7 @@ export default function LiquidationAgreement({ id, onClose }) {
 
   return (
     <>
-      <Modal
+      {!receiving && <Modal
         icon={Handshake} tone="teal" title="Thỏa thuận mua lô trúng" size="lg" onClose={onClose} busy={busy}
         subtitle={d?.title}
         badge={d && <Badge tone={posted ? 'primary' : 'teal'} icon={posted ? CheckCircle2 : Hourglass}>
@@ -173,7 +174,7 @@ export default function LiquidationAgreement({ id, onClose }) {
               <Tile icon={CalendarClock} tone="amber" label="Hạn thu gom hết" value={localTime(d.collectionDeadline)} />
             </div>
 
-            <Section icon={CalendarClock} tone="slate" title="Mốc xác nhận">
+            <BatchDetailSection title="Lịch sử xác nhận của hai bên">
               <dl className="grid gap-x-6 gap-y-2.5 text-sm sm:grid-cols-2">
                 {timeline.map(([label, value]) => (
                   <div key={label} className="flex items-baseline justify-between gap-3 border-b border-d-border-subtle/60 pb-1.5">
@@ -182,15 +183,15 @@ export default function LiquidationAgreement({ id, onClose }) {
                   </div>
                 ))}
               </dl>
-            </Section>
+            </BatchDetailSection>
 
-            <Section icon={FileText} title="Phạm vi và điều kiện">
+            <BatchDetailSection title="Xem lại phạm vi và điều kiện lô">
               <p className="whitespace-pre-wrap break-words text-sm">{d.scopeDetails}</p>
               <p className="mt-3 whitespace-pre-wrap break-words rounded-xl bg-d-surface-container-low p-3 text-sm">{d.collectionTerms}</p>
-            </Section>
+            </BatchDetailSection>
           </>
         )}</QueryState>
-      </Modal>
+      </Modal>}
       {docOpen && d && <ContractViewer contract={toContract(d, d)} onClose={() => setDocOpen(false)} />}
       {receiving && <StockReceiptForm agreement={d} confirmBulkReceived={!d.ownerCollectedAt} onClose={() => {
         setReceiving(false);

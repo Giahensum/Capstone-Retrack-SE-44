@@ -7,7 +7,7 @@ import { Dialog, MutationError, inputClass, buttonClass } from './DepotUI';
 import { StockExpenseFields } from './StockExpenseFields';
 
 const materials = ['PET', 'HDPE', 'PVC', 'PAPER', 'CARDBOARD', 'ALUMINUM', 'IRON', 'STEEL', 'COPPER', 'OTHER'];
-const emptyLine = () => ({ key: crypto.randomUUID(), kind: 'MATERIAL', materialType: 'IRON', name: 'Sắt', unit: 'kg', quantity: '', referencePrice: '', directCost: '', conditionNote: '' });
+const emptyLine = (kind = 'MATERIAL') => ({ key: crypto.randomUUID(), kind, materialType: 'IRON', name: kind === 'MATERIAL' ? 'Sắt' : '', unit: kind === 'MATERIAL' ? 'kg' : 'cái', quantity: '', referencePrice: '', directCost: '', conditionNote: '' });
 export default function StockReceiptForm({ onClose, agreement, receipt, confirmBulkReceived = false }) {
   const formId = useId();
   const [operationId] = useState(() => crypto.randomUUID());
@@ -22,7 +22,7 @@ export default function StockReceiptForm({ onClose, agreement, receipt, confirmB
   const lineField = (key, patch) => setLines(lines.map(x => x.key === key ? { ...x, ...patch } : x));
   const footer = (<div className="flex flex-wrap justify-end gap-3"><button type="button" disabled={save.isPending} className="rounded-full border border-d-border-subtle px-5 py-2.5" onClick={onClose}>Hủy bỏ</button>{!confirmBulkReceived && <button type="submit" form={formId} value="draft" className={receipt ? buttonClass : 'rounded-full border border-d-border-subtle px-5 py-2.5'} disabled={save.isPending}>{save.isPending ? 'Đang lưu…' : receipt ? 'Lưu thay đổi phiếu nháp' : 'Lưu phiếu nháp'}</button>}{!receipt && <button type="submit" form={formId} value="post" className={buttonClass} disabled={save.isPending || !stockConfirmed}>{save.isPending ? 'Đang lưu…' : confirmBulkReceived ? 'Xác nhận nhận đủ và nhập kho' : 'Ghi nhận vào kho'}</button>}</div>);
   return <Dialog icon={Warehouse} footer={footer} title={receipt ? 'Sửa phiếu nhập nháp' : confirmBulkReceived ? 'Nhận hàng và nhập kho từ lô trúng' : 'Lập phiếu nhập kho đa nguồn'} wide busy={save.isPending} onClose={onClose}>
-    <p className="text-sm text-d-on-surface-variant mb-4">Chỉ ghi hàng đã thực nhận. Phiếu nháp chưa tăng tồn; chủ kho kiểm tra rồi duyệt ghi sổ. Đơn thu gom DONE đã tính tồn, không nhập lại ở đây. {receipt && 'Có thể sửa, thêm hoặc bỏ dòng hàng; nguồn và ngày nhận gốc được giữ nguyên.'}</p>
+    <p className="text-sm text-d-on-surface-variant mb-4">{confirmBulkReceived ? 'Nhập số lượng từng loại hàng sau phân loại. Giá mua cả lô đã được lấy từ thỏa thuận.' : 'Chỉ ghi hàng đã thực nhận; không nhập lại đơn thu gom đã hoàn tất.'} {receipt && 'Phiếu nháp cho phép sửa hàng và chi phí trước khi ghi sổ.'}</p>
     <form id={formId} className="space-y-5" onSubmit={e => {
       e.preventDefault();
       const postImmediately = !receipt && e.nativeEvent.submitter?.value === 'post';
@@ -33,14 +33,14 @@ export default function StockReceiptForm({ onClose, agreement, receipt, confirmB
           quantity: Number(x.quantity), referencePrice: Number(x.referencePrice || 0), directCost: Number(x.directCost || 0) })) } });
     }}>
       <fieldset disabled={save.isPending} className="space-y-5">
-        <div className="grid sm:grid-cols-2 gap-4">
+        {linkedAgreement && !receipt ? <details className="rounded-xl border border-d-border-subtle bg-white p-3"><summary className="min-h-11 cursor-pointer font-medium text-d-primary">Nguồn: {form.reference}</summary><p className="text-sm">Mua lô trúng giá · nguồn liên kết tự động. Ngày nhận ghi theo thời điểm lập phiếu.</p></details> : <div className="grid sm:grid-cols-2 gap-4">
           <label>Nguồn hàng<select className={inputClass} disabled={linkedAgreement || !!receipt} value={form.sourceType} onChange={e => update('sourceType', e.target.value)}>
             <option value="EXTERNAL_PURCHASE">Mua ngoài hệ thống</option><option value="OPENING_BALANCE">Tồn đầu kỳ</option><option value="BULK_PURCHASE">{linkedAgreement ? 'Mua lô trúng giá — liên kết thỏa thuận' : 'Mua lô thanh lý ngoài phiên giá'}</option>
           </select></label>
           <label>Chứng từ / tham chiếu nguồn<input required maxLength={255} className={inputClass} value={form.reference} onChange={e => update('reference', e.target.value)} placeholder="Ví dụ: Phiếu mua khách sạn, ngày nhận" /></label>
-        </div>
-        <p className="text-sm text-d-on-surface-variant">Ngày nhận ghi theo thời điểm lập phiếu. {linkedAgreement ? "Phiếu liên kết thỏa thuận lô trúng, giữ nguyên tổng giá mua. Nhập hàng phân loại đã nhận và chi phí phát sinh thực tế." : "Nguồn này do kho tự khai báo; chưa phải dữ liệu phiên giá được hệ thống xác minh."}</p>
-        <div className="flex items-center justify-between gap-3"><h3 className="font-semibold">Hàng thực nhận</h3><button type="button" className={buttonClass} disabled={lines.length >= 50} onClick={() => setLines([...lines, emptyLine()])}>Thêm dòng hàng</button></div>
+        </div>}
+        {!linkedAgreement && <p className="text-sm text-d-on-surface-variant">Nguồn ngoài do kho khai báo; ngày nhận theo thời điểm lập phiếu.</p>}
+        <div className="flex flex-wrap items-center justify-between gap-3"><h3 className="font-semibold">Hàng thực nhận</h3><div className="flex flex-wrap gap-2"><button type="button" className={buttonClass} disabled={lines.length >= 50} onClick={() => setLines([...lines, emptyLine()])}>Thêm phế liệu</button><button type="button" className="min-h-11 rounded-full border border-d-border-subtle px-4 py-2 font-semibold text-d-primary" disabled={lines.length >= 50} onClick={() => setLines([...lines, emptyLine('REUSABLE')])}>Thêm đồ cũ</button></div></div>
         {lines.map((line, index) => <section key={line.key} className="rounded-2xl border border-d-border-subtle bg-white p-4 space-y-3">
           <div className="flex justify-between items-center gap-2"><h4 className="font-semibold">Dòng {index + 1}</h4><button type="button" className="min-h-11 px-3 text-d-error rounded-full border border-d-border-subtle disabled:opacity-40" disabled={lines.length === 1} onClick={() => setLines(lines.filter(x => x.key !== line.key))}>Bỏ dòng</button></div>
           <div className="grid sm:grid-cols-2 gap-3">
@@ -60,7 +60,7 @@ export default function StockReceiptForm({ onClose, agreement, receipt, confirmB
             <p className="text-sm text-d-on-surface-variant">Có thể ghi hàng vào kho trước mà chưa phân bổ vốn. Nếu chưa đủ dữ liệu, báo cáo sẽ ghi rõ chưa xác định; đóng mục này không xóa các khoản đã nhập.</p>
             <label className="block">Giá mua cả lô / giá trị tồn đầu kỳ (đ)<input type="number" min="0" step="1" max="1000000000000" className={inputClass} readOnly={linkedAgreement} value={form.purchaseCost} onChange={e => update('purchaseCost', e.target.value)} /></label>
             <StockExpenseFields expenses={expenses} setExpenses={setExpenses} />
-            <label className="flex gap-3 items-start"><input type="checkbox" className="mt-1" checked={form.costsConfirmed} onChange={e => update('costsConfirmed', e.target.checked)} /><span>Đủ dữ liệu chi phí để phân bổ theo giá trị bán tham khảo.<span className="block text-sm text-d-on-surface-variant">Không chọn: giá vốn chưa xác định, không coi là 0 để báo lãi.</span></span></label>
+            <label className="flex gap-3 items-start"><input type="checkbox" className="mt-1" checked={form.costsConfirmed} onChange={e => update('costsConfirmed', e.target.checked)} /><span>Tính giá vốn từng loại hàng để xem lãi khi bán.<span className="block text-sm text-d-on-surface-variant">Cần giá bán tham khảo làm tỷ trọng chia tổng vốn. Giá tham khảo không phải giá mua thực tế. Bỏ chọn: vốn chưa xác định, không coi là 0.</span></span></label>
             {form.costsConfirmed && lines.map(line => <div key={line.key} className="grid sm:grid-cols-2 gap-3 rounded-xl border border-d-border-subtle p-3"><p className="sm:col-span-2 font-medium">{line.name || 'Dòng hàng chưa đặt tên'}</p><label>Giá bán tham khảo / {line.unit} (đ)<input required type="number" min="1" step="1" max="1000000000000" className={inputClass} value={line.referencePrice} onChange={e => lineField(line.key, { referencePrice: e.target.value })} /></label><label>Chi phí riêng dòng này (đ)<input type="number" min="0" step="1" max="1000000000000" className={inputClass} value={line.directCost} onChange={e => lineField(line.key, { directCost: e.target.value })} /></label></div>)}
             {form.costsConfirmed && <CostAllocationPanel purchaseCost={form.purchaseCost} lines={lines} expenses={expenses} enabled />}
             <p className="text-sm text-d-on-surface-variant">Chi phí nhập đã nằm trong giá vốn không ghi lại khi bán. Thuế chỉ ghi khoản không thu hồi đã xác định, không tự áp thuế suất.</p>

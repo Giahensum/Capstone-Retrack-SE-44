@@ -8,7 +8,7 @@ import { MaterialIcon } from './components/DepotIcon';
 const Dashboard = () => {
   const query = useDepotQuery('dashboard');
   const stock = useDepotQuery('inventory');
-  const history = useDepotQuery('inventory/receipts', { pageSize: 5 });
+  const history = useDepotQuery('inventory/history', { pageSize: 5 });
   const d = query.data;
 
   const total = stock.data?.reduce((n, i) => n + Math.max(0, i.onHandKg), 0) ?? 0;
@@ -25,7 +25,7 @@ const Dashboard = () => {
   });
 
   return (
-    <div className="flex flex-col p-4 md:p-6 gap-4 md:gap-5 w-full max-w-7xl mx-auto h-[calc(100vh-4rem)] overflow-hidden">
+    <div className="flex flex-col p-4 md:p-6 gap-4 md:gap-5 w-full max-w-7xl mx-auto">
       {/* Page Title */}
       <div className="flex flex-col md:flex-row md:items-end justify-between shrink-0">
         <div>
@@ -122,41 +122,38 @@ const Dashboard = () => {
       </div>
 
       {/* Two Column Layout: Table & Chart */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1 min-h-0 overflow-y-auto lg:overflow-hidden pb-4 md:pb-0">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 pb-4 md:pb-0">
         {/* Left: Recent Inbound Table (60%) */}
         <div className="lg:col-span-7 bg-d-surface-container-lowest rounded-[20px] p-5 border border-d-border-subtle shadow-[0_20px_40px_rgba(23,33,27,0.02)] flex flex-col h-full overflow-hidden">
           <div className="flex justify-between items-center mb-4 shrink-0">
-            <h2 className="font-d-headline-md text-d-headline-md text-d-on-surface">Nhập kho gần đây</h2>
-            <Link to="/depot/inventory" className="text-d-primary font-d-label-sm text-d-label-sm hover:underline">Xem tất cả</Link>
+            <h2 className="font-d-headline-md text-d-headline-md text-d-on-surface">Hoạt động nhập gần đây</h2>
+            <Link to="/depot/inventory?tab=receipts" className="text-d-primary font-d-label-sm text-d-label-sm hover:underline">Xem tất cả</Link>
           </div>
-          <div className="overflow-y-auto flex-1 min-h-0">
+          <div className="overflow-auto flex-1 min-h-0">
             <QueryState query={history}>
-              <table className="w-full text-left relative">
+              <table className="w-full min-w-[620px] text-left relative">
                 <thead className="sticky top-0 bg-d-surface-container-lowest z-10">
                   <tr className="border-b border-d-border-subtle text-d-on-surface-variant font-d-label-sm text-d-label-sm uppercase tracking-wider">
-                    <th className="py-2 font-medium">Mã đơn</th>
-                    <th className="py-2 font-medium">Người bán</th>
-                    <th className="py-2 font-medium">Vật liệu</th>
-                    <th className="py-2 font-medium text-right">Khối lượng</th>
+                    <th className="py-2 font-medium">Mã nguồn</th>
+                    <th className="py-2 font-medium">Nguồn hàng</th>
+                    <th className="py-2 font-medium">Hàng thực nhận</th>
+                    <th className="py-2 font-medium">Ngày nhận</th>
                     <th className="py-2 font-medium text-right">Trạng thái</th>
                   </tr>
                 </thead>
                 <tbody className="font-d-body-sm text-d-body-sm divide-y divide-d-border-subtle">
                   {history.data?.items.map((p) => (
-                    <tr key={p.id} className="hover:bg-d-surface-container-low transition-colors group">
-                      <td className="py-2.5 text-d-on-surface font-medium">#{p.id.slice(0,8)}</td>
-                      <td className="py-2.5 text-d-on-surface-variant flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-full bg-d-surface-variant flex items-center justify-center text-[10px] font-bold text-d-on-surface-variant">
-                          {p.sellerName.charAt(0).toUpperCase()}
-                        </div>
-                        {p.sellerName}
+                    <tr key={`${p.sourceType}-${p.id}`} className="hover:bg-d-surface-container-low transition-colors group">
+                      <td className="py-2.5 text-d-on-surface font-medium"><Link className="text-d-primary underline" to={p.sourceType === 'PICKUP' ? `/depot/payments?requestId=${p.id}` : `/depot/inventory?tab=receipts&receiptId=${p.id}`}>#{p.id.slice(0,8)}</Link></td>
+                      <td className="py-2.5 text-d-on-surface-variant max-w-40 break-words">
+                        {p.title}
                       </td>
                       <td className="py-2.5 text-d-on-surface-variant max-w-[150px] truncate">
-                        {p.items?.map(i => materialLabel(i.materialType)).join(', ') || 'Chưa cập nhật'}
+                        {p.lines.slice(0, 2).map((line, i) => <p key={i}>{line.materialType ? materialLabel(line.materialType) : line.name}: {number(line.quantity)} {line.unit}</p>)}{p.lines.length > 2 && <p>Và {p.lines.length - 2} dòng khác</p>}
                       </td>
-                      <td className="py-2.5 text-d-on-surface text-right">{number(p.items.reduce((n,i)=>n+i.weightKg,0))} kg</td>
+                      <td className="py-2.5 text-d-on-surface">{new Date(p.receivedAt).toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}</td>
                       <td className="py-2.5 text-right">
-                        <span className="inline-flex items-center px-2 py-1 rounded-full bg-d-surface-accent text-d-secondary font-d-label-sm text-d-label-sm">Đã nhập</span>
+                        <span className="inline-flex items-center px-2 py-1 rounded-full bg-d-surface-accent text-d-secondary font-d-label-sm text-d-label-sm">{({ DONE: 'Đã nhập', POSTED: 'Đã nhập', DRAFT: 'Nháp', SUBMITTED: 'Chờ duyệt', REJECTED: 'Từ chối', VOIDED: 'Đã đảo' })[p.status] ?? p.status}</span>
                       </td>
                     </tr>
                   ))}
