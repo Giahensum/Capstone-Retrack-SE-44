@@ -70,6 +70,7 @@ public static class FactoryOrderMapper
             NetPayableAmount = qc?.NetAmount,
             PaymentReference = batch.PaymentReference,
             PaymentProofUrl = qc?.PaymentProofUrl,
+            PaymentMethod = batch.PaymentMethod,
             DepotPaymentConfirmedAt = batch.DepotPaymentConfirmedAt,
             SettlementWorkflowVersion = batch.SettlementWorkflowVersion,
             SettlementRevision = batch.SettlementRevision,

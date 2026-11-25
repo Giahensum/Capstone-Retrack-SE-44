@@ -25,7 +25,7 @@ public record DepotPaymentDto(Guid Id, Guid DepotId, string SellerName, string S
     string? CollectorName, string Address, string Status, decimal GrossAmount,
     decimal PlatformFeePercentage, decimal PlatformFeeAmount, decimal NetAmount,
     string? PaymentProofUrl, string? CheckinImageUrl, DateTime CreatedAt, List<PaymentItemDto> Items,
-    string FeePolicy = Retrack.API.Services.Shared.PlatformFees.Legacy, decimal BuyerTotalAmount = 0);
+    string FeePolicy = Retrack.API.Services.Shared.PlatformFees.Legacy, decimal BuyerTotalAmount = 0, string? PaymentMethod = null, string? PaymentReference = null);
 public record PaymentSummaryDto(int PendingCount, decimal PendingAmount, int SentTodayCount, decimal SentTodayAmount);
 
 public sealed class PaymentProofDto

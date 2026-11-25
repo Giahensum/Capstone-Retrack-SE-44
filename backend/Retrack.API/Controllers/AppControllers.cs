@@ -106,12 +106,12 @@ namespace Retrack.API.Controllers
         [Authorize(Roles = "DEPOT_OWNER")]
         public async Task<IActionResult> MarkPaymentSent(Guid id, [FromBody] PaymentProofBody body)
         {
-            var result = await _pickupService.MarkPaymentSentAsync(id, GetUserId(), body.PaymentProofUrl);
+            var result = await _pickupService.MarkPaymentSentAsync(id, GetUserId(), body.PaymentProofUrl, body.PaymentMethod, body.PaymentReference);
             return Ok(ApiResponse<PickupRequestDto>.Ok(result, "Đã ghi nhận thanh toán."));
         }
 
         public record WeighRequestBody(List<WeighItemDto> Items, string? CheckinImageUrl);
-        public record PaymentProofBody(string PaymentProofUrl);
+        public record PaymentProofBody(string? PaymentProofUrl, string PaymentMethod = "BANK_TRANSFER", string? PaymentReference = null);
     }
 
     // -------------------------------------------------------

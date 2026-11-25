@@ -106,6 +106,8 @@ namespace Retrack.API.DTOs
         public decimal PlatformFeeAmount { get; set; }
         public decimal BuyerTotalAmount { get; set; }
         public string? PaymentProofUrl { get; set; }
+        public string? PaymentMethod { get; set; }
+        public string? PaymentReference { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
         public List<PickupRequestItemDto> Items { get; set; } = new();

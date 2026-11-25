@@ -11,4 +11,4 @@ public record DepotBatchSettlementDto(decimal? PricePerKg, decimal? GrossAmount,
     decimal? NetAmount, string? VatTreatment, decimal? VatPercentage, decimal? VatAmount,
     decimal? InvoiceTotalAmount, string? PaymentReference, DateTime SettledAt, string? PaymentProofUrl,
     bool? PriceIncludesVat = null, string FeePolicy = Retrack.API.Services.Shared.PlatformFees.Legacy,
-    DateTime? PaymentConfirmedAt = null);
+    DateTime? PaymentConfirmedAt = null, string? PaymentMethod = null);

@@ -36,6 +36,7 @@ namespace Retrack.API.Middleware
                 || context.Request.Path.StartsWithSegments("/api/payos");
             var (statusCode, message) = ex switch
             {
+                DepotSubscriptionRequiredException => (HttpStatusCode.PaymentRequired, ex.Message),
                 DepotForbiddenException => (HttpStatusCode.Forbidden, ex.Message),
                 DepotConflictException => (HttpStatusCode.Conflict, ex.Message),
                 KeyNotFoundException => (HttpStatusCode.NotFound, ex.Message),
@@ -53,6 +54,7 @@ namespace Retrack.API.Middleware
             };
             var code = statusCode switch
             {
+                HttpStatusCode.PaymentRequired => "SUBSCRIPTION_REQUIRED",
                 HttpStatusCode.BadRequest => "VALIDATION_ERROR",
                 HttpStatusCode.Unauthorized => "UNAUTHENTICATED",
                 HttpStatusCode.Forbidden => "FORBIDDEN",

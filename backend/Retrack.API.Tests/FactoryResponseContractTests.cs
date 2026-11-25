@@ -59,7 +59,7 @@ public class FactoryResponseContractTests
             "vatTreatment", "vatPercentage", "vatAmount", "invoiceTotalAmount",
             "priceIncludesVat", "invoiceDate", "sellerTaxCode", "vatLegalBasis",
             "receivedAt", "decidedAt", "rejectionReason", "settledAt", "feeAmount", "netPayableAmount",
-            "paymentReference", "paymentProofUrl", "depotPaymentConfirmedAt", "settlementWorkflowVersion", "settlementRevision",
+            "paymentReference", "paymentProofUrl", "paymentMethod", "depotPaymentConfirmedAt", "settlementWorkflowVersion", "settlementRevision",
             "settlementProposedAt", "settlementApprovedAt", "settlementDecisionReason", "return", "platformFeePercentage", "feePolicy", "buyerTotalAmount", "createdAt", "transport", "weightVerification", "weightTicket", "invoice");
         Assert.Equal(0, json.GetProperty("settlementWorkflowVersion").GetInt32());
         Assert.Equal(0, json.GetProperty("settlementRevision").GetInt32());

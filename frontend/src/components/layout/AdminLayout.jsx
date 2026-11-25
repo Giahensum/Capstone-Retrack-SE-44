@@ -27,8 +27,8 @@ const NAV = [
     title: 'TÀI CHÍNH',
     items: [
       { icon: Tags, label: 'Bảng giá thị trường', to: '/admin/market-prices' },
-      { icon: Banknote, label: 'Phí & Doanh thu', to: '/admin/billing' },
-      { icon: ArrowLeftRight, label: 'Thu chi', to: '/admin/money' },
+      { icon: Banknote, label: 'Gói dịch vụ & Doanh thu', to: '/admin/billing' },
+      { icon: ArrowLeftRight, label: 'Đối soát thu chi cũ', to: '/admin/money' },
     ],
   },
   { title: 'HỆ THỐNG', items: [{ icon: ScrollText, label: 'Audit logs', to: '/admin/audit-logs' }] },

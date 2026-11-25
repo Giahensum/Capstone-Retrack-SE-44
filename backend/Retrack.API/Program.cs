@@ -28,6 +28,10 @@ if (builder.Environment.IsDevelopment())
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
+builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IDepotSubscriptionRepository, DepotSubscriptionRepository>();
+builder.Services.AddScoped<Retrack.API.Services.Interfaces.IDepotSubscriptionService, Retrack.API.Services.Depot.DepotSubscriptionService>();
+builder.Services.AddHostedService<Retrack.API.Services.Depot.SubscriptionReconciliationWorker>();
+
 // ===== AUTHENTICATION (JWT) =====
 var jwtKey = builder.Configuration["Jwt:Key"]!;
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)

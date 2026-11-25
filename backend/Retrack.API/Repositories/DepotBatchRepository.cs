@@ -26,7 +26,7 @@ public sealed class DepotBatchRepository(AppDbContext db) : IDepotBatchRepositor
                 b.PlatformFeeAmount, b.NetAmount, b.VatTreatment, b.VatPercentage, b.VatAmount,
                 b.InvoiceTotalAmount, b.PaymentReference, (b.SettledAt ?? b.SettlementProposedAt)!.Value,
                 b.QualityCheck == null ? null : b.QualityCheck.PaymentProofUrl,
-                b.VatTreatment == null ? null : b.PriceIncludesVat, b.FeePolicy, b.DepotPaymentConfirmedAt),
+                b.VatTreatment == null ? null : b.PriceIncludesVat, b.FeePolicy, b.DepotPaymentConfirmedAt, b.PaymentMethod),
             new BatchWorkflowDto(b.SettlementWorkflowVersion, b.SettlementRevision, b.SettlementProposedAt, b.SettlementApprovedAt, b.SettlementDecisionReason),
             new BatchReturnDto(b.ReturnHandedOverAt, b.ReturnHandoverProofUrl, b.ReturnHandoverReference, b.ReturnHandoverNote, b.ReturnReceivedAt, b.ReturnReceiptReference, b.ReturnReceiptNote)))
         .SingleOrDefaultAsync();
@@ -66,7 +66,7 @@ public sealed class DepotBatchRepository(AppDbContext db) : IDepotBatchRepositor
         .FromSqlInterpolated($"SELECT * FROM factory_demands WHERE id = {id} FOR SHARE")
         .AsNoTracking().SingleOrDefaultAsync();
     public Task<FactoryDepotPartnership?> FindPartnerAsync(Guid depotId, Guid factoryId) => db.FactoryDepotPartnerships.AsNoTracking().SingleOrDefaultAsync(p => p.DepotId == depotId && p.FactoryId == factoryId);
-    public Task<string?> FeeConfigurationAsync() => db.SystemConfigs.AsNoTracking()
+    public async Task<string?> FeeConfigurationAsync() => await Services.Shared.BusinessModel.IsSubscriptionAsync(db) ? "0" : await db.SystemConfigs.AsNoTracking()
         .Where(x => x.ConfigKey == "PLATFORM_FEE_PERCENTAGE").Select(x => x.ConfigValue).SingleOrDefaultAsync();
     public void AddPartner(FactoryDepotPartnership partner) => db.FactoryDepotPartnerships.Add(partner);
     public Task<long> NextNumberAsync() => db.Database.SqlQueryRaw<long>("SELECT nextval('depot_batch_number') AS \"Value\"").SingleAsync();

@@ -100,7 +100,8 @@ public class SettlementRequest
 public sealed class BatchPaymentProofRequest
 {
     [Required, StringLength(200)] public string PaymentReference { get; set; } = "";
-    [Required, StringLength(500)] public string PaymentProofUrl { get; set; } = "";
+    [StringLength(500)] public string? PaymentProofUrl { get; set; }
+    public string PaymentMethod { get; set; } = "BANK_TRANSFER";
 }
 
 public class PartnerRequest

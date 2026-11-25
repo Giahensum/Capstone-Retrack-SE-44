@@ -12,6 +12,7 @@ import {
   MATERIAL_TYPE_LABEL,
 } from '@/lib/utils';
 import { MaterialIcon } from '@/features/depot/components/DepotIcon';
+import { paymentMethodLabel } from '@/lib/paymentMethods';
 
 export default function RequestDetail() {
   const { id } = useParams();
@@ -348,14 +349,15 @@ export default function RequestDetail() {
           <div>
             <h3 className="text-base font-bold text-d-on-surface flex items-center gap-2">
               <MaterialIcon name="payments" className="text-d-secondary text-xl" />
-              <span>Chủ kho đã chuyển tiền thanh toán</span>
+              <span>Chủ kho báo đã thanh toán</span>
             </h3>
             <p className="text-xs text-d-on-surface-variant mt-1">
-              Vui lòng kiểm tra tài khoản ngân hàng của bạn. Nếu đã nhận đủ số tiền{' '}
+              Hình thức: {paymentMethodLabel(req.paymentMethod)}. Kiểm tra tiền thực nhận; nếu đã nhận đủ{' '}
               <strong className="text-d-primary">{formatCurrency(req.netAmount)}</strong>, hãy bấm xác nhận.
             </p>
           </div>
 
+          {req.paymentReference && <p className="text-sm">Căn cứ giao tiền: {req.paymentReference}</p>}
           {/^https?:\/\/\S+$/i.test(req.paymentProofUrl ?? '') && (
             <a
               href={req.paymentProofUrl}

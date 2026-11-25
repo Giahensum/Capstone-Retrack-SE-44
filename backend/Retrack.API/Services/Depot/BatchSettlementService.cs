@@ -50,9 +50,9 @@ public sealed class BatchSettlementService(IDepotBatchRepository repository, IDe
         var batch = await repository.LockBatchAsync(id) ?? throw new KeyNotFoundException("Không tìm thấy lô.");
         if (batch.DepotId != depot) throw new DepotForbiddenException();
         if (batch.Status is not ("COMPLETED" or "PAID") || (batch.SettlementWorkflowVersion == 0 && batch.SettledAt == null) ||
-            string.IsNullOrWhiteSpace(batch.QualityCheck?.PaymentProofUrl) ||
+            (batch.PaymentMethod is not ("CASH" or "OTHER") && string.IsNullOrWhiteSpace(batch.QualityCheck?.PaymentProofUrl)) ||
             (batch.SettlementWorkflowVersion > 0 && batch.SettlementApprovedAt == null))
-            throw new DepotConflictException("Cần giá đã được đồng ý và chứng từ chuyển khoản trước khi xác nhận nhận tiền.");
+            throw new DepotConflictException("Cần giá đã đồng ý và căn cứ thanh toán; chuyển khoản cần chứng từ trước khi xác nhận nhận tiền.");
         if (amount <= 0 || batch.NetAmount != amount || string.IsNullOrWhiteSpace(reference) || reference.Trim() != batch.PaymentReference)
             throw new DepotConflictException("Số tiền hoặc mã tham chiếu không khớp. Hãy đối chiếu tài khoản ngân hàng.");
         if (batch.Status == "PAID") return;
