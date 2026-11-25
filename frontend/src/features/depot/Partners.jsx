@@ -1,3 +1,4 @@
+import { Form, Input, Select, Textarea } from '@/components/forms/ValidatedForm';
 import { useEffect, useRef, useState } from 'react';
 import { useDepotQuery, useDepotMutation, number, money, date } from './depotApi';
 import { useDepot } from './DepotContext';
@@ -55,7 +56,7 @@ export default function Partners() {
       {contractDecision && <Dialog title={`Hợp đồng ${contractDecision.contractCode || ''}`} onClose={() => setContractDecision(null)} busy={decideContract.isPending}>
         <ContractDocument contract={contractDecision} factoryName={contractDecision.factoryName} depotName={profile.data?.name || profile.data?.depotName} />
         {['PENDING_DEPOT', 'ACTIVE'].includes(contractDecision.contractStatus) && <EsignPanel partnershipId={contractDecision.id} contractStatus={contractDecision.contractStatus} onChanged={() => requests.refetch()} />}
-        {contractDecision.contractStatus === 'PENDING_DEPOT' && <><label className="mt-4 flex items-start gap-2 text-sm"><input type="checkbox" checked={contractDecision.confirmed || false} onChange={(e) => setContractDecision({ ...contractDecision, confirmed: e.target.checked })} />Tôi đã đọc, đồng ý nội dung và xác nhận ký điện tử với tư cách chủ vựa.</label><MutationError mutation={decideContract} /></>}
+        {contractDecision.contractStatus === 'PENDING_DEPOT' && <><label className="mt-4 flex items-start gap-2 text-sm"><Input type="checkbox" checked={contractDecision.confirmed || false} onChange={(e) => setContractDecision({ ...contractDecision, confirmed: e.target.checked })} />Tôi đã đọc, đồng ý nội dung và xác nhận ký điện tử với tư cách chủ vựa.</label><MutationError mutation={decideContract} /></>}
         <div className="mt-5 flex flex-wrap justify-end gap-3"><button className="border border-d-primary text-d-primary px-4 py-2 rounded-full" type="button" onClick={() => window.print()}>In / Lưu PDF</button><button onClick={() => setContractDecision(null)} disabled={decideContract.isPending}>Đóng</button>
           {contractDecision.contractStatus === 'PENDING_DEPOT' && <><button className="border border-d-error text-d-error px-4 py-2 rounded-full" disabled={decideContract.isPending} onClick={() => decideContract.mutate({ id: contractDecision.factoryId, body: { decision: 'REJECT', confirmElectronicSignature: false } })}>Từ chối</button>
           <button className="bg-d-primary text-white px-4 py-2 rounded-full" disabled={decideContract.isPending || !contractDecision.confirmed} onClick={() => decideContract.mutate({ id: contractDecision.factoryId, body: { decision: 'ACCEPT', confirmElectronicSignature: true } })}>{decideContract.isPending ? 'Đang lưu…' : 'Ký chấp thuận'}</button></>}
@@ -63,7 +64,7 @@ export default function Partners() {
           {contractDecision.terminationStatus === 'PENDING_DEPOT' && <button className="bg-d-error text-white px-4 py-2 rounded-full" onClick={() => setTermination({ ...contractDecision, mode: 'decision' })}>Xử lý đề nghị chấm dứt</button>}</div>
       </Dialog>}
       {termination && <Dialog title={termination.mode === 'request' ? 'Đề nghị chấm dứt hợp đồng' : 'Xử lý đề nghị chấm dứt'} onClose={() => setTermination(null)} busy={requestTermination.isPending || decideTermination.isPending}>
-        {termination.mode === 'request' ? <form onSubmit={(e) => { e.preventDefault(); requestTermination.mutate({ id: termination.factoryId, body: { reason: termination.reason } }); }}><p className="mb-3 text-sm text-d-on-surface-variant">Chỉ có thể chấm dứt khi các lô đang xử lý đã hoàn tất.</p><label className="block text-sm">Lý do<textarea className={`${inputClass} mt-1`} required minLength={10} maxLength={2000} value={termination.reason} onChange={(e) => setTermination({ ...termination, reason: e.target.value })} /></label><MutationError mutation={requestTermination} /><div className="mt-5 flex justify-end gap-3"><button type="button" onClick={() => setTermination(null)}>Đóng</button><button className="bg-d-error text-white px-4 py-2 rounded-full" type="submit">Gửi đề nghị</button></div></form> : <div><p className="rounded-xl bg-d-surface-container-low p-3">Nhà máy đề nghị chấm dứt: <strong>{termination.terminationReason}</strong></p><MutationError mutation={decideTermination} /><div className="mt-5 flex justify-end gap-3"><button onClick={() => decideTermination.mutate({ id: termination.factoryId, body: { decision: 'REJECT' } })}>Từ chối</button><button className="bg-d-error text-white px-4 py-2 rounded-full" onClick={() => decideTermination.mutate({ id: termination.factoryId, body: { decision: 'ACCEPT' } })}>Chấp thuận chấm dứt</button></div></div>}
+        {termination.mode === 'request' ? <Form onSubmit={(e) => { e.preventDefault(); requestTermination.mutate({ id: termination.factoryId, body: { reason: termination.reason } }); }}><p className="mb-3 text-sm text-d-on-surface-variant">Chỉ có thể chấm dứt khi các lô đang xử lý đã hoàn tất.</p><label className="block text-sm">Lý do<Textarea className={`${inputClass} mt-1`} required minLength={10} maxLength={2000} value={termination.reason} onChange={(e) => setTermination({ ...termination, reason: e.target.value })} /></label><MutationError mutation={requestTermination} /><div className="mt-5 flex justify-end gap-3"><button type="button" onClick={() => setTermination(null)}>Đóng</button><button className="bg-d-error text-white px-4 py-2 rounded-full" type="submit">Gửi đề nghị</button></div></Form> : <div><p className="rounded-xl bg-d-surface-container-low p-3">Nhà máy đề nghị chấm dứt: <strong>{termination.terminationReason}</strong></p><MutationError mutation={decideTermination} /><div className="mt-5 flex justify-end gap-3"><button onClick={() => decideTermination.mutate({ id: termination.factoryId, body: { decision: 'REJECT' } })}>Từ chối</button><button className="bg-d-error text-white px-4 py-2 rounded-full" onClick={() => decideTermination.mutate({ id: termination.factoryId, body: { decision: 'ACCEPT' } })}>Chấp thuận chấm dứt</button></div></div>}
       </Dialog>}
 
       {/* Page Header */}
@@ -161,7 +162,7 @@ export default function Partners() {
               <div className="p-6 border-b border-d-border-subtle flex flex-col sm:flex-row justify-between items-center gap-4 bg-d-surface-container-lowest shrink-0">
                 <div className="relative w-full sm:w-80">
                   <MaterialIcon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 text-d-outline text-[20px]" />
-                  <input
+                  <Input
                     ref={searchRef}
                     aria-label="Tìm tên nhà máy"
                     className="w-full bg-white border border-d-border-subtle rounded-full py-2 pl-10 pr-4 font-d-body-sm text-d-body-sm focus:border-d-primary focus:ring-1 focus:ring-d-primary transition-all text-d-on-surface outline-none"
@@ -172,16 +173,16 @@ export default function Partners() {
                   />
                 </div>
                 <div className="flex gap-3 w-full sm:w-auto">
-                  <select aria-label="Lọc quan hệ đối tác" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }} className={inputClass}><option value="">Tất cả quan hệ</option>{Object.entries(labels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select>
+                  <Select aria-label="Lọc quan hệ đối tác" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }} className={inputClass}><option value="">Tất cả quan hệ</option>{Object.entries(labels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</Select>
                 </div>
               </div>
 
               <div className="px-6 pb-5 flex flex-wrap items-end gap-4 border-b border-d-border-subtle">
                 <label className="text-sm text-d-on-surface-variant">Trong bán kính ước tính (km)
-                  <input aria-label="Bán kính ước tính theo đường chim bay" type="number" min="1" max="2000" step="1" value={maxDistanceKm}
+                  <Input aria-label="Bán kính ước tính theo đường chim bay" type="number" min="1" max="2000" step="1" value={maxDistanceKm}
                     disabled={!hasCoordinates} onChange={(e) => { setMaxDistanceKm(e.target.value); setPage(1); }}
                     placeholder="Không giới hạn" className={`${inputClass} mt-1 w-44`} /></label>
-                <label className="flex items-center gap-2 min-h-11 text-sm text-d-on-surface"><input type="checkbox" checked={nearestFirst}
+                <label className="flex items-center gap-2 min-h-11 text-sm text-d-on-surface"><Input type="checkbox" checked={nearestFirst}
                   disabled={!hasCoordinates} onChange={(e) => { setNearestFirst(e.target.checked); setPage(1); }} />Gần trước</label>
                 <p className="text-sm text-d-on-surface-variant">Khoảng cách đường chim bay để tham khảo, không phải quãng đường xe chạy. {hasCoordinates ? 'Nhà máy thiếu tọa độ sẽ không xuất hiện khi lọc bán kính.' : 'Cập nhật GPS trong hồ sơ kho để dùng bộ lọc.'}</p>
                 {maxDistanceKm !== '' && !validRadius && <p role="alert" className="text-sm text-d-error">Nhập bán kính từ 1 đến 2.000 km; bộ lọc chưa được áp dụng.</p>}
@@ -271,7 +272,7 @@ export default function Partners() {
             <div className="flex flex-col md:flex-row gap-4 mb-2">
               <div className="flex-1 flex items-center bg-white rounded-full px-4 py-3 border border-d-border-subtle focus-within:border-d-secondary transition-colors shadow-sm">
                 <MaterialIcon name="search" className="text-d-outline mr-3" />
-                <input
+                <Input
                   className="bg-transparent border-none outline-none w-full font-d-body-md text-d-body-md text-d-on-surface placeholder-d-on-surface-variant/50 focus:ring-0"
                   placeholder="Tìm kiếm theo loại phế liệu..."
                   aria-label="Tìm nhu cầu theo loại phế liệu"

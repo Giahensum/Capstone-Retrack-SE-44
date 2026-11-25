@@ -1,3 +1,4 @@
+import { Form, Input, Select } from '@/components/forms/ValidatedForm';
 import { useState } from 'react';
 import { useDepotMutation, useDepotQuery, money, date } from './depotApi';
 import { buttonClass, inputClass, MutationError, Pager, QueryState } from './components/DepotUI';
@@ -26,7 +27,7 @@ function OrderPayment({ order, payOsAvailable }) {
     <p className="text-sm text-d-on-surface-variant">Mã đơn: {order.id}. Thanh toán chỉ áp dụng cho kho này. Giá được giữ theo lúc lập đơn; không tự động trừ tiền tháng sau.</p>
     {order.reviewNote && <p role="status" className="rounded-xl bg-d-surface-accent p-3 text-sm">Cần bổ sung / đối soát: {order.reviewNote}</p>}
     {order.proofUrl ? <p role="status">Đã gửi chứng từ, chờ Admin kiểm tra tiền thực nhận. Chưa cần trả thêm tiền.</p> : <>
-      <label className="block text-sm">Hình thức thanh toán gói<select className={inputClass} disabled={busy || order.payOsStarted || !!checkout} value={method} onChange={e => setMethod(e.target.value)}><option value="payos">QR qua PayOS</option><option value="manual">Chuyển khoản và gửi chứng từ</option></select></label>
+      <label className="block text-sm">Hình thức thanh toán gói<Select className={inputClass} disabled={busy || order.payOsStarted || !!checkout} value={method} onChange={e => setMethod(e.target.value)}><option value="payos">QR qua PayOS</option><option value="manual">Chuyển khoản và gửi chứng từ</option></Select></label>
       {method === 'payos' ? <div className="space-y-3">
         {!payOsAvailable && <p role="status" className="text-sm">PayOS chưa được cấu hình. Chọn chuyển khoản và gửi chứng từ nếu Admin đã cung cấp tài khoản nhận tiền.</p>}
         {!safeCheckout && <button type="button" className={buttonClass} disabled={busy || !payOsAvailable} onClick={() => link.mutate()}>{link.isPending ? 'Đang tạo…' : 'Tạo mã thanh toán gói'}</button>}
@@ -34,13 +35,13 @@ function OrderPayment({ order, payOsAvailable }) {
         {(order.payOsStarted || safeCheckout || link.isError) && <button type="button" className="min-h-11 rounded-full border border-d-border-subtle px-4" disabled={busy} onClick={() => sync.mutate()}>Kiểm tra đã thanh toán</button>}
         {sync.isSuccess && <p role="status">Đã kiểm tra: {orderLabels[sync.data?.data?.data] ?? 'Đang chờ kết quả thanh toán'}. Hạn gói chỉ cập nhật khi đã nhận đủ tiền.</p>}
       </div> : <ManualPaymentAccount account={account} />}
-      {method === 'manual' && <form className="space-y-3" onSubmit={e => { e.preventDefault(); submit.mutate({ body: { proofUrl: proof, reference } }); }}>
+      {method === 'manual' && <Form className="space-y-3" onSubmit={e => { e.preventDefault(); submit.mutate({ body: { proofUrl: proof, reference } }); }}>
         <ProofUpload onUploaded={setProof} onBusyChange={setUploading} disabled={busy} />
-        <label className="block text-sm">Đường dẫn ảnh chứng từ<input required type="url" className={inputClass} value={proof} onChange={e => setProof(e.target.value)} disabled={busy} /></label>
-        <label className="block text-sm">Mã giao dịch / nội dung chuyển khoản<input required maxLength={255} className={inputClass} value={reference} onChange={e => setReference(e.target.value)} disabled={busy} /></label>
-        <label className="flex gap-2 text-sm"><input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} disabled={busy} />Tôi đã chuyển đúng {money(order.amount)} cho đơn gói này và kiểm tra chứng từ.</label>
-        <button disabled={busy || !confirmed || !proof || !accountReady} className={buttonClass}>Gửi chứng từ để đối soát</button>
-      </form>}
+        <label className="block text-sm">Đường dẫn ảnh chứng từ<Input required type="url" pattern="https://.+" data-pattern-message="Chứng từ mua gói phải dùng đường dẫn HTTPS, bắt đầu bằng https://." className={inputClass} value={proof} onChange={e => setProof(e.target.value)} disabled={busy} /></label>
+        <label className="block text-sm">Mã giao dịch / nội dung chuyển khoản<Input required maxLength={255} className={inputClass} value={reference} onChange={e => setReference(e.target.value)} disabled={busy} /></label>
+        <label className="flex gap-2 text-sm"><Input required data-field-label="Xác nhận đã chuyển tiền gói" type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} disabled={busy} />Tôi đã chuyển đúng {money(order.amount)} cho đơn gói này và kiểm tra chứng từ.</label>
+        <button disabled={busy || !accountReady} className={buttonClass}>Gửi chứng từ để đối soát</button>
+      </Form>}
     </>}
     <MutationError mutation={link} /><MutationError mutation={sync} /><MutationError mutation={submit} />
   </div>;

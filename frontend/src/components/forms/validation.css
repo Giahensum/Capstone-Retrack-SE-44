@@ -1,0 +1,3 @@
+/* Lỗi luôn ở dòng riêng, kể cả nhãn checkbox dùng flex; không chỉ dựa vào màu. */
+.validated-form label:has(> [data-field-error]) { flex-wrap: wrap; }
+.validated-form label > [data-field-error] { flex-basis: 100%; order: 1; }

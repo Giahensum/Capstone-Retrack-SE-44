@@ -1,3 +1,4 @@
+import { Form, Input, Textarea } from '@/components/forms/ValidatedForm';
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { FileCheck2, ImagePlus, Paperclip, Trash2, Upload } from 'lucide-react';
@@ -46,7 +47,7 @@ export default function VerificationUploadForm({ depotId, onSuccess }) {
     changed(); setFiles(current => [...current, ...incoming.map(file => ({ file, kind, id: crypto.randomUUID() }))]);
   };
   const ready = files.some(item => item.kind === 'REGISTRATION');
-  return <form className="space-y-5" onSubmit={event => { event.preventDefault(); if (ready && !upload.isPending && policy.data?.acceptsUploads) upload.mutate(); }}>
+  return <Form validate={() => ready ? {} : { 'document-REGISTRATION': 'Thêm ít nhất một giấy tờ kinh doanh trước khi nộp hồ sơ.' }} className="space-y-5" onSubmit={event => { event.preventDefault(); if (ready && !upload.isPending && policy.data?.acceptsUploads) upload.mutate(); }}>
     <div className="rounded-xl border border-d-border-subtle p-3 text-sm" role={policy.isError || policy.data?.acceptsUploads === false ? 'alert' : 'status'}>
       {policy.isPending ? 'Đang kiểm tra điều kiện nộp hồ sơ…' : policy.isError
         ? <>{depotError(policy.error)} <button type="button" className="underline font-semibold" onClick={() => policy.refetch()}>Thử lại</button></>
@@ -72,7 +73,7 @@ export default function VerificationUploadForm({ depotId, onSuccess }) {
           <Icon size={22} className="text-d-primary" aria-hidden="true" />
           <span className="block font-semibold">{documentKinds[kind]}</span>
           <span className="block text-xs text-d-on-surface-variant">{help}</span>
-          <input aria-label={documentKinds[kind]} type="file" multiple
+          <Input name={`document-${kind}`} aria-label={documentKinds[kind]} type="file" multiple
             accept={kind === 'DEPOT_PHOTO' ? 'image/png,image/jpeg' : 'application/pdf,image/png,image/jpeg'}
             className="sr-only"
             onChange={event => addFiles(event, kind)} />
@@ -86,15 +87,15 @@ export default function VerificationUploadForm({ depotId, onSuccess }) {
           onClick={() => { changed(); setFiles(current => current.filter(item => item.id !== id)); }}><Trash2 size={18} aria-hidden="true" /></button>
       </li>)}</ul>}
       {error && <p role="alert" className="text-sm text-d-error">{error}</p>}
-      <label className="block">Ghi chú hồ sơ<textarea className={inputClass} rows={3} maxLength={2000} value={note}
+      <label className="block">Ghi chú hồ sơ<Textarea className={inputClass} rows={3} maxLength={2000} value={note}
         placeholder="Ví dụ: giấy tờ đứng tên hộ kinh doanh, thông tin cần Admin đối chiếu…"
         onChange={event => { changed(); setNote(event.target.value); }} /></label>
     </fieldset>
     <MutationError mutation={upload} />
     <div className="flex flex-wrap items-center gap-3">
-      <button className={buttonClass} disabled={upload.isPending || !ready || !policy.data?.acceptsUploads}><Upload size={18} aria-hidden="true" />{upload.isPending ? 'Đang nộp…' : 'Nộp hồ sơ xác minh'}</button>
+      <button className={buttonClass} disabled={upload.isPending || !policy.data?.acceptsUploads}><Upload size={18} aria-hidden="true" />{upload.isPending ? 'Đang nộp…' : 'Nộp hồ sơ xác minh'}</button>
       <p className="text-xs text-d-on-surface-variant">{files.length}/3 tệp · {ready ? 'Đã có giấy tờ kinh doanh' : 'Cần ít nhất một giấy tờ kinh doanh'}</p>
     </div>
     <p className="text-xs text-d-on-surface-variant">Hồ sơ đã nộp được lưu lịch sử. Nếu cần thay đổi, chờ Admin yêu cầu bổ sung rồi nộp bộ hồ sơ mới.</p>
-  </form>;
+  </Form>;
 }

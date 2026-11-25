@@ -1,3 +1,4 @@
+import { Form, Input } from '@/components/forms/ValidatedForm';
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
@@ -7,7 +8,7 @@ import { Page, Cards, QueryState, GridTable, Pager, PeriodFilter, Dialog, Mutati
 const labels={UNPAID:'Chưa thanh toán',SUBMITTED:'Chờ đối soát',PAID:'Đã thanh toán'};
 function ConfirmInvoice({invoice,onClose}){
  const [proof,setProof]=useState(''); const [uploading,setUploading]=useState(false); const save=useDepotMutation('patch',`reports/invoices/${invoice.id}/confirmation`,onClose);
- return <Dialog title="Xác nhận chuyển khoản phí nền tảng" busy={save.isPending || uploading} onClose={onClose}><p>{invoice.revision > 0 ? `Hóa đơn bổ sung lần ${invoice.revision}` : 'Hóa đơn gốc'} kỳ {date(invoice.periodStart)}: {money(invoice.amount)}</p><form className="mt-4 space-y-4" onSubmit={(e)=>{e.preventDefault();if (!uploading && !save.isPending) save.mutate({body:{paymentProofUrl:proof}});}}><ProofUpload onUploaded={setProof} onBusyChange={setUploading} disabled={save.isPending}/><label className="block">Đường dẫn chứng từ<input className={inputClass} disabled={uploading || save.isPending} required type="url" pattern="https?://.+" value={proof} onChange={(e)=>setProof(e.target.value)}/></label><p>Gửi chứng từ sau khi chuyển khoản. Hóa đơn sẽ chờ Admin đối soát.</p><MutationError mutation={save}/><button disabled={save.isPending || uploading} className={buttonClass}>Gửi xác nhận</button></form></Dialog>;
+ return <Dialog title="Xác nhận chuyển khoản phí nền tảng" busy={save.isPending || uploading} onClose={onClose}><p>{invoice.revision > 0 ? `Hóa đơn bổ sung lần ${invoice.revision}` : 'Hóa đơn gốc'} kỳ {date(invoice.periodStart)}: {money(invoice.amount)}</p><Form className="mt-4 space-y-4" onSubmit={(e)=>{e.preventDefault();if (!uploading && !save.isPending) save.mutate({body:{paymentProofUrl:proof}});}}><ProofUpload onUploaded={setProof} onBusyChange={setUploading} disabled={save.isPending}/><label className="block">Đường dẫn chứng từ<Input className={inputClass} disabled={uploading || save.isPending} required type="url" pattern="https?://.+" value={proof} onChange={(e)=>setProof(e.target.value)}/></label><p>Gửi chứng từ sau khi chuyển khoản. Hóa đơn sẽ chờ Admin đối soát.</p><MutationError mutation={save}/><button disabled={save.isPending || uploading} className={buttonClass}>Gửi xác nhận</button></Form></Dialog>;
 }
 function PayOsPay({invoice}){
  const pay=useDepotMutation('post',`reports/invoices/${invoice.id}/payos-link`,undefined);
