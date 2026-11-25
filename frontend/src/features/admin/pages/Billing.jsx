@@ -1,3 +1,4 @@
+import { Form, Input, Select } from '@/components/forms/ValidatedForm';
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
@@ -39,12 +40,12 @@ function RevenueTab() {
     <div className="flex flex-col gap-6">
       <Panel icon={CalendarRange} title="Khoảng thời gian">
         <div className="flex flex-wrap items-end gap-4 p-5">
-          <Field label="Từ ngày"><input type="date" value={range.from} onChange={(e) => setRange((r) => ({ ...r, from: e.target.value }))} className={`${inputClass} w-44`} /></Field>
-          <Field label="Đến ngày"><input type="date" value={range.to} onChange={(e) => setRange((r) => ({ ...r, to: e.target.value }))} className={`${inputClass} w-44`} /></Field>
+          <Field label="Từ ngày"><Input type="date" value={range.from} onChange={(e) => setRange((r) => ({ ...r, from: e.target.value }))} className={`${inputClass} w-44`} /></Field>
+          <Field label="Đến ngày"><Input type="date" value={range.to} onChange={(e) => setRange((r) => ({ ...r, to: e.target.value }))} className={`${inputClass} w-44`} /></Field>
           <Field label="Gộp theo">
-            <select value={range.groupBy} onChange={(e) => setRange((r) => ({ ...r, groupBy: e.target.value }))} className={`${inputClass} w-36 cursor-pointer`}>
+            <Select value={range.groupBy} onChange={(e) => setRange((r) => ({ ...r, groupBy: e.target.value }))} className={`${inputClass} w-36 cursor-pointer`}>
               <option value="day">Ngày</option><option value="week">Tuần</option><option value="month">Tháng</option>
-            </select>
+            </Select>
           </Field>
         </div>
       </Panel>
@@ -133,8 +134,8 @@ function InvoicesTab() {
     <div className="flex flex-col gap-6">
       <Panel icon={FilePlus2} title="Phát hành và đối soát tháng đã chốt">
         <div className="flex flex-wrap items-end gap-4 p-5">
-          <Field label="Tháng"><input type="number" min="1" max="12" value={period.month} onChange={(e) => setPeriod((p) => ({ ...p, month: Number(e.target.value) }))} className={`${inputClass} w-24`} /></Field>
-          <Field label="Năm"><input type="number" value={period.year} onChange={(e) => setPeriod((p) => ({ ...p, year: Number(e.target.value) }))} className={`${inputClass} w-28`} /></Field>
+          <Field label="Tháng"><Input type="number" min="1" max="12" value={period.month} onChange={(e) => setPeriod((p) => ({ ...p, month: Number(e.target.value) }))} className={`${inputClass} w-24`} /></Field>
+          <Field label="Năm"><Input type="number" value={period.year} onChange={(e) => setPeriod((p) => ({ ...p, year: Number(e.target.value) }))} className={`${inputClass} w-28`} /></Field>
           <PrimaryButton icon={FilePlus2} disabled={generateMutation.isPending || !canIssue} onClick={() => generateMutation.mutate()}>{generateMutation.isPending ? 'Đang đối soát…' : 'Phát hành / đối soát'}</PrimaryButton>
           <p className="flex max-w-md items-start gap-2 text-xs text-d-on-surface-variant"><Info size={15} className="mt-0.5 shrink-0 text-d-secondary" />Chỉ phát hành khi tháng đã kết thúc theo giờ Việt Nam. Phí tháng hiện tại là tạm tính. Chạy lại sẽ đối soát hóa đơn chưa có giao dịch thanh toán; hóa đơn đã gửi chứng từ/đã trả được giữ nguyên, khoản thiếu phát hành bổ sung.</p>
           {!canIssue && <p role="status" className="text-sm text-d-error">Kỳ chưa kết thúc hoặc không hợp lệ; chưa thể phát hành hóa đơn.</p>}
@@ -218,24 +219,24 @@ function FeeConfigTab() {
     <Panel icon={Percent} title="Cấu hình phí nền tảng" className="max-w-lg">
       <div className="p-5">
         {isLoading ? <div className="h-24 animate-pulse rounded-2xl bg-d-surface-container" /> : (
-          <form className="flex flex-col gap-4" onSubmit={(e) => { e.preventDefault(); mutation.mutate({ platformFeePercentage: Number(current) }); }}>
+          <Form className="flex flex-col gap-4" onSubmit={(e) => { e.preventDefault(); mutation.mutate({ platformFeePercentage: Number(current) }); }}>
             <Field label="Phí nền tảng (%)" hint="Đơn/lô mới chốt mức phí khi tạo. Bên mua chịu phí riêng: Depot mua Seller, Factory mua Depot. Không đổi mức phí trên giao dịch đã tạo.">
-              <input type="number" min="0" max="100" step="0.1" value={current} onChange={(e) => setValue(e.target.value)} className={inputClass} />
+              <Input type="number" min="0" max="100" step="0.1" value={current} onChange={(e) => setValue(e.target.value)} className={inputClass} />
             </Field>
             <PrimaryButton icon={Save} type="submit" disabled={mutation.isPending} className="self-start">{mutation.isPending ? 'Đang lưu…' : 'Lưu cấu hình'}</PrimaryButton>
-          </form>
+          </Form>
         )}
       </div>
     </Panel>
     <Panel icon={Banknote} title="Tài khoản nhận phí từ Factory" className="max-w-lg">
       <div className="p-5">
-        {account.isLoading ? <div className="h-24 animate-pulse rounded-2xl bg-d-surface-container" /> : <form className="flex flex-col gap-4" onSubmit={(event) => { event.preventDefault(); accountMutation.mutate(paymentAccount); }}>
+        {account.isLoading ? <div className="h-24 animate-pulse rounded-2xl bg-d-surface-container" /> : <Form className="flex flex-col gap-4" onSubmit={(event) => { event.preventDefault(); accountMutation.mutate(paymentAccount); }}>
           <p className="text-sm text-d-on-surface-variant">Factory sẽ thấy thông tin này trên hóa đơn phí tháng. Chỉ nhập tài khoản của đơn vị vận hành RETRACK.</p>
-          <Field label="Ngân hàng"><input required maxLength={100} className={inputClass} value={paymentAccount.bankName} onChange={(event) => setAccountDraft({ ...paymentAccount, bankName: event.target.value })} /></Field>
-          <Field label="Số tài khoản"><input required inputMode="numeric" pattern="[0-9]{4,30}" maxLength={30} className={inputClass} value={paymentAccount.accountNumber} onChange={(event) => setAccountDraft({ ...paymentAccount, accountNumber: event.target.value })} /></Field>
-          <Field label="Tên chủ tài khoản"><input required maxLength={120} className={inputClass} value={paymentAccount.accountHolder} onChange={(event) => setAccountDraft({ ...paymentAccount, accountHolder: event.target.value })} /></Field>
+          <Field label="Ngân hàng"><Input required maxLength={100} className={inputClass} value={paymentAccount.bankName} onChange={(event) => setAccountDraft({ ...paymentAccount, bankName: event.target.value })} /></Field>
+          <Field label="Số tài khoản"><Input required inputMode="numeric" pattern="[0-9]{4,30}" maxLength={30} className={inputClass} value={paymentAccount.accountNumber} onChange={(event) => setAccountDraft({ ...paymentAccount, accountNumber: event.target.value })} /></Field>
+          <Field label="Tên chủ tài khoản"><Input required maxLength={120} className={inputClass} value={paymentAccount.accountHolder} onChange={(event) => setAccountDraft({ ...paymentAccount, accountHolder: event.target.value })} /></Field>
           <PrimaryButton icon={Save} type="submit" disabled={accountMutation.isPending} className="self-start">{accountMutation.isPending ? 'Đang lưu…' : 'Lưu tài khoản nhận phí'}</PrimaryButton>
-        </form>}
+        </Form>}
       </div>
     </Panel>
     </div>

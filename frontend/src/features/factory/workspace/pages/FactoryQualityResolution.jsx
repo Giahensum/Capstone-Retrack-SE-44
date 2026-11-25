@@ -1,3 +1,4 @@
+import { Form, Input, Select, Textarea } from '@/components/forms/ValidatedForm';
 import { useState } from 'react';
 import { Button, Field, Pagination, useFactory } from '../components/FactoryUI';
 import { downloadFactoryAttachment, uploadFactoryFeeProof } from '../data/factoryApi';
@@ -19,25 +20,25 @@ export function FactoryWorkflowHistory({ order }) {
 export function QualityResolutionForm({ order, close }) {
   const {act}=useFactory();
   const [resolution,setResolution]=useState(order.qc?.resolution || 'RENEGOTIATE'),[note,setNote]=useState(''),[busy,setBusy]=useState(false);
-  return <form onSubmit={async e=>{e.preventDefault();if(busy)return;setBusy(true);try{if(await act('QUALITY_RESOLUTION',{id:order.id,resolution,note},'Đã chọn hướng xử lý; kết quả KCS được giữ nguyên.'))close();}finally{setBusy(false);}}}>
+  return <Form onSubmit={async e=>{e.preventDefault();if(busy)return;setBusy(true);try{if(await act('QUALITY_RESOLUTION',{id:order.id,resolution,note},'Đã chọn hướng xử lý; kết quả KCS được giữ nguyên.'))close();}finally{setBusy(false);}}}>
     <p className="info-box">Giữ nguyên KCS không đạt. Nếu thương lượng, vựa cần đồng ý giá mua theo hiện trạng. Nếu trả hàng, cần bàn giao trả kèm chứng từ rồi vựa xác nhận nhận đủ; chưa tự hoàn tồn.</p>
-    <Field label="Hướng xử lý KCS"><select disabled={busy} value={resolution} onChange={e=>setResolution(e.target.value)}><option value="RENEGOTIATE">Thương lượng mua theo hiện trạng</option><option value="RETURN">Trả toàn bộ lô về kho</option></select></Field>
-    <Field label="Ghi chú lựa chọn hướng xử lý" required><textarea required disabled={busy} maxLength={2000} value={note} onChange={e=>setNote(e.target.value)}/></Field>
+    <Field label="Hướng xử lý KCS"><Select disabled={busy} value={resolution} onChange={e=>setResolution(e.target.value)}><option value="RENEGOTIATE">Thương lượng mua theo hiện trạng</option><option value="RETURN">Trả toàn bộ lô về kho</option></Select></Field>
+    <Field label="Ghi chú lựa chọn hướng xử lý" required><Textarea required disabled={busy} maxLength={2000} value={note} onChange={e=>setNote(e.target.value)}/></Field>
     <div className="form-actions"><Button secondary disabled={busy} onClick={close}>Hủy</Button><Button type="submit" disabled={busy || !note.trim()}>{busy?'Đang lưu…':'Lưu hướng xử lý'}</Button></div>
-  </form>;
+  </Form>;
 }
 export function ReturnHandoverForm({ order, close }) {
   const {act}=useFactory();
   const [reference,setReference]=useState(''),[note,setNote]=useState(''),[file,setFile]=useState(null),[confirmed,setConfirmed]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState('');
-  return <form onSubmit={async e=>{e.preventDefault();if(busy || !file || !confirmed)return;setBusy(true);setError('');try{const proofUrl=await uploadFactoryFeeProof(file);if(await act('RETURN_HANDOVER',{id:order.id,reference,note,proofUrl},'Đã bàn giao trả; chờ kho xác nhận nhận đủ.'))close();}catch(cause){setError(cause.message);}finally{setBusy(false);}}}>
+  return <Form onSubmit={async e=>{e.preventDefault();if(busy || !file || !confirmed)return;setBusy(true);setError('');try{const proofUrl=await uploadFactoryFeeProof(file);if(await act('RETURN_HANDOVER',{id:order.id,reference,note,proofUrl},'Đã bàn giao trả; chờ kho xác nhận nhận đủ.'))close();}catch(cause){setError(cause.message);}finally{setBusy(false);}}}>
     <p className="info-box">Xác nhận thực tế đã bàn giao trả toàn bộ lô. Chứng từ không thay cho xác nhận đã nhận hàng của kho; tồn chỉ được hoàn sau bước của kho.</p>
     <Field label="Tham chiếu bàn giao trả" required value={reference} maxLength={200} disabled={busy} onChange={e=>setReference(e.target.value)}/>
-    <Field label="Ghi chú bàn giao trả" required><textarea required maxLength={2000} disabled={busy} value={note} onChange={e=>setNote(e.target.value)}/></Field>
-    <Field label="Chứng từ bàn giao trả (PDF, JPG, PNG; tối đa 700 KB)" required><input type="file" required accept=".pdf,.jpg,.jpeg,.png" disabled={busy} onChange={e=>setFile(e.target.files?.[0] || null)}/></Field>
-    <label className="checkbox-line"><input type="checkbox" checked={confirmed} disabled={busy} onChange={e=>setConfirmed(e.target.checked)}/>Tôi đã bàn giao trả toàn bộ lô thực tế và kiểm tra chứng từ.</label>
+    <Field label="Ghi chú bàn giao trả" required><Textarea required maxLength={2000} disabled={busy} value={note} onChange={e=>setNote(e.target.value)}/></Field>
+    <Field label="Chứng từ bàn giao trả (PDF, JPG, PNG; tối đa 700 KB)" required><Input type="file" required accept=".pdf,.jpg,.jpeg,.png" disabled={busy} onChange={e=>setFile(e.target.files?.[0] || null)}/></Field>
+    <label className="checkbox-line"><Input type="checkbox" checked={confirmed} disabled={busy} onChange={e=>setConfirmed(e.target.checked)}/>Tôi đã bàn giao trả toàn bộ lô thực tế và kiểm tra chứng từ.</label>
     {error && <p role="alert" className="text-danger">{error}</p>}
     <div className="form-actions"><Button secondary disabled={busy} onClick={close}>Hủy</Button><Button type="submit" disabled={busy || !confirmed || !file || !reference.trim() || !note.trim()}>{busy?'Đang gửi…':'Xác nhận đã bàn giao trả'}</Button></div>
-  </form>;
+  </Form>;
 }
 export function ReturnSummary({ order }) {
   const {notify}=useFactory(),d=order.return;

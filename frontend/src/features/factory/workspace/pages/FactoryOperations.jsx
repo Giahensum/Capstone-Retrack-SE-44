@@ -1,3 +1,4 @@
+import { Form, Input, Select, Textarea } from '@/components/forms/ValidatedForm';
 import { FactoryWorkflowHistory, QualityResolutionForm, ReturnHandoverForm, ReturnSummary } from "./FactoryQualityResolution";
 import { useState } from "react";
 import { paymentMethods } from '@/lib/paymentMethods';
@@ -76,14 +77,14 @@ export function Operations({ mode, focusId, navigate }) {
           onChange={(e) => { setSearch(e.target.value); setPage(1); }}
         />
         <Field label="Trạng thái">
-          <select value={filter} onChange={(e) => { setFilter(e.target.value); setPage(1); }}>
+          <Select value={filter} onChange={(e) => { setFilter(e.target.value); setPage(1); }}>
             <option value="">Tất cả trạng thái</option>
             {config.states.map((s) => (
               <option key={s} value={s}>
                 {labels[s]}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
       </div>
       <Card title={`${data?.totalCount ?? 0} đơn hàng`}>
@@ -432,7 +433,7 @@ function WeighForm({ order, close, next }) {
     /* Show preview only for valid readings. */
   }
   return (
-    <form
+    <Form
         onSubmit={async (e) => {
           e.preventDefault();
           if (await act(
@@ -481,7 +482,7 @@ function WeighForm({ order, close, next }) {
       <Field
         label={`Biên bản / Ghi chú${result?.flagged ? " (bắt buộc khi lệch trên 5%)" : ""}`}
       >
-        <textarea
+        <Textarea
           required={result?.flagged}
           value={form.note}
           onChange={(e) => set("note", e.target.value)}
@@ -504,7 +505,7 @@ function WeighForm({ order, close, next }) {
         </Button>
         <Button type="submit" disabled={!result}>Lưu và chuyển sang KCS</Button>
       </div>
-    </form>
+    </Form>
   );
 }
 function QualityForm({ order, close }) {
@@ -520,7 +521,7 @@ function QualityForm({ order, close }) {
   });
   const set = (key, value) => setForm((f) => ({ ...f, [key]: value }));
   return (
-    <form
+    <Form
         onSubmit={async (e) => {
           e.preventDefault();
           if (
@@ -558,7 +559,7 @@ function QualityForm({ order, close }) {
           />
         ))}
         <Field label="Grade">
-          <select
+          <Select
             required
             value={form.grade}
             onChange={(e) => set("grade", e.target.value)}
@@ -567,7 +568,7 @@ function QualityForm({ order, close }) {
             {["A", "B", "C"].map((g) => (
               <option key={g}>{g}</option>
             ))}
-          </select>
+          </Select>
         </Field>
       </div>
       {form.purity !== "" &&
@@ -578,23 +579,23 @@ function QualityForm({ order, close }) {
           </div>
         )}
       <Field label="Quyết định">
-        <select
+        <Select
           value={form.decision}
           onChange={(e) => set("decision", e.target.value)}
         >
           <option value="accept">Chấp nhận • Chuyển quyết toán</option>
           <option value="reject">Từ chối lô</option>
-        </select>
+        </Select>
       </Field>
       {form.decision === "reject" && (
         <Field label="Hướng xử lý">
-          <select
+          <Select
             value={form.resolution}
             onChange={(e) => set("resolution", e.target.value)}
           >
             <option value="RETURN">Trả hàng về vựa</option>
             <option value="RENEGOTIATE">Liên hệ vựa để thỏa thuận lại</option>
-          </select>
+          </Select>
         </Field>
       )}
       <Field
@@ -604,7 +605,7 @@ function QualityForm({ order, close }) {
             : "Ghi chú nghiệm thu"
         }
       >
-        <textarea
+        <Textarea
           required={form.decision === "reject"}
           value={form.note}
           onChange={(e) => set("note", e.target.value)}
@@ -618,7 +619,7 @@ function QualityForm({ order, close }) {
           Chốt kết quả KCS
         </Button>
       </div>
-    </form>
+    </Form>
   );
 }
 function SettlementForm({ order, close }) {
@@ -632,7 +633,7 @@ function SettlementForm({ order, close }) {
     /* Price has not been entered. */
   }
   return (
-    <form
+    <Form
         onSubmit={async (e) => {
         e.preventDefault();
         if (!confirmed) return;
@@ -658,7 +659,7 @@ function SettlementForm({ order, close }) {
       <p className="muted">Số tiền quyết toán = khối lượng nghiệm thu × đơn giá thỏa thuận. Phần này không cộng VAT hoặc phí nền tảng.</p>
       {preview && <Financial values={preview} net={order.weight.net} />}
       <label className="checkbox-line">
-        <input
+        <Input
           type="checkbox"
           required
           checked={confirmed}
@@ -674,7 +675,7 @@ function SettlementForm({ order, close }) {
           Gửi đề xuất giá
         </Button>
       </div>
-    </form>
+    </Form>
   );
 }
 function PaymentProofForm({ order, close }) {
@@ -685,7 +686,7 @@ function PaymentProofForm({ order, close }) {
   const [error, setError] = useState("");
   const [method, setMethod] = useState('BANK_TRANSFER');
   const [confirmed, setConfirmed] = useState(false);
-  return <form onSubmit={async (e) => {
+  return <Form onSubmit={async (e) => {
     e.preventDefault();
     if ((method === 'BANK_TRANSFER' && !file) || !confirmed || busy) return;
     setBusy(true); setError("");
@@ -697,16 +698,16 @@ function PaymentProofForm({ order, close }) {
   }}>
     <fieldset disabled={busy}>
     <p className="muted">Hai bên tự thanh toán {money(order.payment?.payable)} theo thỏa thuận. RETRACK ghi nhận, không thu hộ tiền hàng mới. Vựa xác nhận sau khi đã nhận đủ tiền.</p>
-    <Field label="Hình thức đã thanh toán"><select value={method} onChange={e => { setMethod(e.target.value); setConfirmed(false); }}>{Object.entries(paymentMethods).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></Field>
+    <Field label="Hình thức đã thanh toán"><Select value={method} onChange={e => { setMethod(e.target.value); setConfirmed(false); }}>{Object.entries(paymentMethods).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</Select></Field>
     <Field label="Mã giao dịch / căn cứ giao tiền" required value={reference} maxLength={200} onChange={(e) => setReference(e.target.value)} />
     <Field label={method === 'BANK_TRANSFER' ? 'Chứng từ chuyển khoản (PDF, JPG, PNG; tối đa 700 KB)' : 'Biên nhận giao tiền (tùy chọn)'} required={method === 'BANK_TRANSFER'}>
-      <input type="file" required={method === 'BANK_TRANSFER'} accept=".pdf,.jpg,.jpeg,.png" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+      <Input type="file" required={method === 'BANK_TRANSFER'} accept=".pdf,.jpg,.jpeg,.png" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
     </Field>
-    <label className="check-line"><input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} />Tôi đã trả đủ số tiền theo thỏa thuận và chịu trách nhiệm về xác nhận này.</label>
+    <label className="check-line"><Input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} />Tôi đã trả đủ số tiền theo thỏa thuận và chịu trách nhiệm về xác nhận này.</label>
     {error && <p role="alert" className="text-error">{error}</p>}
     <div className="form-actions"><Button secondary onClick={close}>Hủy</Button><Button type="submit" disabled={method === 'BANK_TRANSFER' && !file || !confirmed || busy}>{busy ? "Đang gửi…" : "Xác nhận đã trả tiền"}</Button></div>
     </fieldset>
-  </form>;
+  </Form>;
 }
 function RatingForm({ order, close }) {
   const { act } = useFactory();
@@ -716,7 +717,7 @@ function RatingForm({ order, close }) {
     partnership: "UNCHANGED",
   });
   return (
-    <form
+    <Form
         onSubmit={async (e) => {
           e.preventDefault();
           if (
@@ -735,7 +736,7 @@ function RatingForm({ order, close }) {
         Đánh giá gắn với đơn <strong>{order.id}</strong> đã quyết toán.
       </p>
       <Field label="Chất lượng lô hàng">
-        <select
+        <Select
           value={form.stars}
           onChange={(e) => setForm({ ...form, stars: e.target.value })}
         >
@@ -744,22 +745,22 @@ function RatingForm({ order, close }) {
               {n} sao
             </option>
           ))}
-        </select>
+        </Select>
       </Field>
       <Field label="Nhận xét">
-        <textarea
+        <Textarea
           value={form.comment}
           onChange={(e) => setForm({ ...form, comment: e.target.value })}
         />
       </Field>
       <Field label="Quyết định sau đánh giá">
-        <select
+        <Select
           value={form.partnership}
           onChange={(e) => setForm({ ...form, partnership: e.target.value })}
         >
           <option value="UNCHANGED">Chưa quyết định</option>
           <option value="DECLINED">Không hợp tác lâu dài</option>
-        </select>
+        </Select>
       </Field>
       <p className="muted">
         Muốn hợp tác lâu dài, vào mục Vựa đối tác để lập hợp đồng điện tử và chờ
@@ -771,6 +772,6 @@ function RatingForm({ order, close }) {
         </Button>
         <Button type="submit">Lưu đánh giá</Button>
       </div>
-    </form>
+    </Form>
   );
 }
