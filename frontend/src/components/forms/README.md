@@ -26,4 +26,6 @@ Quy tắc liên field: truyền `validate(formData, formElement, submitter)` tr�
 
 Các form Auth/Seller/Money đang có bộ lỗi riêng cần tích hợp theo từng màn và giữ kiểm soát hiện có; không chỉ thay thẻ rồi coi là đã nghiệm thu toàn bộ.
 
+`npm run lint` còn kiểm tên component JSX chưa khai báo/import bằng TypeScript đang có trong dự án. Đây là kiểm tra binding JSX trên toàn `src`, không phải chứng nhận toàn bộ dự án đã đạt strict typecheck. Vite build thành công riêng chưa đủ bắt lỗi tên component chưa import.
+
 Tham khảo [W3C form notifications](https://www.w3.org/WAI/tutorials/forms/notifications/) và [GOV.UK error summary](https://design-system.service.gov.uk/components/error-summary/). Đã kiểm DOM/focus/keyboard và responsive ở các form đại diện; chưa chứng nhận toàn sản phẩm đạt WCAG bằng trình đọc màn hình/axe.
