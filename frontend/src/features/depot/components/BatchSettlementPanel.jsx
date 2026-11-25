@@ -1,3 +1,5 @@
+import { Form, Input, Textarea } from '@/components/forms/ValidatedForm';
+import { settlementProblems } from './depotFormRules';
 import { useState } from 'react';
 import { useDepotMutation, useDepotQuery, money, batchLabels } from '../depotApi';
 import { buttonClass, inputClass, MutationError, QueryState, Pager } from './DepotUI';
@@ -17,16 +19,18 @@ export default function BatchSettlementPanel({ detail, id }) {
     <p className="text-sm text-d-on-surface-variant">Nhà máy đề xuất → kho đồng ý → nhà máy chuyển tiền và gửi chứng từ → kho đối chiếu tài khoản và xác nhận nhận đủ tiền. RETRACK ghi nhận các xác nhận, không tự xác minh chuyển khoản ngân hàng.</p>
     <p className="text-sm font-medium">{batchLabels[batch.status] ?? batch.status}{workflow.revision > 0 ? ` · Đề xuất phiên bản ${workflow.revision}` : ''}</p>
     {workflow.decisionReason && <p className="text-sm whitespace-pre-wrap">Phản hồi của kho: {workflow.decisionReason}</p>}
-    {pending && <div className="rounded-xl bg-d-surface-accent p-4 space-y-3">
+    {pending && <Form className="rounded-xl bg-d-surface-accent p-4 space-y-3"
+      validate={settlementProblems}
+      onSubmit={event => { event.preventDefault(); const accept = event.nativeEvent.submitter?.value === 'accept'; if (!decision.isPending && (accept ? checked : reason.trim())) decide(accept); }}>
       <p className="font-semibold">Số tiền nhà máy sẽ chuyển cho kho: {money(settlement.netAmount)}</p>
       <p className="text-sm">Đối chiếu khối lượng thực cân, KCS, đơn giá và VAT ở bảng phía trên. Phí bên Factory trả riêng không trừ vào số tiền này.</p>
-      <label className="block text-sm">Lý do / nội dung đề nghị điều chỉnh<textarea maxLength={2000} className={inputClass} value={reason} disabled={decision.isPending} onChange={e => setReason(e.target.value)} /></label>
-      <label className="flex gap-2 text-sm"><input type="checkbox" checked={checked} disabled={decision.isPending} onChange={e => setChecked(e.target.checked)} />{detail.quality?.isAccepted === false ? "Tôi đồng ý bán lô theo hiện trạng KCS không đạt, với khối lượng, đơn giá và số tiền của phiên bản này." : "Tôi đồng ý khối lượng, đơn giá và số tiền của phiên bản này."}</label>
+      <label className="block text-sm">Lý do / nội dung đề nghị điều chỉnh<Textarea name="reason" maxLength={2000} className={inputClass} value={reason} disabled={decision.isPending} onChange={e => setReason(e.target.value)} /></label>
+      <label className="flex gap-2 text-sm"><Input name="confirmation" data-field-label="Xác nhận đối chiếu giá và số tiền" type="checkbox" checked={checked} disabled={decision.isPending} onChange={e => setChecked(e.target.checked)} />{detail.quality?.isAccepted === false ? "Tôi đồng ý bán lô theo hiện trạng KCS không đạt, với khối lượng, đơn giá và số tiền của phiên bản này." : "Tôi đồng ý khối lượng, đơn giá và số tiền của phiên bản này."}</label>
       <div className="flex flex-wrap gap-3">
-        <button type="button" className={buttonClass} disabled={!checked || decision.isPending} onClick={() => decide(true)}>Đồng ý giá và số tiền</button>
-        <button type="button" className="rounded-full border border-d-border-subtle px-4 py-2 text-d-primary disabled:opacity-40" disabled={!reason.trim() || decision.isPending} onClick={() => decide(false)}>Yêu cầu điều chỉnh giá</button>
+        <button type="submit" value="accept" className={buttonClass} disabled={decision.isPending}>Đồng ý giá và số tiền</button>
+        <button type="submit" value="dispute" className="rounded-full border border-d-border-subtle px-4 py-2 text-d-primary disabled:opacity-40" disabled={decision.isPending}>Yêu cầu điều chỉnh giá</button>
       </div><MutationError mutation={decision} />
-    </div>}
+    </Form>}
     <BatchDetailSection title={<span role="heading" aria-level="4">Lịch sử xác nhận của hai bên</span>}>
     <QueryState query={history}><ol className="space-y-3">{history.data?.items.map(event => <li key={event.id} className="rounded-xl bg-d-surface-accent p-3 text-sm">
       <p className="font-semibold">{actions[event.action] ?? event.action}{event.revision ? ` · Phiên bản ${event.revision}` : ''}</p>

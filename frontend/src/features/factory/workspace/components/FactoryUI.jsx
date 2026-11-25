@@ -1,3 +1,4 @@
+import { Input } from '@/components/forms/ValidatedForm';
 import { createContext, useContext, useEffect, useId, useRef, useState } from "react";
 import { useAuthStore } from "@/app/store/useAuthStore";
 import { useQueryClient } from "@tanstack/react-query";
@@ -119,7 +120,7 @@ export function Pagination({ page, totalPages = 0, totalCount = 0, onChange }) {
   </nav>;
 }
 export function Field({ label, children, ...props }) {
-  return <label className="field"><span>{label}</span>{children || <input {...props} />}</label>;
+  return <label className="field"><span>{label}</span>{children || <Input {...props} />}</label>;
 }
 export function Modal({ title, children, onClose, busy = false }) {
   const ref = useRef();

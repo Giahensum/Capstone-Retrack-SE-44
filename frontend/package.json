@@ -8,7 +8,7 @@
     "build": "vite build",
     "lint": "oxlint src --ignore-pattern=*_old.jsx --ignore-pattern=*_old_utf8.jsx",
     "preview": "vite preview",
-    "test:unit": "node --test src/features/money/moneyStatus.test.js src/features/money-admin/moneyLabels.test.js src/features/money-payee/payeeBank.test.js src/features/money-admin/refundLabels.test.js",
+    "test:unit": "node --test src/features/money/moneyStatus.test.js src/features/money-admin/moneyLabels.test.js src/features/money-payee/payeeBank.test.js src/features/money-admin/refundLabels.test.js src/features/depot/components/depotFormRules.test.js",
     "test:e2e": "playwright test"
   },
   "dependencies": {

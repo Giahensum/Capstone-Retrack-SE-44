@@ -1,3 +1,4 @@
+import { Form, Input } from '@/components/forms/ValidatedForm';
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
@@ -70,7 +71,7 @@ export default function LiquidationAgreement({ id, onClose }) {
     } else if (hasDeposit && !d.buyerSignedAt && !esign.isPending) {
       action = (
         <div className="space-y-2.5">
-          <label className={checkLabel}><input type="checkbox" className={checkbox} disabled={busy} checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />Tôi đã đọc và đồng ý ký hợp đồng đặt cọc mua trọn lô này.</label>
+          <label className={checkLabel}><Input type="checkbox" className={checkbox} disabled={busy} checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />Tôi đã đọc và đồng ý ký hợp đồng đặt cọc mua trọn lô này.</label>
           <div className="flex justify-end"><button type="button" className={primaryBtn} disabled={busy || !confirmed} onClick={() => sign.mutate()}><FileSignature size={16} />Ký hợp đồng đặt cọc</button></div>
           <MutationError mutation={sign} />
         </div>
@@ -83,14 +84,14 @@ export default function LiquidationAgreement({ id, onClose }) {
       action = <PayCollectionButton flow="LIQUIDATION_DEPOSIT" sourceId={id} title={`Đặt cọc ${money(d.depositAmount)} qua sàn (PayOS)`} />;
     } else if (hasDeposit && bothSigned && !d.depositReportedAt) {
       action = (
-        <form className="space-y-2.5" onSubmit={(e) => { e.preventDefault(); reportDeposit.mutate({ reference: depositRef }); }}>
+        <Form className="space-y-2.5" onSubmit={(e) => { e.preventDefault(); reportDeposit.mutate({ reference: depositRef }); }}>
           <label className="block text-xs font-semibold text-d-on-surface-variant">Tham chiếu / nội dung chuyển cọc {money(d.depositAmount)}
-            <input required disabled={busy} maxLength={255} className={`${inputClass} mt-1`} value={depositRef} onChange={(e) => setDepositRef(e.target.value)} placeholder="VD: COC-LO-001" />
+            <Input required disabled={busy} maxLength={255} className={`${inputClass} mt-1`} value={depositRef} onChange={(e) => setDepositRef(e.target.value)} placeholder="VD: COC-LO-001" />
           </label>
-          <label className={checkLabel}><input required type="checkbox" className={checkbox} disabled={busy} checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />Tôi đã chuyển đủ tiền cọc cho Seller.</label>
+          <label className={checkLabel}><Input required type="checkbox" className={checkbox} disabled={busy} checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />Tôi đã chuyển đủ tiền cọc cho Seller.</label>
           <div className="flex justify-end"><button className={primaryBtn} disabled={busy || !confirmed}><Wallet size={16} />Báo đã chuyển cọc</button></div>
           <MutationError mutation={reportDeposit} />
-        </form>
+        </Form>
       );
     } else if (hasDeposit && d.depositReportedAt && !d.depositConfirmedAt) {
       waiting = `Đã báo chuyển cọc (${d.depositReference}). Chờ Seller xác nhận nhận cọc.`;
@@ -100,16 +101,16 @@ export default function LiquidationAgreement({ id, onClose }) {
       action = <PayCollectionButton flow="LIQUIDATION_BALANCE" sourceId={id} title={`${hasDeposit ? `Phần còn lại ${money(d.remainingAmount)}` : `Thanh toán ${money(d.amount)}`} qua sàn (PayOS)`} />;
     } else if (depositOk && !d.paymentReportedAt) {
       action = (
-        <form className="space-y-2.5" onSubmit={(e) => { e.preventDefault(); report.mutate({ reference }); }}>
+        <Form className="space-y-2.5" onSubmit={(e) => { e.preventDefault(); report.mutate({ reference }); }}>
           <label className="block text-xs font-semibold text-d-on-surface-variant">Tham chiếu / nội dung đã chuyển {hasDeposit ? `phần còn lại ${money(d.remainingAmount)}` : `đủ ${money(d.amount)}`}
-            <input required disabled={busy} maxLength={255} className={`${inputClass} mt-1`} value={reference} onChange={(e) => setReference(e.target.value)} placeholder="VD: CK-LO-001" />
+            <Input required disabled={busy} maxLength={255} className={`${inputClass} mt-1`} value={reference} onChange={(e) => setReference(e.target.value)} placeholder="VD: CK-LO-001" />
           </label>
-          <label className={checkLabel}><input required type="checkbox" className={checkbox} disabled={busy} checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />
+          <label className={checkLabel}><Input required type="checkbox" className={checkbox} disabled={busy} checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />
             {hasDeposit ? `Tôi đã chuyển đủ phần còn lại ${money(d.remainingAmount)} (sau khi trừ cọc) cho Seller.` : 'Tôi đã chuyển đủ tổng tiền của thỏa thuận cho Seller.'}
           </label>
           <div className="flex justify-end"><button className={primaryBtn} disabled={busy || !confirmed}><Banknote size={16} />Báo đã chuyển tiền</button></div>
           <MutationError mutation={report} />
-        </form>
+        </Form>
       );
     } else if (d.paymentReportedAt && !d.paymentConfirmedAt) {
       waiting = 'Đã báo chuyển tiền. Chờ Seller xác nhận nhận đủ tiền.';

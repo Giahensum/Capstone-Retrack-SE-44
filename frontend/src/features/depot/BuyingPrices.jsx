@@ -1,3 +1,4 @@
+import { Form, Input, Select, Textarea } from '@/components/forms/ValidatedForm';
 import { useState } from 'react';
 import { Tags } from 'lucide-react';
 import { useDepotQuery, useDepotMutation, money } from './depotApi';
@@ -12,20 +13,20 @@ function PriceForm({ price, existingMaterials, onClose }) {
   const update = (field, value) => setForm({ ...form, [field]: value });
   return <Dialog icon={Tags} title={price.materialType ? 'Cập nhật giá thu mua' : 'Công bố giá thu mua'} onClose={onClose} busy={save.isPending}>
     <p className="text-sm text-d-on-surface-variant">Bảng giá thuộc kho đang chọn. Seller sẽ xem giá đang công bố khi chọn kho chỉ định; đơn đã chốt giữ nguyên số tiền.</p>
-    <form className="space-y-4" onSubmit={e => { e.preventDefault(); save.mutate({ body: { pricePerKg: Number(form.pricePerKg),
+    <Form className="space-y-4" onSubmit={e => { e.preventDefault(); save.mutate({ body: { pricePerKg: Number(form.pricePerKg),
       conditionNote: form.conditionNote, isActive: form.isActive, expectedUpdatedAt: price.updatedAt ?? null } }); }}>
       <fieldset disabled={save.isPending} className="space-y-4">
-        <label className="block">Vật liệu<select required disabled={!!price.materialType} className={inputClass} value={form.materialType} onChange={e => update('materialType', e.target.value)}>
+        <label className="block">Vật liệu<Select required disabled={!!price.materialType} className={inputClass} value={form.materialType} onChange={e => update('materialType', e.target.value)}>
           <option value="">Chọn vật liệu</option>{materials.filter(x => x === price.materialType || !existingMaterials.includes(x)).map(x => <option key={x} value={x}>{materialLabel(x)}</option>)}
-        </select></label>
-        <label className="block">Giá thu mua tham khảo (đ/kg)<input required type="number" min="1" max="1000000000" step="1" className={inputClass} value={form.pricePerKg} onChange={e => update('pricePerKg', e.target.value)} /></label>
-        <label className="block">Điều kiện áp dụng<textarea maxLength={500} rows={3} className={inputClass} value={form.conditionNote} onChange={e => update('conditionNote', e.target.value)} placeholder="Ví dụ: PET sạch, không lẫn tạp; giá cuối cùng xác nhận sau cân và phân loại." /></label>
-        <label className="flex items-start gap-3"><input type="checkbox" className="mt-1" checked={form.isActive} onChange={e => update('isActive', e.target.checked)} /><span>Công bố cho Seller<span className="block text-sm text-d-on-surface-variant">Tắt để ngừng công bố; dữ liệu và đơn cũ vẫn được giữ. Kho cần được duyệt trước khi xuất hiện trong danh sách chỉ định.</span></span></label>
+        </Select></label>
+        <label className="block">Giá thu mua tham khảo (đ/kg)<Input required type="number" min="1" max="1000000000" step="1" className={inputClass} value={form.pricePerKg} onChange={e => update('pricePerKg', e.target.value)} /></label>
+        <label className="block">Điều kiện áp dụng<Textarea maxLength={500} rows={3} className={inputClass} value={form.conditionNote} onChange={e => update('conditionNote', e.target.value)} placeholder="Ví dụ: PET sạch, không lẫn tạp; giá cuối cùng xác nhận sau cân và phân loại." /></label>
+        <label className="flex items-start gap-3"><Input type="checkbox" className="mt-1" checked={form.isActive} onChange={e => update('isActive', e.target.checked)} /><span>Công bố cho Seller<span className="block text-sm text-d-on-surface-variant">Tắt để ngừng công bố; dữ liệu và đơn cũ vẫn được giữ. Kho cần được duyệt trước khi xuất hiện trong danh sách chỉ định.</span></span></label>
         <p className="text-sm text-d-on-surface-variant">Đây là giá tham khảo do kho khai báo; giá giao dịch được chốt theo hàng thực tế và Seller xác nhận. Thay giá không tự đổi đơn đang xử lý.</p>
       </fieldset>
       <MutationError mutation={save} />
       <div className="flex flex-wrap justify-end gap-3"><button type="button" className="min-h-11 rounded-full border border-d-border-subtle px-5 py-2" disabled={save.isPending} onClick={onClose}>Hủy bỏ</button><button className={buttonClass} disabled={save.isPending}>{save.isPending ? 'Đang lưu…' : 'Lưu bảng giá'}</button></div>
-    </form>
+    </Form>
   </Dialog>;
 }
 export default function BuyingPrices() {

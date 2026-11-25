@@ -1,3 +1,4 @@
+import { Form, Input, Select } from '@/components/forms/ValidatedForm';
 import { useState } from 'react';
 import { Wallet } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -74,24 +75,24 @@ export default function PaymentDrawer({ payment, onClose }) {
           <PayCollectionButton flow="PICKUP" sourceId={payment.id} title="Thanh toán qua sàn (PayOS)" />
           <p className="text-sm text-d-on-surface-variant">Chủ kho thanh toán vào nền tảng; nền tảng giữ tiền và chi cho người bán sau khi đơn hoàn tất. Không cần tải chứng từ chuyển khoản.</p>
           <div className="flex justify-end border-t border-d-border-subtle pt-4"><button type="button" onClick={onClose} className="rounded-full border border-d-border-subtle px-5 py-2.5 font-semibold hover:bg-d-surface-container-low">Đóng</button></div>
-        </div> : item.status === 'AWAITING_PAYMENT' ? <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); if (canSubmit && !save.isPending) save.mutate(); }}>
-          <label className="block text-sm font-medium">Hình thức đã thanh toán<select className={inputClass} value={paymentMethod} disabled={busy} onChange={e => { setPaymentMethod(e.target.value); setConfirmed(false); }}>{Object.entries(paymentMethods).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
-          {paymentMethod !== 'BANK_TRANSFER' && <label className="block text-sm font-medium">Căn cứ giao tiền / ghi chú thỏa thuận<input required maxLength={255} disabled={busy} className={inputClass} value={reference} onChange={e => setReference(e.target.value)} placeholder="Ví dụ: giao tiền mặt trực tiếp cho người bán, mã biên nhận…" /></label>}
+        </div> : item.status === 'AWAITING_PAYMENT' ? <Form className="space-y-4" onSubmit={(event) => { event.preventDefault(); if (canSubmit && !save.isPending) save.mutate(); }}>
+          <label className="block text-sm font-medium">Hình thức đã thanh toán<Select className={inputClass} value={paymentMethod} disabled={busy} onChange={e => { setPaymentMethod(e.target.value); setConfirmed(false); }}>{Object.entries(paymentMethods).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</Select></label>
+          {paymentMethod !== 'BANK_TRANSFER' && <label className="block text-sm font-medium">Căn cứ giao tiền / ghi chú thỏa thuận<Input required maxLength={255} disabled={busy} className={inputClass} value={reference} onChange={e => setReference(e.target.value)} placeholder="Ví dụ: giao tiền mặt trực tiếp cho người bán, mã biên nhận…" /></label>}
           {paymentMethod === 'BANK_TRANSFER' && <>
           <div className="rounded-2xl border border-d-border-subtle p-4"><h3 className="font-semibold">Chứng từ chuyển khoản</h3>
             <p className="mt-1 text-sm text-d-on-surface-variant">Chuyển đúng số tiền thực trả ở trên, rồi tải ảnh chứng từ hoặc nhập đường dẫn HTTPS.</p>
             <div className="mt-4"><ProofUpload onUploaded={setProof} onBusyChange={setUploading} disabled={save.isPending} /></div>
             <label className="mt-4 block text-sm font-medium">Đường dẫn chứng từ
-              <input required type="url" value={proof} onChange={(event) => setProof(event.target.value)} disabled={busy}
+              <Input required type="url" pattern="https?://.+" data-pattern-message="Dùng đường dẫn bắt đầu bằng http:// hoặc https://." value={proof} onChange={(event) => setProof(event.target.value)} disabled={busy}
                 placeholder="https://..." className={inputClass} /></label></div></>}
           <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-d-border-subtle p-3 text-sm">
-            <input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} disabled={busy} className="mt-1 size-4 accent-d-primary" />
+            <Input required data-field-label="Xác nhận đã trả tiền" type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} disabled={busy} className="mt-1 size-4 accent-d-primary" />
             <span>Tôi đã trả đủ <strong>{money(item.netAmount)}</strong> cho người bán theo hình thức {paymentMethodLabel(paymentMethod).toLocaleLowerCase('vi-VN')} và chịu trách nhiệm về xác nhận này.</span></label>
           {save.isError && <p role="alert" className="text-d-error">{depotError(save.error)}</p>}
           <div className="flex flex-wrap justify-end gap-3 border-t border-d-border-subtle pt-4">
             <button type="button" onClick={onClose} disabled={busy} className="rounded-full border border-d-border-subtle px-5 py-2.5 font-semibold hover:bg-d-surface-container-low disabled:opacity-40">Đóng</button>
-            <button type="submit" disabled={!canSubmit || save.isPending} className={buttonClass}>{save.isPending ? 'Đang ghi nhận…' : 'Xác nhận đã trả tiền'}</button>
-          </div></form> : <div className="rounded-2xl border border-d-border-subtle p-4">
+            <button type="submit" disabled={busy || !item.items.length || collection.pending} className={buttonClass}>{save.isPending ? 'Đang ghi nhận…' : 'Xác nhận đã trả tiền'}</button>
+          </div></Form> : <div className="rounded-2xl border border-d-border-subtle p-4">
           <h3 className="font-semibold">Chứng từ đã ghi nhận</h3>
           <p className="mt-2 text-sm">Hình thức: <strong>{paymentMethodLabel(item.paymentMethod)}</strong>{item.paymentReference && <> · Căn cứ: {item.paymentReference}</>}</p>
           {safeUrl(item.paymentProofUrl) ? <a className="mt-3 inline-flex items-center gap-2 rounded-full border border-d-border-subtle px-4 py-2 font-semibold text-d-primary hover:bg-d-surface-container-low" href={item.paymentProofUrl} target="_blank" rel="noreferrer"><MaterialIcon name="visibility" />Xem chứng từ</a>
