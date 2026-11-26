@@ -30,7 +30,7 @@ export default function VerificationDocument({ file }) {
       : 'Chưa quét mã độc · không coi chữ ký định dạng là kết quả an toàn'}</p>
     <div className="flex flex-wrap gap-2">
       {image && <button type="button" className={buttonClass} disabled={busy} onClick={() => load(true)} aria-label={'Xem ' + file.name}><Eye size={16} aria-hidden="true" />Xem ảnh</button>}
-      <button type="button" className="min-h-11 rounded-full border border-d-border-subtle px-4 py-2 text-sm font-semibold text-d-primary inline-flex gap-2 items-center disabled:opacity-40"
+      <button type="button" className="inline-flex items-center justify-center gap-2 rounded-full font-semibold transition active:scale-[.98] disabled:pointer-events-none disabled:opacity-50 outline-none focus-visible:ring-2 focus-visible:ring-d-primary/30 focus-visible:ring-offset-1 min-h-11 px-5 py-2 text-sm border border-d-border-subtle bg-white text-d-on-surface hover:bg-d-surface-container"
         disabled={busy} onClick={() => load(false)} aria-label={'Tải ' + file.name}><Download size={16} aria-hidden="true" />{busy ? 'Đang tải…' : 'Tải tệp'}</button>
     </div>
     {error && <p role="alert" className="text-sm text-d-error">{error}</p>}

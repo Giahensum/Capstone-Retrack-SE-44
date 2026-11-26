@@ -7,6 +7,7 @@ import { depotError, useDepot } from './DepotContext';
 import PaymentDrawer from './components/PaymentDrawer';
 import { inputClass, Pager } from './components/DepotUI';
 import { PICKUP_STATUS_LABEL } from '@/lib/utils';
+import { PageHeader, StatCard, ErrorState } from '@/components/ui/kit';
 
 const money = (n) => Number(n ?? 0).toLocaleString('vi-VN') + ' đ';
 const paymentStates = ['SELLER_CONFIRMED', 'AWAITING_PAYMENT', 'PAYMENT_SENT', 'DONE'];
@@ -36,15 +37,10 @@ export default function Payments() {
   ];
   return <div className="flex-1 p-4 md:p-6 w-full max-w-7xl mx-auto flex flex-col gap-6 min-h-full bg-d-background">
     {selected && <PaymentDrawer key={selected.id} payment={selected} onClose={() => { setSelected(null); setParams(prev => { prev.delete('requestId'); return prev; }, { replace: true }); }} />}
-    <div><h1 className="font-d-headline-xl-mobile md:font-d-headline-xl text-d-headline-xl-mobile md:text-d-headline-xl text-d-on-surface mb-2">Thanh toán cho người bán</h1>
-      <p className="font-d-body-md text-d-on-surface-variant">Sau khi nhân viên bàn giao, kho trả tiền theo thỏa thuận rồi ghi nhận tại đây; người bán xác nhận tiền thực nhận. RETRACK không thu hộ tiền hàng mới.</p></div>
-    {summary.isError ? <p role="alert">{depotError(summary.error)}</p> : <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-6">
-      {cards.map(([icon, label, value], i) => <div key={label} className={`${i === 0 ? 'bg-d-surface-accent' : 'bg-white'} rounded-[20px] p-5 md:p-6 border border-d-border-subtle relative overflow-hidden`}>
-        <MaterialIcon name={icon} className="absolute right-5 top-5 text-4xl text-d-primary opacity-15" />
-        <p className="font-d-label-md text-d-on-surface-variant mb-2">{label}</p>
-        <p className="font-d-headline-lg text-d-headline-lg text-d-primary">{summary.isPending ? '…' : value}</p>
-      </div>)}</div>}
-    <div className="bg-white rounded-[20px] border border-d-border-subtle p-4 flex flex-col xl:flex-row gap-4">
+    <PageHeader title="Thanh toán cho người bán" description="Sau khi nhân viên bàn giao, kho trả tiền theo thỏa thuận rồi ghi nhận tại đây; người bán xác nhận tiền thực nhận. RETRACK không thu hộ tiền hàng mới." />
+    {summary.isError ? <ErrorState onRetry={() => summary.refetch()}>{depotError(summary.error)}</ErrorState> : <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      {cards.map(([icon, label, value]) => <StatCard key={label} label={label} value={value} loading={summary.isPending} icon={<MaterialIcon name={icon} className="text-xl" />} />)}</div>}
+    <div className="bg-white rounded-2xl border border-d-border-subtle shadow-sm p-4 flex flex-col xl:flex-row gap-4">
       <label className="flex-1">Tìm người bán hoặc mã đơn<input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }}
         className={inputClass} /></label>
       <label>Trạng thái<select value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }} className={inputClass}>
@@ -54,7 +50,7 @@ export default function Payments() {
         <option value="newest">Mới nhất</option><option value="oldest">Cũ nhất trước</option><option value="amount">Giá trị cao</option>
       </select></label>
     </div>
-    <div className="bg-white rounded-[20px] border border-d-border-subtle overflow-hidden shadow-sm">
+    <div className="bg-white rounded-2xl border border-d-border-subtle overflow-hidden shadow-sm">
       {query.isPending ? <p role="status" className="p-8">Đang tải thanh toán…</p> : query.isError ? <div role="alert" className="p-8 text-d-error">{depotError(query.error)} <button onClick={() => query.refetch()} className="ml-2 rounded-full border border-d-error px-4 py-2 font-semibold hover:bg-d-surface-container-low">Thử lại</button></div> : <>
         <div className="overflow-x-auto"><table className="w-full text-left border-collapse">
           <thead><tr className="bg-d-surface-container/50 border-b border-d-border-subtle">{['Mã đơn', 'Người bán & SĐT', ...(hasLegacyFees ? ['Tiền hàng', 'Phí cũ'] : []), 'Trả người bán', 'Trạng thái', 'Hành động'].map((h) => <th key={h} className="py-4 px-6 font-d-label-sm text-d-on-surface-variant whitespace-nowrap">{h}</th>)}</tr></thead>

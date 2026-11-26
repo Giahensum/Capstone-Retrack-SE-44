@@ -61,7 +61,7 @@ export function ShiftForm({ onClose }) {
   </Dialog>;
 }
 export function Footer({ busy, onClose, label }) {
-  return <div className="flex flex-wrap justify-end gap-3 border-t border-d-border-subtle pt-4"><button type="button" disabled={busy} className="rounded-full border border-d-border-subtle min-h-11 px-5 py-2" onClick={onClose}>Hủy bỏ</button><button className={buttonClass + ' min-h-11'} disabled={busy}>{busy ? 'Đang lưu…' : label}</button></div>;
+  return <div className="flex flex-wrap justify-end gap-3 border-t border-d-border-subtle pt-4"><button type="button" disabled={busy} className="inline-flex items-center justify-center gap-2 rounded-full font-semibold transition active:scale-[.98] disabled:pointer-events-none disabled:opacity-50 outline-none focus-visible:ring-2 focus-visible:ring-d-primary/30 focus-visible:ring-offset-1 min-h-11 px-5 py-2 text-sm border border-d-border-subtle bg-white text-d-on-surface hover:bg-d-surface-container" onClick={onClose}>Hủy bỏ</button><button className={buttonClass + ' min-h-11'} disabled={busy}>{busy ? 'Đang lưu…' : label}</button></div>;
 }
 export function StopShiftForm({ shift, onClose }) {
   const [reason, setReason] = useState('');

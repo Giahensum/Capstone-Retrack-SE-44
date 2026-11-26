@@ -83,7 +83,7 @@ export default function VerificationUploadForm({ depotId, onSuccess }) {
       {files.length > 0 && <ul className="space-y-2" aria-label="Tệp đã chọn">{files.map(({ file, kind, id }) => <li key={id} className="flex items-center gap-3 rounded-xl border border-d-border-subtle p-3">
         {file.type.startsWith('image/') && <SelectedImage file={file} />}
         <div className="min-w-0 flex-1"><p className="font-medium break-all">{file.name}</p><p className="text-xs text-d-on-surface-variant">{documentKinds[kind]} · {documentSize(file.size)}</p></div>
-        <button type="button" aria-label={'Xóa ' + file.name} className="min-h-11 min-w-11 rounded-full border border-d-border-subtle inline-flex items-center justify-center text-d-error"
+        <button type="button" aria-label={'Xóa ' + file.name} className="inline-flex items-center justify-center gap-2 rounded-full font-semibold transition active:scale-[.98] disabled:pointer-events-none disabled:opacity-50 outline-none focus-visible:ring-2 focus-visible:ring-d-primary/30 focus-visible:ring-offset-1 min-h-11 px-5 py-2 text-sm border border-d-border-subtle bg-white text-d-on-surface hover:bg-d-surface-container"
           onClick={() => { changed(); setFiles(current => current.filter(item => item.id !== id)); }}><Trash2 size={18} aria-hidden="true" /></button>
       </li>)}</ul>}
       {error && <p role="alert" className="text-sm text-d-error">{error}</p>}

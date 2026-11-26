@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { sellerApi } from '../api';
 import { formatCurrency, PICKUP_STATUS_LABEL, PICKUP_STATUS_STYLE } from '@/lib/utils';
 import { MaterialIcon } from '@/features/depot/components/DepotIcon';
+import { PageHeader, StatCard, buttonClass } from '@/components/ui/kit';
 
 export default function SellerHome() {
   const { data: stats } = useQuery({
@@ -19,28 +20,12 @@ export default function SellerHome() {
 
   return (
     <div className="flex flex-col p-4 md:p-6 gap-6 w-full max-w-7xl mx-auto">
-      {/* Page Title */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-        <div>
-          <h1 className="font-d-headline-xl-mobile md:font-d-headline-xl text-d-headline-xl-mobile md:text-d-headline-xl text-d-on-surface">
-            Tổng quan người bán
-          </h1>
-          <p className="font-d-body-md text-d-body-md text-d-on-surface-variant mt-2">
-            Theo dõi trạng thái thu gom phế liệu và doanh thu của bạn.
-          </p>
-        </div>
-
-        <Link
-          to="/seller/create"
-          className="inline-flex items-center justify-center gap-2 rounded-full bg-d-primary hover:bg-[#385500] text-d-on-primary font-semibold px-6 py-3 transition-all shadow-sm active:scale-95 text-sm"
-        >
-          <MaterialIcon name="add" className="text-lg" />
-          <span>Tạo đơn thu gom mới</span>
-        </Link>
-      </div>
+      <PageHeader title="Tổng quan người bán" description="Theo dõi trạng thái thu gom phế liệu và doanh thu của bạn.">
+        <Link to="/seller/create" className={buttonClass()}><MaterialIcon name="add" className="text-lg" />Tạo đơn thu gom mới</Link>
+      </PageHeader>
 
       {/* Welcome Banner */}
-      <div className="relative overflow-hidden rounded-[20px] bg-gradient-to-r from-d-primary to-[#2a4400] text-d-on-primary p-6 md:p-8 shadow-sm">
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-d-primary to-[#2a4400] text-d-on-primary p-6 md:p-8 shadow-sm">
         <div className="absolute top-0 right-0 w-72 h-72 bg-white/5 rounded-full -translate-y-1/3 translate-x-1/3 blur-2xl" />
         <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
           <div className="space-y-2 max-w-xl">
@@ -67,53 +52,11 @@ export default function SellerHome() {
         </div>
       </div>
 
-      {/* KPI Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          {
-            label: 'Tổng số đơn',
-            value: stats?.total ?? 0,
-            icon: 'receipt_long',
-            color: 'text-d-primary',
-          },
-          {
-            label: 'Đang xử lý',
-            value: stats?.inProgress ?? 0,
-            icon: 'schedule',
-            color: 'text-[#d97706]',
-          },
-          {
-            label: 'Đã hoàn thành',
-            value: stats?.done ?? 0,
-            icon: 'check_circle',
-            color: 'text-d-secondary',
-          },
-          {
-            label: 'Thu nhập tháng này',
-            value: formatCurrency(stats?.monthlyIncome ?? 0),
-            icon: 'payments',
-            color: 'text-d-primary',
-          },
-        ].map(({ label, value, icon, color }) => (
-          <div
-            key={label}
-            className="d-glass-panel bg-d-surface-container-lowest border border-d-border-subtle rounded-2xl p-5 relative overflow-hidden group shadow-sm hover:shadow-md transition-shadow"
-          >
-            <div className="flex justify-between items-start mb-3">
-              <div className={`w-10 h-10 rounded-xl bg-d-surface-container flex items-center justify-center ${color}`}>
-                <MaterialIcon name={icon} className="text-xl" />
-              </div>
-            </div>
-            <div>
-              <p className="font-d-body-sm text-d-body-sm text-d-on-surface-variant mb-1">
-                {label}
-              </p>
-              <h3 className="font-d-headline-lg text-d-headline-lg text-d-on-surface">
-                {value}
-              </h3>
-            </div>
-          </div>
-        ))}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard label="Tổng số đơn" value={stats?.total ?? 0} icon={<MaterialIcon name="receipt_long" className="text-xl" />} />
+        <StatCard label="Đang xử lý" value={stats?.inProgress ?? 0} icon={<MaterialIcon name="schedule" className="text-xl" />} />
+        <StatCard label="Đã hoàn thành" value={stats?.done ?? 0} icon={<MaterialIcon name="check_circle" className="text-xl" />} />
+        <StatCard label="Thu nhập tháng này" value={formatCurrency(stats?.monthlyIncome ?? 0)} icon={<MaterialIcon name="payments" className="text-xl" />} />
       </div>
 
       {/* Quick Action Bento Cards */}

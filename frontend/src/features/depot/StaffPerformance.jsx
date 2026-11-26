@@ -5,6 +5,7 @@ import { MaterialIcon } from './components/DepotIcon';
 import { monthBounds, vietnamMonth } from './reportPeriod';
 import StaffHistoryModal from './components/StaffHistoryModal';
 import { buttonClass } from './components/DepotUI';
+import { PageHeader, StatCard } from '@/components/ui/kit';
 
 export default function StaffPerformance() {
   const [page, setPage] = useState(1);
@@ -28,12 +29,7 @@ export default function StaffPerformance() {
 
   return (
     <div className="w-full max-w-7xl mx-auto min-h-full p-4 md:p-6 flex flex-col gap-6 bg-d-surface">
-      {/* Page Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 shrink-0">
-        <div>
-          <h1 className="font-d-headline-lg text-d-headline-lg text-d-on-surface">Hiệu suất nhân sự</h1>
-          <p className="font-d-body-md text-d-body-md text-d-on-surface-variant mt-1">Theo dõi số đơn hoặc chuyến hoàn thành, khối lượng và giá trị thu mua theo tháng.</p>
-        </div>
+      <PageHeader title="Hiệu suất nhân sự" description="Theo dõi số đơn hoặc chuyến hoàn thành, khối lượng và giá trị thu mua theo tháng.">
         <label className="bg-d-surface-container-lowest border border-d-border-subtle px-4 py-2 rounded-xl flex items-center gap-2 font-d-label-md text-d-on-surface hover:border-d-primary transition-colors focus-within:border-d-primary cursor-pointer shrink-0">
           <MaterialIcon name="calendar_today" className="text-d-on-surface-variant text-[18px]" />
           <span>Tháng báo cáo</span>
@@ -45,31 +41,16 @@ export default function StaffPerformance() {
             className="bg-transparent border-none outline-none cursor-pointer"
           />
         </label>
-      </div>
+      </PageHeader>
 
       <QueryState query={query}>
         <QueryState query={summary}>
-        {/* KPI Row — 4 cards ngang hàng, cân đối như các trang khác */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 shrink-0">
-          {kpiCards.map((k, i) => (
-            <div key={i} className="d-glass-panel rounded-[20px] p-4 md:p-5 relative overflow-hidden group">
-              <div className="absolute top-0 right-0 w-20 h-20 bg-d-primary/5 rounded-bl-full -mr-3 -mt-3 transition-transform group-hover:scale-110" />
-              <div className="flex justify-between items-start mb-3">
-                <div className="w-9 h-9 rounded-lg bg-d-surface-container flex items-center justify-center">
-                  <MaterialIcon name={k.icon} className={`text-[20px] ${k.iconColor}`} />
-                </div>
-              </div>
-              <p className="font-d-body-sm text-d-body-sm text-d-on-surface-variant mb-1">{k.label}</p>
-              <div className="flex items-baseline gap-2">
-                <span className="font-d-headline-lg text-d-headline-lg text-d-on-surface">{k.value}</span>
-                {k.unit && <span className="font-d-body-md text-d-on-surface-variant">{k.unit}</span>}
-              </div>
-            </div>
-          ))}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {kpiCards.map((k) => <StatCard key={k.label} label={k.label} value={k.unit ? `${k.value} ${k.unit}` : k.value} icon={<MaterialIcon name={k.icon} className="text-xl" />} />)}
         </div>
 
         {/* Top 5 Bar Chart — full width, compact height */}
-        <div className="bg-d-surface-container-lowest rounded-[20px] border border-d-border-subtle p-5 md:p-6 shadow-sm shrink-0">
+        <div className="bg-d-surface-container-lowest rounded-2xl border border-d-border-subtle p-5 md:p-6 shadow-sm shrink-0">
           <h3 className="font-d-headline-md text-d-headline-md text-d-on-surface mb-5">5 nhân viên có khối lượng cao nhất toàn kho trong tháng</h3>
           <div className="flex flex-col gap-3">
             {topStaff.map((staff, idx) => {
@@ -105,7 +86,7 @@ export default function StaffPerformance() {
 
         </QueryState>
         {/* Detail Table */}
-        <div className="bg-d-surface-container-lowest rounded-[20px] border border-d-border-subtle overflow-hidden shadow-sm">
+        <div className="bg-d-surface-container-lowest rounded-2xl border border-d-border-subtle overflow-hidden shadow-sm">
           <div className="px-5 py-4 border-b border-d-border-subtle bg-d-surface-accent/30">
             <h3 className="font-d-headline-md text-d-headline-md text-d-on-surface">Chi Tiết Năng Suất Từng Nhân Viên</h3>
           </div>

@@ -1,4 +1,2 @@
-﻿// TODO: Implement Input
-export default function Input() {
-  return <div>Input</div>;
-}
+// Bộ thành phần chuẩn RETRACK nằm ở components/ui/kit.
+export { Input, Select, Textarea, Field } from '@/components/ui/kit';

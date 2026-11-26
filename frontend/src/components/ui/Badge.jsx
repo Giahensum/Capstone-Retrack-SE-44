@@ -1,4 +1,2 @@
-﻿// TODO: Implement Badge
-export default function Badge() {
-  return <div>Badge</div>;
-}
+// Bộ thành phần chuẩn RETRACK nằm ở components/ui/kit.
+export { Badge } from '@/components/ui/kit';

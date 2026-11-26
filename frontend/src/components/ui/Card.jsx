@@ -1,4 +1,2 @@
-﻿// TODO: Implement Card
-export default function Card() {
-  return <div>Card</div>;
-}
+// Bộ thành phần chuẩn RETRACK nằm ở components/ui/kit.
+export { Card, CardHeader, CardContent } from '@/components/ui/kit';

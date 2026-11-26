@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import Modal from '@/components/ui/Modal';
-import { TONES } from '@/components/ui/modalTheme';
-export { Modal, TONES };
+import { TONES, Badge, Notice, buttonClass } from '@/components/ui/kit';
+export { Modal, TONES, Badge, Notice };
 import {
   Check, Clock, Timer, TrendingUp, Trophy, Wallet, Crown, ChevronRight,
 } from 'lucide-react';
@@ -12,15 +12,6 @@ export const PHASE_TONE = {
   UPCOMING: 'slate', SURVEY: 'blue', BIDDING: 'primary', CLOSING: 'amber', AWARDED: 'teal', NO_SALE: 'slate', CANCELLED: 'red',
 };
 
-export function Badge({ tone = 'slate', icon: Icon, children, className = '' }) {
-  return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold ${TONES[tone].chip} ${className}`}>
-      {Icon && <Icon size={13} aria-hidden="true" />}
-      {children}
-    </span>
-  );
-}
-
 // ── Modal: header + footer cố định, chỉ phần thân cuộn → nút X luôn nhìn thấy ──
 // Đóng bằng: nút X, phím Esc, bấm vùng nền tối. Khi `busy` (đang gửi) thì khóa việc đóng.
 // Hộp xác nhận nhỏ gọn thay cho nút "Đồng ý / Không" nằm rải trong trang.
@@ -30,8 +21,8 @@ export function ConfirmModal({ icon: Icon = Check, tone = 'primary', title, desc
       size="sm" icon={Icon} tone={tone} title={title} onClose={onCancel} busy={busy}
       footer={(
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          <button type="button" onClick={onCancel} disabled={busy} className="rounded-full border border-d-border-subtle bg-white px-5 py-2.5 text-sm font-semibold text-d-on-surface-variant hover:bg-d-surface-container disabled:opacity-50">{cancelLabel}</button>
-          <button type="button" onClick={onConfirm} disabled={busy || disabled} className={`rounded-full px-6 py-2.5 text-sm font-bold shadow-sm transition active:scale-95 disabled:opacity-50 ${TONES[tone].solid}`}>
+          <button type="button" onClick={onCancel} disabled={busy} className={buttonClass({ variant: 'secondary' })}>{cancelLabel}</button>
+          <button type="button" onClick={onConfirm} disabled={busy || disabled} className={buttonClass({ className: `px-6 ${TONES[tone].solid} hover:brightness-95` })}>
             {busy ? 'Đang xử lý…' : confirmLabel}
           </button>
         </div>
@@ -46,7 +37,7 @@ export function ConfirmModal({ icon: Icon = Check, tone = 'primary', title, desc
 // ── Khối nội dung ──
 export function Section({ icon: Icon, title, tone = 'primary', action, children, className = '' }) {
   return (
-    <section className={`rounded-2xl border border-d-border-subtle bg-white p-4 sm:p-5 ${className}`}>
+    <section className={`rounded-2xl border border-d-border-subtle bg-white p-4 shadow-sm sm:p-5 ${className}`}>
       <div className="mb-3 flex items-center gap-2.5">
         {Icon && <span className={`flex size-8 items-center justify-center rounded-xl ${TONES[tone].chip}`}><Icon size={17} aria-hidden="true" /></span>}
         <h3 className="flex-1 text-sm font-bold text-d-on-surface">{title}</h3>
@@ -66,15 +57,6 @@ export function Tile({ icon: Icon, label, value, hint, tone = 'slate', className
         <p className="mt-0.5 break-words text-sm font-bold text-d-on-surface">{value}</p>
         {hint && <p className="mt-0.5 text-xs text-d-on-surface-variant">{hint}</p>}
       </div>
-    </div>
-  );
-}
-
-export function Notice({ icon: Icon, tone = 'blue', children }) {
-  return (
-    <div role="status" className={`flex items-start gap-2.5 rounded-2xl px-4 py-3 text-sm ring-1 ${TONES[tone].chip} ${TONES[tone].ring}`}>
-      {Icon && <Icon size={17} className="mt-0.5 shrink-0" aria-hidden="true" />}
-      <div className="min-w-0 break-words">{children}</div>
     </div>
   );
 }

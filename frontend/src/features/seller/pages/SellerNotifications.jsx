@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { sellerApi } from '../api';
 import { sellerNotificationTarget } from '../notificationTarget';
 import { MaterialIcon } from '@/features/depot/components/DepotIcon';
+import { PageHeader, buttonClass } from '@/components/ui/kit';
 
 export default function SellerNotifications() {
   const queryClient = useQueryClient();
@@ -75,31 +76,14 @@ export default function SellerNotifications() {
   ];
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-d-on-surface tracking-tight flex items-center gap-2">
-            <MaterialIcon name="notifications" className="text-d-primary text-2xl" />
-            <span>Thông báo của bạn</span>
-          </h1>
-          <p className="text-sm text-d-on-surface-variant mt-1">
-            Theo dõi tiến độ đơn thu gom, lịch hẹn, kết quả cân phế liệu và biên lai thanh toán
-          </p>
-        </div>
-
+    <div className="mx-auto w-full max-w-7xl space-y-6 p-4 md:p-6">
+      <PageHeader title="Thông báo của bạn" description="Theo dõi tiến độ đơn thu gom, lịch hẹn, kết quả cân phế liệu và biên lai thanh toán.">
         {unreadCount > 0 && (
-          <button
-            type="button"
-            onClick={() => markAllMutation.mutate()}
-            disabled={markAllMutation.isPending}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-d-border-subtle bg-white text-d-primary hover:bg-d-surface-container font-semibold text-xs transition-colors shrink-0 shadow-2xs"
-          >
-            <MaterialIcon name="done_all" className="text-base" />
-            <span>Đánh dấu tất cả đã đọc</span>
+          <button type="button" onClick={() => markAllMutation.mutate()} disabled={markAllMutation.isPending} className={buttonClass({ variant: 'secondary', size: 'sm' })}>
+            <MaterialIcon name="done_all" className="text-base" />Đánh dấu tất cả đã đọc
           </button>
         )}
-      </div>
+      </PageHeader>
 
       {/* Filter Tabs */}
       <div className="flex items-center gap-2 border-b border-d-border-subtle pb-3 overflow-x-auto">

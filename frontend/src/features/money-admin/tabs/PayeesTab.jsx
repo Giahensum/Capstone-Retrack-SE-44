@@ -64,7 +64,7 @@ function BankReview({ payee, onClose }) {
       footer={rejecting ? (
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <GhostButton onClick={() => { setRejecting(false); setReasonErr(''); }} disabled={busy}>Quay lại</GhostButton>
-          <button type="submit" form="reject-bank-form" disabled={busy} className="inline-flex items-center justify-center gap-2 rounded-full bg-red-600 px-6 py-2.5 text-sm font-bold text-white disabled:opacity-60">
+          <button type="submit" form="reject-bank-form" disabled={busy} className="inline-flex items-center justify-center gap-2 rounded-full font-semibold transition active:scale-[.98] disabled:pointer-events-none disabled:opacity-50 outline-none focus-visible:ring-2 focus-visible:ring-d-primary/30 focus-visible:ring-offset-1 min-h-11 px-5 py-2 text-sm bg-d-error text-white hover:bg-[#93000a]">
             <XCircle size={16} aria-hidden="true" />{reject.isPending ? 'Đang từ chối…' : 'Xác nhận từ chối'}
           </button>
         </div>

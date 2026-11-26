@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { sellerApi } from '../api';
 import { formatCurrency, formatDate, PICKUP_STATUS_LABEL, PICKUP_STATUS_STYLE } from '@/lib/utils';
 import { MaterialIcon } from '@/features/depot/components/DepotIcon';
+import { PageHeader, buttonClass } from '@/components/ui/kit';
 
 const STATUS_TABS = [
   { key: '', label: 'Tất cả' },
@@ -37,25 +38,9 @@ export default function RequestList() {
 
   return (
     <div className="flex flex-col p-4 md:p-6 gap-6 w-full max-w-7xl mx-auto">
-      {/* Page Title & Action */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-        <div>
-          <h1 className="font-d-headline-xl-mobile md:font-d-headline-xl text-d-headline-xl-mobile md:text-d-headline-xl text-d-on-surface">
-            Đơn thu gom của tôi
-          </h1>
-          <p className="font-d-body-md text-d-body-md text-d-on-surface-variant mt-2">
-            Theo dõi tiến độ, khối lượng cân phế liệu và trạng thái thanh toán theo thời gian thực.
-          </p>
-        </div>
-
-        <Link
-          to="/seller/create"
-          className="inline-flex items-center justify-center gap-2 rounded-full bg-d-primary hover:bg-[#385500] text-d-on-primary font-semibold px-6 py-3 transition-all shadow-sm active:scale-95 text-sm shrink-0"
-        >
-          <MaterialIcon name="add" className="text-lg" />
-          <span>Tạo đơn mới</span>
-        </Link>
-      </div>
+      <PageHeader title="Đơn thu gom của tôi" description="Theo dõi tiến độ, khối lượng cân phế liệu và trạng thái thanh toán theo thời gian thực.">
+        <Link to="/seller/create" className={buttonClass()}><MaterialIcon name="add" className="text-lg" />Tạo đơn mới</Link>
+      </PageHeader>
 
       {/* Filter Tabs */}
       <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
