@@ -130,6 +130,33 @@ export async function calculateDepotsDistanceWithGoong(depots, userLat, userLng)
 }
 
 /**
+ * Tra cứu đơn giá thu mua công bố của một kho vựa cụ thể cho loại phế liệu đang chọn (nếu có)
+ */
+export function getDepotPublishedPrice(depot, wasteItem) {
+  if (!depot?.prices || Object.keys(depot.prices).length === 0 || !wasteItem) {
+    return null;
+  }
+  const meta = CLASS_METADATA_MAP[wasteItem.class_key] || {};
+  const materialKey = (wasteItem.material_type || meta.material_type || 'OTHER').toUpperCase();
+  const candidates = [
+    materialKey,
+    wasteItem.class_key?.toUpperCase(),
+    wasteItem.class_key,
+    wasteItem.class_key === 'metal' ? 'ALUMINUM' : null,
+    wasteItem.class_key === 'plastic' ? 'PET' : null,
+    wasteItem.class_key === 'cardboard' ? 'CARDBOARD' : null,
+    wasteItem.class_key === 'paper' ? 'PAPER' : null,
+  ].filter(Boolean);
+
+  for (const key of candidates) {
+    if (depot.prices[key] && Number(depot.prices[key]) > 0) {
+      return Number(depot.prices[key]);
+    }
+  }
+  return null;
+}
+
+/**
  * Thuật toán định giá thị trường thông minh (Zero-Hallucination Pricing Engine)
  * Kết hợp:
  * 1. Giá niêm yết kho vựa đối tác gần nhất trong hệ thống

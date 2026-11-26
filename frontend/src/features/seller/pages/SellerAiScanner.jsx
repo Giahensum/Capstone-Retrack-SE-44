@@ -11,11 +11,12 @@ import {
   ChevronDown, ChevronUp, Coins, Info, Lightbulb,
   Eye, EyeOff, RotateCcw,
 } from 'lucide-react';
-import { normalizeAiPredictions } from '../aiWasteMetadata';
+import { normalizeAiPredictions, buildLogicalOrderDescription } from '../aiWasteMetadata';
 import {
   calculateDepotsDistanceWithGoong,
   calculateSmartPriceRecommendation,
   calculateMixedPilePricingRecommendation,
+  getDepotPublishedPrice,
   QUALITY_CONDITIONS,
   FULFILLMENT_METHODS,
 } from '../pricingRecommendation';
@@ -74,8 +75,10 @@ export default function SellerAiScanner() {
   const [estimatedWeight, setEstimatedWeight] = useState(10);
   const [qualityCondition, setQualityCondition] = useState('STANDARD'); // 'CLEAN_COMPACTED' | 'STANDARD' | 'DIRTY_MIXED'
   const [fulfillmentMethod, setFulfillmentMethod] = useState('DOORSTEP'); // 'DOORSTEP' | 'DROP_OFF'
-  const [_depotsList, setDepotsList] = useState([]);
+  const [depotsList, setDepotsList] = useState([]);
   const [nearestDepot, setNearestDepot] = useState(null);
+  const [selectedDepotId, setSelectedDepotId] = useState(null); // null = chưa cố định kho (tùy chọn)
+  const [showAllDepots, setShowAllDepots] = useState(false);
   const [isCalculatingDistance, setIsCalculatingDistance] = useState(false);
   const [showPricingBreakdown, setShowPricingBreakdown] = useState(false);
 
@@ -86,7 +89,7 @@ export default function SellerAiScanner() {
       .catch(() => setAiStatus({ status: 'offline' }));
   }, []);
 
-  // Tự động tải địa chỉ từ Profile người bán nếu đã lưu
+  // Tự động tải địa chỉ từ Profile người bán và danh sách kho vựa hoạt động
   useEffect(() => {
     sellerApi.getProfile()
       .then((profile) => {
@@ -96,24 +99,28 @@ export default function SellerAiScanner() {
             lat: profile.latitude ?? null,
             lng: profile.longitude ?? null,
           });
-          if (profile.latitude != null && profile.longitude != null) {
-            loadNearbyDepots(profile.latitude, profile.longitude);
-          }
+          loadNearbyDepots(profile.latitude ?? null, profile.longitude ?? null);
+        } else {
+          loadNearbyDepots(null, null);
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        loadNearbyDepots(null, null);
+      });
   }, []);
 
   const loadNearbyDepots = async (lat, lng) => {
-    if (lat == null || lng == null) return;
-    setIsCalculatingDistance(true);
+    setIsCalculatingDistance(lat != null && lng != null);
     try {
       const rawDepots = await sellerApi.getNearbyDepots(lat, lng);
-      const sorted = await calculateDepotsDistanceWithGoong(rawDepots, lat, lng);
+      const sorted = (lat != null && lng != null)
+        ? await calculateDepotsDistanceWithGoong(rawDepots, lat, lng)
+        : (rawDepots || []);
       setDepotsList(sorted);
       setNearestDepot(sorted.length > 0 ? sorted[0] : null);
+      setSelectedDepotId((prevId) => (prevId && sorted.some((d) => d.id === prevId) ? prevId : null));
     } catch (err) {
-      console.warn('Lỗi tính toán khoảng cách kho vựa:', err);
+      console.warn('Lỗi tải danh sách kho vựa:', err);
     } finally {
       setIsCalculatingDistance(false);
     }
@@ -323,8 +330,11 @@ export default function SellerAiScanner() {
   };
 
   // Transfer AI Result to Create Request
-  const handleProceedToCreateRequest = (targetItem = null, customPrice = null) => {
+  const handleProceedToCreateRequest = (targetItem = null, customPrice = null, overrideDepot = null) => {
     if (!aiResult) return;
+
+    const chosenDepot = overrideDepot || depotsList.find((d) => d.id === selectedDepotId) || null;
+    const pricingDepot = chosenDepot || nearestDepot;
 
     // Chế độ 2: Đống phế liệu hỗn hợp (Mixed Pile)
     if (scanMode === 'mixed_pile' || aiResult.scan_mode === 'mixed_pile') {
@@ -337,16 +347,18 @@ export default function SellerAiScanner() {
       const mixedPricing = calculateMixedPilePricingRecommendation({
         detectedObjects: effectiveObjects,
         totalWeightKg: Number(estimatedWeight) || 20,
-        nearestDepot,
+        nearestDepot: pricingDepot,
         qualityId: qualityCondition,
         fulfillment: fulfillmentMethod,
         userLocation,
       });
 
-      const qualityMeta = QUALITY_CONDITIONS.find((q) => q.id === qualityCondition);
-      const itemsSummary = mixedPricing.items.map(
-        (it) => `• ${it.name_vi}: ${it.estimated_share_percent}% (~${it.itemWeightKg}kg x ${it.unitPrice.toLocaleString('vi-VN')} đ/kg = ${it.subTotal.toLocaleString('vi-VN')} đ)`
-      ).join('\n');
+      const logicalDescription = buildLogicalOrderDescription({
+        mode: 'mixed_pile',
+        detectedObjects: mixedPricing.items,
+        qualityCondition,
+        fulfillmentMethod,
+      });
 
       navigate('/seller/create', {
         state: {
@@ -359,7 +371,7 @@ export default function SellerAiScanner() {
             icon: 'layers',
             price_range: `${mixedPricing.averageUnitPrice.toLocaleString('vi-VN')} đ/kg (Trung bình)`,
             unit: 'kg',
-            suggested_description: `Đống phế liệu hỗn hợp đa vật thể (AI nhận diện ${mixedPricing.items.length} nhóm vật liệu), tổng khối lượng ~${estimatedWeight}kg. Tình trạng: ${qualityMeta?.shortLabel || 'Chuẩn'}.\n${itemsSummary}\nTổng giá trị AI ước tính: ~${mixedPricing.totalEstimatedValue.toLocaleString('vi-VN')} đ.`,
+            suggested_description: logicalDescription,
             is_recyclable: true,
             material_type: 'MIXED',
             imagePreview: selectedImage?.preview,
@@ -367,8 +379,9 @@ export default function SellerAiScanner() {
             address: userLocation.address,
             latitude: userLocation.lat,
             longitude: userLocation.lng,
-            targetDepotId: nearestDepot?.id || null,
-            nearestDepotName: nearestDepot?.name || null,
+            targetDepotId: chosenDepot?.id || null,
+            selectedDepot: chosenDepot || null,
+            nearestDepotName: pricingDepot?.name || null,
             estimatedWeight: Number(estimatedWeight) || 20,
             recommendedPricePerKg: mixedPricing.averageUnitPrice,
             estimatedTotalPayout: mixedPricing.totalEstimatedValue,
@@ -382,21 +395,26 @@ export default function SellerAiScanner() {
       return;
     }
 
-    // Chế độ 1: Quét 1 vật thể đơn lẻ (Single Item) - GIỮ NGUYÊN 100%
+    // Chế độ 1: Quét 1 vật thể đơn lẻ (Single Item)
     const predictions = normalizeAiPredictions(aiResult);
     const itemToUse = targetItem || predictions[selectedPredictionIndex] || predictions[0];
     if (!itemToUse) return;
 
-    const calcPrice = customPrice || calculateSmartPriceRecommendation({
+    const calcPrice = (!overrideDepot && customPrice) || calculateSmartPriceRecommendation({
       wasteItem: itemToUse,
-      nearestDepot,
+      nearestDepot: pricingDepot,
       weightKg: Number(estimatedWeight) || 1,
       qualityId: qualityCondition,
       fulfillment: fulfillmentMethod,
       userLocation,
     });
 
-    const qualityMeta = QUALITY_CONDITIONS.find((q) => q.id === qualityCondition);
+    const logicalDescription = buildLogicalOrderDescription({
+      mode: 'single',
+      wasteItem: itemToUse,
+      qualityCondition,
+      fulfillmentMethod,
+    });
 
     navigate('/seller/create', {
       state: {
@@ -410,7 +428,7 @@ export default function SellerAiScanner() {
           price_range: itemToUse.price_range,
           unit: itemToUse.unit,
           recycling_tip: itemToUse.recycling_tip,
-          suggested_description: `Phế liệu ${itemToUse.name_vi} (AI nhận diện: ${itemToUse.confidence}%), khối lượng ước tính ~${estimatedWeight}kg. Tình trạng: ${qualityMeta?.shortLabel || 'Chuẩn'}. Giá AI đề xuất: ${calcPrice.recommendedUnitPrice.toLocaleString('vi-VN')} đ/kg.`,
+          suggested_description: logicalDescription,
           is_recyclable: itemToUse.is_recyclable,
           material_type: itemToUse.material_type,
           selectedRank: itemToUse.rank,
@@ -422,8 +440,9 @@ export default function SellerAiScanner() {
           address: userLocation.address,
           latitude: userLocation.lat,
           longitude: userLocation.lng,
-          targetDepotId: nearestDepot?.id || null,
-          nearestDepotName: nearestDepot?.name || null,
+          targetDepotId: chosenDepot?.id || null,
+          selectedDepot: chosenDepot || null,
+          nearestDepotName: pricingDepot?.name || null,
           estimatedWeight: Number(estimatedWeight) || 10,
           recommendedPricePerKg: calcPrice.recommendedUnitPrice,
           estimatedTotalPayout: calcPrice.estimatedTotal,
@@ -434,6 +453,163 @@ export default function SellerAiScanner() {
         },
       },
     });
+  };
+
+  // Helper render bộ chọn kho vựa tùy chọn ngay trong phần AI Recommendation
+  const renderOptionalDepotSelector = (referenceWasteItem = null) => {
+    if (!depotsList || depotsList.length === 0) {
+      return (
+        <p className="text-[11px] text-d-on-surface-variant italic">
+          * Nhập địa chỉ thu gom cụ thể để hệ thống gợi ý các kho vựa gần nhất và tính cự ly di chuyển.
+        </p>
+      );
+    }
+
+    const chosenDepot = depotsList.find((d) => d.id === selectedDepotId) || null;
+    const visibleDepots = showAllDepots ? depotsList : depotsList.slice(0, 3);
+
+    return (
+      <div className="pt-2 space-y-2">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <label className="text-xs font-bold text-d-on-surface flex items-center gap-1.5">
+            <Store size={14} className="text-d-primary" />
+            <span>Chọn kho vựa tạo đơn luôn (Tùy chọn):</span>
+          </label>
+          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-d-surface-container text-d-on-surface-variant">
+            {chosenDepot ? `Đã chọn: ${chosenDepot.name}` : 'Không bắt buộc'}
+          </span>
+        </div>
+
+        <div className="space-y-1.5">
+          {/* Lựa chọn 0: Không chọn cố định trước */}
+          <div
+            onClick={() => setSelectedDepotId(null)}
+            className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-2 text-xs ${
+              !chosenDepot
+                ? 'border-2 border-d-primary bg-d-primary/5 shadow-2xs'
+                : 'border-d-border-subtle bg-d-surface hover:bg-d-surface-container'
+            }`}
+          >
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="shrink-0">
+                {!chosenDepot ? (
+                  <div className="w-4 h-4 rounded-full bg-d-primary text-d-on-primary flex items-center justify-center">
+                    <Check size={10} strokeWidth={3} />
+                  </div>
+                ) : (
+                  <div className="w-4 h-4 rounded-full border border-d-border-subtle" />
+                )}
+              </div>
+              <div className="min-w-0">
+                <span className="font-bold text-d-on-surface block">
+                  Chưa chọn kho cố định (Chọn sau hoặc Nổ đơn tự do)
+                </span>
+                {nearestDepot && (
+                  <span className="text-[11px] text-d-on-surface-variant block truncate">
+                    Đang tham chiếu giá từ kho gần nhất: {nearestDepot.name}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Danh sách kho vựa để chọn luôn nếu thích */}
+          {visibleDepots.map((depot) => {
+            const isChosen = selectedDepotId === depot.id;
+            const isNearest = nearestDepot?.id === depot.id;
+            const publishedPrice = referenceWasteItem ? getDepotPublishedPrice(depot, referenceWasteItem) : null;
+            const distKm = depot.routingDistanceKm ?? depot.distanceKm ?? null;
+
+            return (
+              <div
+                key={depot.id}
+                onClick={() => setSelectedDepotId(isChosen ? null : depot.id)}
+                className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-2.5 text-xs ${
+                  isChosen
+                    ? 'border-2 border-emerald-600 bg-emerald-500/10 shadow-xs'
+                    : 'border-d-border-subtle bg-d-surface hover:border-d-primary/40 hover:bg-d-surface-container'
+                }`}
+              >
+                <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                  <div className="shrink-0 mt-0.5">
+                    {isChosen ? (
+                      <div className="w-4 h-4 rounded-full bg-emerald-600 text-white flex items-center justify-center">
+                        <Check size={10} strokeWidth={3} />
+                      </div>
+                    ) : (
+                      <div className="w-4 h-4 rounded-full border border-d-border-subtle" />
+                    )}
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="font-bold text-d-on-surface break-words">
+                        {depot.name}
+                      </span>
+                      {isNearest && (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-600/15 text-emerald-700 dark:text-emerald-300 shrink-0">
+                          📍 Gần nhất
+                        </span>
+                      )}
+                      {publishedPrice && (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-800 dark:text-amber-300 shrink-0">
+                          Giá niêm yết: {publishedPrice.toLocaleString('vi-VN')} đ/kg
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-d-on-surface-variant truncate mt-0.5">
+                      {depot.address}
+                    </p>
+                    <div className="flex items-center gap-2 mt-1 text-[10px] text-d-on-surface-variant flex-wrap">
+                      <span className="font-bold text-amber-700 dark:text-amber-400">
+                        ★ {depot.avgRating?.toFixed(1) || '5.0'}
+                      </span>
+                      <span>• {depot.totalDone || 0} đơn</span>
+                      {distKm != null && (
+                        <span className="font-semibold text-emerald-700 dark:text-emerald-400">
+                          • {distKm.toFixed(1)} km{depot.routingDurationText ? ` (${depot.routingDurationText})` : ''}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedDepotId(depot.id);
+                    handleProceedToCreateRequest(referenceWasteItem, null, depot);
+                  }}
+                  className={`px-3 py-1.5 rounded-full text-[11px] font-bold transition-all shrink-0 cursor-pointer ${
+                    isChosen
+                      ? 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-2xs'
+                      : 'bg-d-surface-container text-d-on-surface hover:bg-d-primary hover:text-d-on-primary'
+                  }`}
+                >
+                  Tạo đơn kho này
+                </button>
+              </div>
+            );
+          })}
+        </div>
+
+        {depotsList.length > 3 && (
+          <button
+            type="button"
+            onClick={() => setShowAllDepots((prev) => !prev)}
+            className="text-[11px] font-bold text-d-primary hover:underline flex items-center gap-1 cursor-pointer"
+          >
+            <span>
+              {showAllDepots
+                ? 'Thu gọn danh sách kho'
+                : `Xem thêm ${depotsList.length - 3} kho vựa khác`}
+            </span>
+            {showAllDepots ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+          </button>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -854,10 +1030,12 @@ export default function SellerAiScanner() {
               estimated_share_percent: manualShares[obj.id] ?? obj.estimated_share_percent,
               manual_share_percent: manualShares[obj.id],
             }));
+            const chosenDepot = depotsList.find((d) => d.id === selectedDepotId) || null;
+            const pricingDepot = chosenDepot || nearestDepot;
             const mixedPricing = calculateMixedPilePricingRecommendation({
               detectedObjects,
               totalWeightKg: Number(estimatedWeight) || 20,
-              nearestDepot,
+              nearestDepot: pricingDepot,
               qualityId: qualityCondition,
               fulfillment: fulfillmentMethod,
               userLocation,
@@ -1045,8 +1223,8 @@ export default function SellerAiScanner() {
 
                 {/* ── Parameter Inputs for Mixed Pile Valuation ── */}
                 <div className="rounded-2xl border border-d-border-subtle bg-d-surface-container-low/60 p-4 space-y-4">
-                  {/* Location Goong.io */}
-                  <div className="space-y-1.5">
+                  {/* Location Goong.io & Optional Depot Picker */}
+                  <div className="space-y-2">
                     <label className="text-xs font-bold text-d-on-surface flex items-center gap-1.5">
                       <MapPin size={14} className="text-d-primary" />
                       <span>Địa điểm thu gom thực tế:</span>
@@ -1057,6 +1235,7 @@ export default function SellerAiScanner() {
                       onSelect={handleLocationSelect}
                       placeholder="Gõ số nhà, tên đường hoặc bấm GPS..."
                     />
+                    {renderOptionalDepotSelector(null)}
                   </div>
 
                   {/* Total Weight Input */}
@@ -1166,7 +1345,7 @@ export default function SellerAiScanner() {
                       onClick={() => handleProceedToCreateRequest()}
                       className="px-5 py-3 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0"
                     >
-                      <span>Tạo đơn gom cả đống phế liệu</span>
+                      <span>{chosenDepot ? `Tạo đơn gửi ${chosenDepot.name}` : 'Tạo đơn gom cả đống phế liệu'}</span>
                       <ArrowRight size={14} />
                     </button>
                   </div>
@@ -1179,9 +1358,11 @@ export default function SellerAiScanner() {
           {aiResult && scanMode === 'single' && (() => {
             const predictions = normalizeAiPredictions(aiResult);
             const currentSelected = predictions[selectedPredictionIndex] || predictions[0];
+            const chosenDepot = depotsList.find((d) => d.id === selectedDepotId) || null;
+            const pricingDepot = chosenDepot || nearestDepot;
             const smartPrice = calculateSmartPriceRecommendation({
               wasteItem: currentSelected,
-              nearestDepot,
+              nearestDepot: pricingDepot,
               weightKg: Number(estimatedWeight) || 1,
               qualityId: qualityCondition,
               fulfillment: fulfillmentMethod,
@@ -1279,23 +1460,23 @@ export default function SellerAiScanner() {
                             </div>
 
                             {/* Name & price */}
-                            <div className="min-w-0">
+                            <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2 flex-wrap">
-                                <span className="font-bold text-sm text-d-on-surface truncate">
+                                <span className="font-bold text-sm text-d-on-surface break-words">
                                   {pred.name_vi}
                                 </span>
                                 {pred.is_top1 ? (
-                                  <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-md bg-amber-500/20 text-amber-700 dark:text-amber-300">
+                                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-amber-500/20 text-amber-700 dark:text-amber-300 shrink-0">
                                     🏆 Top 1
                                   </span>
                                 ) : (
-                                  <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded-md bg-d-surface-container text-d-on-surface-variant">
+                                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-d-surface-container text-d-on-surface-variant shrink-0">
                                     Top {idx + 1}
                                   </span>
                                 )}
                               </div>
-                              <p className="text-[11px] text-d-on-surface-variant truncate mt-0.5">
-                                Giá tham khảo: <strong className="text-d-on-surface">{pred.price_range}</strong>
+                              <p className="text-[11px] text-d-on-surface-variant mt-0.5">
+                                Giá tham khảo: <strong className="text-d-on-surface font-semibold">{pred.price_range}</strong>
                               </p>
                             </div>
                           </div>
@@ -1386,8 +1567,8 @@ export default function SellerAiScanner() {
                       </span>
                     </div>
 
-                    {/* Trường 1: Địa điểm thu gom thực tế (Goong.io) */}
-                    <div className="space-y-1.5">
+                    {/* Trường 1: Địa điểm thu gom thực tế (Goong.io) & Chọn kho vựa (Tùy chọn) */}
+                    <div className="space-y-2">
                       <div className="flex items-center justify-between">
                         <label className="text-xs font-bold text-d-on-surface flex items-center gap-1.5">
                           <MapPin size={14} className="text-d-primary" />
@@ -1405,43 +1586,7 @@ export default function SellerAiScanner() {
                         onSelect={handleLocationSelect}
                         placeholder="Gõ số nhà, tên đường hoặc bấm biểu tượng GPS định vị vị trí..."
                       />
-                      {nearestDepot ? (
-                        <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-xs flex items-center justify-between flex-wrap gap-2">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0">
-                              <Store size={15} />
-                            </div>
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className="font-bold text-d-on-surface truncate">
-                                  Kho gần bạn nhất: {nearestDepot.name}
-                                </span>
-                                {smartPrice.depotPublishedPrice && (
-                                  <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-emerald-600/20 text-emerald-800 dark:text-emerald-300 font-bold">
-                                    Giá niêm yết: {smartPrice.depotPublishedPrice.toLocaleString('vi-VN')} đ/kg
-                                  </span>
-                                )}
-                              </div>
-                              <p className="text-[11px] text-d-on-surface-variant truncate mt-0.5">
-                                {nearestDepot.address}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="text-right shrink-0">
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-600 text-white font-bold text-xs shadow-2xs">
-                              {nearestDepot.routingDistanceKm != null ? `${nearestDepot.routingDistanceKm.toFixed(1)} km` : '~2.0 km'}
-                              {nearestDepot.routingDurationText && ` (${nearestDepot.routingDurationText})`}
-                            </span>
-                            <p className="text-[9px] text-emerald-700 dark:text-emerald-400 font-mono mt-0.5">
-                              {nearestDepot.isGoongRouting ? 'Tuyến xe máy Goong.io' : 'Cự ly ước tính'}
-                            </p>
-                          </div>
-                        </div>
-                      ) : (
-                        <p className="text-[11px] text-d-on-surface-variant italic">
-                          * Bạn có thể chọn địa chỉ cụ thể để hệ thống tìm kho vựa gần nhất và tính cước vận chuyển chuẩn xác.
-                        </p>
-                      )}
+                      {renderOptionalDepotSelector(currentSelected)}
                     </div>
 
                     {/* Trường 2: Khối lượng ước tính */}
@@ -1587,7 +1732,7 @@ export default function SellerAiScanner() {
                         <span className="text-[11px] text-d-on-surface-variant flex items-center gap-1">
                           <CheckCircle2 size={12} className="text-emerald-600" />
                           {smartPrice.priceSource === 'DEPOT_PUBLISHED'
-                            ? `Khớp trực tiếp từ bảng giá niêm yết của ${nearestDepot?.name}`
+                            ? `Khớp trực tiếp từ bảng giá niêm yết của ${chosenDepot ? `kho đã chọn (${chosenDepot.name})` : pricingDepot?.name}`
                             : 'Tham chiếu theo bảng giá thị trường chuẩn ReTrack'}
                         </span>
                         <button
@@ -1609,7 +1754,7 @@ export default function SellerAiScanner() {
                           </p>
                           <div className="space-y-1 text-[11px]">
                             <div className="flex justify-between text-d-on-surface-variant">
-                              <span>• Giá cơ sở ({smartPrice.priceSource === 'DEPOT_PUBLISHED' ? `Kho ${nearestDepot?.name}` : 'Thị trường chuẩn'}):</span>
+                              <span>• Giá cơ sở ({smartPrice.priceSource === 'DEPOT_PUBLISHED' ? `Kho ${pricingDepot?.name}` : 'Thị trường chuẩn'}):</span>
                               <span className="font-mono font-bold text-d-on-surface">{smartPrice.breakdown.basePrice.toLocaleString('vi-VN')} đ/kg</span>
                             </div>
                             <div className="flex justify-between text-d-on-surface-variant">
@@ -1695,17 +1840,17 @@ export default function SellerAiScanner() {
                       </div>
 
                       {/* Lời khuyên 3: Hình thức bàn giao tối ưu */}
-                      {nearestDepot && (
+                      {pricingDepot && (
                         <div className="flex items-start gap-2.5 bg-d-surface-container-lowest/80 p-3 rounded-xl border border-blue-500/15">
                           <div className="w-6 h-6 rounded-lg bg-blue-500/15 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0 mt-0.5">
                             <Store size={14} />
                           </div>
                           <div className="min-w-0">
                             <span className="font-bold text-d-on-surface block">
-                              Kho vựa gần bạn ({nearestDepot.name}):
+                              {chosenDepot ? `Kho bạn đã chọn (${chosenDepot.name}):` : `Kho vựa gần bạn (${pricingDepot.name}):`}
                             </span>
                             <p className="text-d-on-surface-variant leading-relaxed mt-0.5">
-                              Kho cách bạn <strong>{nearestDepot.routingDistanceKm != null ? `${nearestDepot.routingDistanceKm.toFixed(1)} km` : '~2.0 km'}</strong>. Nếu tiện đường, bạn có thể chọn hình thức <em>'Tự mang đến kho vựa'</em> để nhận trọn 100% giá thu mua cao nhất của vựa.
+                              Kho cách bạn <strong>{pricingDepot.routingDistanceKm != null ? `${pricingDepot.routingDistanceKm.toFixed(1)} km` : '~2.0 km'}</strong>. Nếu tiện đường, bạn có thể chọn hình thức <em>'Tự mang đến kho vựa'</em> để nhận trọn 100% giá thu mua cao nhất của vựa.
                             </p>
                           </div>
                         </div>
@@ -1747,7 +1892,9 @@ export default function SellerAiScanner() {
                   >
                     <span>
                       {currentSelected.is_recyclable
-                        ? `Tạo đơn với mức giá đề xuất này (${smartPrice.recommendedUnitPrice.toLocaleString('vi-VN')} đ/kg)`
+                        ? chosenDepot
+                          ? `Tạo đơn gửi ${chosenDepot.name} (${smartPrice.recommendedUnitPrice.toLocaleString('vi-VN')} đ/kg)`
+                          : `Tạo đơn với mức giá đề xuất này (${smartPrice.recommendedUnitPrice.toLocaleString('vi-VN')} đ/kg)`
                         : `Tạo đơn thu gom với: ${currentSelected.name_vi}`}
                     </span>
                     <ArrowRight size={16} />
