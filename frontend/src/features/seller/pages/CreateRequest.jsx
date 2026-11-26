@@ -7,7 +7,7 @@ import { sellerApi } from '../api';
 import GoongAutocomplete from '@/components/ui/GoongAutocomplete';
 import { MaterialIcon } from '@/features/depot/components/DepotIcon';
 import { Loader2, Sparkles, Wand2, Layers } from 'lucide-react';
-import { CLASS_METADATA_MAP, normalizeAiPredictions } from '../aiWasteMetadata';
+import { CLASS_METADATA_MAP, normalizeAiPredictions, buildLogicalOrderDescription } from '../aiWasteMetadata';
 
 const TIME_SLOTS = [
   '07:00 - 09:00', '09:00 - 11:00', '11:00 - 13:00',
@@ -74,6 +74,7 @@ export default function CreateRequest() {
   const [selectedPresetId, setSelectedPresetId] = useState(null);
   const [isAiScanning, setIsAiScanning] = useState(false);
   const [detectedAiData, setDetectedAiData] = useState(null);
+  const [selectedDepot, setSelectedDepot] = useState(null);
 
   const [form, setForm] = useState({
     description: '',
@@ -96,15 +97,32 @@ export default function CreateRequest() {
         ...ai,
         top_predictions: (ai.top_predictions && ai.top_predictions.length > 0) ? ai.top_predictions : normalized,
       };
+      const cleanDescription = enrichedAi.suggested_description || buildLogicalOrderDescription({
+        mode: enrichedAi.scan_mode || 'single',
+        wasteItem: enrichedAi,
+        detectedObjects: enrichedAi.detected_objects || [],
+        qualityCondition: enrichedAi.qualityCondition || 'STANDARD',
+        fulfillmentMethod: enrichedAi.fulfillmentMethod || 'DOORSTEP',
+      });
+
       setDetectedAiData(enrichedAi);
       setInputMethod('manual');
+
+      if (ai.selectedDepot && ai.selectedDepot.id) {
+        setSelectedDepot(ai.selectedDepot);
+        setMode('choose');
+      } else {
+        setSelectedDepot(null);
+        setMode(null);
+      }
+
       setForm((prev) => ({
         ...prev,
         address: ai.address || prev.address,
         latitude: ai.latitude ?? prev.latitude,
         longitude: ai.longitude ?? prev.longitude,
-        targetDepotId: ai.targetDepotId || prev.targetDepotId,
-        description: enrichedAi.suggested_description || prev.description || `Phế liệu ${enrichedAi.name_vi} (AI nhận diện: ${enrichedAi.confidence}%), tình trạng khô ráo cần kho thu gom.`,
+        targetDepotId: ai.selectedDepot?.id || null,
+        description: cleanDescription,
       }));
 
       if (ai.imagePreview || ai.annotated_image) {
@@ -120,7 +138,11 @@ export default function CreateRequest() {
           return prev;
         });
       }
-      toast.success(`✨ Đã áp dụng thông tin AI: ${ai.name_vi} (${ai.confidence}%)`);
+      if (ai.selectedDepot?.name) {
+        toast.success(`✨ Đã áp dụng thông tin AI & chọn kho: ${ai.selectedDepot.name}`);
+      } else {
+        toast.success(`✨ Đã áp dụng phân loại AI: ${ai.name_vi}`);
+      }
     }
   }, [location.state]);
 
@@ -141,12 +163,18 @@ export default function CreateRequest() {
       unit: pred.unit || meta.unit || detectedAiData.unit,
       selectedRank: pred.rank,
     };
+    const logicalDesc = buildLogicalOrderDescription({
+      mode: 'single',
+      wasteItem: updated,
+      qualityCondition: updated.qualityCondition || 'STANDARD',
+      fulfillmentMethod: updated.fulfillmentMethod || 'DOORSTEP',
+    });
     setDetectedAiData(updated);
     setForm((prev) => ({
       ...prev,
-      description: updated.suggested_description || `Phế liệu ${updated.name_vi} (AI nhận diện: ${updated.confidence}%), tình trạng khô ráo cần kho thu gom.`,
+      description: logicalDesc,
     }));
-    toast.success(`✨ Đã chuyển sang phân loại: ${updated.name_vi} (${updated.confidence}%)`);
+    toast.success(`✨ Đã chuyển sang loại phế liệu: ${updated.name_vi}`);
   };
 
   // ── Inline AI scan file handler ──
@@ -163,11 +191,16 @@ export default function CreateRequest() {
           top_predictions: normalized,
           selectedRank: 1,
         };
+        const logicalDesc = buildLogicalOrderDescription({
+          mode: res.scan_mode || 'single',
+          wasteItem: enrichedRes,
+          detectedObjects: res.detected_objects || [],
+        });
         setDetectedAiData(enrichedRes);
         setInputMethod('manual');
         setForm((prev) => ({
           ...prev,
-          description: enrichedRes.suggested_description || `Phế liệu ${enrichedRes.name_vi} (AI nhận diện: ${enrichedRes.confidence}%), tình trạng khô ráo cần kho thu gom.`,
+          description: logicalDesc,
         }));
         setImages((prev) => {
           if (prev.length < 5) {
@@ -183,7 +216,7 @@ export default function CreateRequest() {
           }
           return prev;
         });
-        toast.success(`✨ AI đã nhận diện: ${res.name_vi} (${res.confidence}%) và tự động điền mô tả!`);
+        toast.success(`✨ AI đã nhận diện: ${res.name_vi} và tự động điền mô tả đơn!`);
       }
     } catch (err) {
       console.error('AI scan error:', err);
@@ -193,7 +226,6 @@ export default function CreateRequest() {
       if (aiFileInputRef.current) aiFileInputRef.current.value = '';
     }
   };
-  const [selectedDepot, setSelectedDepot] = useState(null);
 
   // Fetch recent requests to recommend previously used addresses
   const { data: previousRequests = [] } = useQuery({
@@ -405,13 +437,19 @@ export default function CreateRequest() {
   };
 
   const goBack = () => {
+    if (step === 3) {
+      if (mode === 'broadcast') {
+        setMode(null);
+      }
+      setStep(2);
+      return;
+    }
     if (step === 2 && mode) {
       setMode(null);
       return;
     }
     if (step > 1) {
       setStep(step - 1);
-      setMode(null);
       return;
     }
     navigate(-1);
@@ -886,19 +924,93 @@ export default function CreateRequest() {
             />
           </div>
 
+          {/* Banner Kho vựa đã chọn sẵn (nếu chọn từ AI Recommendation hoặc Bước 2) */}
+          {selectedDepot && mode === 'choose' && (
+            <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+              <div className="flex items-start gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0">
+                  <MaterialIcon name="domain" className="text-xl" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-bold text-sm text-d-on-surface">
+                      Kho thu gom đã chọn: {selectedDepot.name}
+                    </span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-600/20 text-emerald-800 dark:text-emerald-300">
+                      ✓ Đã gắn kho
+                    </span>
+                  </div>
+                  <p className="text-xs text-d-on-surface-variant truncate mt-0.5">
+                    📍 {selectedDepot.address}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!form.address.trim()) return toast.error('Vui lòng nhập địa chỉ thu gom trước khi đổi kho');
+                    setStep(2);
+                    setMode('choose');
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-d-surface text-xs font-bold text-d-primary border border-d-border-subtle hover:bg-d-surface-container cursor-pointer"
+                >
+                  Đổi kho khác
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedDepot(null);
+                    setMode(null);
+                    setForm((prev) => ({ ...prev, targetDepotId: null }));
+                  }}
+                  className="px-3 py-1.5 rounded-xl text-xs font-semibold text-d-on-surface-variant hover:text-red-600 cursor-pointer"
+                >
+                  ✕ Bỏ chọn
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Action button */}
-          <div className="flex justify-end pt-2">
-            <button
-              type="button"
-              onClick={() => {
-                if (!form.address.trim()) return toast.error('Vui lòng nhập địa chỉ thu gom');
-                setStep(2);
-              }}
-              className="inline-flex items-center gap-2 rounded-full bg-d-primary hover:bg-[#385500] text-d-on-primary font-semibold px-8 py-3.5 transition-all shadow-sm active:scale-95 text-sm"
-            >
-              <span>Tiếp tục chọn hình thức</span>
-              <MaterialIcon name="arrow_forward" className="text-base" />
-            </button>
+          <div className="flex flex-wrap justify-end gap-3 pt-2">
+            {selectedDepot && mode === 'choose' ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!form.address.trim()) return toast.error('Vui lòng nhập địa chỉ thu gom');
+                    setStep(2);
+                  }}
+                  className="inline-flex items-center gap-2 rounded-full border border-d-border-subtle bg-d-surface hover:bg-d-surface-container text-d-on-surface font-semibold px-6 py-3.5 transition-all text-sm cursor-pointer"
+                >
+                  <span>Đổi hình thức / Kho khác</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!form.address.trim()) return toast.error('Vui lòng nhập địa chỉ thu gom');
+                    setStep(3);
+                  }}
+                  className="inline-flex items-center gap-2 rounded-full bg-d-primary hover:bg-[#385500] text-d-on-primary font-semibold px-8 py-3.5 transition-all shadow-sm active:scale-95 text-sm cursor-pointer"
+                >
+                  <span>Tiếp tục xác nhận đơn</span>
+                  <MaterialIcon name="arrow_forward" className="text-base" />
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  if (!form.address.trim()) return toast.error('Vui lòng nhập địa chỉ thu gom');
+                  setStep(2);
+                }}
+                className="inline-flex items-center gap-2 rounded-full bg-d-primary hover:bg-[#385500] text-d-on-primary font-semibold px-8 py-3.5 transition-all shadow-sm active:scale-95 text-sm cursor-pointer"
+              >
+                <span>Tiếp tục chọn hình thức</span>
+                <MaterialIcon name="arrow_forward" className="text-base" />
+              </button>
+            )}
           </div>
         </div>
       )}
