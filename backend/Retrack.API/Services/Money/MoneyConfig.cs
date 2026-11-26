@@ -40,7 +40,7 @@ public static class MoneyConfigKeys
 public sealed record MoneyConfig(
     string Mode, IReadOnlyDictionary<string, decimal> DefaultCommission, bool PayoutAutoEnabled, string PayoutSchedule,
     int PayoutHoldMinutes, decimal PayoutMinAmount, decimal PayoutAutoMaxAmount, string PayoutProvider,
-    bool PayoutTestEnabled, decimal PayoutTestMaxAmount, int PayoutScheduleHour = 2, int PayoutScheduleWeekday = 1)
+    bool PayoutTestEnabled, decimal PayoutTestMaxAmount, int PayoutScheduleHour = 2, int PayoutScheduleWeekday = 1, bool SubscriptionOnly = false)
 {
     public bool IsPlatformMode => Mode == MoneyConfigKeys.ModePlatform;
 
@@ -64,16 +64,24 @@ public sealed record MoneyConfig(
         return new(mode, rates, Bool(MoneyConfigKeys.PayoutAutoEnabled, false), schedule,
             (int)Dec(MoneyConfigKeys.PayoutHoldMinutes, 1440m, 0m, 525600m), Dec(MoneyConfigKeys.PayoutMinAmount, 50000m),
             Dec(MoneyConfigKeys.PayoutAutoMaxAmount, 5000000m), provider, Bool(MoneyConfigKeys.PayoutTestEnabled, false),
-            Dec(MoneyConfigKeys.PayoutTestMaxAmount, 10000m), (int)Dec(MoneyConfigKeys.PayoutScheduleHour, 2m, 0m, 23m), (int)Dec(MoneyConfigKeys.PayoutScheduleWeekday, 1m, 1m, 7m));
+            Dec(MoneyConfigKeys.PayoutTestMaxAmount, 10000m), (int)Dec(MoneyConfigKeys.PayoutScheduleHour, 2m, 0m, 23m), (int)Dec(MoneyConfigKeys.PayoutScheduleWeekday, 1m, 1m, 7m),
+            Text("BUSINESS_MODEL", "") == "DEPOT_SUBSCRIPTION");
     }
 }
 
 /// <summary>Đọc cấu hình thu/chi từ system_configs. Không cache: mỗi lần gọi là một truy vấn nhỏ để đổi cấu hình có hiệu lực ngay.</summary>
 public sealed class MoneyConfigReader(AppDbContext db)
 {
+    public async Task<bool> UsesPlatformAsync(string flow, Guid source, CancellationToken ct = default)
+    {
+        var config = await GetAsync(ct);
+        if (!config.SubscriptionOnly) return config.IsPlatformMode;
+        return await db.MoneyCollections.AsNoTracking().AnyAsync(
+            x => x.Flow == flow && x.SourceId == source && (x.Status == "PENDING" || x.Status == "PAID" || x.Status == "REFUNDING"), ct);
+    }
     public async Task<MoneyConfig> GetAsync(CancellationToken ct = default)
     {
-        var values = await db.SystemConfigs.AsNoTracking().Where(c => MoneyConfigKeys.All.Contains(c.ConfigKey))
+        var values = await db.SystemConfigs.AsNoTracking().Where(c => MoneyConfigKeys.All.Contains(c.ConfigKey) || c.ConfigKey == "BUSINESS_MODEL")
             .ToDictionaryAsync(c => c.ConfigKey, c => c.ConfigValue, ct);
         return MoneyConfig.FromValues(values);
     }

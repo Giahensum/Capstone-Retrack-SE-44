@@ -67,6 +67,22 @@ public sealed class PaymentTests : IAsyncLifetime
         return await service.MarkPaymentSentAsync(request, owner, proof);
     }
 
+    [Fact]
+    public async Task Cash_payment_records_actual_method_and_reference_without_fake_proof_and_retries_once()
+    {
+        var f = await Seed();
+        await using var db = Open();
+        var service = new DepotPaymentService(new DepotOwnerRepository(db), new DepotPaymentRepository(db), new DepotUnitOfWork(db));
+        await Assert.ThrowsAsync<ArgumentException>(() => service.MarkSentAsync(f.Request, f.Owner, null, "CASH"));
+        await service.MarkSentAsync(f.Request, f.Owner, null, "CASH", "Giao tiền trực tiếp, biên nhận 001");
+        await service.MarkSentAsync(f.Request, f.Owner, null, "CASH", "Giao tiền trực tiếp, biên nhận 001");
+        await Assert.ThrowsAsync<DepotConflictException>(() => service.MarkSentAsync(f.Request, f.Owner, null, "OTHER", "Căn cứ khác"));
+        await using var check = Open(); var saved = await check.PickupRequests.SingleAsync(x => x.Id == f.Request);
+        Assert.Equal("PAYMENT_SENT", saved.Status); Assert.Equal("CASH", saved.PaymentMethod); Assert.Null(saved.PaymentProofUrl);
+        Assert.Equal("Giao tiền trực tiếp, biên nhận 001", saved.PaymentReference);
+        Assert.Single(await check.Notifications.Where(x => x.PickupRequestId == f.Request).ToListAsync());
+    }
+
     [Theory]
     [InlineData("ADMIN")]
     [InlineData("DRIVER")]

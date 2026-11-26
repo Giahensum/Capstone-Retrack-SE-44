@@ -1,6 +1,2 @@
-import React from 'react';
-import clsx from 'clsx';
-
-export const MaterialIcon = ({ name, className, style }) => (
-  <span className={clsx("material-symbols-outlined", className)} style={style}>{name}</span>
-);
+// Dùng chung bộ icon lucide đóng gói sẵn (không tải font Material Symbols từ ngoài).
+export { MaterialIcon } from '@/features/depot/components/DepotIcon';

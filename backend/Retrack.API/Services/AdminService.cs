@@ -83,6 +83,8 @@ namespace Retrack.API.Services
         {
             var usersByRole = await _userRepo.CountByRoleAsync();
             var now = DateTime.UtcNow;
+            var subscriptionOnly = await Retrack.API.Services.Shared.BusinessModel.IsSubscriptionAsync(_db);
+            var monthStart = now.AddHours(7); monthStart = new DateTime(monthStart.Year, monthStart.Month, 1, 0, 0, 0, DateTimeKind.Utc).AddHours(-7);
 
             return new AdminDashboardStatsDto
             {
@@ -91,8 +93,8 @@ namespace Retrack.API.Services
                 TotalPickupRequests = await _db.PickupRequests.CountAsync(),
                 CompletedPickupRequests = await _db.PickupRequests.CountAsync(p => p.Status == "DONE"),
                 TotalInventoryBatches = await _db.InventoryBatches.CountAsync(),
-                TotalPlatformRevenue = await _db.PlatformTransactions.SumAsync(t => t.FeeAmount),
-                RevenueThisMonth = await _db.PlatformTransactions
+                TotalPlatformRevenue = subscriptionOnly ? await _db.DepotSubscriptionOrders.Where(o => o.Status == "PAID").SumAsync(o => (decimal?)o.Amount) ?? 0 : await _db.PlatformTransactions.SumAsync(t => t.FeeAmount),
+                RevenueThisMonth = subscriptionOnly ? await _db.DepotSubscriptionOrders.Where(o => o.Status == "PAID" && o.PaidAt >= monthStart).SumAsync(o => (decimal?)o.Amount) ?? 0 : await _db.PlatformTransactions
                     .Where(t => t.CreatedAt.Year == now.Year && t.CreatedAt.Month == now.Month)
                     .SumAsync(t => t.FeeAmount)
             };
@@ -379,13 +381,15 @@ namespace Retrack.API.Services
             var config = await _db.SystemConfigs.FindAsync(FeeConfigKey);
             return new FeeConfigDto
             {
-                PlatformFeePercentage = decimal.Parse(config?.ConfigValue ?? "5.00", CultureInfo.InvariantCulture),
+                PlatformFeePercentage = await Retrack.API.Services.Shared.BusinessModel.IsSubscriptionAsync(_db) ? 0 : decimal.Parse(config?.ConfigValue ?? "5.00", CultureInfo.InvariantCulture),
                 UpdatedAt = config?.UpdatedAt ?? DateTime.UtcNow
             };
         }
 
         public async Task<FeeConfigDto> UpdateFeeConfigAsync(UpdateFeeConfigDto dto, Guid actorId)
         {
+            if (await Retrack.API.Services.Shared.BusinessModel.IsSubscriptionAsync(_db))
+                throw new ArgumentException("RETRACK đang bán gói quản lý Depot, không cấu hình phí hoa hồng. Đơn cũ giữ mức đã chốt.");
             if (dto.PlatformFeePercentage < 0 || dto.PlatformFeePercentage > 100 || decimal.Round(dto.PlatformFeePercentage, 2) != dto.PlatformFeePercentage)
                 throw new ArgumentException("Phí nền tảng phải từ 0 đến 100% và tối đa hai chữ số thập phân.");
 
@@ -408,6 +412,16 @@ namespace Retrack.API.Services
         // ── Revenue & Transactions ─────────────────────────────────────
         public async Task<RevenueReportDto> GetRevenueReportAsync(DateTime from, DateTime to, string groupBy)
         {
+            if (await Retrack.API.Services.Shared.BusinessModel.IsSubscriptionAsync(_db))
+            {
+                if (from.Kind != DateTimeKind.Utc || to.Kind != DateTimeKind.Utc || from > to || to - from > TimeSpan.FromDays(3660))
+                    throw new ArgumentException("Khoảng báo cáo UTC không hợp lệ hoặc dài quá 10 năm.");
+                var daily = await _db.DepotSubscriptionOrders.AsNoTracking().Where(o => o.Status == "PAID" && o.PaidAt >= from && o.PaidAt <= to)
+                    .GroupBy(o => o.PaidAt!.Value.AddHours(7).Date).Select(g => new { Day = g.Key, Amount = g.Sum(o => o.Amount) }).ToListAsync();
+                var subscriptionPoints = daily.GroupBy(x => PeriodLabel(x.Day, groupBy)).OrderBy(x => x.Key)
+                    .Select(g => new RevenuePointDto { PeriodLabel = g.Key, Amount = g.Sum(x => x.Amount) }).ToList();
+                return new RevenueReportDto { TotalRevenue = daily.Sum(x => x.Amount), Points = subscriptionPoints };
+            }
             var transactions = await _db.PlatformTransactions
                 .Where(t => t.CreatedAt >= from && t.CreatedAt <= to)
                 .ToListAsync();

@@ -33,6 +33,11 @@ public class LiquidationLot
     [Column("cancel_reason"), MaxLength(1000)] public string? CancelReason { get; set; }
     [Column("request_hash"), MaxLength(64)] public string RequestHash { get; set; } = "";
     [Column("created_at")] public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    // V2: phiên nhiều hạng mục (1 = trọn lô cũ). Gia hạn sát giờ tối đa 5 lần x 2 phút; hạn thu gom tính từ lúc đóng thực tế.
+    [Column("format_version")] public short FormatVersion { get; set; } = 1;
+    [Column("extension_count")] public short ExtensionCount { get; set; }
+    [Column("collection_window_hours")] public int? CollectionWindowHours { get; set; }
+    [Column("closed_at")] public DateTime? ClosedAt { get; set; }
 }
 
 [Table("liquidation_participations")]
@@ -66,8 +71,9 @@ public class LiquidationAgreement
     [Key, Column("id")] public Guid Id { get; set; } = Guid.NewGuid();
     [Column("lot_id")] public Guid LotId { get; set; }
     [ForeignKey(nameof(LotId))] public LiquidationLot Lot { get; set; } = null!;
-    [Column("winning_bid_id")] public Guid WinningBidId { get; set; }
-    [ForeignKey(nameof(WinningBidId))] public LiquidationBid WinningBid { get; set; } = null!;
+    // V1 bắt buộc lượt giá thắng trọn lô; V2 để trống, giá thắng nằm ở từng hạng mục (LiquidationAgreementItem).
+    [Column("winning_bid_id")] public Guid? WinningBidId { get; set; }
+    [ForeignKey(nameof(WinningBidId))] public LiquidationBid? WinningBid { get; set; }
     [Column("depot_id")] public Guid DepotId { get; set; }
     [ForeignKey(nameof(DepotId))] public Depot Depot { get; set; } = null!;
     [Column("buyer_id")] public Guid BuyerId { get; set; }
@@ -90,4 +96,14 @@ public class LiquidationAgreement
     [Column("esign_sent_at")] public DateTime? EsignSentAt { get; set; }
     [Column("esign_completed_at")] public DateTime? EsignCompletedAt { get; set; }
     [Column("created_at")] public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    [Column("format_version")] public short FormatVersion { get; set; } = 1;
+    // Báo bên mua bỏ mua/không thực hiện: lưu lý do để Admin xử lý; hệ thống không tự phạt hay chuyển người thắng.
+    [Column("abandon_reported_at")] public DateTime? AbandonReportedAt { get; set; }
+    [Column("abandon_reported_by")] public Guid? AbandonReportedBy { get; set; }
+    [Column("abandon_reason"), MaxLength(1000)] public string? AbandonReason { get; set; }
+    [Column("resolution"), MaxLength(20)] public string? Resolution { get; set; }
+    [Column("resolution_note"), MaxLength(1000)] public string? ResolutionNote { get; set; }
+    [Column("resolved_at")] public DateTime? ResolvedAt { get; set; }
+    [Column("resolved_by")] public Guid? ResolvedBy { get; set; }
+    public List<LiquidationAgreementItem> Items { get; set; } = [];
 }

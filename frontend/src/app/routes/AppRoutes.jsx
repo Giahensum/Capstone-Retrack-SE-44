@@ -29,6 +29,7 @@ const DepotLiquidations = lazy(() => import('@/features/depot/liquidation/Liquid
 const DepotNotifications = lazy(() => import('@/features/depot/Notifications'));
 const DepotDispatch = lazy(() => import('@/features/depot/dispatch/DispatchPage'));
 const DepotBuyingPrices = lazy(() => import('@/features/depot/BuyingPrices'));
+const DepotSubscription = lazy(() => import('@/features/depot/Subscription'));
 import { DepotProvider } from '@/features/depot/DepotContext';
 // Thu nhập & chi trả của người nhận (Seller, Chủ kho, Nhà máy dùng chung một trang)
 const MoneyEarnings = lazy(() => import('@/features/money-payee/EarningsPage'));
@@ -41,8 +42,9 @@ const FactoryDashboard = lazy(() => import('@/features/factory/workspace/Factory
 const AdminDashboard = lazy(() => import('@/features/admin/pages/AdminDashboard'));
 const PayReturnPage = lazy(() => import('@/features/money/PayReturnPage'));
 // Loading fallback
-const PageLoader = () => (<div className="flex items-center justify-center min-h-screen bg-slate-900">
-    <div className="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"/>
+const PageLoader = () => (<div role="status" aria-label="Đang tải" className="flex min-h-screen flex-col items-center justify-center gap-4 bg-d-background">
+    <img src="/brand/logo_mark.png" alt="" aria-hidden="true" className="size-12 animate-pulse object-contain"/>
+    <div className="size-8 animate-spin rounded-full border-[3px] border-[#446900] border-t-transparent"/>
   </div>);
 export function AppRoutes() {
     return (<BrowserRouter>
@@ -69,6 +71,7 @@ export function AppRoutes() {
               <Route path="partners" element={<DepotPartners />} />
               <Route path="payments" element={<DepotPayments />} />
               <Route path="payments/fees" element={<DepotPlatformFees />} />
+              <Route path="subscription" element={<DepotSubscription />} />
               <Route path="earnings" element={<MoneyEarnings />} />
               <Route path="reports" element={<DepotRevenueReport />} />
               <Route path="staff" element={<DepotStaff />} />
@@ -103,9 +106,13 @@ export function AppRoutes() {
           <Route path="/pay/return" element={<PrivateRoute><PayReturnPage /></PrivateRoute>}/>
 
           {/* Fallback */}
-          <Route path="/unauthorized" element={<div className="flex items-center justify-center min-h-screen text-red-400 text-xl">
-              403 — Không có quyền truy cập
-            </div>}/>
+          <Route path="/unauthorized" element={<main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-d-background p-6 text-center">
+              <img src="/brand/logo_mark.png" alt="" aria-hidden="true" className="size-16 object-contain"/>
+              <p className="text-5xl font-black text-[#446900]">403</p>
+              <h1 className="text-xl font-bold text-[#141e18]">Không có quyền truy cập</h1>
+              <p className="max-w-sm text-[#424936]">Tài khoản hiện tại không được phép mở trang này. Hãy đăng nhập bằng tài khoản đúng vai trò.</p>
+              <a href="/" className="rounded-full bg-[#446900] px-5 py-2.5 font-semibold text-white transition hover:bg-[#385500]">Về trang chủ</a>
+            </main>}/>
           <Route path="*" element={<Navigate to="/" replace/>}/>
         </Routes>
       </Suspense>

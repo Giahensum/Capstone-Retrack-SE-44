@@ -105,6 +105,7 @@ public sealed class PayableLedgerService(AppDbContext db, MoneyConfigReader conf
     public async Task<decimal> ResolveRateAsync(Guid payeeId, string flow, MoneyConfig? cfg = null, CancellationToken ct = default)
     {
         cfg ??= await config.GetAsync(ct);
+        if (cfg.SubscriptionOnly) return 0m;
         var own = await db.PayeeCommissions.AsNoTracking().Where(c => c.UserId == payeeId && c.Flow == flow).Select(c => (decimal?)c.Rate).SingleOrDefaultAsync(ct);
         return CommissionCalculator.ResolveRate(own, cfg.DefaultRate(flow));
     }

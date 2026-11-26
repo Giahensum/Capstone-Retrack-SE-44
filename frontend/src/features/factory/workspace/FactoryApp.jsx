@@ -15,22 +15,35 @@ import FactoryPlatformFees from "./pages/FactoryPlatformFees";
 import FactoryNotifications, { FactoryNotificationBell } from "./pages/FactoryNotifications";
 import MoneyEarnings from "@/features/money-payee/EarningsPage";
 import { request } from "./data/factoryApi";
+import AppShell from "@/components/layout/AppShell";
+import {
+  LayoutDashboard, Store, ClipboardList, Truck, Scale, FileCheck2, ReceiptText, Wallet, Bell, Handshake, TrendingUp, Building2,
+} from "lucide-react";
 import "./factory.css";
 
+// Menu nhà máy: mỗi mục là một tab nội bộ (không đổi URL), nhóm theo nghiệp vụ như các vai trò khác.
 const tabs = [
-  ["dashboard", "Tổng quan", "◫"],
-  ["marketplace", "Sàn nguyên liệu", "▦"],
-  ["demands", "Nhu cầu thu mua", "▤"],
-  ["orders", "Đơn hàng & Vận chuyển", "⇄"],
-  ["qc", "Trạm cân & KCS", "⚖"],
-  ["settlements", "Quyết toán", "▣"],
-  ["platform-fees", "Hóa đơn phí cũ", "₫"],
-  ["earnings", "Thu nhập & chi trả", "₫"],
-  ["notifications", "Thông báo", "♧"],
-  ["partners", "Vựa đối tác", "♧"],
-  ["prices", "Giá tham khảo", "↗"],
-  ["profile", "Hồ sơ nhà máy", "⚙"],
+  ["dashboard", "Tổng quan", LayoutDashboard],
+  ["marketplace", "Sàn nguyên liệu", Store],
+  ["demands", "Nhu cầu thu mua", ClipboardList],
+  ["orders", "Đơn hàng & Vận chuyển", Truck],
+  ["qc", "Trạm cân & KCS", Scale],
+  ["settlements", "Quyết toán", FileCheck2],
+  ["platform-fees", "Hóa đơn phí cũ", ReceiptText],
+  ["earnings", "Thu nhập & chi trả", Wallet],
+  ["notifications", "Thông báo", Bell],
+  ["partners", "Vựa đối tác", Handshake],
+  ["prices", "Giá tham khảo", TrendingUp],
+  ["profile", "Hồ sơ nhà máy", Building2],
 ];
+const groups = [
+  ["Chung", ["dashboard"]],
+  ["Thu mua", ["marketplace", "demands", "partners", "prices"]],
+  ["Vận hành", ["orders", "qc", "settlements"]],
+  ["Tài chính", ["earnings", "platform-fees"]],
+  ["Tài khoản", ["profile"]],
+];
+
 function Workspace() {
   const { state, user, logout, loading, retry } = useFactory();
   const historicalInvoices = useQuery({
@@ -54,60 +67,33 @@ function Workspace() {
   if (loading) return <main className="factory-auth-page" role="status">Đang tải dữ liệu nhà máy…</main>;
   if (!state) return <main className="factory-auth-page"><section className="factory-auth-card"><h1>Không tải được dữ liệu nhà máy</h1><p>Kiểm tra kết nối máy chủ rồi thử lại bằng phiên đăng nhập hiện tại.</p><button className="btn" onClick={retry}>Thử kết nối lại</button></section></main>;
   const pending = state.dashboard?.pendingQcCount ?? 0;
+  // Hóa đơn phí cũ chỉ hiện khi còn dữ liệu lịch sử (hoặc chưa kiểm tra được).
+  const showFees = historicalInvoices.isError || (historicalInvoices.data?.totalCount ?? 0) > 0;
+  const byKey = Object.fromEntries(tabs.map(([key, label, icon]) => [key, { key, label, icon }]));
+  const nav = groups.map(([title, keys]) => ({
+    title,
+    items: keys
+      .filter((key) => key !== "platform-fees" || showFees)
+      .map((key) => ({ ...byKey[key], active: tab === key, onClick: () => navigate(key), badge: key === "qc" ? pending : 0 })),
+  }));
   return (
-    <div className="factory-shell">
-      <aside className="factory-sidebar">
-        <a
-          className="brand"
-          href="#"
-          aria-label="Về tổng quan nhà máy"
-          onClick={(e) => {
-            e.preventDefault();
-            navigate("dashboard");
-          }}
-        >
-          <img className="brand-mark" src="/brand/logo_mark.png" alt="" aria-hidden="true" />
-          <span className="factory-brand-wordmark" aria-hidden="true">
-            <strong>RETRACK</strong>
-            <small>FACTORY WORKSPACE</small>
-          </span>
-        </a>
-        <div className="workspace-name">
-          <span className="workspace-avatar">GC</span>
-          <div>
-            <strong>{state.profile.companyName || "Nhà máy"}</strong>
-            <small>Nhà máy tái chế</small>
-          </div>
-        </div>
-        <div className="nav-caption">KHÔNG GIAN LÀM VIỆC</div>
-        <nav aria-label="Điều hướng nhà máy">
-          {tabs.filter(([key]) => key !== "notifications" && (key !== "platform-fees" || historicalInvoices.isError || (historicalInvoices.data?.totalCount ?? 0) > 0)).map(([key, label, icon]) => (
-            <button
-              key={key}
-              className={tab === key ? "active" : ""}
-              aria-current={tab === key ? "page" : undefined}
-              onClick={() => navigate(key)}
-            >
-              <span className="nav-icon" aria-hidden="true">
-                {icon}
-              </span>
-              {label}
-              {key === "qc" && pending > 0 && (
-                <span className="nav-count">{pending}</span>
-              )}
-            </button>
-          ))}
-        </nav>
-      </aside>
-      <div className="factory-workspace">
-        <header className="workspace-topbar">
-          <div>
-            Nhà máy <span>/</span>{" "}
-            <strong>{tabs.find((t) => t[0] === tab)?.[1]}</strong>
-          </div>
-          <div className="factory-topbar-actions"><FactoryNotificationBell navigate={navigate} /><span className="user-chip"><span>{(user?.fullName || "F").slice(0, 2).toUpperCase()}</span>{user?.fullName || user?.email}<button className="logout-button" onClick={() => { logout(); navigateRoute("/login", { replace: true }); }}>Đăng xuất</button></span></div>
-        </header>
-        <main className="factory-main">
+    <AppShell
+      nav={nav}
+      eyebrow="Nhà máy tái chế"
+      onHome={() => navigate("dashboard")}
+      homeLabel={state.profile.companyName || "Nhà máy"}
+      crumb={byKey[tab]?.label}
+      roleLabel={state.profile.companyName || "Nhà máy tái chế"}
+      roleBadge="FACTORY"
+      user={user}
+      onLogout={() => { logout(); navigateRoute("/login", { replace: true }); }}
+      menuItems={[{ key: "profile", icon: Building2, label: "Hồ sơ nhà máy", onClick: () => navigate("profile") }]}
+      storageKey="retrack_factory_sidebar"
+      navLabel="Điều hướng nhà máy"
+      headerActions={<FactoryNotificationBell navigate={navigate} />}
+    >
+      <div className="factory-shell factory-shell--embedded">
+        <div className="factory-main">
           {tab === "dashboard" && <Dashboard navigate={navigate} />}
           {tab === "marketplace" && <Marketplace navigate={navigate} directOnly={Boolean(focusId)} />}
           {tab === "demands" && <Demands />}
@@ -125,13 +111,9 @@ function Workspace() {
           {tab === "notifications" && <FactoryNotifications navigate={navigate} />}
           {tab === "profile" && <Profile />}
           {tab === "prices" && <Prices />}
-        </main>
-        <footer className="factory-footer">
-          RETRACK / Factory Operations
-          <span>Nguồn nguyên liệu minh bạch, vận hành có kiểm soát.</span>
-        </footer>
+        </div>
       </div>
-    </div>
+    </AppShell>
   );
 }
 export default function FactoryApp() {

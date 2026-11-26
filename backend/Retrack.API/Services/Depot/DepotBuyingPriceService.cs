@@ -8,7 +8,7 @@ using Retrack.API.Services.Shared;
 namespace Retrack.API.Services.Depot;
 
 public sealed class DepotBuyingPriceService(IDepotBuyingPriceRepository prices, IDepotBatchRepository batches,
-    IDepotUnitOfWork work, IDepotService scope) : IDepotBuyingPriceService
+    IDepotUnitOfWork work, IDepotService scope, IDepotSubscriptionService? subscriptions = null) : IDepotBuyingPriceService
 {
     public async Task<PagedResult<DepotBuyingPriceDto>> ListAsync(Guid ownerId, Guid depotId, DepotQuery query)
     {
@@ -19,6 +19,7 @@ public sealed class DepotBuyingPriceService(IDepotBuyingPriceRepository prices, 
     public async Task<DepotBuyingPriceDto> SaveAsync(Guid ownerId, Guid depotId, string material, SaveDepotBuyingPriceDto dto)
     {
         await scope.RequireOwnerAsync(ownerId, depotId);
+        if (subscriptions != null) await subscriptions.RequireAccessAsync(depotId);
         var code = MaterialCatalog.RequireCode(material);
         if (dto.PricePerKg <= 0 || dto.PricePerKg > 1000000000 || decimal.Truncate(dto.PricePerKg) != dto.PricePerKg ||
             dto.ConditionNote == null || dto.ConditionNote.Length > 500 || dto.ExpectedUpdatedAt is { Kind: not DateTimeKind.Utc })

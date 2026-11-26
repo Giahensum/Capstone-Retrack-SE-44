@@ -14,10 +14,11 @@ const SellerAiScanner = lazy(() => import('./SellerAiScanner'));
 const LiquidationList = lazy(() => import('./LiquidationList'));
 const LiquidationCreate = lazy(() => import('./LiquidationCreate'));
 const LiquidationDetail = lazy(() => import('./LiquidationDetail'));
+const LiquidationV2Detail = lazy(() => import('./LiquidationV2Detail'));
 
 const PageLoader = () => (
   <div className="flex items-center justify-center h-64">
-    <div className="w-8 h-8 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+    <div className="w-8 h-8 border-[3px] border-[#446900] border-t-transparent rounded-full animate-spin" />
   </div>
 );
 
@@ -33,6 +34,7 @@ export default function SellerDashboard() {
           <Route path="requests/:id" element={<RequestDetail />} />
           <Route path="liquidations" element={<LiquidationList />} />
           <Route path="liquidations/new" element={<LiquidationCreate />} />
+          <Route path="liquidations/v2/:id" element={<LiquidationV2Detail />} />
           <Route path="liquidations/:id" element={<LiquidationDetail />} />
           <Route path="notifications" element={<SellerNotifications />} />
           <Route path="income" element={<SellerIncome />} />

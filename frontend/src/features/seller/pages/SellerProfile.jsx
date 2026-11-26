@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import { sellerApi } from '../api';
 import { MaterialIcon } from '@/features/depot/components/DepotIcon';
 import { Loader2 } from 'lucide-react';
+import { PageHeader } from '@/components/ui/kit';
 
 export default function SellerProfile() {
   const queryClient = useQueryClient();
@@ -60,18 +61,10 @@ export default function SellerProfile() {
 
   return (
     <div className="flex flex-col p-4 md:p-6 gap-6 w-full max-w-3xl mx-auto">
-      {/* Title */}
-      <div>
-        <h1 className="font-d-headline-xl-mobile md:font-d-headline-xl text-d-headline-xl-mobile md:text-d-headline-xl text-d-on-surface">
-          Hồ sơ cá nhân
-        </h1>
-        <p className="font-d-body-md text-d-body-md text-d-on-surface-variant mt-2">
-          Quản lý thông tin liên hệ và tài khoản ngân hàng nhận tiền thu gom phế liệu.
-        </p>
-      </div>
+      <PageHeader title="Hồ sơ cá nhân" description="Quản lý thông tin liên hệ và tài khoản ngân hàng nhận tiền thu gom phế liệu." />
 
       {/* Avatar Banner Card */}
-      <div className="relative overflow-hidden rounded-[20px] bg-gradient-to-r from-d-primary to-[#2a4400] text-d-on-primary p-6 md:p-8 text-center shadow-sm">
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-d-primary to-[#2a4400] text-d-on-primary p-6 md:p-8 text-center shadow-sm">
         <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2 blur-xl" />
         <div className="relative z-10 flex flex-col items-center">
           <div className="w-20 h-20 bg-d-primary-container text-d-on-primary-container rounded-full flex items-center justify-center mb-3 text-2xl font-bold shadow-md">

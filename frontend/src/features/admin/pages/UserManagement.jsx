@@ -1,3 +1,4 @@
+import { Form, Input, Select } from '@/components/forms/ValidatedForm';
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
@@ -94,11 +95,11 @@ export default function UserManagement() {
           toolbar={(
             <>
               <SearchBox className="w-full sm:w-72" placeholder="Tên, email hoặc số điện thoại…" value={filters.keyword} onChange={(e) => setFilters((f) => ({ ...f, keyword: e.target.value, page: 1 }))} />
-              <select aria-label="Lọc theo vai trò" value={filters.role} onChange={(e) => setFilters((f) => ({ ...f, role: e.target.value, page: 1 }))}
+              <Select aria-label="Lọc theo vai trò" value={filters.role} onChange={(e) => setFilters((f) => ({ ...f, role: e.target.value, page: 1 }))}
                 className="h-11 cursor-pointer rounded-full border border-d-border-subtle bg-white px-4 text-sm outline-none focus:border-d-primary">
                 <option value="">Tất cả vai trò</option>
                 {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
-              </select>
+              </Select>
             </>
           )}
         >
@@ -137,29 +138,29 @@ export default function UserManagement() {
       {createOpen && (
         <Modal size="md" icon={UserPlus} title="Tạo người dùng mới" subtitle="Tài khoản được kích hoạt ngay sau khi tạo" onClose={() => setCreateOpen(false)} busy={createMutation.isPending}
           footer={<FormFooter formId="create-user" onCancel={() => setCreateOpen(false)} submitting={createMutation.isPending} submitLabel="Tạo người dùng" icon={Check} />}>
-          <form id="create-user" className="flex flex-col gap-4" onSubmit={(e) => { e.preventDefault(); createMutation.mutate(createForm); }}>
-            <Field label="Email"><input type="email" required className={inputClass} value={createForm.email} onChange={(e) => setCreateForm((f) => ({ ...f, email: e.target.value }))} /></Field>
-            <Field label="Mật khẩu" hint="Tối thiểu 6 ký tự"><input type="password" required minLength={6} className={inputClass} value={createForm.password} onChange={(e) => setCreateForm((f) => ({ ...f, password: e.target.value }))} /></Field>
+          <Form id="create-user" className="flex flex-col gap-4" onSubmit={(e) => { e.preventDefault(); createMutation.mutate(createForm); }}>
+            <Field label="Email"><Input type="email" required className={inputClass} value={createForm.email} onChange={(e) => setCreateForm((f) => ({ ...f, email: e.target.value }))} /></Field>
+            <Field label="Mật khẩu" hint="Tối thiểu 6 ký tự"><Input type="password" required minLength={6} className={inputClass} value={createForm.password} onChange={(e) => setCreateForm((f) => ({ ...f, password: e.target.value }))} /></Field>
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Họ tên"><input required className={inputClass} value={createForm.fullName} onChange={(e) => setCreateForm((f) => ({ ...f, fullName: e.target.value }))} /></Field>
-              <Field label="Số điện thoại"><input required className={inputClass} value={createForm.phone} onChange={(e) => setCreateForm((f) => ({ ...f, phone: e.target.value }))} /></Field>
+              <Field label="Họ tên"><Input required className={inputClass} value={createForm.fullName} onChange={(e) => setCreateForm((f) => ({ ...f, fullName: e.target.value }))} /></Field>
+              <Field label="Số điện thoại"><Input required className={inputClass} value={createForm.phone} onChange={(e) => setCreateForm((f) => ({ ...f, phone: e.target.value }))} /></Field>
             </div>
             <Field label="Vai trò">
-              <select value={createForm.role} onChange={(e) => setCreateForm((f) => ({ ...f, role: e.target.value }))} className={`${inputClass} cursor-pointer`}>
+              <Select value={createForm.role} onChange={(e) => setCreateForm((f) => ({ ...f, role: e.target.value }))} className={`${inputClass} cursor-pointer`}>
                 {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
-              </select>
+              </Select>
             </Field>
-          </form>
+          </Form>
         </Modal>
       )}
 
       {editUser && (
         <Modal size="md" icon={Pencil} tone="blue" title="Cập nhật người dùng" onClose={() => setEditUser(null)} busy={updateMutation.isPending}
           footer={<FormFooter formId="edit-user" onCancel={() => setEditUser(null)} submitting={updateMutation.isPending} submitLabel="Lưu thay đổi" icon={Check} />}>
-          <form id="edit-user" className="flex flex-col gap-4" onSubmit={(e) => { e.preventDefault(); updateMutation.mutate({ id: editUser.id, dto: { fullName: editUser.fullName, phone: editUser.phone } }); }}>
-            <Field label="Họ tên"><input required className={inputClass} value={editUser.fullName} onChange={(e) => setEditUser((u) => ({ ...u, fullName: e.target.value }))} /></Field>
-            <Field label="Số điện thoại"><input required className={inputClass} value={editUser.phone} onChange={(e) => setEditUser((u) => ({ ...u, phone: e.target.value }))} /></Field>
-          </form>
+          <Form id="edit-user" className="flex flex-col gap-4" onSubmit={(e) => { e.preventDefault(); updateMutation.mutate({ id: editUser.id, dto: { fullName: editUser.fullName, phone: editUser.phone } }); }}>
+            <Field label="Họ tên"><Input required className={inputClass} value={editUser.fullName} onChange={(e) => setEditUser((u) => ({ ...u, fullName: e.target.value }))} /></Field>
+            <Field label="Số điện thoại"><Input required className={inputClass} value={editUser.phone} onChange={(e) => setEditUser((u) => ({ ...u, phone: e.target.value }))} /></Field>
+          </Form>
         </Modal>
       )}
 

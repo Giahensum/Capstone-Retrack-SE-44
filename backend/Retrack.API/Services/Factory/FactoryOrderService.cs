@@ -227,30 +227,32 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
     {
         var factory = await CurrentFactory(userId, ct);
         // PLATFORM (money.mode): Factory trả tiền cho lô qua PayOS vào sàn, không nộp chứng từ chuyển khoản tay. LEGACY: không đổi.
-        if ((await new Retrack.API.Services.Money.MoneyConfigReader(Db).GetAsync(ct)).IsPlatformMode)
+        if (await new Retrack.API.Services.Money.MoneyConfigReader(Db).UsesPlatformAsync("BATCH", id, ct))
             return ServiceResult<OrderResponse>.Conflict("Thanh toán qua sàn đang bật: vui lòng thanh toán lô bằng PayOS thay vì tải chứng từ chuyển khoản.");
-        if (string.IsNullOrWhiteSpace(request.PaymentReference) || string.IsNullOrWhiteSpace(request.PaymentProofUrl) ||
-            (attachments is not null && !attachments.IsOwnedUrl(request.PaymentProofUrl, userId)))
-            return ServiceResult<OrderResponse>.Invalid("Cần mã tham chiếu và chứng từ chuyển khoản hợp lệ.");
+        var proofUrl = string.IsNullOrWhiteSpace(request.PaymentProofUrl) ? null : request.PaymentProofUrl.Trim();
+        if (request.PaymentMethod is not ("BANK_TRANSFER" or "CASH" or "OTHER") || string.IsNullOrWhiteSpace(request.PaymentReference) ||
+            request.PaymentMethod == "BANK_TRANSFER" && proofUrl == null || proofUrl != null && attachments is not null && !attachments.IsOwnedUrl(proofUrl, userId))
+            return ServiceResult<OrderResponse>.Invalid("Cần hình thức và căn cứ thanh toán; chuyển khoản cần chứng từ hợp lệ.");
         await using var tx = await Db.Database.BeginTransactionAsync(ct);
         var batch = await LockOrderAsync(id, factory.Id, ct);
         if (batch is null) return ServiceResult<OrderResponse>.NotFound("Không tìm thấy đơn hàng.");
         if (batch.QualityCheck != null && batch.Status is "COMPLETED" or "PAID" &&
-            batch.PaymentReference == request.PaymentReference.Trim() && batch.QualityCheck.PaymentProofUrl == request.PaymentProofUrl.Trim())
+            batch.PaymentReference == request.PaymentReference.Trim() && batch.QualityCheck.PaymentProofUrl == proofUrl && (batch.PaymentMethod ?? "BANK_TRANSFER") == request.PaymentMethod)
             return ServiceResult<OrderResponse>.Success(data: FactoryOrderMapper.Map(await FactoryOrderQueries.ForFactory(Db, factory.Id).SingleAsync(x => x.Id == id, ct)), message: "Chứng từ đã được lưu.");
         if ((batch.Status != "COMPLETED" && batch.Status != "SETTLEMENT_ACCEPTED") || batch.QualityCheck is null ||
             (batch.SettlementWorkflowVersion == 0 && batch.SettledAt is null) ||
             (batch.SettlementWorkflowVersion > 0 && batch.SettlementApprovedAt == null))
             return ServiceResult<OrderResponse>.Conflict("Chỉ bổ sung chứng từ cho lô đã quyết toán và đang chờ vựa xác nhận.");
-        if (!string.IsNullOrWhiteSpace(batch.QualityCheck.PaymentProofUrl))
+        if (!string.IsNullOrWhiteSpace(batch.QualityCheck.PaymentProofUrl) || batch.Status == "COMPLETED" && batch.PaymentMethod is "CASH" or "OTHER")
             return ServiceResult<OrderResponse>.Conflict("Lô đã có chứng từ; liên hệ vựa để đối chiếu trước khi thay đổi.");
         var previousStatus = batch.Status;
         batch.PaymentReference = request.PaymentReference.Trim();
-        batch.QualityCheck.PaymentProofUrl = request.PaymentProofUrl.Trim();
+        batch.QualityCheck.PaymentProofUrl = proofUrl;
+        batch.PaymentMethod = request.PaymentMethod;
         batch.Status = "COMPLETED";
-        if (batch.SettlementWorkflowVersion > 0) Db.BatchWorkflowEvents.Add(Retrack.API.Services.Depot.BatchSettlementService.Event(batch, userId, "PAYMENT_REPORTED", previousStatus, "Nhà máy báo đã chuyển tiền và gửi chứng từ."));
+        if (batch.SettlementWorkflowVersion > 0) Db.BatchWorkflowEvents.Add(Retrack.API.Services.Depot.BatchSettlementService.Event(batch, userId, "PAYMENT_REPORTED", previousStatus, "Nhà máy báo đã thanh toán trực tiếp; chờ kho xác nhận tiền thực nhận."));
         batch.UpdatedAt = DateTime.UtcNow;
-        await NotifyDepotAsync(batch.DepotId, "Nhà máy bổ sung chứng từ chuyển khoản", $"Lô {batch.Code ?? batch.Id.ToString()} đã có chứng từ chuyển khoản. Vui lòng đối chiếu tài khoản trước khi xác nhận nhận tiền.", batch.Id, ct: ct);
+        await NotifyDepotAsync(batch.DepotId, request.PaymentMethod == "BANK_TRANSFER" ? "Nhà máy bổ sung chứng từ chuyển khoản" : "Nhà máy báo đã thanh toán", $"Lô {batch.Code ?? batch.Id.ToString()}: nhà máy báo đã trả tiền. Kiểm tra tiền thực nhận trước khi xác nhận.", batch.Id, ct: ct);
         await Db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
         var saved = await FactoryOrderQueries.ForFactory(Db, factory.Id).SingleAsync(x => x.Id == id, ct);

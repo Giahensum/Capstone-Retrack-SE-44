@@ -6,6 +6,7 @@ import { materialLabel } from './materialLabels';
 import { useDepotQuery, useDepotMutation, number, batchLabels } from './depotApi';
 import { QueryState, Pager, Dialog, MutationError, inputClass, buttonClass } from './components/DepotUI';
 import { MaterialIcon } from './components/DepotIcon';
+import { PageHeader, StatCard, buttonClass as kitButton } from '@/components/ui/kit';
 
 export default function Batches() {
   const [create, setCreate] = useState(false);
@@ -22,19 +23,9 @@ export default function Batches() {
 
   return (
     <div className="w-full max-w-7xl mx-auto p-4 md:p-6 space-y-6">
-      {/* Page Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h2 className="text-3xl font-bold font-d-headline-lg text-d-on-surface mb-2">Danh sách lô xuất hàng</h2>
-          <p className="text-d-on-surface-variant font-d-body-lg">Quản lý và theo dõi trạng thái các lô vật liệu tái chế đang xuất kho.</p>
-        </div>
-        <button
-          onClick={() => setCreate(true)}
-          className="bg-d-primary text-white font-bold px-6 py-3 rounded-full hover:bg-d-primary-hover transition-all shadow-lg hover:-translate-y-0.5 flex items-center gap-2"
-        >
-          <MaterialIcon name="add" className="text-[20px]" /> Tạo lô xuất hàng mới
-        </button>
-      </div>
+      <PageHeader title="Danh sách lô xuất hàng" description="Quản lý và theo dõi trạng thái các lô vật liệu tái chế đang xuất kho.">
+        <button type="button" onClick={() => setCreate(true)} className={kitButton()}><MaterialIcon name="add" className="text-[18px]" />Tạo lô xuất hàng mới</button>
+      </PageHeader>
 
       <CreateBatchModal isOpen={create} onClose={() => setCreate(false)} />
       {detail && <BatchDetailModal id={detail} onClose={() => { setDetail(null); setParams(prev => { prev.delete('batchId'); return prev; }, { replace: true }); }}/>}
@@ -53,55 +44,11 @@ export default function Batches() {
         </Dialog>
       )}
 
-      {/* KPI Bento Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white border border-d-border-subtle p-5 rounded-2xl flex flex-col justify-between shadow-sm hover:shadow-md transition-shadow group">
-          <div className="flex justify-between items-start mb-4">
-            <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
-              <MaterialIcon name="publish" className="text-[20px]" />
-            </div>
-          </div>
-          <div>
-            <p className="text-sm font-medium text-d-on-surface-variant mb-1">Tổng Lô Đang Xử Lý</p>
-            <p className="text-3xl font-bold text-d-on-surface group-hover:text-blue-600 transition-colors">{dashboard.data?.activeBatches ?? 0}</p>
-          </div>
-        </div>
-
-        <div className="bg-white border border-d-border-subtle p-5 rounded-2xl flex flex-col justify-between shadow-sm hover:shadow-md transition-shadow group">
-          <div className="flex justify-between items-start mb-4">
-            <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
-              <MaterialIcon name="local_shipping" className="text-[20px]" />
-            </div>
-          </div>
-          <div>
-            <p className="text-sm font-medium text-d-on-surface-variant mb-1">Cảnh Báo Chất Lượng</p>
-            <p className="text-3xl font-bold text-d-on-surface group-hover:text-purple-600 transition-colors">{dashboard.data?.rejectedQualityBatches ?? 0}</p>
-          </div>
-        </div>
-
-        <div className="bg-white border border-d-border-subtle p-5 rounded-2xl flex flex-col justify-between shadow-sm hover:shadow-md transition-shadow group">
-          <div className="flex justify-between items-start mb-4">
-            <div className="w-10 h-10 rounded-xl bg-green-50 text-green-600 flex items-center justify-center">
-              <MaterialIcon name="task_alt" className="text-[20px]" />
-            </div>
-          </div>
-          <div>
-            <p className="text-sm font-medium text-d-on-surface-variant mb-1">Đơn Nhập Kho Mới</p>
-            <p className="text-3xl font-bold text-d-on-surface group-hover:text-green-600 transition-colors">{dashboard.data?.newRequestsToday ?? 0}</p>
-          </div>
-        </div>
-
-        <div className="bg-gradient-to-br from-d-primary to-d-secondary p-5 rounded-2xl flex flex-col justify-between shadow-sm hover:shadow-md transition-shadow text-white group">
-          <div className="flex justify-between items-start mb-4">
-            <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center text-white">
-              <MaterialIcon name="auto_graph" className="text-[20px]" />
-            </div>
-          </div>
-          <div>
-            <p className="text-sm font-medium text-white/80 mb-1">Khả Dụng Tồn Kho</p>
-            <p className="text-2xl font-bold truncate">{number(dashboard.data?.availableKg ?? 0)} kg</p>
-          </div>
-        </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard label="Tổng lô đang xử lý" value={dashboard.data?.activeBatches ?? 0} icon={<MaterialIcon name="publish" className="text-xl" />} />
+        <StatCard label="Cảnh báo chất lượng" value={dashboard.data?.rejectedQualityBatches ?? 0} tone={(dashboard.data?.rejectedQualityBatches ?? 0) > 0 ? 'red' : 'primary'} icon={<MaterialIcon name="warning" className="text-xl" />} />
+        <StatCard label="Đơn nhập kho mới" value={dashboard.data?.newRequestsToday ?? 0} icon={<MaterialIcon name="task_alt" className="text-xl" />} />
+        <StatCard label="Khả dụng tồn kho" value={`${number(dashboard.data?.availableKg ?? 0)} kg`} icon={<MaterialIcon name="auto_graph" className="text-xl" />} />
       </div>
 
       {/* Main List */}

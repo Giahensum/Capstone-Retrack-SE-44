@@ -60,6 +60,8 @@ namespace Retrack.API.Models
 
         [Column("payment_proof_url")]
         public string? PaymentProofUrl { get; set; }
+        [Column("payment_method"), MaxLength(20)] public string? PaymentMethod { get; set; }
+        [Column("payment_reference"), MaxLength(255)] public string? PaymentReference { get; set; }
 
         [Required]
         [Column("status")]

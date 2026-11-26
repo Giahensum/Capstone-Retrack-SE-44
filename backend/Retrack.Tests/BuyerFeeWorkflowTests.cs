@@ -71,7 +71,7 @@ public sealed class BuyerFeeWorkflowTests : IAsyncLifetime
         Assert.Equal(PlatformFees.BuyerSeparate, created.FeePolicy);
         var pickup = await db.PickupRequests.SingleAsync(x => x.Id == created.Id);
         // Dòng legacy mô phỏng đơn đã tồn tại trước ngày chuyển chính sách.
-        pickup.FeePolicy = policy; pickup.AcceptedCollectorId = employee.Id; pickup.Status = "IN_PROGRESS";
+        pickup.FeePolicy = policy; pickup.PlatformFeePercentage = 5m; pickup.AcceptedCollectorId = employee.Id; pickup.Status = "IN_PROGRESS";
         pickup.CheckinImageUrl = "https://example.com/checkin.png";
         db.PickupCheckIns.Add(new PickupCheckIn { PickupRequest = pickup, Employee = employee, ImageUrl = pickup.CheckinImageUrl });
         await db.SystemConfigs.Where(x => x.ConfigKey == "PLATFORM_FEE_PERCENTAGE").ExecuteUpdateAsync(x => x.SetProperty(p => p.ConfigValue, "7.00"));

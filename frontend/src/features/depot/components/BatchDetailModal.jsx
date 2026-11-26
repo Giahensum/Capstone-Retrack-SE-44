@@ -10,6 +10,7 @@ import DriverEventsPanel from './DriverEventsPanel';
 import BatchSettlementPanel from './BatchSettlementPanel';
 import BatchReturnPanel from './BatchReturnPanel';
 import BatchDetailSection from './BatchDetailSection';
+import { paymentMethodLabel } from '@/lib/paymentMethods';
 const missing = 'Chưa cập nhật';
 const kg = (v) => v == null ? missing : `${number(v)} kg`;
 const percent = (v) => v == null ? missing : `${number(v)}%`;
@@ -48,7 +49,7 @@ function Proof({ title, url }) {
   const [error, setError] = useState('');
   const path = factoryProofPath(url);
   if (path) return <div className="text-sm"><span>{title}: </span><button type="button" disabled={busy}
-    className="rounded-full border border-d-border-subtle px-4 py-2 text-d-primary disabled:opacity-40"
+    className="inline-flex items-center justify-center gap-2 rounded-full font-semibold transition active:scale-[.98] disabled:pointer-events-none disabled:opacity-50 outline-none focus-visible:ring-2 focus-visible:ring-d-primary/30 focus-visible:ring-offset-1 min-h-11 px-5 py-2 text-sm border border-d-border-subtle bg-white text-d-on-surface hover:bg-d-surface-container"
     onClick={async () => {
       setBusy(true); setError('');
       try {
@@ -94,14 +95,14 @@ export default function BatchDetailModal({ id, onClose }) {
       ["Thuế suất VAT", percent(s?.vatPercentage)], ["Tiền VAT theo hóa đơn", cash(s?.vatAmount)],
       ["Tổng tiền theo hóa đơn", cash(s?.invoiceTotalAmount)], [s?.feePolicy === "BUYER_SEPARATE_V1" ? "Phí do Factory trả riêng" : "Phí khấu trừ — lô cũ", cash(s?.feeAmount)],
       ["Tiền thanh toán theo quyết toán, gồm VAT đã khai", cash(s?.netAmount)],
-      ["Tham chiếu thanh toán", s?.paymentReference], [d.workflow?.version && b.status !== 'PAID' ? "Ngày đề xuất giá" : "Ngày quyết toán", time(s?.settledAt)], ["Vựa xác nhận nhận tiền", time(s?.paymentConfirmedAt)], ["Số hóa đơn", q?.invoiceNumber]]}/> }
+      ["Hình thức thanh toán", paymentMethodLabel(s?.paymentMethod)], ["Tham chiếu thanh toán", s?.paymentReference], [d.workflow?.version && b.status !== 'PAID' ? "Ngày đề xuất giá" : "Ngày quyết toán", time(s?.settledAt)], ["Vựa xác nhận nhận tiền", time(s?.paymentConfirmedAt)], ["Số hóa đơn", q?.invoiceNumber]]}/> }
     <BatchReturnPanel key={id} detail={d} id={id} handoverProof={<Proof title="Biên bản bàn giao trả" url={d.return?.handoverProofUrl}/>} />
     {(s || ['SETTLEMENT_PENDING', 'SETTLEMENT_ACCEPTED', 'SETTLEMENT_DISPUTED', 'COMPLETED', 'PAID'].includes(b.status)) && <BatchSettlementPanel key={`${id}-${d.workflow?.revision ?? 0}`} detail={d} id={id} />}
-    {b.status === 'COMPLETED' && s?.paymentProofUrl && <section className="rounded-2xl border border-d-border-subtle bg-white p-4 space-y-3">
-      <h3 className="font-semibold text-d-primary">Xác nhận tiền chuyển khoản</h3>
-      <p className="text-sm text-d-on-surface-variant">Đối chiếu tiền thực nhận trong tài khoản ngân hàng, số tiền {cash(s.netAmount)} và mã {s.paymentReference} trước khi xác nhận.</p>
-      <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={confirming} onChange={(e) => setConfirming(e.target.checked)} />Tôi đã kiểm tra tài khoản và nhận đủ số tiền trên.</label>
-      <button type="button" disabled={!confirming || confirmPayment.isPending} className="rounded-xl bg-d-primary px-4 py-2 text-white disabled:opacity-40"
+    {b.status === 'COMPLETED' && (s?.paymentProofUrl || ['CASH', 'OTHER'].includes(s?.paymentMethod)) && <section className="rounded-2xl border border-d-border-subtle bg-white p-4 space-y-3">
+      <h3 className="font-semibold text-d-primary">Xác nhận tiền thực nhận</h3>
+      <p className="text-sm text-d-on-surface-variant">Hình thức {paymentMethodLabel(s.paymentMethod)}. Đối chiếu đã nhận đủ {cash(s.netAmount)} và căn cứ {s.paymentReference} trước khi xác nhận.</p>
+      <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={confirming} onChange={(e) => setConfirming(e.target.checked)} />Tôi đã kiểm tra và nhận đủ số tiền trên.</label>
+      <button type="button" disabled={!confirming || confirmPayment.isPending} className="inline-flex items-center justify-center gap-2 rounded-full font-semibold transition active:scale-[.98] disabled:pointer-events-none disabled:opacity-50 outline-none focus-visible:ring-2 focus-visible:ring-d-primary/30 focus-visible:ring-offset-1 min-h-11 px-5 py-2 text-sm bg-d-primary text-white hover:bg-[#385500]"
         onClick={() => confirmPayment.mutate({ body: { amount: s.netAmount, paymentReference: s.paymentReference } })}>
         {confirmPayment.isPending ? 'Đang xác nhận…' : 'Xác nhận đã nhận tiền'}
       </button>

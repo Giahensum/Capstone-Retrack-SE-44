@@ -1,5 +1,7 @@
 # Thiết kế luồng thu – chi qua sàn RETRACK (bản nháp để nhóm duyệt)
 
+> **Lịch sử — thay đổi mô hình 25/11/2026:** thiết kế thu hộ/hoa hồng bên dưới không còn áp dụng cho giao dịch mới khi `BUSINESS_MODEL=DEPOT_SUBSCRIPTION`. Chỉ thu gói Depot; giữ xử lý khoản tiền đã tồn tại. Đọc [mô hình hiện hành và contract tích hợp](goi-quan-ly-depot.md). Không triển khai lại thu hộ mới dựa vào bản nháp này.
+
 > Trạng thái: **nháp**, chưa có code. Phạm vi: demo cho giảng viên, không xét giấy phép trung gian thanh toán.
 > Tham khảo: `D:\Fullstack\eco_fashion\eco_backend` (FITLY: NestJS + Prisma) và tài liệu payOS (`https://payos.vn/docs/api/`).
 

@@ -88,7 +88,7 @@ public sealed class SellerLiquidationService(ISellerLiquidationRepository reposi
     {
         var lot = await repository.FindLotAsync(lotId);
         // Không phân biệt "không tồn tại" và "của Seller khác" để không lộ ID.
-        if (lot == null || lot.SellerId != sellerId) throw new KeyNotFoundException("Không tìm thấy lô thanh lý.");
+        if (lot == null || lot.SellerId != sellerId || lot.FormatVersion != 1) throw new KeyNotFoundException("Không tìm thấy lô thanh lý.");
         return lot;
     }
 
@@ -110,7 +110,7 @@ public sealed class SellerLiquidationService(ISellerLiquidationRepository reposi
         await using var tx = await work.BeginAsync();
         // Chỉ khóa dòng lô: luồng trả giá cũng khóa lô nên bid đồng thời sẽ thấy trạng thái đã hủy.
         var lot = await repository.LockLotAsync(lotId) ?? throw new KeyNotFoundException("Không tìm thấy lô thanh lý.");
-        if (lot.SellerId != sellerId) throw new KeyNotFoundException("Không tìm thấy lô thanh lý.");
+        if (lot.SellerId != sellerId || lot.FormatVersion != 1) throw new KeyNotFoundException("Không tìm thấy lô thanh lý.");
         if (lot.Status == "CANCELLED" && lot.CancelReason == reason) return;
         var now = Now;
         if (lot.Status != "PUBLISHED" || now >= lot.BiddingEnd) throw new DepotConflictException("Phiên đã kết thúc hoặc không còn ở trạng thái mở.");
@@ -126,7 +126,7 @@ public sealed class SellerLiquidationService(ISellerLiquidationRepository reposi
     private async Task<LiquidationAgreement> OwnedAgreementAsync(Guid sellerId, Guid agreementId)
     {
         var agreement = await repository.FindAgreementAsync(agreementId);
-        if (agreement == null || agreement.Lot.SellerId != sellerId) throw new KeyNotFoundException("Không tìm thấy thỏa thuận.");
+        if (agreement == null || agreement.Lot.SellerId != sellerId || agreement.FormatVersion != 1) throw new KeyNotFoundException("Không tìm thấy thỏa thuận.");
         return agreement;
     }
 

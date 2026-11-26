@@ -12,6 +12,7 @@ import MarketPrices from './MarketPrices';
 import Billing from './Billing';
 import AuditLogs from './AuditLogs';
 import DepotVerifications from './DepotVerifications';
+import LiquidationDisputes from './LiquidationDisputes';
 import MoneyAdminPage from '@/features/money-admin/MoneyAdminPage';
 
 function sevenDaysAgoISO() {
@@ -125,6 +126,7 @@ export default function AdminDashboard() {
       <Route path="money" element={<MoneyAdminPage />} />
       <Route path="audit-logs" element={<AuditLogs />} />
       <Route path="depot-verifications" element={<DepotVerifications />} />
+      <Route path="liquidation-disputes" element={<LiquidationDisputes />} />
       <Route path="*" element={<Navigate to="/admin" replace />} />
     </Routes>
   );

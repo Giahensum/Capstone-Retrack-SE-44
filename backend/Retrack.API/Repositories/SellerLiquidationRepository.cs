@@ -27,7 +27,7 @@ public sealed class SellerLiquidationRepository(AppDbContext db) : ISellerLiquid
     public Task<List<LiquidationParticipation>> ParticipantsAsync(Guid lotId) => db.LiquidationParticipations.AsNoTracking().Where(x => x.LotId == lotId).ToListAsync();
     public async Task<PagedResult<SellerLotRow>> ListAsync(Guid sellerId, SellerLiquidationQuery query, DateTime now)
     {
-        var source = db.LiquidationLots.AsNoTracking().Where(x => x.SellerId == sellerId);
+        var source = db.LiquidationLots.AsNoTracking().Where(x => x.SellerId == sellerId && x.FormatVersion == 1);
         if (!string.IsNullOrWhiteSpace(query.Search)) source = source.Where(x => x.Title.Contains(query.Search) || x.PublicArea.Contains(query.Search));
         source = query.Status switch
         {
@@ -57,7 +57,7 @@ public sealed class SellerLiquidationRepository(AppDbContext db) : ISellerLiquid
             .Skip((int)offset).Take(BidPageSize).ToListAsync();
         return new() { Page = page, PageSize = BidPageSize, TotalCount = total, Items = items };
     }
-    public Task<LiquidationAgreement?> LotAgreementAsync(Guid lotId) => db.LiquidationAgreements.AsNoTracking().SingleOrDefaultAsync(x => x.LotId == lotId);
+    public Task<LiquidationAgreement?> LotAgreementAsync(Guid lotId) => db.LiquidationAgreements.AsNoTracking().SingleOrDefaultAsync(x => x.LotId == lotId && x.FormatVersion == 1);
     public async Task<LiquidationAgreement?> FindAgreementAsync(Guid id)
     {
         var agreement = await db.LiquidationAgreements.Include(x => x.Lot).SingleOrDefaultAsync(x => x.Id == id);

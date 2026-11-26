@@ -178,6 +178,7 @@ export function mapOrder(order) {
       feePolicy: order.feePolicy || "LEGACY_SELLER_DEDUCTION_V1",
       buyerTotal: order.buyerTotalAmount ?? ((order.netPayableAmount || 0) + (order.feeAmount || 0)),
       reference: order.paymentReference || "",
+      method: order.paymentMethod || 'BANK_TRANSFER',
       proofUrl: order.paymentProofUrl || "",
       confirmedAt: order.depotPaymentConfirmedAt || null,
       at: order.settledAt || order.settlementProposedAt,
@@ -306,6 +307,7 @@ export async function performFactoryAction(type, payload) {
       return request(`/api/factory/orders/${id}/payment-proof`, { method: "POST", body: {
         paymentReference: payload.reference,
         paymentProofUrl: payload.paymentProofUrl,
+        paymentMethod: payload.paymentMethod || 'BANK_TRANSFER',
       } });
     case "INVOICE":
       {

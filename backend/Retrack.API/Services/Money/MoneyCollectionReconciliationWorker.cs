@@ -24,7 +24,8 @@ public sealed class MoneyCollectionReconciliationWorker(IServiceScopeFactory sco
         await using (var scope = scopes.CreateAsyncScope())
         {
             // Chỉ chạy ở chế độ PLATFORM; LEGACY không có khoản thu nào cần hỏi PayOS.
-            if (!(await scope.ServiceProvider.GetRequiredService<MoneyConfigReader>().GetAsync(ct)).IsPlatformMode) return;
+            var cfg = await scope.ServiceProvider.GetRequiredService<MoneyConfigReader>().GetAsync(ct);
+            if (!cfg.IsPlatformMode && !cfg.SubscriptionOnly) return;
             ids = await scope.ServiceProvider.GetRequiredService<IMoneyCollectionService>().PendingCollectionIdsAsync(50, ct);
         }
         foreach (var id in ids)
