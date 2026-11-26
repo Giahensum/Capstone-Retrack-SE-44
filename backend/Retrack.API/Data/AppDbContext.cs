@@ -57,6 +57,10 @@ namespace Retrack.API.Data
         public DbSet<LiquidationParticipation> LiquidationParticipations { get; set; }
         public DbSet<LiquidationBid> LiquidationBids { get; set; }
         public DbSet<LiquidationAgreement> LiquidationAgreements { get; set; }
+        public DbSet<LiquidationItem> LiquidationItems { get; set; }
+        public DbSet<LiquidationParticipationItem> LiquidationParticipationItems { get; set; }
+        public DbSet<LiquidationItemBid> LiquidationItemBids { get; set; }
+        public DbSet<LiquidationAgreementItem> LiquidationAgreementItems { get; set; }
 
         // Thu/chi qua sàn (RETRACK_MONEY_V1)
         public DbSet<MoneyCollection> MoneyCollections { get; set; }
@@ -88,8 +92,17 @@ namespace Retrack.API.Data
             modelBuilder.Entity<EmployeeDispatchEvent>().HasOne<EmployeeDispatchShift>().WithMany().HasForeignKey(e => e.ShiftId).OnDelete(DeleteBehavior.Restrict);
             modelBuilder.Entity<EmployeeDispatchEvent>().HasIndex(e => new { e.PickupId, e.CreatedAt });
             modelBuilder.Entity<LiquidationParticipation>().HasIndex(x => new { x.LotId, x.OwnerId }).IsUnique();
-            modelBuilder.Entity<LiquidationAgreement>().HasIndex(x => x.LotId).IsUnique();
+            // V1: một thỏa thuận/lô; V2: một thỏa thuận cho mỗi kho thắng trong phiên (khớp unique index có điều kiện trong SQL).
+            modelBuilder.Entity<LiquidationAgreement>().HasIndex(x => x.LotId).IsUnique().HasFilter("format_version = 1");
+            modelBuilder.Entity<LiquidationAgreement>().HasIndex(x => new { x.LotId, x.DepotId }).IsUnique().HasFilter("format_version = 2");
             modelBuilder.Entity<LiquidationAgreement>().HasIndex(x => x.WinningBidId).IsUnique();
+            modelBuilder.Entity<LiquidationParticipationItem>().HasKey(x => new { x.ParticipationId, x.ItemId });
+            modelBuilder.Entity<LiquidationItem>().HasIndex(x => new { x.LotId, x.Position }).IsUnique();
+            modelBuilder.Entity<LiquidationItem>().HasOne(x => x.Lot).WithMany().OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<LiquidationAgreementItem>().HasOne(x => x.Agreement).WithMany(x => x.Items).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<LiquidationAgreementItem>().HasOne(x => x.Item).WithMany().OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<LiquidationAgreementItem>().HasIndex(x => x.ItemId).IsUnique();
+            modelBuilder.Entity<LiquidationAgreementItem>().HasIndex(x => x.WinningBidId).IsUnique();
             modelBuilder.Entity<LiquidationBid>().HasIndex(x => new { x.LotId, x.CreatedAt });
             modelBuilder.Entity<LiquidationLot>().HasOne(x => x.Seller).WithMany().OnDelete(DeleteBehavior.Restrict);
             modelBuilder.Entity<LiquidationAgreement>().HasOne(x => x.Lot).WithMany().OnDelete(DeleteBehavior.Restrict);

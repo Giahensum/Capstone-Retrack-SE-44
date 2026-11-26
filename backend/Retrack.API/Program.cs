@@ -154,6 +154,12 @@ builder.Services.AddScoped<Retrack.API.Services.Interfaces.ILiquidationService, 
 builder.Services.AddHostedService<Retrack.API.Services.Liquidation.LiquidationClosingWorker>();
 builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.ISellerLiquidationRepository, SellerLiquidationRepository>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.ISellerLiquidationService, Retrack.API.Services.Seller.SellerLiquidationService>();
+// Phiên thanh lý nhiều hạng mục (V2): một service phục vụ Chủ kho, Seller và Admin xử lý báo bỏ mua.
+builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.ILiquidationV2Repository, LiquidationV2Repository>();
+builder.Services.AddScoped<Retrack.API.Services.Liquidation.LiquidationV2Service>();
+builder.Services.AddScoped<Retrack.API.Services.Interfaces.ILiquidationV2Service>(sp => sp.GetRequiredService<Retrack.API.Services.Liquidation.LiquidationV2Service>());
+builder.Services.AddScoped<Retrack.API.Services.Interfaces.ISellerLiquidationV2Service>(sp => sp.GetRequiredService<Retrack.API.Services.Liquidation.LiquidationV2Service>());
+builder.Services.AddScoped<Retrack.API.Services.Interfaces.IAdminLiquidationService>(sp => sp.GetRequiredService<Retrack.API.Services.Liquidation.LiquidationV2Service>());
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IDepotStockService, Retrack.API.Services.Depot.DepotStockService>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IDepotProofService, Retrack.API.Services.Depot.DepotProofService>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IBatchService, Retrack.API.Services.Depot.BatchService>();

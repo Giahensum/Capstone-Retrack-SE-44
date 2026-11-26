@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { LayoutDashboard, Users, Tags, Banknote, ScrollText, ShieldCheck, ArrowLeftRight } from 'lucide-react';
+import { LayoutDashboard, Users, Tags, Banknote, ScrollText, ShieldCheck, ArrowLeftRight, Flag } from 'lucide-react';
 import AppShell from '@/components/layout/AppShell';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -12,6 +12,7 @@ const NAV = [
     items: [
       { icon: Users, label: 'Người dùng', to: '/admin/users' },
       { icon: ShieldCheck, label: 'Hồ sơ kho vựa', to: '/admin/depot-verifications' },
+      { icon: Flag, label: 'Báo bỏ mua thanh lý', to: '/admin/liquidation-disputes' },
     ],
   },
   {

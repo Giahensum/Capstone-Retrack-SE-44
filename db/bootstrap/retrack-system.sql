@@ -1354,6 +1354,96 @@ ALTER TABLE pickup_requests ADD COLUMN IF NOT EXISTS payment_method VARCHAR(20);
 ALTER TABLE pickup_requests ADD COLUMN IF NOT EXISTS payment_reference VARCHAR(255);
 ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS payment_method VARCHAR(20);
 
+-- RETRACK_LIQUIDATION_V2: phiên thanh lý nhiều hạng mục, trả giá theo đơn giá từng hạng mục.
+-- Dùng lại liquidation_lots làm phiên (format_version = 2); V1 giữ nguyên dữ liệu và luật cũ.
+-- Tiền mua = đơn giá trúng x số lượng Seller đã đăng; chốt ngay khi đóng phiên, không cọc qua RETRACK.
+-- Mỗi kho thắng có một thỏa thuận (liquidation_agreements format_version = 2) để nối luồng thanh toán/bàn giao/nhập kho sẵn có.
+ALTER TABLE liquidation_lots ADD COLUMN IF NOT EXISTS format_version SMALLINT NOT NULL DEFAULT 1;
+ALTER TABLE liquidation_lots ADD COLUMN IF NOT EXISTS extension_count SMALLINT NOT NULL DEFAULT 0;
+ALTER TABLE liquidation_lots ADD COLUMN IF NOT EXISTS collection_window_hours INTEGER;
+ALTER TABLE liquidation_lots ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ;
+ALTER TABLE liquidation_lots DROP CONSTRAINT IF EXISTS ck_liquidation_lot_version;
+ALTER TABLE liquidation_lots ADD CONSTRAINT ck_liquidation_lot_version CHECK (
+    format_version IN (1, 2) AND extension_count BETWEEN 0 AND 5
+    AND (format_version = 1 OR (collection_window_hours BETWEEN 24 AND 1440 AND deposit_percent = 0)));
+CREATE INDEX IF NOT EXISTS ix_liquidation_v2_closing ON liquidation_lots(bidding_end, id) WHERE format_version = 2 AND status = 'PUBLISHED';
+
+CREATE TABLE IF NOT EXISTS liquidation_items (
+    id UUID PRIMARY KEY, lot_id UUID NOT NULL REFERENCES liquidation_lots(id) ON DELETE CASCADE,
+    position SMALLINT NOT NULL CHECK (position BETWEEN 1 AND 20),
+    kind VARCHAR(20) NOT NULL CHECK (kind IN ('MATERIAL','USED_GOODS')),
+    material_code VARCHAR(30), name VARCHAR(255) NOT NULL, description VARCHAR(1000) NOT NULL,
+    unit VARCHAR(10) NOT NULL CHECK (unit IN ('kg','cai','bo')),
+    quantity NUMERIC(18,3) NOT NULL CHECK (quantity > 0),
+    starting_unit_price NUMERIC(18,0) NOT NULL CHECK (starting_unit_price > 0),
+    bid_increment NUMERIC(18,0) NOT NULL CHECK (bid_increment > 0),
+    highest_unit_price NUMERIC(18,0), highest_bid_id UUID,
+    bid_count INTEGER NOT NULL DEFAULT 0 CHECK (bid_count >= 0),
+    status VARCHAR(10) NOT NULL DEFAULT 'OPEN' CHECK (status IN ('OPEN','WON','UNSOLD')),
+    UNIQUE (lot_id, position),
+    CHECK ((kind = 'MATERIAL' AND unit = 'kg') OR (kind = 'USED_GOODS' AND unit IN ('cai','bo') AND quantity = TRUNC(quantity))),
+    CHECK ((highest_bid_id IS NULL) = (highest_unit_price IS NULL))
+);
+CREATE TABLE IF NOT EXISTS liquidation_participation_items (
+    participation_id UUID NOT NULL REFERENCES liquidation_participations(id) ON DELETE CASCADE,
+    item_id UUID NOT NULL REFERENCES liquidation_items(id) ON DELETE CASCADE,
+    registered_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (participation_id, item_id)
+);
+CREATE TABLE IF NOT EXISTS liquidation_item_bids (
+    id UUID PRIMARY KEY, lot_id UUID NOT NULL REFERENCES liquidation_lots(id) ON DELETE CASCADE,
+    item_id UUID NOT NULL REFERENCES liquidation_items(id) ON DELETE CASCADE,
+    owner_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    depot_id UUID NOT NULL REFERENCES depots(id) ON DELETE RESTRICT,
+    unit_price NUMERIC(18,0) NOT NULL CHECK (unit_price > 0),
+    created_at TIMESTAMPTZ NOT NULL, extended_end TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS ix_liquidation_item_bid_history ON liquidation_item_bids(item_id, created_at DESC, id);
+CREATE INDEX IF NOT EXISTS ix_liquidation_item_bid_owner ON liquidation_item_bids(item_id, owner_id, depot_id, created_at DESC);
+
+-- Thỏa thuận: V1 giữ đúng một thỏa thuận/lô và bắt buộc winning_bid_id; V2 một thỏa thuận cho mỗi kho thắng trong phiên.
+ALTER TABLE liquidation_agreements ADD COLUMN IF NOT EXISTS format_version SMALLINT NOT NULL DEFAULT 1;
+ALTER TABLE liquidation_agreements ALTER COLUMN winning_bid_id DROP NOT NULL;
+DO $liquidation_v2_unique$
+DECLARE c RECORD;
+BEGIN
+    FOR c IN SELECT con.conname FROM pg_constraint con
+        WHERE con.conrelid = 'liquidation_agreements'::regclass AND con.contype = 'u'
+          AND con.conkey = ARRAY[(SELECT attnum FROM pg_attribute WHERE attrelid = 'liquidation_agreements'::regclass AND attname = 'lot_id')]::smallint[]
+    LOOP EXECUTE format('ALTER TABLE liquidation_agreements DROP CONSTRAINT %I', c.conname); END LOOP;
+END $liquidation_v2_unique$;
+CREATE UNIQUE INDEX IF NOT EXISTS ux_liquidation_agreement_v1_lot ON liquidation_agreements(lot_id) WHERE format_version = 1;
+CREATE UNIQUE INDEX IF NOT EXISTS ux_liquidation_agreement_v2_depot ON liquidation_agreements(lot_id, depot_id) WHERE format_version = 2;
+ALTER TABLE liquidation_agreements ADD COLUMN IF NOT EXISTS abandon_reported_at TIMESTAMPTZ;
+ALTER TABLE liquidation_agreements ADD COLUMN IF NOT EXISTS abandon_reported_by UUID REFERENCES users(id) ON DELETE RESTRICT;
+ALTER TABLE liquidation_agreements ADD COLUMN IF NOT EXISTS abandon_reason VARCHAR(1000);
+ALTER TABLE liquidation_agreements ADD COLUMN IF NOT EXISTS resolution VARCHAR(20);
+ALTER TABLE liquidation_agreements ADD COLUMN IF NOT EXISTS resolution_note VARCHAR(1000);
+ALTER TABLE liquidation_agreements ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMPTZ;
+ALTER TABLE liquidation_agreements ADD COLUMN IF NOT EXISTS resolved_by UUID REFERENCES users(id) ON DELETE RESTRICT;
+ALTER TABLE liquidation_agreements DROP CONSTRAINT IF EXISTS ck_liquidation_agreement_version;
+ALTER TABLE liquidation_agreements ADD CONSTRAINT ck_liquidation_agreement_version CHECK (
+    (format_version = 1 AND winning_bid_id IS NOT NULL)
+    OR (format_version = 2 AND winning_bid_id IS NULL AND deposit_amount = 0));
+ALTER TABLE liquidation_agreements DROP CONSTRAINT IF EXISTS ck_liquidation_agreement_abandon;
+ALTER TABLE liquidation_agreements ADD CONSTRAINT ck_liquidation_agreement_abandon CHECK (
+    (abandon_reported_at IS NULL) = (abandon_reported_by IS NULL)
+    AND (abandon_reported_at IS NULL) = (abandon_reason IS NULL)
+    AND (resolution IS NULL OR resolution IN ('CONTINUE','CANCELLED'))
+    AND (resolution IS NULL) = (resolved_at IS NULL)
+    AND (resolution IS NULL) = (resolved_by IS NULL)
+    AND (resolution IS NULL OR abandon_reported_at IS NOT NULL));
+CREATE INDEX IF NOT EXISTS ix_liquidation_agreement_disputes ON liquidation_agreements(abandon_reported_at, id) WHERE abandon_reported_at IS NOT NULL;
+CREATE TABLE IF NOT EXISTS liquidation_agreement_items (
+    id UUID PRIMARY KEY, agreement_id UUID NOT NULL REFERENCES liquidation_agreements(id) ON DELETE RESTRICT,
+    item_id UUID NOT NULL UNIQUE REFERENCES liquidation_items(id) ON DELETE RESTRICT,
+    winning_bid_id UUID NOT NULL UNIQUE REFERENCES liquidation_item_bids(id) ON DELETE RESTRICT,
+    name VARCHAR(255) NOT NULL, unit VARCHAR(10) NOT NULL, quantity NUMERIC(18,3) NOT NULL CHECK (quantity > 0),
+    unit_price NUMERIC(18,0) NOT NULL CHECK (unit_price > 0), amount NUMERIC(18,0) NOT NULL CHECK (amount > 0)
+);
+CREATE INDEX IF NOT EXISTS ix_liquidation_agreement_items_agreement ON liquidation_agreement_items(agreement_id);
+-- RETRACK_LIQUIDATION_V2_END
+
 -- RETRACK_SCHEMA_END
 
 -- RETRACK_SEED_BEGIN

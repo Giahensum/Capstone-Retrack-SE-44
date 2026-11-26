@@ -130,7 +130,7 @@ public sealed class MoneyCollectionService(AppDbContext db, Retrack.API.Services
             {
                 var r = await (from a in db.LiquidationAgreements.AsNoTracking() where a.Id == sourceId
                                join l in db.LiquidationLots.AsNoTracking() on a.LotId equals l.Id
-                               select new { a.BuyerId, l.SellerId, a.Amount, a.DepositAmount, a.SellerSignedAt, a.BuyerSignedAt, a.DepositConfirmedAt, a.PaymentConfirmedAt })
+                               select new { a.BuyerId, l.SellerId, a.Amount, a.DepositAmount, a.SellerSignedAt, a.BuyerSignedAt, a.DepositConfirmedAt, a.PaymentConfirmedAt, a.FormatVersion })
                     .SingleOrDefaultAsync(ct) ?? throw new KeyNotFoundException("Không tìm thấy thỏa thuận thanh lý.");
                 if (flow == MoneyFlows.LiquidationDeposit)
                 {
@@ -139,7 +139,9 @@ public sealed class MoneyCollectionService(AppDbContext db, Retrack.API.Services
                         : r.DepositConfirmedAt != null ? "Tiền cọc đã được ghi nhận." : null;
                     return new(MoneySources.LiquidationAgreement, r.BuyerId, r.SellerId, r.DepositAmount, $"RT COC {tag}", block);
                 }
-                var balBlock = r.DepositAmount > 0 && r.DepositConfirmedAt == null ? "Cần thanh toán và xác nhận tiền cọc trước khi thanh toán phần còn lại."
+                // Phiên nhiều hạng mục (V2): hai bên tự thanh toán trực tiếp, RETRACK không thu hộ tiền hàng mới.
+                var balBlock = r.FormatVersion == 2 ? "Phiên nhiều hạng mục: hai bên tự thanh toán trực tiếp, RETRACK không thu hộ tiền hàng."
+                    : r.DepositAmount > 0 && r.DepositConfirmedAt == null ? "Cần thanh toán và xác nhận tiền cọc trước khi thanh toán phần còn lại."
                     : r.PaymentConfirmedAt != null ? "Thỏa thuận đã ghi nhận thanh toán phần còn lại." : null;
                 return new(MoneySources.LiquidationAgreement, r.BuyerId, r.SellerId, r.Amount - r.DepositAmount, $"RT TL {tag}", balBlock);
             }
