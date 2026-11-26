@@ -42,7 +42,7 @@ Dùng thử chống lách: một mã số thuế chỉ được dùng thử mộ
 |---|---|
 | Owner → Seller | Body báo trả tiền thêm `paymentMethod`: `BANK_TRANSFER` (mặc định cũ), `CASH`, `OTHER`; `paymentReference` là căn cứ tiền mặt/khác. Chuyển khoản vẫn cần `paymentProofUrl`. Seller xác nhận thực nhận mới `DONE` và tăng tồn |
 | Factory → Owner | Báo thanh toán có cùng ba hình thức; bank cần attachment hợp lệ, cash/other cần reference. Giá hai bên đồng ý trước; Owner xác nhận thực nhận mới `PAID` |
-| Lô lớn | Trả giá cả lô, tiền/cọc thỏa thuận ngoài app; tham chiếu có thể là mã chuyển khoản hoặc biên nhận tiền mặt. Nhận đủ rồi Owner nhập một lần theo kg/cái/bộ |
+| Lô lớn | V1 trọn lô giữ luật cũ. V2 thắng riêng hạng mục, tiền = đơn giá trúng × lượng Seller đăng, không cọc/thu hộ qua RETRACK. Nhận đủ rồi Owner nhập một lần lượng thực tế theo kg/cái/bộ; xem bàn giao TV2 V2. |
 | Tiền qua sàn cũ | Endpoint tiền trả mode theo nguồn. Khoản cũ có collection PENDING/PAID/REFUNDING vẫn dùng platform để đối soát/chi/hoàn; không chỉ nhìn `money.mode` toàn cục |
 | Employee/dispatch | Đơn mới chỉ nhận/phân công vào kho còn quyền dùng. Đơn đã nhắm/gán kho vẫn được hoàn tất. Mobile phải dùng mode từ server thay vì tự coi mọi đơn đều trả PayOS |
 | Admin | Doanh thu nền tảng mới là số tiền đơn gói PAID, không cộng tiền hàng. Menu phí/thu chi cũ dùng tra lịch sử |
