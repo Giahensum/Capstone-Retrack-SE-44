@@ -122,12 +122,14 @@ Bất biến đang dựa vào: chỉ báo bỏ mua và Admin hủy được **tr
 
 Ngoài ra, khi chọn V2 trong `MoneyCollectionService`, khoản thu hộ số dư bị chặn (V2 không có tiền qua sàn).
 
-## 6. Việc TV2 cần kiểm tra/đề xuất
+## 6. Kết quả tích hợp phía TV2 — 26/11/2026
 
-1. (Khuyến nghị, phòng thủ thêm) Trong `DepotStockService.CreateAsync`, từ chối khi `source.Resolution == "CANCELLED"` hoặc `AbandonReportedAt != null && Resolution == null`. Hiện an toàn nhờ bất biến ở mục 4, nhưng sẽ hỏng nếu sau này cho báo bỏ mua sau bàn giao.
-2. Có thể gọi `intake-source` để điền sẵn dòng (tên, đơn vị, `materialType`) và hiển thị `postedQuantity` làm gợi ý, nhưng không khóa số lượng theo nó.
-3. Báo giá vốn: `purchaseCost` là tổng tiền mua cả thỏa thuận; phân bổ cho từng dòng theo cơ chế `DepotCosting.Allocate` hiện có.
-4. Chưa làm: kiểm tra hạn gói khi đăng ký/trả giá V2 (`RequireAccessAsync` chưa gọi trong `LiquidationV2Service`). TV5 sẽ bổ sung riêng; nhập kho từ thỏa thuận đã mua vẫn được phép khi hết hạn (đúng quy tắc chung).
+1. API kho tự từ chối thỏa thuận đã hủy hoặc có báo bỏ mua chưa xử lý. Kiểm tra nằm sau khóa nguồn và trước khi tạo phiếu; không chỉ dựa vào nút giao diện hoặc bất biến trước bàn giao.
+2. Popup gọi intake-source khi mở nhập kho, điền sẵn tên/loại/đơn vị các hạng mục thắng. Lượng Seller đăng chỉ là gợi ý; ô lượng thực nhập để trống để Owner điền sau phân loại. Hạng mục hỗn hợp chưa có mã phải chọn vật liệu, không tự coi là sắt. Có thể thêm/bỏ dòng theo kết quả phân loại thực tế.
+3. Tiền mua tự lấy finalPurchaseAmount. Một đầu ra không hỏi giá tham khảo; nhiều đầu ra giữ trọng số DepotCosting.Allocate. Không cộng lại tiền mua theo lượng thực nhập.
+4. Lưu/đóng phiếu làm mới cache V2 của kho để thỏa thuận và danh sách chuyển đúng trạng thái, có đường tới phiếu đã ghi.
+5. Đính chính mục hạn gói của bàn giao ban đầu: RegisterAsync/ConfirmSurveyAsync/BidAsync đã gọi RequireTradingAsync; DepotService được DI với IDepotSubscriptionService nên runtime đã kiểm gói. Test V2 hiện dùng cùng dependency này, chứng minh hết hạn chặn tham gia/giá mới, retry đúng thao tác và nhận lô đã mua vẫn được hoàn tất. Không thêm guard trùng ở service V2.
+6. Test PostgreSQL bổ sung kiểm nguồn hủy/tranh chấp dù dữ liệu cờ bàn giao bất nhất, không sinh phiếu/tác động nhận hàng; kiểm tiền mua300000đ + chi45000đ với90kg thực nhập cho vốn345000đ.
 
 ## 7. Kiểm tra lại
 
@@ -138,3 +140,13 @@ dotnet test backend/Retrack.sln --no-restore --filter "FullyQualifiedName~Liquid
 ```
 
 DB cũ: áp khối `RETRACK_LIQUIDATION_V2` … `RETRACK_LIQUIDATION_V2_END` trong `db/bootstrap/retrack-system.sql` (idempotent, trước `-- RETRACK_SCHEMA_END`), không chạy seed.
+
+## 8. Kiểm chứng tích hợp TV2 — 26/11/2026
+
+- Backend: 632 ca API.Tests +330 ca Retrack.Tests Passed trên PostgreSQL test;22 ca V2 trong đó kiểm cả gói, gia hạn, thắng riêng, tiền theo lượng đăng, retry/race và nhập kho.
+- Frontend:43 unit Passed; lint/build Passed, còn cảnh báo scaffold/chunk có sẵn.
+- Browser fixture riêng: mua100kg sắt giá300000đ, nhập90kg+45000đ chi phí → vốn345000đ; mua sắt và5 ghế giá600000đ+200000đ → vốn800000đ phân bổ đúng. Ghi sổ và reload đều giữ dữ liệu, không hiện nút nhập lại; form chặn lượng trống và số cái lẻ.
+- Responsive:320/768/1024/1440px không tràn ngang toàn trang, hành động ghi sổ ở trong viewport.
+- File SQL full hiện hành đã chạy hai lần trên schema test riêng: đủ6 role,52 user,8 depot, không thiếu cột model. Không đổi cấu trúc SQL chỉ để thêm một bản sao cho task.
+- DB local đã backup, áp hai khối V2/refund không seed, đủ719 cột model; số dòng54 bảng cũ giữ nguyên. Đây là kiểm schema/số dòng, không phải kiểm toán mọi dữ liệu hoặc chứng nhận production.
+- Chưa nghiệm thu ở lượt này: ngân hàng/PayOS thật và webhook công khai; GPS/camera mobile thật; toàn bộ UI các role trên môi trường deploy. Browser fixture dùng đăng nhập email, Google có client ID mẫu nên không dùng làm bằng chứng Google OAuth.

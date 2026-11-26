@@ -6,12 +6,12 @@ import { useDepot, depotError } from '../DepotContext';
 import { money, number } from '../depotApi';
 import { inputClass } from './DepotUI';
 
-export default function BatchSalePreview({ materialType, weightKg, demand }) {
+export default function BatchSalePreview({ materialType, weightKg, demand, shippingCost = 0 }) {
   const { depotId, userId } = useDepot();
   const [price, setPrice] = useState(demand?.minPricePerKg ?? '');
   const [sellingCost, setSellingCost] = useState('');
   const [open, setOpen] = useState(!!demand);
-  const body = JSON.stringify({ materialType, weightKg: Number(weightKg), pricePerKg: price === '' ? null : Number(price), sellingCost: Number(sellingCost || 0) });
+  const body = JSON.stringify({ materialType, weightKg: Number(weightKg), pricePerKg: price === '' ? null : Number(price), sellingCost: Number(sellingCost || 0) + Number(shippingCost) });
   const [debounced, setDebounced] = useState(null);
   useEffect(() => { const timer = setTimeout(() => setDebounced(body), 350); return () => clearTimeout(timer); }, [body]);
   const priceValid = price === '' || Number.isFinite(Number(price)) && Number(price) >= 0 && Number(price) <= 1000000000 && Number.isInteger(Number((Number(price) * 100).toFixed(6)));
@@ -27,7 +27,8 @@ export default function BatchSalePreview({ materialType, weightKg, demand }) {
       <p className="text-sm">Giá vốn lấy từ nguồn hàng khả dụng theo thứ tự nhập trước, xuất trước. Giá dưới đây chỉ để cân nhắc, không gửi thành giá thỏa thuận cho nhà máy.</p>
       {demand && <p className="rounded-xl bg-d-surface-accent p-3 text-sm">Khoảng Factory đang tham khảo: {demand.minPricePerKg == null ? 'Chưa có giá tối thiểu' : money(demand.minPricePerKg)} – {demand.maxPricePerKg == null ? 'Chưa có giá tối đa' : money(demand.maxPricePerKg)} / kg. Có thể thay giá để so sánh từng phương án.</p>}
       <div className="grid sm:grid-cols-2 gap-3"><label className="block text-sm">Giá bán dự kiến / kg (đ)<Input data-validation-skip type="number" min="0" max="1000000000" step="0.01" className={inputClass} value={price} onChange={e => setPrice(e.target.value)} /></label>
-        <label className="block text-sm">Chi phí giao/bán dự kiến (đ)<Input data-validation-skip type="number" min="0" max="1000000000000" step="1" className={inputClass} value={sellingCost} onChange={e => setSellingCost(e.target.value)} placeholder="Xăng xe, bốc dỡ… chưa nằm trong giá vốn" /></label></div>
+        <label className="block text-sm">Chi phí giao/bán khác (đ)<Input data-validation-skip type="number" min="0" max="1000000000000" step="1" className={inputClass} value={sellingCost} onChange={e => setSellingCost(e.target.value)} placeholder="Bốc dỡ và khoản khác chưa có trong giá vốn/báo giá vận chuyển" /></label></div>
+      {shippingCost > 0 && <p className="text-sm">Đã cộng chi phí vận chuyển tham khảo {money(shippingCost)} vào dự kiến. Không nhập lại khoản này ở chi phí khác.</p>}
       {!valid ? <p role="status" className="text-sm">{!priceValid ? 'Giá bán dự kiến từ 0 đến 1 tỷ đồng/kg, tối đa 2 số lẻ.' : !costValid ? 'Chi phí giao/bán phải là số nguyên đồng từ 0 đến 1.000 tỷ đồng.' : 'Chọn vật liệu và nhập khối lượng hợp lệ để xem dự kiến.'}</p> : q.isError ? <p role="alert" className="text-sm text-d-error">{depotError(q.error)}</p> : !d ? <p role="status" className="text-sm">Đang tính dự kiến…</p> : <>
         <dl aria-live="polite" className="grid sm:grid-cols-2 gap-3 rounded-xl bg-d-surface-accent p-3 text-sm">
           <div><dt>Giá vốn {number(d.weightKg)} kg chuẩn bị xuất</dt><dd className="font-bold">{d.costOfGoods == null ? 'Chưa đủ dữ liệu' : money(d.costOfGoods)}</dd></div>

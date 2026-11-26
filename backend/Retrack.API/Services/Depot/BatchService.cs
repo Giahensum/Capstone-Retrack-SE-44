@@ -6,7 +6,7 @@ using Retrack.API.Services.Interfaces;
 
 namespace Retrack.API.Services.Depot;
 
-public sealed class BatchService(IDepotBatchRepository batches, IDepotUnitOfWork work, IDepotService scope, IInventoryService inventory, ICloudinaryService images, IDepotStockService stockLedger) : IBatchService
+public sealed class BatchService(IDepotBatchRepository batches, IDepotUnitOfWork work, IDepotService scope, IInventoryService inventory, ICloudinaryService images, IDepotStockService stockLedger, Retrack.API.Services.Shipping.ShippingService? shipping = null) : IBatchService
 {
     public async Task<DepotBatchDetailDto> DetailAsync(Guid ownerId, Guid depotId, Guid batchId)
     {
@@ -25,6 +25,8 @@ public sealed class BatchService(IDepotBatchRepository batches, IDepotUnitOfWork
     public async Task<DepotBatchDto> CreateAsync(Guid ownerId, Guid depotId, CreateDepotBatchDto dto, IReadOnlyList<IFormFile>? photos = null)
     {
         await scope.RequireOwnerAsync(ownerId, depotId);
+        if (dto.ShippingMethod is not ("INTERNAL" or "EXTERNAL")) throw new ArgumentException("Phương thức vận chuyển không hợp lệ.");
+        if (dto.ShippingMethod == "EXTERNAL" && shipping == null) throw new DepotConflictException("Chưa cấu hình vận chuyển ngoài.");
         if (photos?.Count > 5) throw new ArgumentException("Mỗi lô chỉ được tải lên tối đa 5 ảnh vật liệu.");
         if (dto.OperationId == Guid.Empty || string.IsNullOrWhiteSpace(dto.MaterialType) || dto.MaterialType.Length > 100 || dto.WeightKg <= 0 || dto.WeightKg > 1_000_000_000)
             throw new ArgumentException("Cần mã thao tác, loại vật liệu và khối lượng dương.");
@@ -36,12 +38,14 @@ public sealed class BatchService(IDepotBatchRepository batches, IDepotUnitOfWork
         var existing = await batches.FindOperationAsync(dto.OperationId);
         if (existing != null)
         {
-            if (existing.DepotId != depotId || Retrack.API.Services.Shared.MaterialCatalog.Normalize(existing.MaterialType) != dto.MaterialType ||
+            if (existing.DepotId != depotId || existing.ShippingMethod != dto.ShippingMethod || existing.ShippingQuoteId != dto.ShippingQuoteId || Retrack.API.Services.Shared.MaterialCatalog.Normalize(existing.MaterialType) != dto.MaterialType ||
                 existing.DeclaredWeightKg != dto.WeightKg || (existing.TargetFactoryId ?? existing.DirectOfferFactoryId) != dto.TargetFactoryId || existing.Description != dto.Description || existing.SourceDemandId != dto.SourceDemandId)
                 throw new DepotConflictException("Mã thao tác đã được dùng cho một lô khác.");
             return Map(existing);
         }
         await scope.RequireTradingAsync(ownerId, depotId);
+        if (dto.ShippingQuoteId.HasValue && shipping != null)
+            await shipping.ValidateQuoteAsync(ownerId, depotId, dto.ShippingQuoteId.Value, dto.TargetFactoryId, dto.MaterialType, dto.WeightKg, dto.ShippingMethod, default);
         var stock = (await inventory.GetAsync(ownerId, depotId)).SingleOrDefault(i => i.MaterialType == dto.MaterialType);
         if (stock == null || stock.AvailableKg < dto.WeightKg) throw new DepotConflictException("Tồn kho khả dụng không đủ.");
         var status = "LISTED";
@@ -111,6 +115,7 @@ public sealed class BatchService(IDepotBatchRepository batches, IDepotUnitOfWork
         var code = $"LO-{DateTime.UtcNow.AddHours(7):yyMM}-{sequence:D3}";
         var batch = new InventoryBatch {
             Id = dto.OperationId, Code = code, DepotId = depotId, MaterialType = dto.MaterialType,
+            ShippingMethod = dto.ShippingMethod, ShippingQuoteId = dto.ShippingQuoteId,
             DeclaredWeightKg = dto.WeightKg, Description = dto.Description, SourceDemandId = dto.SourceDemandId,
             TargetFactoryId = isApproved ? dto.TargetFactoryId : null,
             DirectOfferFactoryId = !isApproved && dto.TargetFactoryId.HasValue ? dto.TargetFactoryId : null,
@@ -127,7 +132,7 @@ public sealed class BatchService(IDepotBatchRepository batches, IDepotUnitOfWork
                     : $"Lô {code} đang chờ nhà máy xem và quyết định nhận hàng. Mở Yêu cầu chỉ định để phản hồi.",
                 isApproved ? "BATCH" : "MARKETPLACE");
         await stockLedger.ReserveCostsAsync(depotId, batch.Id, dto.MaterialType, dto.WeightKg);
-        if (status == "TRANSPORT_READY") await batches.AddTransportAsync(new TransportJob { BatchId = batch.Id }, depotId);
+        if (status == "TRANSPORT_READY") await batches.AddTransportAsync(new TransportJob { BatchId = batch.Id, Status = batch.ShippingMethod == "EXTERNAL" ? "EXTERNAL_WAITING" : "PENDING" }, depotId);
         await work.SaveAsync();
         await tx.CommitAsync();
         batch.TargetFactory = factory;

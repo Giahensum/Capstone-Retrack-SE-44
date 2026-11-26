@@ -60,7 +60,7 @@ export default function StockReceiptReview({ receipt, onClose }) {
       <BatchDetailSection title="Điều chỉnh chi phí có lịch sử"><StockCostAdjustments receipt={receipt} onBusyChange={setAdjusting} /></BatchDetailSection>
       </BatchDetailSection>}
       <MutationError mutation={post} /><MutationError mutation={reject} /><MutationError mutation={reverse} />
-      <p className="text-sm text-d-on-surface-variant">Nguồn do kho tự khai báo. Tài liệu/phiếu nội bộ không thay hóa đơn thuế. Chi phí đã ghi không đồng nghĩa đã gồm mọi thuế và chi phí vận hành.</p>
+      <p className="text-sm text-d-on-surface-variant">{receipt.bulkAgreementId ? 'Phiếu liên kết với thỏa thuận mua; lượng thực nhập do kho xác nhận.' : 'Nguồn do kho tự khai báo.'} Tài liệu/phiếu nội bộ không thay hóa đơn thuế. Chi phí đã ghi không đồng nghĩa đã gồm mọi thuế và chi phí vận hành.</p>
     </div>
   </Dialog>;
 }

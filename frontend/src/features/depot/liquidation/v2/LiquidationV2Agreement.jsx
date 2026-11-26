@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useIsMutating } from '@tanstack/react-query';
+import { useIsMutating, useQueryClient } from '@tanstack/react-query';
 import { Handshake, Banknote, PackageCheck, Warehouse, ReceiptText, ArrowRight, AlertTriangle, Flag, MapPin, Phone, Timer, Info, Scale } from 'lucide-react';
 import { Form, Input, Textarea } from '@/components/forms/ValidatedForm';
 import { QueryState, MutationError, inputClass } from '@/features/depot/components/DepotUI';
@@ -17,6 +17,7 @@ const stageTone = { CANCELLED: 'red', DISPUTED: 'amber', COMPLETED: 'primary' };
 /** Thỏa thuận của kho thắng trong phiên nhiều hạng mục: tiền chốt theo lượng đã đăng, hai bên tự thanh toán và bàn giao. */
 export default function LiquidationV2Agreement({ id, onClose }) {
   const scope = useV2Scope();
+  const client = useQueryClient();
   const query = useV2Query(`/agreements/${id}`);
   const d = query.data;
   const busy = useIsMutating({ mutationKey: ['liquidation-v2', scope.userId, scope.depotId] }) > 0;
@@ -24,10 +25,19 @@ export default function LiquidationV2Agreement({ id, onClose }) {
   const [confirmed, setConfirmed] = useState(false);
   const [receiving, setReceiving] = useState(false);
   const [abandon, setAbandon] = useState(false);
+  const intake = useV2Query(`/agreements/${id}/intake-source`, {}, { enabled: receiving });
+  const closeIntake = () => { setReceiving(false); void client.invalidateQueries({ queryKey: ['liquidation-v2', scope.userId, scope.depotId] }); };
   const report = useV2Mutation('patch', `/agreements/${id}/report-payment`, () => { setReference(''); setConfirmed(false); });
   const received = useV2Mutation('patch', `/agreements/${id}/confirm-received`);
 
-  if (receiving && d) return <StockReceiptForm agreement={{ id: d.id, title: d.title, amount: d.totalAmount }} confirmBulkReceived={!d.ownerCollectedAt} onClose={() => setReceiving(false)} />;
+  if (receiving && d) {
+    if (intake.data?.readyForIntake && !intake.isError) return <StockReceiptForm agreement={{ id: intake.data.agreementId, title: d.title, amount: intake.data.finalPurchaseAmount }}
+      intakeSource={intake.data} confirmBulkReceived={!intake.data.ownerReceived} onClose={closeIntake} />;
+    return <Modal title="Nhập kho từ hạng mục đã mua" icon={Warehouse} onClose={closeIntake}>
+      <QueryState query={intake}>{intake.data && <Notice tone="amber" icon={AlertTriangle}>Thỏa thuận chưa đủ điều kiện nhập hoặc đã có phiếu. Hãy kiểm tra lại các mốc tiền, bàn giao và trạng thái xử lý.</Notice>}</QueryState>
+      <button type="button" className={ghostBtn} onClick={closeIntake}>Quay lại thỏa thuận</button>
+    </Modal>;
+  }
 
   const steps = d && [
     { key: 'pay', label: 'Kho thanh toán', icon: Banknote, state: d.paymentReportedAt ? 'done' : 'current' },

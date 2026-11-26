@@ -56,6 +56,13 @@ services:
       Jwt__Audience: ${JWT_AUDIENCE:-ReTrackUsers}
       Frontend__Url: ${FRONTEND_URL:-http://localhost:5173}
       Database__Initialize: "false"
+      Shipping__Mode: ${SHIPPING_MODE:-Disabled}
+      Shipping__InternalFactor: ${SHIPPING_INTERNAL_FACTOR:-0.90}
+      Shipping__MaxWeightKg: ${SHIPPING_MAX_WEIGHT_KG:-2500}
+      Shipping__DemoStepSeconds: ${SHIPPING_DEMO_STEP_SECONDS:-45}
+      Shipping__ApiKey: ${LALAMOVE_API_KEY:-}
+      Shipping__ApiSecret: ${LALAMOVE_API_SECRET:-}
+      Shipping__ServiceType: ${LALAMOVE_SERVICE_TYPE:-}
       Google__ClientId: ${GOOGLE_CLIENT_ID:-}
       Google__ClientSecret: ${GOOGLE_CLIENT_SECRET:-}
       Cloudinary__CloudName: ${CLOUDINARY_CLOUD_NAME:-}

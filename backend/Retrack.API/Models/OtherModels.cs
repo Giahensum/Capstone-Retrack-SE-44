@@ -147,6 +147,11 @@ namespace Retrack.API.Models
     [Table("inventory_batches")]
     public class InventoryBatch
     {
+        [Column("shipping_method"), MaxLength(16)]
+        public string ShippingMethod { get; set; } = "INTERNAL";
+        [Column("shipping_quote_id")]
+        public Guid? ShippingQuoteId { get; set; }
+
         [Column("code"), MaxLength(40)]
         public string? Code { get; set; }
 

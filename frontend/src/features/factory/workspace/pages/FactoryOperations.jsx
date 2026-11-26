@@ -26,6 +26,8 @@ import { useFactoryOrder, useFactoryPage } from "../data/useFactoryData";
 import { downloadFactoryAttachment, uploadFactoryFeeProof } from "../data/factoryApi";
 import PayCollectionButton, { usePlatformCollection } from "@/features/money/PayCollectionButton";
 
+const transportStatusLabel = status => ({ EXTERNAL_WAITING: 'Chờ kho xác nhận gọi xe', PENDING: 'Chờ phân công vận chuyển', ACCEPTED: 'Tài xế đã nhận chuyến', PICKED_UP: 'Đã lấy hàng', IN_TRANSIT: 'Đang vận chuyển', ON_THE_WAY: 'Đang vận chuyển', DELIVERED: 'Đã giao hàng' })[status] ?? status;
+
 const modes = {
   orders: {
     title: "Đơn hàng & Vận chuyển",
@@ -171,9 +173,9 @@ export function Operations({ mode, focusId, navigate }) {
                   <dd>{state.profile.address}</dd>
                 </div>
                 <div>
-                  <dt>Tài xế</dt>
+                  <dt>Vận chuyển</dt>
                   <dd>
-                    {order.transport?.status || (order.status === "ACCEPTED" ? "Chưa nhận chuyến" : "Đang chờ cập nhật")}
+                    {transportStatusLabel(order.transport?.status) || (order.status === "ACCEPTED" ? "Chưa nhận chuyến" : "Đang chờ cập nhật")}
                   </dd>
                 </div>
                 <div>
@@ -274,8 +276,8 @@ export function Operations({ mode, focusId, navigate }) {
               {platformPay && <PayCollectionButton flow="BATCH" sourceId={order.id} title="Thanh toán lô qua sàn (PayOS)" />}
               {["ACCEPTED", "IN_TRANSIT"].includes(order.status) && (
                 <div className="simulation-box">
-                  <strong>Đang chờ cập nhật vận chuyển</strong>
-                  <p>Trạng thái này sẽ thay đổi khi tài xế nhận chuyến và cập nhật giao hàng.</p>
+                  <strong>{order.status === "IN_TRANSIT" ? "Hàng đang trên đường đến nhà máy" : "Chờ lấy hàng tại kho"}</strong>
+                  <p>{order.transport?.status === "EXTERNAL_WAITING" ? "Kho đã chọn thuê ngoài nhưng chưa xác nhận gọi xe. Kho cần mở chi tiết lô và hoàn tất thông tin giao nhận." : "Hệ thống tự cập nhật khi có thông tin lấy hàng và giao hàng. Nhà máy vẫn cần xác nhận tiếp nhận sau khi hàng đến."}</p>
                 </div>
               )}
             </Card>

@@ -125,9 +125,9 @@ public class FactoryMarketService(AppDbContext db) : FactoryServiceBase(db), IFa
         await NotifyDepotAsync(batch.DepotId, "Nhà máy đã nhận lô", $"{factory.Name} đã nhận lô {batch.Code ?? batch.Id.ToString()}. Kho có thể theo dõi bước vận chuyển.", batch.Id, ct: ct);
         if (batch.TransportJob is null)
         {
-            var job = new TransportJob { BatchId = batch.Id, Status = "PENDING" };
+            var job = new TransportJob { BatchId = batch.Id, Status = batch.ShippingMethod == "EXTERNAL" ? "EXTERNAL_WAITING" : "PENDING" };
             Db.TransportJobs.Add(job);
-            await Retrack.API.Services.Driver.DriverJobNotices.QueueAsync(new Retrack.API.Repositories.DriverDeliveryRepository(Db), batch.DepotId, job.Id, ct);
+            if (batch.ShippingMethod == "INTERNAL") await Retrack.API.Services.Driver.DriverJobNotices.QueueAsync(new Retrack.API.Repositories.DriverDeliveryRepository(Db), batch.DepotId, job.Id, ct);
         }
         await Db.SaveChangesAsync(ct);
         if (transaction != null) await transaction.CommitAsync(ct);
