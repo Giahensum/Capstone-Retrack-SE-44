@@ -231,3 +231,12 @@ Các mục hạ tầng này là hướng dẫn triển khai, chưa có số li�
 xác nhận vận hành trên máy chủ của nhóm. Không bật cache tồn kho/thanh toán,
 replica đọc trễ, partition hay sharding khi chưa có nhu cầu đã đo và phương án
 giữ tính nhất quán.
+
+
+### Nâng cấp riêng phần vận chuyển thuê ngoài
+
+Schema vận chuyển nằm trong `bootstrap/retrack-system.sql`, giữa `-- RETRACK_SHIPPING_BEGIN` và `-- RETRACK_SHIPPING_END`, trước `-- RETRACK_SCHEMA_END`. Không có file SQL Shipping riêng.
+
+Với DB đang có dữ liệu: sao lưu, xác minh đúng database, chọn duy nhất nội dung giữa hai marker Shipping và chạy trong transaction `BEGIN;` … `COMMIT;`. Không chạy kèm phần seed hoặc thay toàn bộ database chỉ để thêm vận chuyển. Khối này bổ sung hai cột `shipping_method`, `shipping_quote_id` vào `inventory_batches` và ba bảng `shipping_quotes`, `external_shipments`, `shipping_events`. Lô cũ mặc định dùng `INTERNAL`.
+
+Bài test `ShippingPostgresTests` chỉ đọc bootstrap chung, tắt seed rồi chạy lại khối Shipping từ chính nội dung đã đọc để kiểm tra tính lặp an toàn và đặt xe đồng thời. Khi đưa code lên Git cần giữ cả hai marker Shipping trong bootstrap.

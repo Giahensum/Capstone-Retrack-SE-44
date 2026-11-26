@@ -20,6 +20,16 @@ public sealed class ShippingPostgresTests
         var root=new DirectoryInfo(AppContext.BaseDirectory);
         while(root!=null&&!Directory.Exists(Path.Combine(root.FullName,"db","bootstrap")))root=root.Parent;
         Assert.NotNull(root);
+        var bootstrap=await File.ReadAllTextAsync(Path.Combine(root!.FullName,"db","bootstrap","retrack-system.sql"));
+        bootstrap=bootstrap.Replace("SET LOCAL retrack.seed_demo = 'on';","SET LOCAL retrack.seed_demo = 'off';");
+        const string shippingBegin="-- RETRACK_SHIPPING_BEGIN";
+        const string shippingEnd="-- RETRACK_SHIPPING_END";
+        var begin=bootstrap.IndexOf(shippingBegin,StringComparison.Ordinal);
+        var end=bootstrap.IndexOf(shippingEnd,StringComparison.Ordinal);
+        Assert.True(begin>=0 && end>begin,"Bootstrap phải chứa khối schema Shipping giữa hai marker RETRACK_SHIPPING_BEGIN/END.");
+        // Chỉ đọc một file SQL; chạy lại khối Shipping để kiểm tra nâng cấp có thể lặp an toàn.
+        var upgrade="BEGIN;\n"+bootstrap[(begin+shippingBegin.Length)..end]+"\nCOMMIT;";
+
         var schema="shipping_"+Guid.NewGuid().ToString("N");
         await using var admin=new NpgsqlConnection(connection);await admin.OpenAsync();
         await using(var create=new NpgsqlCommand($"CREATE SCHEMA {schema}",admin))await create.ExecuteNonQueryAsync();
@@ -30,10 +40,7 @@ public sealed class ShippingPostgresTests
         try {
             await using(var sql=new NpgsqlConnection(scoped)) {
                 await sql.OpenAsync();
-                var bootstrap=await File.ReadAllTextAsync(Path.Combine(root!.FullName,"db/bootstrap/retrack-system.sql"));
-                bootstrap=bootstrap.Replace("SET LOCAL retrack.seed_demo = 'on';","SET LOCAL retrack.seed_demo = 'off';");
                 await using(var cmd=new NpgsqlCommand(bootstrap,sql))await cmd.ExecuteNonQueryAsync();
-                var upgrade=await File.ReadAllTextAsync(Path.Combine(root.FullName,"db/shipping/01_shipping_schema.sql"));
                 await using(var cmd=new NpgsqlCommand(upgrade,sql))await cmd.ExecuteNonQueryAsync();
             }
             await using var setup=Context();
