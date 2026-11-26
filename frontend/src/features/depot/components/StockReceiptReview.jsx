@@ -2,10 +2,10 @@ import { Form, Input } from '@/components/forms/ValidatedForm';
 import { useState } from 'react';
 import { useDepotMutation, money, number } from '../depotApi';
 import { Dialog, MutationError, buttonClass, inputClass } from './DepotUI';
-import { StockExpenseFields } from './StockExpenseFields';
+import StockReceiptCosts from './StockReceiptCosts';
 import StockCostAdjustments from './StockCostAdjustments';
 import StockReceiptForm from './StockReceiptForm';
-import CostAllocationPanel, { CostFormulaHelp } from './CostAllocationPanel';
+import CostAllocationPanel from './CostAllocationPanel';
 import { ReceiptText } from 'lucide-react';
 import BatchDetailSection from './BatchDetailSection';
 
@@ -29,6 +29,7 @@ export default function StockReceiptReview({ receipt, onClose }) {
     <div className="space-y-4">
       <p className="rounded-xl bg-d-surface-accent p-3 text-sm">{canReview ? 'Phiếu chưa ghi sổ, chưa được tính vào tồn khả dụng.' : receipt.status === 'POSTED' ? 'Phiếu đã ghi sổ. Không sửa trực tiếp số lượng hay giá vốn đã duyệt.' : `${receipt.status === 'VOIDED' ? 'Đã đảo phiếu' : 'Phiếu bị từ chối'}: ${receipt.reviewNote ?? ''}`}</p>
       {receipt.lines.map(x => <div key={x.id} className="rounded-xl bg-white border border-d-border-subtle p-4"><p className="font-semibold">{x.name} · {number(x.quantity)} {x.unit}</p>
+        <p className="text-sm mt-1 text-d-primary">Vốn ban đầu: {x.allocatedCost == null ? 'Chưa xác định' : money(x.allocatedCost / x.quantity) + ' / ' + x.unit}</p>
         {x.conditionNote && <p className="text-sm mt-1">{x.conditionNote}</p>}</div>)}
       <BatchDetailSection title="Chi phí và phân bổ giá vốn (nâng cao)">
       <dl className="grid sm:grid-cols-2 gap-3"><div><dt>Giá mua cả lô đã ghi</dt><dd className="font-semibold">{money(receipt.purchaseCost)}</dd></div><div><dt>Chi phí phiếu gốc đã ghi</dt><dd className="font-semibold">{money(receipt.totalCost)}</dd></div></dl>
@@ -43,13 +44,8 @@ export default function StockReceiptReview({ receipt, onClose }) {
             lines: lines.map(x => ({ id: x.id, referencePrice: Number(x.referencePrice || 0), directCost: Number(x.directCost || 0) })),
             expenses: expenses.map(({ key: _key, ...x }) => ({ ...x, amount: Number(x.amount || 0) })) } });
         }}>
-          <fieldset disabled={busy} className="space-y-4"><label className="block">Giá mua cả lô (đ)<Input required readOnly={!!receipt.bulkAgreementId} min="0" max="1000000000000" step="1" type="number" className={inputClass} value={purchaseCost} onChange={e => setPurchaseCost(e.target.value)} /></label>
-            {receipt.bulkAgreementId && <p className="text-sm text-d-on-surface-variant">Giá mua giữ nguyên giá trúng cả lô. Chi phí nhân công, xăng xe và khoản phát sinh ghi riêng bên dưới.</p>}
-            {lines.map(x => <div key={x.id} className="grid sm:grid-cols-2 gap-3"><label>Giá tham khảo / {x.unit}: {x.name}<Input type="number" min={confirmed ? 1 : 0} required step="1" max="1000000000000" className={inputClass} value={x.referencePrice} onChange={e => setLines(lines.map(l => l.id === x.id ? { ...l, referencePrice: e.target.value } : l))} /></label>
-              <label>Chi phí riêng: {x.name}<Input required type="number" min="0" step="1" max="1000000000000" className={inputClass} value={x.directCost} onChange={e => setLines(lines.map(l => l.id === x.id ? { ...l, directCost: e.target.value } : l))} /></label></div>)}
-            <CostFormulaHelp /><CostAllocationPanel purchaseCost={purchaseCost} lines={lines} expenses={expenses} enabled={confirmed} />
-            <StockExpenseFields expenses={expenses} setExpenses={setExpenses} />
-            <label className="flex gap-2"><Input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} />Đủ dữ liệu chi phí để phân bổ theo giá trị tham khảo</label>
+          <fieldset disabled={busy} className="space-y-4"><StockReceiptCosts purchaseCost={purchaseCost} setPurchaseCost={setPurchaseCost} linked={!!receipt.bulkAgreementId}
+            confirmed={confirmed} setConfirmed={setConfirmed} lines={lines} setLines={setLines} expenses={expenses} setExpenses={setExpenses} />
             <button className={buttonClass}>Lưu chi phí và tính phân bổ</button>
           </fieldset><MutationError mutation={save} />
         </Form>}

@@ -15,7 +15,7 @@ public sealed partial class DepotStockService
         var reference = dto.Lines.Sum(x => x.Quantity * x.ReferencePrice);
         return new(dto.PurchaseCost, common, dto.Lines.Sum(x => x.DirectCost), costs.Sum(), reference,
             dto.Lines.Select((x, i) => new StockCostPreviewLine(x.Name, x.Unit, x.Quantity, x.ReferencePrice,
-                x.Quantity * x.ReferencePrice, 100 * x.Quantity * x.ReferencePrice / reference,
+                x.Quantity * x.ReferencePrice, dto.Lines.Count == 1 ? 100 : 100 * x.Quantity * x.ReferencePrice / reference,
                 costs[i] - x.DirectCost, x.DirectCost, costs[i], costs[i] / x.Quantity)).ToList());
     }
 }

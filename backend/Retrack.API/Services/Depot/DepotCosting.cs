@@ -9,8 +9,10 @@ public static class DepotCosting
     public static decimal[] Allocate(decimal purchase, decimal common, IReadOnlyList<CostingLine> lines)
     {
         if (purchase < 0 || common < 0 || lines.Count == 0 ||
-            lines.Any(x => x.Quantity <= 0 || x.ReferencePrice <= 0 || x.DirectCost < 0))
+            lines.Any(x => x.Quantity <= 0 || x.ReferencePrice < 0 || lines.Count > 1 && x.ReferencePrice == 0 || x.DirectCost < 0))
             throw new ArgumentException("Số lượng, giá tham khảo và chi phí phân bổ không hợp lệ.");
+        // Một đầu ra nhận toàn bộ vốn, không cần giá bán tham khảo để tạo tỷ trọng.
+        if (lines.Count == 1) return [purchase + common + lines[0].DirectCost];
         var totalValue = lines.Sum(x => x.Quantity * x.ReferencePrice);
         var pool = purchase + common;
         var remaining = pool;
