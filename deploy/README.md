@@ -95,6 +95,19 @@ ssh root@IP "cd /opt/retrack && docker compose --env-file .env.production -f doc
 - **Khôi phục DB** từ bản sao lưu: `docker compose ... exec -T db pg_restore -U retrack -d retrack --clean --if-exists < backups/pre-<giờ>.dump`.
 - **Quay về bản cũ thủ công:** `IMAGE=ghcr.io/<owner>/retrack-api:<sha-cũ> bash /opt/retrack/deploy-remote.sh` (tag sha nằm ở tab Packages của repo).
 - **Bật HTTPS (giống FITLY, không cần mua tên miền):** xem mục 6 bên dưới.
+- **Ổ đĩa đầy** (log CD: `Postgres không sẵn sàng`, log DB: `PANIC ... No space left on device`): Postgres crash lặp vì không ghi được checkpoint. Dữ liệu vẫn nằm trong WAL, có chỗ trống là tự phục hồi. Từ bản này `deploy-remote.sh` tự dọn image API cũ/build cache/container dừng trước khi kéo image và dừng sớm nếu còn dưới `MIN_FREE_MB` (1500 MB); log container giới hạn 3 × 10 MB/service. Cứu tay trên VPS:
+  ```bash
+  df -h / /var/lib/docker; docker system df                       # xem cái gì chiếm chỗ
+  cd /opt/retrack
+  CUR=$(grep '^API_IMAGE=' .env.production | cut -d= -f2-)
+  docker images "${CUR%:*}" --format '{{.Repository}}:{{.Tag}}' | grep -vxF "$CUR" | xargs -r docker rmi   # image API cũ, giữ bản đang chạy
+  docker image prune -f; docker builder prune -f; docker container prune -f
+  ls -1t backups/pre-*.dump | tail -n +4 | xargs -r rm -f          # chỉ giữ 3 bản sao lưu mới nhất (tải về máy trước nếu cần)
+  find /var/lib/docker/containers -name '*-json.log' -size +50M -exec truncate -s 0 {} \;   # log container quá lớn
+  journalctl --vacuum-size=200M; apt-get clean                       # log hệ thống, cache apt
+  docker compose --env-file .env.production -f docker-compose.prod.yml logs --tail 20 db   # chờ "database system is ready"
+  ```
+  **Không** chạy `docker volume prune`, `docker system prune --volumes` hay `down -v`: sẽ xoá volume `pg_data` (mất dữ liệu). Sau đó chạy lại job CD (Re-run) hoặc `SKIP_PULL=1` như trên.
 - **Dịch vụ AI phân loại rác** (`AI_Garbage_Classification`) chưa được triển khai; API dùng `AI_SERVICE_URL` (mặc định `http://127.0.0.1:5005`), nên tính năng AI của Seller sẽ lỗi cho tới khi bạn chạy dịch vụ đó và cập nhật biến này.
 - **Quét hồ sơ Depot:** `VERIFICATION_SCANNER_MODE=Disabled` ở production nghĩa là API từ chối nộp hồ sơ mới (xem `backend/Retrack.API/.env.example`); cần ClamAV nếu muốn mở.
 
@@ -161,4 +174,4 @@ Webhook là tuỳ chọn: không có thì dùng nút "Cập nhật trạng thái
 
 - Chưa chạy thử trên VPS thật: các script đã kiểm tra cú pháp (`bash -n`) nhưng lần chạy đầu nên có người theo dõi.
 - Image ở GHCR mặc định riêng tư; CD truyền token tạm để VPS kéo image. Muốn kéo thủ công thì cần `docker login ghcr.io` bằng token có quyền `read:packages`.
-- VPS 1 vCPU / 2 GB RAM / 20 GB ổ đĩa chạy được API + Postgres nhưng không dư dả; giữ `backups/` gọn (script giữ 7 bản).
+- VPS 1 vCPU / 2 GB RAM / 20 GB ổ đĩa chạy được API + Postgres nhưng không dư dả; giữ `backups/` gọn (script giữ 7 bản). Nếu DB lớn dần, giảm `KEEP_BACKUPS` hoặc tải bản sao lưu về máy rồi xoá bớt.
