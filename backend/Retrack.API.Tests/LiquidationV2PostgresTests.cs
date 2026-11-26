@@ -49,6 +49,8 @@ public sealed class LiquidationV2PostgresTests : IAsyncLifetime
             new User { Id = adminUser, Role = "ADMIN", Email = Guid.NewGuid() + "@test.invalid", FullName = "Admin thử" });
         db.Depots.AddRange(new Depot { Id = depotA, OwnerId = ownerA, Name = "Kho A", VerificationStatus = "APPROVED" },
             new Depot { Id = depotB, OwnerId = ownerB, Name = "Kho B", VerificationStatus = "APPROVED" });
+        db.DepotSubscriptions.AddRange(new DepotSubscription { DepotId = depotA, TrialStartedAt = clock.Now, TrialEndsAt = clock.Now.AddDays(14) },
+            new DepotSubscription { DepotId = depotB, TrialStartedAt = clock.Now, TrialEndsAt = clock.Now.AddDays(14) });
         await db.SaveChangesAsync();
     }
 
@@ -60,7 +62,8 @@ public sealed class LiquidationV2PostgresTests : IAsyncLifetime
 
     private AppDbContext Open() => new(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(connection).Options);
     private LiquidationV2Service Service(AppDbContext db) => new(new LiquidationV2Repository(db),
-        new DepotService(new DepotOwnerRepository(db), new DepotPaymentReadRepository(db)), new DepotUnitOfWork(db), new DepotBatchRepository(db), clock);
+        new DepotService(new DepotOwnerRepository(db), new DepotPaymentReadRepository(db),
+            new DepotSubscriptionService(new DepotSubscriptionRepository(db), new NoPayOs(), clock)), new DepotUnitOfWork(db), new DepotBatchRepository(db), clock);
     private async Task<T> Run<T>(Func<LiquidationV2Service, Task<T>> action) { await using var db = Open(); return await action(Service(db)); }
     private async Task Run(Func<LiquidationV2Service, Task> action) { await using var db = Open(); await action(Service(db)); }
 
@@ -208,6 +211,8 @@ public sealed class LiquidationV2PostgresTests : IAsyncLifetime
         await using var check = Open();
         var receipt = await check.DepotStockReceipts.SingleAsync(x => x.BulkAgreementId == agreementId);
         Assert.Equal(300_000, receipt.PurchaseCost);
+        var line = await check.DepotStockLines.SingleAsync(x => x.ReceiptId == receipt.Id);
+        Assert.Equal(90, line.Quantity); Assert.Equal(345_000, line.AllocatedCost);
         Assert.NotNull((await check.LiquidationAgreements.SingleAsync(x => x.Id == agreementId)).OwnerCollectedAt);
         var after = await Run(s => s.AgreementAsync(ownerA, depotA, agreementId));
         Assert.Equal("COMPLETED", after.Stage); Assert.Equal(receipt.Id, after.ReceiptId); Assert.Null(after.NextAction);
@@ -259,6 +264,84 @@ public sealed class LiquidationV2PostgresTests : IAsyncLifetime
         clock.Advance(TimeSpan.FromMinutes(11)); // hết hạn đăng ký khảo sát
         await Assert.ThrowsAsync<DepotConflictException>(() => Run(s => s.RegisterAsync(ownerA, depotA, created.Campaign.Id, new(true, [created.Items[0].Id]))));
     }
+    [PostgresV2Fact]
+    public async Task Expired_subscription_blocks_new_registration_and_does_not_create_participation()
+    {
+        var created = await Run(s => s.CreateAsync(seller, Campaign(Guid.NewGuid())));
+        clock.Advance(TimeSpan.FromMinutes(2));
+        await ExpireAsync();
+        await Assert.ThrowsAsync<DepotSubscriptionRequiredException>(() => Run(s => s.RegisterAsync(ownerA, depotA, created.Campaign.Id,
+            new(true, [created.Items[0].Id]))));
+        await using var check = Open();
+        Assert.Empty(await check.LiquidationParticipations.Where(x => x.DepotId == depotA).ToListAsync());
+    }
+
+    [PostgresV2Fact]
+    public async Task Expired_subscription_blocks_new_bid_but_preserves_retry_and_existing_agreement_intake()
+    {
+        var (lot, iron, _) = await OpenCampaignWithBothDepotsAsync();
+        var operation = Guid.NewGuid();
+        var bid = await Run(s => s.BidAsync(ownerA, depotA, lot, iron, new(operation, 3000, null)));
+        await ExpireAsync();
+        var retry = await Run(s => s.BidAsync(ownerA, depotA, lot, iron, new(operation, 3000, null)));
+        Assert.Equal(bid.Id, retry.Id);
+        await Assert.ThrowsAsync<DepotSubscriptionRequiredException>(() => Run(s => s.BidAsync(ownerA, depotA, lot, iron, new(Guid.NewGuid(), 3100, null))));
+        clock.Advance(TimeSpan.FromMinutes(60)); await Run(s => s.FinalizeAsync(lot));
+        Guid agreement; await using (var db = Open()) agreement = (await db.LiquidationAgreements.SingleAsync(x => x.LotId == lot)).Id;
+        await Run(s => s.BuyerActionAsync(ownerA, depotA, agreement, "REPORT_PAYMENT", "CK DEMO hợp lệ"));
+        await Run(s => s.SellerActionAsync(seller, agreement, "CONFIRM_PAYMENT"));
+        await Run(s => s.SellerActionAsync(seller, agreement, "CONFIRM_HANDOVER"));
+        await using var post = Open();
+        var sub = new DepotSubscriptionService(new DepotSubscriptionRepository(post), new NoPayOs(), clock);
+        var receipt = await new DepotStockService(new DepotStockRepository(post), new DepotBatchRepository(post), new DepotUnitOfWork(post),
+            new DepotService(new DepotOwnerRepository(post), new DepotPaymentReadRepository(post)), subscriptions: sub)
+            .CreateAsync(ownerA, depotA, Intake(agreement));
+        Assert.Equal("POSTED", receipt.Status);
+    }
+
+    [PostgresV2Theory, InlineData(true), InlineData(false)]
+    public async Task Stock_intake_rechecks_cancelled_or_disputed_source_even_with_handover_flags(bool cancelled)
+    {
+        var (lot, iron, _) = await OpenCampaignWithBothDepotsAsync();
+        await Run(s => s.BidAsync(ownerA, depotA, lot, iron, new(Guid.NewGuid(), 3000, null)));
+        clock.Advance(TimeSpan.FromMinutes(60)); await Run(s => s.FinalizeAsync(lot));
+        Guid id;
+        await using (var db = Open())
+        {
+            var agreement = await db.LiquidationAgreements.SingleAsync(x => x.LotId == lot); id = agreement.Id;
+            // Cố ý tạo trạng thái bất nhất trong fixture để chứng minh API kho tự phòng vệ, không dựa vào UI.
+            agreement.PaymentReportedAt = clock.Now; agreement.PaymentConfirmedAt = clock.Now; agreement.SellerHandedOverAt = clock.Now;
+            agreement.AbandonReportedAt = clock.Now; agreement.AbandonReportedBy = seller; agreement.AbandonReason = "Fixture kiểm tra nguồn không còn hợp lệ";
+            agreement.Resolution = cancelled ? "CANCELLED" : null;
+            if (cancelled) { agreement.ResolvedAt = clock.Now; agreement.ResolvedBy = adminUser; agreement.ResolutionNote = "Admin hủy trong fixture"; }
+            await db.SaveChangesAsync();
+        }
+        await using var post = Open();
+        await Assert.ThrowsAsync<DepotConflictException>(() => new DepotStockService(new DepotStockRepository(post), new DepotBatchRepository(post), new DepotUnitOfWork(post),
+            new DepotService(new DepotOwnerRepository(post), new DepotPaymentReadRepository(post))).CreateAsync(ownerA, depotA, Intake(id)));
+        Assert.False(await post.DepotStockReceipts.AnyAsync(x => x.BulkAgreementId == id));
+        await using var check = Open(); Assert.Null((await check.LiquidationAgreements.SingleAsync(x => x.Id == id)).OwnerCollectedAt);
+    }
+
+    private async Task ExpireAsync()
+    {
+        await using var db = Open(); var sub = await db.DepotSubscriptions.SingleAsync(x => x.DepotId == depotA);
+        sub.TrialEndsAt = clock.Now.AddMinutes(-1); sub.PaidUntil = null; await db.SaveChangesAsync();
+    }
+    private static CreateStockReceiptDto Intake(Guid agreement) => new()
+    {
+        OperationId = Guid.NewGuid(), BulkAgreementId = agreement, SourceType = "BULK_PURCHASE", Reference = "DEMO nhập sau thắng V2",
+        ReceivedAt = DateTime.UtcNow, PurchaseCost = 300_000, CostsConfirmed = true, PostImmediately = true, ConfirmBulkReceived = true,
+        Lines = [new() { Kind = "MATERIAL", MaterialType = "IRON", Name = "Sắt", Unit = "kg", Quantity = 90 }], Expenses = [new("OTHER", "Vận chuyển và phân loại", 45_000)]
+    };
+    private sealed class NoPayOs : IPayOsClient
+    {
+        public bool IsConfigured => false;
+        public Task<PayOsLink> CreatePaymentLinkAsync(long code, long amount, string description, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<PayOsPayment> GetPaymentAsync(long code, CancellationToken ct = default) => throw new NotSupportedException();
+        public bool VerifyWebhookData(System.Text.Json.JsonElement data, string signature) => false;
+    }
+
 }
 
 public sealed class ManualClock(DateTime start) : TimeProvider
@@ -276,5 +359,14 @@ public sealed class PostgresV2FactAttribute : FactAttribute
     {
         if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("RETRACK_TEST_POSTGRES")))
             Skip = "Cần PostgreSQL test riêng (Retrack_TV2_test) để kiểm tra phiên nhiều hạng mục.";
+    }
+}
+
+public sealed class PostgresV2TheoryAttribute : TheoryAttribute
+{
+    public PostgresV2TheoryAttribute()
+    {
+        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("RETRACK_TEST_POSTGRES")))
+            Skip = "Cần PostgreSQL test riêng (Retrack_TV2_test) để kiểm tra nguồn nhập.";
     }
 }

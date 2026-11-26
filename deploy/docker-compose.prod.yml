@@ -10,10 +10,18 @@
 # =====================================================================
 name: retrack
 
+# Log container: xoay vòng tối đa 3 file × 10 MB/service (mặc định Docker không giới hạn và từng làm đầy ổ đĩa VPS).
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   db:
     image: postgres:16-alpine
     restart: unless-stopped
+    logging: *logging
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-retrack}
       POSTGRES_USER: ${POSTGRES_USER:-retrack}
@@ -36,6 +44,7 @@ services:
   api:
     image: ${API_IMAGE:?đặt API_IMAGE (CD tự ghi) trong .env.production}
     restart: unless-stopped
+    logging: *logging
     depends_on:
       db:
         condition: service_healthy
@@ -93,6 +102,7 @@ services:
     profiles: ["tls"]
     image: caddy:2-alpine
     restart: unless-stopped
+    logging: *logging
     depends_on: [api]
     environment:
       # Không dùng ":?" ở đây: compose nội suy biến của MỌI service, kể cả service thuộc profile đang tắt — bắt buộc sẽ làm hỏng cả lần deploy không có tên miền.

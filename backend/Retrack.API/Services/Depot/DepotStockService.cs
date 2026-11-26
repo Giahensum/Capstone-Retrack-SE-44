@@ -64,6 +64,8 @@ public sealed partial class DepotStockService(IDepotStockRepository repository, 
         {
             var source = await repository.LockBulkSourceAsync(dto.BulkAgreementId.Value);
             if (source == null || source.DepotId != depotId || source.BuyerId != userId && isOwner) throw new DepotForbiddenException();
+            if (source.Resolution == "CANCELLED" || source.AbandonReportedAt != null && source.Resolution == null)
+                throw new DepotConflictException("Thỏa thuận đã hủy hoặc đang chờ xử lý tranh chấp, không được nhập kho.");
             if (source.PaymentConfirmedAt == null || source.SellerHandedOverAt == null ||
                 source.OwnerCollectedAt == null && !dto.ConfirmBulkReceived || dto.SourceType != "BULK_PURCHASE")
                 throw new DepotConflictException("Lô trúng cần xác nhận đủ tiền và Seller bàn giao đủ; chủ kho xác nhận thực nhận khi ghi kho.");
