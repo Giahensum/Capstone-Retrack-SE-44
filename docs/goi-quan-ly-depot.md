@@ -16,6 +16,26 @@ Owner lập đơn một tháng có `operationId`; backend giữ snapshot số ti
 
 PayOS dùng cấu hình `PayOS__*` local hiện có và webhook `/api/payos/webhook`. Không thêm key vào Git, không tự bật tài khoản/giả lập thành tiền thật. Phiếu mua gói là ghi nhận dịch vụ, chưa thay hóa đơn điện tử hợp pháp; chủ thể vận hành/thuế còn cần nhóm chốt.
 
+## Hoàn tiền gói
+
+Tách hẳn với tiền hàng: RETRACK không dùng tiền gói để hoàn tiền hàng. Bảng `depot_subscription_refunds` (khối SQL `RETRACK_SUBSCRIPTION_REFUND_V1`), mỗi bước ghi `audit_logs` và báo Owner (category `SUBSCRIPTION`).
+
+| Loại (`kind`) | Đơn hợp lệ | Khi Admin duyệt |
+|---|---|---|
+| `DUPLICATE_OR_EXCESS` | `PAID` | Hoàn phần trùng/thừa, cần chứng từ/mã giao dịch; không đổi hạn dùng |
+| `SHORT_PAYMENT` | `PENDING` có chứng từ (chưa PayOS) hoặc `CANCELLED` | Hoàn khoản đã nhận; đơn chờ bị đóng để lập đơn mới đúng giá |
+| `UNUSED_PERIOD` | `PAID`, kỳ chưa bắt đầu **và** là kỳ cuối (`PaidUntil = PeriodEnd`) | Hoàn đủ giá đơn, đặt `period_revoked_at`, `PaidUntil` lùi về hết kỳ trước; các kỳ khác giữ nguyên |
+| `SERVICE_ERROR` | `PAID` | Admin xác minh, hoàn toàn bộ/một phần; tổng hoàn của đơn ≤ số tiền đơn |
+| `LATE_PAYMENT` | `CANCELLED` | Tiền về sau khi đơn đóng được đối soát, không tự kích hoạt gói |
+
+Kỳ đang sử dụng không hoàn vì ngừng dùng. Trạng thái: `REQUESTED` → `APPROVED` (đã duyệt, **chưa** chuyển tiền) → `REFUNDED` (Admin ghi mã giao dịch chuyển trả), hoặc `REJECTED` có lý do. Mỗi đơn chỉ một yêu cầu đang chờ; `operationId` chống gửi lặp. Owner gửi ở `/depot/subscription`, Admin xử lý ở `/admin/billing` (cũng có thể tạo hộ yêu cầu). API: `GET/POST /api/depot/subscription/refunds`, `GET/POST /api/admin/subscriptions/refunds`, `POST .../refunds/{id}/decision`, `POST .../refunds/{id}/transferred`.
+
+Dùng thử chống lách: một mã số thuế chỉ được dùng thử một lần dù đăng ký nhiều kho. Dashboard Admin hiển thị doanh thu gói, tiền đã hoàn, doanh thu ròng, số kho đang dùng/dùng thử/hết hạn. Trong chế độ gói, cấu hình phí nền tảng và hoa hồng bị khóa (chỉ để tra lịch sử).
+
+## Trang công khai
+
+`/goi-dich-vu` (giới thiệu gói, giá/ngày dùng thử lấy từ `GET /api/public/depot-plan`, không cần đăng nhập) và `/dieu-khoan` (điều khoản, hoàn tiền, quyền riêng tư). Không nêu tên doanh nghiệp, mã số thuế, thuế suất; ghi rõ chứng từ nội bộ không phải hóa đơn điện tử hợp pháp.
+
 ## Contract các role cần giữ
 
 | Luồng | Quy tắc mới / tương thích |

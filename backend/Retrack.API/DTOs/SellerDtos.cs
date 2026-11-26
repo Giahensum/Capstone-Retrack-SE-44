@@ -40,6 +40,8 @@ namespace Retrack.API.DTOs
         public string DepotName { get; set; } = string.Empty;
         public decimal Amount { get; set; }
         public DateTime ConfirmedAt { get; set; }
+        /// <summary>1 = lô trọn gói cũ, 2 = phiên nhiều hạng mục (trang chi tiết khác nhau).</summary>
+        public short FormatVersion { get; set; } = 1;
     }
 
     public class NearbyDepotDto

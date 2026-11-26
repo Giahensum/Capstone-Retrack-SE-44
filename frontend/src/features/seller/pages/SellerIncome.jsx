@@ -40,7 +40,7 @@ export default function SellerIncome() {
     ...liquidationSales.map((x) => ({
       key: `liquidation-${x.lotId}`,
       kind: 'liquidation',
-      to: `/seller/liquidations/${x.lotId}`,
+      to: x.formatVersion === 2 ? `/seller/liquidations/v2/${x.lotId}` : `/seller/liquidations/${x.lotId}`,
       title: x.title,
       date: x.confirmedAt,
       depotName: x.depotName,

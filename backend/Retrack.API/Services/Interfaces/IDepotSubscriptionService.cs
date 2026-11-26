@@ -7,6 +7,7 @@ namespace Retrack.API.Services.Interfaces;
 public interface IDepotSubscriptionService
 {
     Task<bool> IsSubscriptionOnlyAsync();
+    Task<PublicDepotPlanDto> PublicPlanAsync();
     Task<PlatformPaymentAccountDto> PaymentAccountAsync(Guid ownerId, Guid depotId);
     Task<DepotSubscriptionDto> GetAsync(Guid ownerId, Guid depotId);
     Task<DepotSubscriptionDto> StartTrialAsync(Guid ownerId, Guid depotId);
@@ -23,4 +24,9 @@ public interface IDepotSubscriptionService
     Task<bool> WebhookAsync(JsonElement body);
     Task<List<Guid>> PendingPayOsAsync();
     Task ReconcileAsync(Guid orderId);
+    // Hoàn tiền gói: depotId = null nghĩa là Admin thao tác.
+    Task<SubscriptionRefundDto> RequestRefundAsync(Guid userId, Guid? depotId, SubscriptionRefundRequestDto dto);
+    Task<PagedResult<SubscriptionRefundDto>> RefundsAsync(Guid userId, Guid? depotId, int page, int pageSize, string? status = null);
+    Task<SubscriptionRefundDto> DecideRefundAsync(Guid adminId, Guid refundId, SubscriptionRefundDecisionDto dto);
+    Task<SubscriptionRefundDto> MarkRefundTransferredAsync(Guid adminId, Guid refundId, SubscriptionRefundTransferDto dto);
 }

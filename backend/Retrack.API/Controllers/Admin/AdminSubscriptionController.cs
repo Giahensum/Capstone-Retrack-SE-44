@@ -18,6 +18,13 @@ public sealed class AdminSubscriptionController(IDepotSubscriptionService servic
     [HttpPost("orders/{id:guid}/approve")] public async Task<IActionResult> Approve(Guid id, SubscriptionApprovalDto dto)
     { await service.ApproveAsync(Actor, id, dto.Reference); return Ok(ApiResponse<string>.Ok("Đã ghi nhận tiền và gia hạn gói.")); }
     [HttpPost("orders/{id:guid}/payos-sync")] public async Task<IActionResult> Sync(Guid id) => Ok(ApiResponse<string>.Ok(await service.SyncAsync(Actor, Guid.Empty, id)));
+    [HttpGet("refunds")] public async Task<IActionResult> Refunds(int page = 1, int pageSize = 20, string? status = null) => Ok(ApiResponse<PagedResult<SubscriptionRefundDto>>.Ok(await service.RefundsAsync(Actor, null, page, pageSize, status)));
+    [HttpPost("refunds")] public async Task<IActionResult> RequestRefund(SubscriptionRefundRequestDto dto) =>
+        Ok(ApiResponse<SubscriptionRefundDto>.Ok(await service.RequestRefundAsync(Actor, null, dto), "Đã tạo yêu cầu hoàn tiền."));
+    [HttpPost("refunds/{id:guid}/decision")] public async Task<IActionResult> Decide(Guid id, SubscriptionRefundDecisionDto dto) =>
+        Ok(ApiResponse<SubscriptionRefundDto>.Ok(await service.DecideRefundAsync(Actor, id, dto), "Đã lưu quyết định hoàn tiền."));
+    [HttpPost("refunds/{id:guid}/transferred")] public async Task<IActionResult> Transferred(Guid id, SubscriptionRefundTransferDto dto) =>
+        Ok(ApiResponse<SubscriptionRefundDto>.Ok(await service.MarkRefundTransferredAsync(Actor, id, dto), "Đã ghi nhận chuyển tiền hoàn."));
     [HttpPost("orders/{id:guid}/reject-proof")] public async Task<IActionResult> Reject(Guid id, SubscriptionRejectionDto dto)
     { await service.RejectProofAsync(Actor, id, dto.Reason); return Ok(ApiResponse<string>.Ok("Đã yêu cầu bổ sung chứng từ, chưa kích hoạt gói.")); }
 }

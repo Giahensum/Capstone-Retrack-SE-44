@@ -5,10 +5,34 @@ import { buttonClass, inputClass, MutationError, Pager, QueryState } from './com
 import ProofUpload from './components/ProofUpload';
 import PlatformFees from './PlatformFees';
 import { Link } from 'react-router-dom';
-import { PageHeader, buttonClass as kitButton } from '@/components/ui/kit';
+import { PageHeader, Badge, buttonClass as kitButton } from '@/components/ui/kit';
+import SubscriptionRefundForm from './components/SubscriptionRefundForm';
+import { REFUND_KINDS, REFUND_STATUS, REFUND_TONE, refundKindsFor } from './subscriptionRefunds';
 
 const labels = { ACTIVE: 'Đang sử dụng', TRIAL: 'Đang dùng thử', NOT_STARTED: 'Chưa bắt đầu', EXPIRED: 'Đã hết hạn', DISABLED: 'Chưa mở bán gói' };
 const orderLabels = { PENDING: 'Chờ thanh toán', PAID: 'Đã kích hoạt', CANCELLED: 'Đã đóng' };
+// Hoàn tiền gói: Chủ kho gửi yêu cầu, Admin duyệt rồi ghi nhận khi đã chuyển tiền thật.
+function RefundRequest({ order, onClose }) {
+  const save = useDepotMutation('post', 'subscription/refunds', onClose);
+  return <SubscriptionRefundForm order={order} onClose={onClose} pending={save.isPending} error={<MutationError mutation={save} />}
+    submit={(body) => save.mutate({ body })} />;
+}
+function Refunds() {
+  const [page, setPage] = useState(1);
+  const q = useDepotQuery('subscription/refunds', { page, pageSize: 10 });
+  if (q.isSuccess && !q.data.totalCount) return null;
+  return <section className="space-y-3"><h2 className="text-lg font-bold">Yêu cầu hoàn tiền gói</h2><QueryState query={q}>
+    <div className="space-y-2">{q.data?.items.map(r => <article key={r.id} className="rounded-2xl border border-d-border-subtle bg-white p-4 text-sm shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-2"><strong>{REFUND_KINDS[r.kind]} · đơn #{r.orderCode}</strong><Badge tone={REFUND_TONE[r.status]}>{REFUND_STATUS[r.status]}</Badge></div>
+      <p className="mt-1">Đề nghị {money(r.requestedAmount)}{r.approvedAmount != null && <> · duyệt {money(r.approvedAmount)}</>} · gửi {date(r.requestedAt)}</p>
+      <p className="mt-1 text-d-on-surface-variant">{r.reason}</p>
+      {r.decisionNote && <p className="mt-1">Admin: {r.decisionNote}</p>}
+      {r.refundReference && <p className="mt-1 font-semibold text-d-primary">Đã chuyển hoàn {date(r.refundedAt)} · mã {r.refundReference}</p>}
+      {r.periodRevoked && <p className="mt-1 text-xs">Kỳ của đơn này đã được rút khỏi hạn dùng.</p>}
+    </article>)}</div>
+    <Pager page={page} setPage={setPage} size={10} total={q.data?.totalCount} />
+  </QueryState></section>;
+}
 function OrderPayment({ order, payOsAvailable }) {
   const [proof, setProof] = useState('');
   const [reference, setReference] = useState('');
@@ -57,6 +81,7 @@ export default function Subscription() {
   const [legacy, setLegacy] = useState(false);
   const [page, setPage] = useState(1);
   const [operationId, setOperationId] = useState(() => crypto.randomUUID());
+  const [refundOrder, setRefundOrder] = useState(null);
   const q = useDepotQuery('subscription');
   const orders = useDepotQuery('subscription/orders', { page, pageSize: 20 });
   const trial = useDepotMutation('post', 'subscription/trial');
@@ -78,9 +103,11 @@ export default function Subscription() {
     </section>}</QueryState>
     <QueryState query={orders}>
       {pending && <OrderPayment key={pending.id} order={pending} payOsAvailable={d?.payOsAvailable} />}
-      <section className="space-y-3"><h2 className="text-lg font-bold">Lịch sử mua và gia hạn</h2><div className="overflow-x-auto rounded-2xl border border-d-border-subtle bg-white shadow-sm"><table className="w-full min-w-[560px] text-left text-sm"><thead><tr>{['Ngày lập', 'Số tiền', 'Trạng thái', 'Thời hạn được cộng'].map(x => <th key={x} className="p-4">{x}</th>)}</tr></thead><tbody>{orders.data?.items.map(o => <tr key={o.id} className="border-t border-d-border-subtle"><td className="p-4">{date(o.createdAt)}</td><td className="p-4">{money(o.amount)}</td><td className="p-4">{o.status === 'PENDING' && o.proofUrl ? 'Chờ đối soát' : orderLabels[o.status] ?? o.status}</td><td className="p-4">{o.periodStart && o.periodEnd ? `${date(o.periodStart)} – ${date(o.periodEnd)}` : 'Chưa kích hoạt'}</td></tr>)}</tbody></table>{orders.data?.items.length === 0 && <p className="p-5">Chưa có đơn mua gói.</p>}</div><Pager page={page} setPage={setPage} total={orders.data?.totalCount} /></section>
+      <section className="space-y-3"><h2 className="text-lg font-bold">Lịch sử mua và gia hạn</h2><div className="overflow-x-auto rounded-2xl border border-d-border-subtle bg-white shadow-sm"><table className="w-full min-w-[560px] text-left text-sm"><thead><tr>{['Mã đơn', 'Ngày lập', 'Số tiền', 'Trạng thái', 'Thời hạn được cộng', 'Thao tác'].map(x => <th key={x} className="p-4">{x}</th>)}</tr></thead><tbody>{orders.data?.items.map(o => <tr key={o.id} className="border-t border-d-border-subtle"><td className="p-4">#{o.orderCode}</td><td className="p-4">{date(o.createdAt)}</td><td className="p-4">{money(o.amount)}</td><td className="p-4">{o.status === 'PENDING' && o.proofUrl ? 'Chờ đối soát' : orderLabels[o.status] ?? o.status}</td><td className="p-4">{o.periodRevokedAt ? 'Đã hoàn kỳ này' : o.periodStart && o.periodEnd ? `${date(o.periodStart)} – ${date(o.periodEnd)}` : 'Chưa kích hoạt'}</td><td className="p-4">{refundKindsFor(o).length > 0 && <button type="button" className="min-h-11 text-sm font-semibold text-d-primary underline" onClick={() => setRefundOrder(o)}>Yêu cầu hoàn tiền</button>}</td></tr>)}</tbody></table>{orders.data?.items.length === 0 && <p className="p-5">Chưa có đơn mua gói.</p>}</div><Pager page={page} setPage={setPage} total={orders.data?.totalCount} /></section>
     </QueryState>
-    <p className="text-sm text-d-on-surface-variant">Lịch sử mua gói là ghi nhận dịch vụ, chưa thay thế hóa đơn điện tử hợp pháp.</p>
+    <Refunds />
+    {refundOrder && <RefundRequest order={refundOrder} onClose={() => setRefundOrder(null)} />}
+    <p className="text-sm text-d-on-surface-variant">Lịch sử mua gói là ghi nhận dịch vụ, chưa thay thế hóa đơn điện tử hợp pháp. Hoàn tiền gói tách riêng với tiền hàng; tiền hàng do các bên tự thanh toán và hoàn trả.</p>
     <button className="min-h-11 text-sm underline text-d-primary" onClick={() => setLegacy(true)}>Xem phí giao dịch và hóa đơn cũ</button>
     <p><Link className="min-h-11 inline-flex items-center text-sm underline text-d-primary" to="/depot/earnings">Đối soát tiền hàng đã thu/chi qua sàn trước đây</Link></p>
   </div>;

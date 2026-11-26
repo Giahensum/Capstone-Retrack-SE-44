@@ -17,6 +17,7 @@ namespace Retrack.API.Data
         public DbSet<Depot> Depots { get; set; }
         public DbSet<DepotSubscription> DepotSubscriptions { get; set; }
         public DbSet<DepotSubscriptionOrder> DepotSubscriptionOrders { get; set; }
+        public DbSet<DepotSubscriptionRefund> DepotSubscriptionRefunds { get; set; }
         public DbSet<Factory> Factories { get; set; }
         public DbSet<DepotStaff> DepotStaffs { get; set; }
         public DbSet<PickupRequest> PickupRequests { get; set; }
@@ -214,6 +215,8 @@ namespace Retrack.API.Data
             modelBuilder.Entity<DepotSubscriptionOrder>().HasIndex(x => x.OrderCode).IsUnique();
             modelBuilder.Entity<DepotSubscriptionOrder>().HasIndex(x => x.DepotId).IsUnique().HasFilter("status = 'PENDING'");
             modelBuilder.Entity<DepotSubscriptionOrder>().HasIndex(x => new { x.DepotId, x.CreatedAt, x.Id });
+            modelBuilder.Entity<DepotSubscriptionRefund>().HasOne<DepotSubscriptionOrder>().WithMany().HasForeignKey(x => x.OrderId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<DepotSubscriptionRefund>().HasIndex(x => x.OrderId).IsUnique().HasFilter("status = 'REQUESTED'");
 
             // Factory -> User (owner) - restrict delete
             modelBuilder.Entity<Factory>()

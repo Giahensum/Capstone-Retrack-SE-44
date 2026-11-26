@@ -7,6 +7,7 @@ import {
   Panel, Field, inputClass, PrimaryButton, GhostButton, DataTable, Th, Td, TableMessage, Pagination, IconAction, FormFooter,
 } from '@/features/admin/components/AdminUI';
 import { moneyAdminApi } from '../moneyAdminApi';
+import { useSubscriptionMode } from '@/lib/billingModel';
 import {
   settingsToForm, formToSettingsPatch, validateSettings, COMMISSION_FLOWS, flowLabel, apiError, pct, fmtDateTime, roleLabel, SETTINGS_LIMITS,
 } from '../moneyLabels';
@@ -138,6 +139,7 @@ function OverridesPanel() {
 
 export default function SettingsTab({ settings, settingsQuery }) {
   const qc = useQueryClient();
+  const { subscriptionOnly } = useSubscriptionMode();
   const [form, setForm] = useState(null);
   const [errors, setErrors] = useState({});
   useEffect(() => { if (settings) setForm(settingsToForm(settings)); }, [settings]);
@@ -177,11 +179,12 @@ export default function SettingsTab({ settings, settingsQuery }) {
   return (
     <div className="flex flex-col gap-6">
       <ProviderBanner settings={settings} />
+      {subscriptionOnly && <Notice icon={ShieldCheck} tone="blue">Đang ở chế độ <strong>gói quản lý Depot</strong>: giao dịch hàng hóa mới không thu hộ và không tính hoa hồng, nên chế độ thu chi và hoa hồng mặc định bị khóa. Phần chi trả bên dưới vẫn dùng để hoàn tất các khoản thu hộ/chi trả cũ.</Notice>}
       <form onSubmit={submit} className="flex flex-col gap-6" noValidate>
         <Panel icon={SlidersHorizontal} title="Chế độ và nhà cung cấp chi">
           <div className="grid gap-5 p-5 md:grid-cols-2">
             <Field label="Chế độ thu chi" hint="PLATFORM: người trả nộp tiền vào sàn, sàn trừ hoa hồng rồi chi cho người nhận. LEGACY: luồng cũ.">
-              <select value={form.mode} onChange={(e) => set({ mode: e.target.value })} className={`${inputClass} cursor-pointer`}>
+              <select value={form.mode} disabled={subscriptionOnly} onChange={(e) => set({ mode: e.target.value })} className={`${inputClass} cursor-pointer`}>
                 <option value="LEGACY">LEGACY (luồng cũ)</option>
                 <option value="PLATFORM">PLATFORM (sàn thu rồi chi)</option>
               </select>
@@ -201,8 +204,8 @@ export default function SettingsTab({ settings, settingsQuery }) {
           )}
         </Panel>
 
-        <Panel icon={Percent} title="Hoa hồng mặc định (%)">
-          <div className="grid gap-5 p-5 md:grid-cols-3">
+        <Panel icon={Percent} title={subscriptionOnly ? 'Hoa hồng mặc định (%) — chỉ còn cho khoản cũ' : 'Hoa hồng mặc định (%)'}>
+          <fieldset disabled={subscriptionOnly} className="grid gap-5 p-5 md:grid-cols-3 disabled:opacity-60">
             {COMMISSION_FLOWS.map((f) => (
               <Field key={f} label={`Hoa hồng ${flowLabel(f).toLowerCase()}`} hint="Từ 0 đến 100. Đơn cũ giữ nguyên mức đã chốt.">
                 <input type="number" inputMode="decimal" step="0.01" min="0" max="100" value={form.defaultCommission[f]}
@@ -211,7 +214,7 @@ export default function SettingsTab({ settings, settingsQuery }) {
                 <FieldError>{errors[`commission.${f}`]}</FieldError>
               </Field>
             ))}
-          </div>
+          </fieldset>
         </Panel>
 
         <Panel icon={SlidersHorizontal} title="Chi tự động, giữ tiền và hạn mức">

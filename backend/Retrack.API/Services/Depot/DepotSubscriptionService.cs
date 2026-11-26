@@ -10,6 +10,11 @@ public sealed partial class DepotSubscriptionService(IDepotSubscriptionRepositor
 {
     private DateTime Now => clock.GetUtcNow().UtcDateTime;
     public async Task<bool> IsSubscriptionOnlyAsync() => SubscriptionRules.Enabled(await repository.SettingsAsync());
+    public async Task<PublicDepotPlanDto> PublicPlanAsync()
+    {
+        var settings = await repository.SettingsAsync();
+        return new(SubscriptionRules.Enabled(settings), SubscriptionRules.Price(settings), SubscriptionRules.TrialDays);
+    }
     public async Task<PlatformPaymentAccountDto> PaymentAccountAsync(Guid ownerId, Guid depotId)
     {
         await OwnerAsync(ownerId, depotId);
@@ -48,6 +53,10 @@ public sealed partial class DepotSubscriptionService(IDepotSubscriptionRepositor
         var s = await repository.FindAsync(depotId);
         if (s?.TrialStartedAt == null && s?.PaidUntil == null)
         {
+            // Chống lách dùng thử bằng cách tạo nhiều kho: cùng mã số thuế chỉ dùng thử một lần.
+            var taxCode = depot.TaxCode?.Trim().ToUpperInvariant();
+            if (!string.IsNullOrEmpty(taxCode) && await repository.TrialUsedByTaxCodeAsync(depotId, taxCode))
+                throw new DepotConflictException("Mã số thuế của kho đã dùng thử ở một kho khác. Kho này có thể mua gói để bắt đầu sử dụng.");
             if (s == null) { s = new() { DepotId = depotId }; repository.Add(s); }
             s.TrialStartedAt = Now; s.TrialEndsAt = Now.AddDays(SubscriptionRules.TrialDays); s.UpdatedAt = Now;
             repository.Audit(ownerId, "SUBSCRIPTION_TRIAL_STARTED", depotId, "Dùng thử 14 ngày một lần cho kho.");
@@ -155,7 +164,7 @@ public sealed partial class DepotSubscriptionService(IDepotSubscriptionRepositor
         if (order.DepotId != depot || order.PayerId != owner) throw new DepotForbiddenException();
         return order;
     }
-    private static SubscriptionOrderDto Map(DepotSubscriptionOrder o) => new(o.Id, o.DepotId, "", o.Amount, o.Status, o.CreatedAt, o.PaidAt, o.PeriodStart, o.PeriodEnd, o.CheckoutUrl, o.ProofUrl, o.PaymentReference, o.ProviderStartedAt != null, o.ReviewNote);
+    private static SubscriptionOrderDto Map(DepotSubscriptionOrder o) => new(o.Id, o.DepotId, "", o.Amount, o.Status, o.CreatedAt, o.PaidAt, o.PeriodStart, o.PeriodEnd, o.CheckoutUrl, o.ProofUrl, o.PaymentReference, o.ProviderStartedAt != null, o.ReviewNote, o.OrderCode, o.PeriodRevokedAt);
 }
 
 public sealed class DepotSubscriptionRequiredException() : Exception("Gói quản lý kho chưa bắt đầu hoặc đã hết hạn. Vào Gói dịch vụ để dùng thử, mua hoặc gia hạn; dữ liệu và giao dịch đang xử lý vẫn được giữ.");

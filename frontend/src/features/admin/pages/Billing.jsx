@@ -1,4 +1,5 @@
 import { Form, Input, Select } from '@/components/forms/ValidatedForm';
+import { useSubscriptionMode } from '@/lib/billingModel';
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
@@ -195,6 +196,7 @@ function InvoicesTab() {
 
 // ── Cấu hình phí ───────────────────────────────────────────
 function FeeConfigTab() {
+  const { subscriptionOnly } = useSubscriptionMode();
   const queryClient = useQueryClient();
   const { data, isLoading } = useQuery({ queryKey: ['admin', 'billing', 'fee-config'], queryFn: adminApi.getFeeConfig });
   const account = useQuery({ queryKey: ['admin', 'billing', 'payment-account'], queryFn: adminApi.getPaymentAccount });
@@ -218,7 +220,8 @@ function FeeConfigTab() {
     <div className="flex flex-wrap items-start gap-5">
     <Panel icon={Percent} title="Cấu hình phí nền tảng" className="max-w-lg">
       <div className="p-5">
-        {isLoading ? <div className="h-24 animate-pulse rounded-2xl bg-d-surface-container" /> : (
+        {subscriptionOnly ? <p role="status" className="rounded-xl bg-d-surface-accent p-4 text-sm">RETRACK đang bán <strong>gói quản lý Depot</strong>: giao dịch mới không có phí nền tảng hay hoa hồng. Mức phí trên đơn/lô cũ giữ nguyên để đối soát; quản lý giá gói tại tab Gói dịch vụ.</p>
+          : isLoading ? <div className="h-24 animate-pulse rounded-2xl bg-d-surface-container" /> : (
           <Form className="flex flex-col gap-4" onSubmit={(e) => { e.preventDefault(); mutation.mutate({ platformFeePercentage: Number(current) }); }}>
             <Field label="Phí nền tảng (%)" hint="Đơn/lô mới chốt mức phí khi tạo. Bên mua chịu phí riêng: Depot mua Seller, Factory mua Depot. Không đổi mức phí trên giao dịch đã tạo.">
               <Input type="number" min="0" max="100" step="0.1" value={current} onChange={(e) => setValue(e.target.value)} className={inputClass} />
