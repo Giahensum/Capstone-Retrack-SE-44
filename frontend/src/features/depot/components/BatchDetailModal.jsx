@@ -6,6 +6,7 @@ import { useState } from 'react';
 import api from '@/lib/axios';
 import { depotError } from '../DepotContext';
 import BatchCostPanel from './BatchCostPanel';
+import BatchShippingPanel from './BatchShippingPanel';
 import DriverEventsPanel from './DriverEventsPanel';
 import BatchSettlementPanel from './BatchSettlementPanel';
 import BatchReturnPanel from './BatchReturnPanel';
@@ -72,11 +73,11 @@ function Proof({ title, url }) {
   return <p className="text-sm">{title}: {safe ? <a className="text-d-primary underline" href={url} target="_blank" rel="noopener noreferrer">Mở chứng từ</a> : missing}</p>;
 }
 export default function BatchDetailModal({ id, onClose }) {
-  const query = useDepotQuery(`batches/${id}`);
+  const query = useDepotQuery(`batches/${id}`, {}, true, 5000);
   const confirmPayment = useDepotMutation('patch', `batches/${id}/confirm-payment`);
   const [confirming, setConfirming] = useState(false);
   const d = query.data, b = d?.batch, q = d?.quality, s = d?.settlement;
-  const transportLabels = { PENDING: 'Chờ phân công', ASSIGNED: 'Đã phân công', ACCEPTED: 'Tài xế đã nhận chuyến', PICKED_UP: 'Đã lấy hàng', IN_TRANSIT: 'Đang vận chuyển', ON_THE_WAY: 'Đang vận chuyển', DELIVERED: 'Đã giao' };
+  const transportLabels = { EXTERNAL_WAITING: 'Chờ đặt xe vận chuyển', PENDING: 'Chờ phân công', ASSIGNED: 'Đã phân công', ACCEPTED: 'Tài xế đã nhận chuyến', PICKED_UP: 'Đã lấy hàng', IN_TRANSIT: 'Đang vận chuyển', ON_THE_WAY: 'Đang vận chuyển', DELIVERED: 'Đã giao' };
   return <Dialog title={`Chi tiết lô ${b?.code ?? ''}`} onClose={onClose} wide><QueryState query={query}>{d && <div className="space-y-4">
     <div className="rounded-xl bg-d-surface-accent p-4 space-y-2"><p className="font-bold text-d-primary">{batchLabels[b.status] ?? b.status}</p><p className="text-sm">{nextSteps[b.status] ?? 'Theo dõi thông tin lô và phản hồi của nhà máy.'}</p><p className="text-xs text-d-on-surface-variant">Thời gian hiển thị theo giờ Việt Nam. Giá vốn và chi phí là thông tin tùy chọn của kho.</p></div>
     {b.status === 'REJECTED' && <p role="status" className="rounded-xl border border-d-error p-3 text-d-error">Lô bị từ chối — cần kiểm tra lý do và hướng xử lý. Trạng thái này không xác nhận hàng đã quay về kho.</p>}
@@ -85,6 +86,7 @@ export default function BatchDetailModal({ id, onClose }) {
       {b.imageUrls?.length ? <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">{b.imageUrls.filter((url) => { try { return new URL(url).protocol === 'https:'; } catch { return false; } }).map((url, index) =>
         <a key={url} href={url} target="_blank" rel="noopener noreferrer"><img src={url} alt={`Ảnh vật liệu ${index + 1}`} className="h-32 w-full rounded-xl object-cover" /></a>)}</div>
         : <p className="text-sm text-d-on-surface-variant">Lô này chưa có ảnh vật liệu.</p>}</BatchDetailSection>}
+    <BatchShippingPanel key={`shipping-${id}`} batch={b} />
     <Rows title="Vận chuyển và nhận hàng" items={[["Vận chuyển", transportLabels[d.transportStatus] ?? d.transportStatus], ["Tài xế", d.driverName], ["Nhà máy nhận hàng", time(d.receivedAt)], ["Quyết định chất lượng", time(d.decidedAt)]]}/>
     {q ? <><Rows title="Cân và kiểm tra chất lượng (KCS)" items={[["Khối lượng thực tế", kg(q.actualWeightKg)], ["Khối lượng tổng", kg(q.grossWeightKg)], ["Khối lượng bì", kg(q.tareWeightKg)], ["Độ lệch", percent(q.differencePercentage)], ["Phân hạng", q.grade === 'PENDING' ? 'Chờ kiểm tra' : q.grade], ["Kết quả", q.isAccepted == null ? 'Chưa chốt' : q.isAccepted ? 'Chấp nhận' : 'Từ chối'], ["Độ tinh khiết", percent(q.purityPercent)], ["Độ ẩm", percent(q.moisturePercent)], ["Tạp chất", percent(q.contaminationPercent)], ["Biên bản cân", q.ticketNumber], ["Lý do từ chối", d.rejectionReason], ["Hướng xử lý", ({ RETURN: 'Trả toàn bộ lô', RENEGOTIATE: 'Thương lượng mua theo hiện trạng' })[q.resolution] ?? q.resolution], ["Ghi chú nhà máy", q.note?.replace(/^(RENEGOTIATE|RETURN):\s*/, '')]]}/>
     {q.ticketImageUrl && <Proof title="Phiếu cân" url={q.ticketImageUrl}/>}</> : <p className="text-sm text-d-on-surface-variant">Chưa có phiếu cân/KCS từ nhà máy.</p>}

@@ -19,7 +19,7 @@ public sealed class DriverNoticeRepository(AppDbContext db) : IDriverNoticeRepos
             .ExecuteUpdateAsync(s => s.SetProperty(n => n.IsRead, true), ct);
     public async Task<object> LegacyTripsAsync(Guid userId, CancellationToken ct) =>
         await db.TransportJobs.AsNoTracking()
-            .Where(x => x.DriverId == userId || (x.DriverId == null && db.DepotStaffs.Any(s => s.UserId == userId && s.IsActive && s.DepotId == x.Batch.DepotId && s.StaffType == "DRIVER")))
+            .Where(x => x.Batch.ShippingMethod == "INTERNAL" && (x.DriverId == userId || (x.DriverId == null && db.DepotStaffs.Any(s => s.UserId == userId && s.IsActive && s.DepotId == x.Batch.DepotId && s.StaffType == "DRIVER"))))
             .Include(x => x.Batch).ThenInclude(x => x.Depot)
             .OrderByDescending(x => x.CreatedAt).ThenBy(x => x.Id).Take(100)
             .Select(x => new { x.Id, batchId = x.BatchId, x.Status, x.DriverId, materialType = x.Batch.MaterialType,

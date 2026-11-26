@@ -16,7 +16,7 @@ public sealed class DriverJobRepository(AppDbContext db) : IDriverJobRepository
     internal IQueryable<TransportJob> Scoped(Guid userId)
     {
         var staff = Staff(userId);
-        return db.TransportJobs.Where(j => staff.Any(s => s.DepotId == j.Batch.DepotId));
+        return db.TransportJobs.Where(j => j.Batch.ShippingMethod == "INTERNAL" && staff.Any(s => s.DepotId == j.Batch.DepotId));
     }
     private static IQueryable<TransportJob> Ready(IQueryable<TransportJob> jobs) => jobs.Where(j =>
         (j.Batch.Status == "TRANSPORT_READY" || j.Batch.Status == "ACCEPTED" || j.Batch.Status == "READY_FOR_PICKUP")

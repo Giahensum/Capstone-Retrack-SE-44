@@ -1,0 +1,123 @@
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using Retrack.API.Data;
+using Retrack.API.Models;
+using Retrack.API.Repositories;
+using Retrack.API.Services.Depot;
+using Retrack.API.Services.Shipping;
+using Xunit;
+
+namespace Retrack.API.Tests;
+
+public sealed class ShippingTests : IAsyncLifetime
+{
+    private readonly SqliteConnection connection = new("Data Source=:memory:");
+    private AppDbContext db = null!;
+    private readonly ShippingOptions config = new() {Mode="Demo",DemoStepSeconds=15};
+    private readonly User owner=new(){Role="DEPOT_OWNER",Email="shipping-owner@test.local"};
+    private readonly User driver=new(){Role="DRIVER",Email="shipping-driver@test.local"};
+    private Depot depot=null!;
+    private Factory factory=null!;
+    private InventoryBatch batch=null!;
+    private ShippingService Service(IShippingProvider? provider=null)=>new(db,
+        new DepotService(new DepotOwnerRepository(db),new DepotPaymentReadRepository(db)),
+        provider??new DemoShippingProvider(Options.Create(config)),Options.Create(config));
+    public async Task InitializeAsync() {
+        await connection.OpenAsync();connection.CreateFunction("NOW",()=>DateTime.UtcNow.ToString("O"));
+        db=new(new DbContextOptionsBuilder<AppDbContext>().UseSqlite(connection).Options);await db.Database.EnsureCreatedAsync();
+        depot=new(){Name="Kho test",Address="Đà Nẵng",Owner=owner,VerificationStatus="APPROVED",Latitude=16.05m,Longitude=108.2m};
+        factory=new(){Name="Nhà máy test",Address="Hòa Khánh",Owner=new(){Role="FACTORY",Email="shipping-factory@test.local"},Latitude=16.08m,Longitude=108.15m};
+        batch=new(){Depot=depot,TargetFactory=factory,MaterialType="PET",DeclaredWeightKg=1200,Status="TRANSPORT_READY",ShippingMethod="EXTERNAL"};
+        db.InventoryBatches.Add(batch);db.DepotStaffs.Add(new(){Depot=depot,User=driver,StaffType="DRIVER"});await db.SaveChangesAsync();
+    }
+    public async Task DisposeAsync(){await db.DisposeAsync();await connection.DisposeAsync();}
+    private Task<ShippingQuote> Quote(string method="EXTERNAL")=>Service().QuoteAsync(owner.Id,depot.Id,new(factory.Id,"PET",1200,method),default);
+    private static ShippingContacts Contacts=>new("Người giao","0901234567","Người nhận","0912345678","12 bao PET, đã đóng gọn");
+    [Fact] public async Task InternalQuoteUsesNinetyPercentWithoutCreatingCarrierOrder() {
+        var quote=await Quote("INTERNAL");Assert.Equal(.9m,quote.Factor);Assert.Equal(decimal.Ceiling(quote.Amount*.9m),quote.EstimatedCost);
+        Assert.Empty(await db.ExternalShipments.ToListAsync());
+    }
+    [Fact] public async Task BookingRetryDoesNotCreateTwoOrdersAndDeliveryDoesNotCompleteFactoryWorkflow() {
+        var quote=await Quote();var input=new BookShippingRequest(Guid.NewGuid(),quote.Id,Contacts);
+        await Service().BookAsync(owner.Id,depot.Id,batch.Id,input,default);await Service().BookAsync(owner.Id,depot.Id,batch.Id,input,default);
+        var shipment=await db.ExternalShipments.SingleAsync();Assert.Equal("ASSIGNING_DRIVER",shipment.Status);
+        await Service().ApplyAsync(shipment.Id,new(shipment.ProviderOrderId!,"PICKED_UP",null,quote.Amount),"TEST",default);
+        Assert.Equal("IN_TRANSIT",(await db.InventoryBatches.FindAsync(batch.Id))!.Status);
+        await Service().ApplyAsync(shipment.Id,new(shipment.ProviderOrderId!,"COMPLETED",null,quote.Amount),"TEST",default);
+        var delivered=await db.InventoryBatches.Include(b=>b.TransportJob).SingleAsync(b=>b.Id==batch.Id);
+        Assert.Equal("DELIVERED",delivered.Status);Assert.Equal("DELIVERED",delivered.TransportJob!.Status);Assert.Null(delivered.FactoryReceivedAt);
+        await Service().ApplyAsync(shipment.Id,new(shipment.ProviderOrderId!,"ON_GOING",null,quote.Amount),"TEST",default);
+        Assert.Equal("COMPLETED",(await db.ExternalShipments.SingleAsync()).Status);
+    }
+    [Fact] public async Task OwnerRefreshChecksScopeAndSynchronizesSkippedStagesWithoutConfirmingFactoryReceipt() {
+        var quote=await Quote();
+        await Service().BookAsync(owner.Id,depot.Id,batch.Id,new(Guid.NewGuid(),quote.Id,Contacts),default);
+        var shipment=await db.ExternalShipments.SingleAsync();
+        shipment.CreatedAt=DateTime.UtcNow.AddHours(-1);
+        shipment.LastCheckedAt=DateTime.UtcNow.AddMinutes(-1);
+        await db.SaveChangesAsync();
+        await Assert.ThrowsAsync<DepotForbiddenException>(()=>Service().RefreshForOwnerAsync(Guid.NewGuid(),depot.Id,batch.Id,default));
+        await Service().RefreshForOwnerAsync(owner.Id,depot.Id,batch.Id,default);
+        var result=await db.InventoryBatches.Include(b=>b.TransportJob).SingleAsync(b=>b.Id==batch.Id);
+        Assert.Equal("DELIVERED",result.Status);
+        Assert.Equal("DELIVERED",result.TransportJob!.Status);
+        Assert.Null(result.FactoryReceivedAt);
+        Assert.Equal("COMPLETED",(await db.ExternalShipments.SingleAsync()).Status);
+    }
+    [Fact] public async Task WrongOwnerCannotQuoteOrReadBatch() {
+        await Assert.ThrowsAsync<DepotForbiddenException>(()=>Service().QuoteAsync(Guid.NewGuid(),depot.Id,new(factory.Id,"PET",100),default));
+        await Assert.ThrowsAsync<DepotForbiddenException>(()=>Service().GetAsync(Guid.NewGuid(),depot.Id,batch.Id,default));
+    }
+    [Fact] public async Task ExpiredAndChangedRouteQuotesCannotBeBooked() {
+        var q=await Quote();q.ExpiresAt=DateTime.UtcNow.AddMinutes(-1);await db.SaveChangesAsync();
+        await Assert.ThrowsAsync<DepotConflictException>(()=>Service().BookAsync(owner.Id,depot.Id,batch.Id,new(Guid.NewGuid(),q.Id,Contacts),default));
+        Assert.Empty(await db.ExternalShipments.ToListAsync());
+        q.ExpiresAt=DateTime.UtcNow.AddMinutes(2);factory.Latitude+=.01m;await db.SaveChangesAsync();
+        await Assert.ThrowsAsync<DepotConflictException>(()=>Service().BookAsync(owner.Id,depot.Id,batch.Id,new(Guid.NewGuid(),q.Id,Contacts),default));
+    }
+    [Fact] public async Task DriverPoolAndClaimExcludeExternalBatch() {
+        var job=new TransportJob {Batch=batch};db.TransportJobs.Add(job);await db.SaveChangesAsync();
+        var repository=new DriverJobRepository(db);
+        Assert.Equal(0,(await repository.ListAsync(driver.Id,false,1,default)).TotalCount);
+        Assert.Equal(0,await repository.ClaimAsync(driver.Id,job.Id,DateTime.UtcNow,default));
+    }
+    [Fact] public async Task PendingFactoryAndClaimedDriverBlockBooking() {
+        var q=await Quote();batch.Status="PENDING_APPROVAL";await db.SaveChangesAsync();
+        await Assert.ThrowsAsync<DepotConflictException>(()=>Service().BookAsync(owner.Id,depot.Id,batch.Id,new(Guid.NewGuid(),q.Id,Contacts),default));
+        batch.Status="TRANSPORT_READY";db.TransportJobs.Add(new(){Batch=batch,Driver=driver,Status="ACCEPTED"});await db.SaveChangesAsync();
+        await Assert.ThrowsAsync<DepotConflictException>(()=>Service().BookAsync(owner.Id,depot.Id,batch.Id,new(Guid.NewGuid(),q.Id,Contacts),default));
+    }
+    [Fact] public async Task CannotSwitchToInternalWhileCarrierActiveAndCancellationDoesNotRestoreStock() {
+        var q=await Quote();await Service().BookAsync(owner.Id,depot.Id,batch.Id,new(Guid.NewGuid(),q.Id,Contacts),default);
+        await Assert.ThrowsAsync<DepotConflictException>(()=>Service().SetMethodAsync(owner.Id,depot.Id,batch.Id,"INTERNAL",null,default));
+        await Service().CancelAsync(owner.Id,depot.Id,batch.Id,default);
+        Assert.Equal("CANCELED",(await db.ExternalShipments.SingleAsync()).Status);
+        Assert.Equal("TRANSPORT_READY",(await db.InventoryBatches.FindAsync(batch.Id))!.Status);
+        await Service().SetMethodAsync(owner.Id,depot.Id,batch.Id,"INTERNAL",null,default);
+        Assert.Equal("PENDING",(await db.TransportJobs.SingleAsync()).Status);
+    }
+    private sealed class TimeoutProvider: IShippingProvider {
+        public string Name=>"DEMO";
+        public Task<ProviderQuote> QuoteAsync(ShippingRoute r,CancellationToken ct)=>throw new NotSupportedException();
+        public Task<ProviderOrder> BookAsync(ShippingQuote q,ShippingContacts c,Guid op,Guid batch,CancellationToken ct)=>throw new HttpRequestException("timeout");
+        public Task<ProviderOrder> GetAsync(ExternalShipment s,CancellationToken ct)=>throw new NotSupportedException();
+        public Task CancelAsync(ExternalShipment s,CancellationToken ct)=>throw new NotSupportedException();
+    }
+    [Fact] public async Task AmbiguousBookingLocksRetriesInsteadOfCreatingDuplicateOrder() {
+        var q=await Quote();var input=new BookShippingRequest(Guid.NewGuid(),q.Id,Contacts);
+        await Assert.ThrowsAsync<DepotConflictException>(()=>Service(new TimeoutProvider()).BookAsync(owner.Id,depot.Id,batch.Id,input,default));
+        Assert.Equal("UNKNOWN",(await db.ExternalShipments.SingleAsync()).Status);
+        await Assert.ThrowsAsync<DepotConflictException>(()=>Service().BookAsync(owner.Id,depot.Id,batch.Id,input with {OperationId=Guid.NewGuid()},default));
+        Assert.Single(await db.ExternalShipments.ToListAsync());
+    }
+    [Theory][InlineData(0)][InlineData(3000)] public async Task InvalidWeightRejected(decimal weight) =>
+        await Assert.ThrowsAsync<ArgumentException>(()=>Service().QuoteAsync(owner.Id,depot.Id,new(factory.Id,"PET",weight),default));
+    [Fact] public void ContactsNormalizeVietnamesePhonesAndRejectInvalidInput() {
+        Assert.Equal("+84901234567",ShippingService.ValidateContacts(Contacts).SenderPhone);
+        Assert.Throws<ArgumentException>(()=>ShippingService.ValidateContacts(Contacts with {SenderPhone="123"}));
+    }
+    [Fact] public async Task DisabledProviderDoesNotSilentlyFallbackToDemo() {
+        config.Mode="Disabled";await Assert.ThrowsAsync<DepotConflictException>(()=>Quote());
+    }
+}

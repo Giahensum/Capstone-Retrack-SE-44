@@ -75,6 +75,7 @@ export function useFactoryPage(kind, options = {}) {
       return { ...result, items: (result.items || []).map(mappers[kind]) };
     },
     placeholderData: (previous) => previous,
+    refetchInterval: kind === "orders" ? 5000 : false,
   });
 }
 
@@ -101,5 +102,6 @@ export function useFactoryOrder(id) {
     queryKey: ["factory", "order", id],
     queryFn: async () => mapOrder(await request(`/api/factory/orders/${encodeURIComponent(id)}`)),
     enabled: Boolean(id),
+    refetchInterval: query => ["ACCEPTED", "IN_TRANSIT"].includes(query.state.data?.status) ? 5000 : false,
   });
 }

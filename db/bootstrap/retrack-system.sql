@@ -1477,6 +1477,38 @@ CREATE INDEX IF NOT EXISTS ix_subscription_refunds_status ON depot_subscription_
 CREATE INDEX IF NOT EXISTS ix_subscription_refunds_depot ON depot_subscription_refunds(depot_id, requested_at DESC, id);
 -- RETRACK_SUBSCRIPTION_REFUND_V1_END
 
+-- RETRACK_SHIPPING_BEGIN
+-- Vận chuyển lô: chạy khối này trên DB hiện có trước khi triển khai code.
+-- Không seed hoặc sửa dữ liệu lô/tiền cũ. Giao dịch do file nâng cấp bao ngoài.
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS shipping_method varchar(16) NOT NULL DEFAULT 'INTERNAL';
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS shipping_quote_id uuid;
+CREATE TABLE IF NOT EXISTS shipping_quotes (
+ id uuid PRIMARY KEY, owner_id uuid NOT NULL REFERENCES users(id), depot_id uuid NOT NULL REFERENCES depots(id),
+ factory_id uuid NOT NULL REFERENCES factories(id), material_type text NOT NULL, weight_kg numeric NOT NULL CHECK(weight_kg>0),
+ method varchar(16) NOT NULL CHECK(method IN ('INTERNAL','EXTERNAL')), provider varchar(32) NOT NULL, service_type text NOT NULL,
+ provider_quote_id text NOT NULL, amount numeric NOT NULL CHECK(amount>=0), factor numeric NOT NULL CHECK(factor>0 AND factor<=1),
+ estimated_cost numeric NOT NULL CHECK(estimated_cost>=0), distance_km numeric NOT NULL CHECK(distance_km>=0), currency varchar(8) NOT NULL,
+ snapshot_json text NOT NULL, provider_json text NOT NULL, created_at timestamptz NOT NULL, expires_at timestamptz NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_shipping_quotes_depot ON shipping_quotes(depot_id,created_at);
+CREATE TABLE IF NOT EXISTS external_shipments (
+ id uuid PRIMARY KEY, batch_id uuid NOT NULL REFERENCES inventory_batches(id), quote_id uuid NOT NULL REFERENCES shipping_quotes(id),
+ operation_id uuid NOT NULL UNIQUE, provider varchar(32) NOT NULL, provider_order_id text, status varchar(32) NOT NULL,
+ share_link text, amount numeric NOT NULL CHECK(amount>=0), currency varchar(8) NOT NULL, contact_json text NOT NULL,
+ last_error text, last_checked_at timestamptz NOT NULL, last_webhook_at timestamptz,
+ created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_external_shipping_order ON external_shipments(provider,provider_order_id) WHERE provider_order_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS ux_external_shipping_active_batch ON external_shipments(batch_id)
+ WHERE status NOT IN ('COMPLETED','CANCELED','REJECTED','EXPIRED');
+CREATE INDEX IF NOT EXISTS ix_external_shipping_poll ON external_shipments(status,last_checked_at);
+CREATE TABLE IF NOT EXISTS shipping_events (
+ id uuid PRIMARY KEY, shipment_id uuid NOT NULL REFERENCES external_shipments(id), status varchar(32) NOT NULL,
+ source varchar(32) NOT NULL, created_at timestamptz NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_shipping_events_shipment ON shipping_events(shipment_id,created_at);
+-- RETRACK_SHIPPING_END
+
 -- RETRACK_SCHEMA_END
 
 -- RETRACK_SEED_BEGIN
