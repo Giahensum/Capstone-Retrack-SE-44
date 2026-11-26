@@ -74,7 +74,7 @@ public sealed class DepotBatchRepository(AppDbContext db) : IDepotBatchRepositor
     public async Task AddTransportAsync(TransportJob job, Guid depotId)
     {
         db.TransportJobs.Add(job);
-        await Retrack.API.Services.Driver.DriverJobNotices.QueueAsync(new Retrack.API.Repositories.DriverDeliveryRepository(db), depotId, job.Id);
+        if (job.Status == "PENDING") await Retrack.API.Services.Driver.DriverJobNotices.QueueAsync(new Retrack.API.Repositories.DriverDeliveryRepository(db), depotId, job.Id);
     }
     public async Task<InventoryBatch?> LockBatchAsync(Guid id)
     {

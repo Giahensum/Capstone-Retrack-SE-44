@@ -14,7 +14,7 @@ export const materials = {
 };
 export const labels = {
   PENDING_APPROVAL: "Chờ nhà máy duyệt",
-  ACCEPTED: "Chờ tài xế",
+  ACCEPTED: "Chờ vận chuyển",
   IN_TRANSIT: "Đang vận chuyển",
   DELIVERED: "Đã giao • Chờ nhận",
   RECEIVED: "Chờ cân",

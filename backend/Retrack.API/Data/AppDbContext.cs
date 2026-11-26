@@ -7,6 +7,9 @@ namespace Retrack.API.Data
     {
         public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
+        public DbSet<ShippingQuote> ShippingQuotes { get; set; }
+        public DbSet<ExternalShipment> ExternalShipments { get; set; }
+        public DbSet<ShippingEvent> ShippingEvents { get; set; }
         // DbSets
         public DbSet<EmployeeCollectionArea> EmployeeCollectionAreas { get; set; }
         public DbSet<EmployeeDispatchShift> EmployeeDispatchShifts { get; set; }
@@ -79,6 +82,13 @@ namespace Retrack.API.Data
             modelBuilder.Entity<BatchWorkflowEvent>().HasIndex(x => new { x.BatchId, x.CreatedAt });
             modelBuilder.Entity<BatchWorkflowEvent>().HasOne(x => x.Batch).WithMany().HasForeignKey(x => x.BatchId).OnDelete(DeleteBehavior.Restrict);
             base.OnModelCreating(modelBuilder);
+            modelBuilder.Entity<ExternalShipment>().HasIndex(s => s.OperationId).IsUnique();
+            modelBuilder.Entity<ExternalShipment>().HasIndex(s => new { s.Provider, s.ProviderOrderId }).IsUnique().HasFilter("provider_order_id IS NOT NULL");
+            modelBuilder.Entity<ExternalShipment>().HasIndex(s => s.BatchId).IsUnique().HasFilter("status NOT IN ('COMPLETED','CANCELED','REJECTED','EXPIRED')");
+            modelBuilder.Entity<ExternalShipment>().HasOne<InventoryBatch>().WithMany().HasForeignKey(s => s.BatchId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<ExternalShipment>().HasOne<ShippingQuote>().WithMany().HasForeignKey(s => s.QuoteId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<ShippingEvent>().HasOne<ExternalShipment>().WithMany().HasForeignKey(s => s.ShipmentId).OnDelete(DeleteBehavior.Restrict);
+
             modelBuilder.Entity<PayeeCommission>().HasKey(x => new { x.UserId, x.Flow });
             modelBuilder.Entity<DepotBuyingPrice>().HasKey(x => new { x.DepotId, x.MaterialType });
             modelBuilder.Entity<DepotBuyingPrice>().HasOne(x => x.Depot).WithMany().HasForeignKey(x => x.DepotId).OnDelete(DeleteBehavior.Cascade);

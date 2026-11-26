@@ -224,6 +224,24 @@ builder.Services.AddHostedService<Retrack.API.Services.Money.PayoutReconcileWork
 builder.Services.AddHostedService<Retrack.API.Services.Money.RefundReconcileWorker>();
 builder.Services.AddScoped<Retrack.API.Services.Factory.FactoryNotificationService>();
 
+// Vận chuyển ngoài chỉ Sandbox hoặc Demo theo cấu hình; không tự chuyển chế độ.
+builder.Services.AddOptions<Retrack.API.Services.Shipping.ShippingOptions>()
+    .Bind(builder.Configuration.GetSection("Shipping"))
+    .Validate(o => o.Mode is "Disabled" or "Demo" or "LalamoveSandbox", "Shipping:Mode không hợp lệ.")
+    .Validate(o => o.InternalFactor is > 0 and <= 1 && o.MaxWeightKg is > 0 and <= 3000, "Hệ số/tải trọng vận chuyển không hợp lệ.")
+    .ValidateOnStart();
+builder.Services.AddHttpClient<Retrack.API.Services.Shipping.LalamoveSandboxProvider>(c => c.Timeout = TimeSpan.FromSeconds(20))
+    .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false })
+    .RemoveAllLoggers();
+builder.Services.AddScoped<Retrack.API.Services.Shipping.DemoShippingProvider>();
+builder.Services.AddScoped<Retrack.API.Services.Shipping.IShippingProvider>(sp =>
+    sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<Retrack.API.Services.Shipping.ShippingOptions>>().Value.Mode == "LalamoveSandbox"
+        ? sp.GetRequiredService<Retrack.API.Services.Shipping.LalamoveSandboxProvider>()
+        : sp.GetRequiredService<Retrack.API.Services.Shipping.DemoShippingProvider>());
+builder.Services.AddScoped<Retrack.API.Services.Shipping.ShippingService>();
+if (builder.Configuration["Shipping:Mode"] is "Demo" or "LalamoveSandbox")
+    builder.Services.AddHostedService<Retrack.API.Services.Shipping.ShippingWorker>();
+
 // ===== CONTROLLERS & SWAGGER =====
 builder.Services.AddControllers().AddJsonOptions(options =>
     options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
