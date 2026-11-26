@@ -3,7 +3,7 @@ import { useLocation, Link, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import {
   LayoutDashboard, Users, Tags, Banknote, ScrollText, ShieldCheck, ChevronsLeft, ChevronsRight, Menu, X,
-  LogOut, ChevronRight, ChevronDown, Home, ArrowLeftRight,
+  LogOut, ChevronRight, ChevronDown, Home, ArrowLeftRight, Flag,
 } from 'lucide-react';
 import '../../features/depot/styles/depot-theme.css';
 import BrandLogo, { BrandMark } from '@/components/brand/BrandLogo';
@@ -21,6 +21,7 @@ const NAV = [
     items: [
       { icon: Users, label: 'Người dùng', to: '/admin/users' },
       { icon: ShieldCheck, label: 'Hồ sơ kho vựa', to: '/admin/depot-verifications' },
+      { icon: Flag, label: 'Báo bỏ mua thanh lý', to: '/admin/liquidation-disputes' },
     ],
   },
   {

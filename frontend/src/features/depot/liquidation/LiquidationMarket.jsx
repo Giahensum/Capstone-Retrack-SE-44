@@ -4,6 +4,7 @@ import { Page, QueryState, Pager, inputClass, buttonClass } from '@/features/dep
 import { money } from '@/features/depot/depotApi';
 import { useLiquidationQuery, useLiquidationScope, liquidationLabels, localTime } from './liquidationApi';
 import LiquidationDetail from './components/LiquidationDetail';
+import LiquidationV2List from './v2/LiquidationV2List';
 import { useQueryClient } from '@tanstack/react-query';
 import { useLiquidationEsignReturn } from '@/features/esign/LiquidationEsign';
 
@@ -24,17 +25,34 @@ export default function LiquidationMarket() {
   const [params, setParams] = useSearchParams();
   const requestedView = params.get('view');
   const view = Object.hasOwn(views, requestedView) ? requestedView : 'OPEN';
+  // Phiên mới là nhiều hạng mục (V2); lô trọn gói cũ vẫn xem và hoàn tất được.
+  const kind = params.get('kind') === 'v1' ? 'v1' : 'v2';
 
   function changeView(nextView) {
     setParams(previous => {
       const next = new URLSearchParams(previous);
       next.set('view', nextView);
       next.delete('lotId');
+      next.delete('campaignId');
+      return next;
+    });
+  }
+  function changeKind(nextKind) {
+    setParams(previous => {
+      const next = new URLSearchParams(previous);
+      next.set('kind', nextKind);
+      next.delete('lotId');
+      next.delete('campaignId');
       return next;
     });
   }
 
-  return <Page title="Lô lớn mua vào" description="Tìm phiên trả giá, theo dõi lô trúng và tra lại giao dịch đã kết thúc của kho.">
+  return <Page title="Lô lớn mua vào" description="Tìm phiên trả giá, theo dõi hạng mục trúng và tra lại giao dịch đã kết thúc của kho." action={
+    <div role="group" aria-label="Loại phiên" className="inline-flex rounded-full border border-d-border-subtle bg-white p-1">
+      {[['v2', 'Phiên nhiều hạng mục'], ['v1', 'Lô trọn gói (cũ)']].map(([key, label]) =>
+        <button key={key} type="button" aria-pressed={kind === key} onClick={() => changeKind(key)}
+          className={`min-h-9 rounded-full px-4 text-sm font-semibold ${kind === key ? 'bg-d-primary text-white' : 'text-d-on-surface-variant'}`}>{label}</button>)}
+    </div>}>
     <div role="group" aria-label="Danh sách lô lớn" className="flex flex-wrap gap-2 border-b border-d-border-subtle">
       {Object.entries(views).map(([key, item]) =>
         <button key={key} type="button" aria-pressed={view === key} onClick={() => changeView(key)}
@@ -42,7 +60,7 @@ export default function LiquidationMarket() {
           {item.label}
         </button>)}
     </div>
-    <LiquidationList key={`${depotId}-${view}`} view={view} depotId={depotId} />
+    {kind === 'v2' ? <LiquidationV2List key={`${depotId}-${view}`} view={view} /> : <LiquidationList key={`${depotId}-${view}`} view={view} depotId={depotId} />}
   </Page>;
 }
 
