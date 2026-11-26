@@ -251,7 +251,7 @@ export default function Billing() {
   return (
     <AdminLayout crumb="Phí & Doanh thu">
       <div className="flex w-full flex-col gap-6 p-4 md:p-6">
-        <button className="self-start min-h-11 rounded-full border border-d-border-subtle px-4 text-d-primary" onClick={() => setLegacy(false)}>← Quay lại gói dịch vụ Depot</button>
+        <button className="self-start inline-flex items-center justify-center gap-2 rounded-full font-semibold transition active:scale-[.98] disabled:pointer-events-none disabled:opacity-50 outline-none focus-visible:ring-2 focus-visible:ring-d-primary/30 focus-visible:ring-offset-1 min-h-11 px-5 py-2 text-sm border border-d-border-subtle bg-white text-d-on-surface hover:bg-d-surface-container" onClick={() => setLegacy(false)}>← Quay lại gói dịch vụ Depot</button>
         <PageHeader icon={Banknote} title="Phí & Doanh thu" description="Doanh thu nền tảng, lịch sử giao dịch, hóa đơn phí và cấu hình phí." />
         <FilterTabs tabs={TABS} value={tab} onChange={setTab} />
         {tab === 'revenue' && <RevenueTab />}

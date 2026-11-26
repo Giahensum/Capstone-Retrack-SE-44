@@ -7,6 +7,7 @@ import { MaterialIcon } from '@/features/depot/components/DepotIcon';
 import { LIQUIDATION_FILTERS, LIQUIDATION_PHASE_LABEL } from '../liquidationLabels';
 import { MapPin, Coins, TrendingUp, Users, Timer } from 'lucide-react';
 import { Badge, PHASE_TONE } from '@/components/liquidation/LiquidationUI';
+import { PageHeader, buttonClass } from '@/components/ui/kit';
 
 export default function LiquidationList() {
   const [status, setStatus] = useState('');
@@ -24,21 +25,9 @@ export default function LiquidationList() {
 
   return (
     <div className="flex flex-col p-4 md:p-6 gap-6 w-full max-w-7xl mx-auto">
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-        <div>
-          <h1 className="text-d-headline-xl-mobile md:text-d-headline-xl font-d-headline-xl text-d-on-surface">Lô thanh lý của tôi</h1>
-          <p className="text-d-body-md text-d-on-surface-variant mt-2">
-            Đăng phiên nhiều hạng mục để các chủ kho khảo sát và trả giá theo đơn giá từng hạng mục. Tiền và giao nhận do hai bên tự thực hiện.
-          </p>
-        </div>
-        <Link
-          to="/seller/liquidations/new"
-          className="inline-flex items-center justify-center gap-2 rounded-full bg-d-primary hover:bg-[#385500] text-d-on-primary font-semibold px-6 py-3 transition-all shadow-sm active:scale-95 text-sm shrink-0"
-        >
-          <MaterialIcon name="add" className="text-lg" />
-          <span>Đăng phiên mới</span>
-        </Link>
-      </div>
+      <PageHeader title="Lô thanh lý của tôi" description="Đăng phiên nhiều hạng mục để các chủ kho khảo sát và trả giá theo đơn giá từng hạng mục. Tiền và giao nhận do hai bên tự thực hiện.">
+        <Link to="/seller/liquidations/new" className={buttonClass()}><MaterialIcon name="add" className="text-lg" />Đăng phiên mới</Link>
+      </PageHeader>
 
       <V2Campaigns />
 

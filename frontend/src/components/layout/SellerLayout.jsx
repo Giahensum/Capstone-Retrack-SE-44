@@ -1,31 +1,18 @@
-import { useState, useEffect } from 'react';
-import { useLocation, Link, useNavigate } from 'react-router-dom';
-import clsx from 'clsx';
+import { Link, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { useQuery } from '@tanstack/react-query';
+import {
+  LayoutDashboard, ScanLine, SquarePlus, ReceiptText, Gavel, Bell, BarChart3, Wallet, UserRound, Plus,
+} from 'lucide-react';
+import AppShell from '@/components/layout/AppShell';
 import { useAuth } from '@/hooks/useAuth';
-import DepotBrandLogo from '@/features/depot/components/DepotBrandLogo';
-import { MaterialIcon } from '@/features/depot/components/DepotIcon';
 import SellerNotificationBell from '@/features/seller/components/SellerNotificationBell';
 import { sellerApi } from '@/features/seller/api';
 
-const NAV_ITEMS = [
-  { iconName: 'dashboard', label: 'Tổng quan', to: '/seller' },
-  { iconName: 'document_scanner', label: 'AI Nhận diện phế liệu', to: '/seller/ai-scanner' },
-  { iconName: 'add_box', label: 'Tạo đơn thu gom', to: '/seller/create' },
-  { iconName: 'receipt_long', label: 'Đơn của tôi', to: '/seller/requests' },
-  { iconName: 'gavel', label: 'Lô thanh lý', to: '/seller/liquidations' },
-  { iconName: 'notifications', label: 'Thông báo', to: '/seller/notifications', badge: true },
-  { iconName: 'bar_chart', label: 'Thống kê thu nhập', to: '/seller/income' },
-  { iconName: 'account_balance_wallet', label: 'Thu nhập & chi trả', to: '/seller/earnings' },
-  { iconName: 'inventory_2', label: 'Hồ sơ cá nhân', to: '/seller/profile' },
-];
-
+/* Khung giao diện Người bán: dùng AppShell chung, giữ menu, chuông thông báo và lối tắt tạo đơn. */
 export default function SellerLayout({ children }) {
-  const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
-  const [menuOpen, setMenuOpen] = useState(false);
 
   const { data: unreadCount = 0 } = useQuery({
     queryKey: ['seller-notifications-unread'],
@@ -33,19 +20,32 @@ export default function SellerLayout({ children }) {
     refetchInterval: 30000,
   });
 
-  useEffect(() => {
-    const media = window.matchMedia('(min-width: 1024px)');
-    const change = () => {
-      if (media.matches) setMenuOpen(false);
-    };
-    media.addEventListener('change', change);
-    return () => media.removeEventListener('change', change);
-  }, []);
-
-  const isActive = (to) => {
-    if (to === '/seller') return location.pathname === '/seller';
-    return location.pathname.startsWith(to);
-  };
+  const nav = [
+    {
+      title: 'Chung',
+      items: [
+        { icon: LayoutDashboard, label: 'Tổng quan', to: '/seller' },
+        { icon: Bell, label: 'Thông báo', to: '/seller/notifications', badge: Number(unreadCount) || 0 },
+      ],
+    },
+    {
+      title: 'Thu gom',
+      items: [
+        { icon: ScanLine, label: 'AI Nhận diện phế liệu', to: '/seller/ai-scanner' },
+        { icon: SquarePlus, label: 'Tạo đơn thu gom', to: '/seller/create' },
+        { icon: ReceiptText, label: 'Đơn của tôi', to: '/seller/requests' },
+        { icon: Gavel, label: 'Lô thanh lý', to: '/seller/liquidations' },
+      ],
+    },
+    {
+      title: 'Thu nhập',
+      items: [
+        { icon: BarChart3, label: 'Thống kê thu nhập', to: '/seller/income' },
+        { icon: Wallet, label: 'Thu nhập & chi trả', to: '/seller/earnings' },
+      ],
+    },
+    { title: 'Tài khoản', items: [{ icon: UserRound, label: 'Hồ sơ cá nhân', to: '/seller/profile' }] },
+  ];
 
   const handleLogout = () => {
     logout();
@@ -53,160 +53,27 @@ export default function SellerLayout({ children }) {
     navigate('/login');
   };
 
-  const initials = (user?.fullName ?? 'S')
-    .trim()
-    .split(/\s+/)
-    .slice(-2)
-    .map((s) => s[0])
-    .join('')
-    .toLocaleUpperCase('vi-VN') || 'NB';
-
-  const currentNav = NAV_ITEMS.find((item) => isActive(item.to)) ?? NAV_ITEMS[0];
-
   return (
-    <div className="bg-d-background flex h-screen overflow-hidden font-d-body-md text-d-on-background">
-      {/* Mobile backdrop */}
-      {menuOpen && (
-        <button
-          type="button"
-          aria-label="Đóng menu"
-          className="fixed inset-0 bg-black/30 z-40 lg:hidden"
-          onClick={() => setMenuOpen(false)}
-        />
-      )}
-
-      {/* Sidebar */}
-      <aside
-        aria-label="Menu Người bán"
-        className={clsx(
-          "w-64 bg-d-surface-container-lowest border-r border-d-border-subtle h-screen fixed top-0 left-0 flex flex-col z-50 transition-transform lg:translate-x-0",
-          menuOpen ? "translate-x-0" : "-translate-x-full"
-        )}
-      >
-        {/* Brand header */}
-        <div className="h-16 flex items-center justify-between px-6 border-b border-d-border-subtle">
-          <Link
-            to="/seller"
-            className="inline-flex items-center gap-2 font-d-headline-md text-d-headline-md font-bold tracking-tighter text-d-primary"
-            aria-label="ReTrack — về trang chủ người bán"
-            onClick={() => setMenuOpen(false)}
-          >
-            <DepotBrandLogo />
-            <span>RETRACK</span>
-          </Link>
-          <span className="text-[10px] font-bold text-d-primary bg-d-primary-container/50 text-d-on-primary-container px-2 py-0.5 rounded-full uppercase tracking-wider">
-            Seller
-          </span>
-        </div>
-
-        {/* Navigation list */}
-        <div className="flex-1 overflow-y-auto py-6">
-          <nav className="px-4 space-y-1.5" onClick={() => setMenuOpen(false)}>
-            {NAV_ITEMS.map((item) => {
-              const active = isActive(item.to);
-              return (
-                <Link
-                  key={item.to}
-                  to={item.to}
-                  className={clsx(
-                    "flex items-center justify-between px-4 py-3 rounded-xl transition-colors font-d-label-md text-d-label-md",
-                    active
-                      ? "bg-d-primary/10 text-d-primary font-semibold"
-                      : "text-d-on-surface-variant hover:bg-d-surface-container"
-                  )}
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <MaterialIcon name={item.iconName} className="text-xl shrink-0" />
-                    <span className="truncate">{item.label}</span>
-                  </div>
-                  {item.badge && unreadCount > 0 && (
-                    <span className="min-w-[20px] h-5 rounded-full bg-d-error px-1.5 text-[11px] font-bold text-white flex items-center justify-center shrink-0">
-                      {unreadCount > 99 ? '99+' : unreadCount}
-                    </span>
-                  )}
-                </Link>
-              );
-            })}
-          </nav>
-        </div>
-
-        {/* User Card / Footer */}
-        <div className="p-4 border-t border-d-border-subtle bg-d-surface-container-lowest">
-          <div className="flex items-center gap-3 px-2 py-1">
-            <div className="w-9 h-9 rounded-full bg-d-primary-container text-d-on-primary-container flex items-center justify-center font-d-label-md font-bold shrink-0">
-              {initials}
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="font-d-label-md text-d-label-md text-d-on-surface font-semibold truncate">
-                {user?.fullName ?? 'Người bán'}
-              </p>
-              <p className="text-xs text-d-on-surface-variant truncate">
-                {user?.email ?? 'seller@retrack.vn'}
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={handleLogout}
-            className="w-full mt-2 flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-d-on-surface-variant hover:text-d-error hover:bg-d-error-container/20 font-d-label-sm text-d-label-sm transition-colors"
-          >
-            <MaterialIcon name="cancel" className="text-sm" />
-            <span>Đăng xuất</span>
-          </button>
-        </div>
-      </aside>
-
-      {/* Main Content Area */}
-      <main className="flex-1 min-w-0 lg:ml-64 flex flex-col h-screen overflow-hidden">
-        {/* TopAppBar */}
-        <header className="d-glass-panel flex justify-between gap-3 items-center min-h-16 px-4 lg:px-8 shrink-0 z-30">
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              aria-label="Mở menu"
-              aria-expanded={menuOpen}
-              className="lg:hidden text-d-on-surface p-1.5 rounded-lg hover:bg-d-surface-container"
-              onClick={() => setMenuOpen(true)}
-            >
-              <MaterialIcon name="menu" className="text-2xl" />
-            </button>
-            <Link to="/seller" className="lg:hidden" aria-label="ReTrack — về trang chủ">
-              <DepotBrandLogo small />
-            </Link>
-            <div className="hidden sm:flex min-w-0 items-center text-d-on-surface-variant font-d-body-sm text-d-body-sm gap-2">
-              <Link to="/seller" className="hover:text-d-primary transition-colors">
-                Trang chủ
-              </Link>
-              <MaterialIcon name="chevron_right" className="text-[16px]" />
-              <span className="text-d-primary font-bold">{currentNav.label}</span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <SellerNotificationBell />
-
-            <Link
-              to="/seller/create"
-              className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-d-primary text-d-on-primary px-4 py-2 text-sm font-semibold hover:bg-[#385500] transition-colors shadow-sm"
-            >
-              <MaterialIcon name="add" className="text-lg" />
-              <span>Tạo đơn</span>
-            </Link>
-            <div className="flex items-center gap-2 pl-2 border-l border-d-border-subtle">
-              <div className="w-8 h-8 rounded-full bg-d-primary-container text-d-on-primary-container flex items-center justify-center text-xs font-bold">
-                {initials}
-              </div>
-              <span className="hidden md:inline font-d-label-sm text-d-label-sm text-d-on-surface font-medium truncate max-w-[120px]">
-                {user?.fullName}
-              </span>
-            </div>
-          </div>
-        </header>
-
-        {/* Page Content */}
-        <div className="flex-1 overflow-y-auto bg-d-background">
-          {children}
-        </div>
-      </main>
-    </div>
+    <AppShell
+      nav={nav}
+      eyebrow="Người bán"
+      homeTo="/seller"
+      homeLabel="Người bán"
+      roleLabel="Người bán"
+      roleBadge="SELLER"
+      user={user}
+      onLogout={handleLogout}
+      menuItems={[{ icon: UserRound, label: 'Hồ sơ cá nhân', to: '/seller/profile' }]}
+      storageKey="retrack_seller_sidebar"
+      navLabel="Menu người bán"
+      headerActions={<>
+        <SellerNotificationBell />
+        <Link to="/seller/create" className="hidden items-center gap-1.5 rounded-full bg-d-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[#385500] sm:inline-flex">
+          <Plus size={17} />Tạo đơn
+        </Link>
+      </>}
+    >
+      {children}
+    </AppShell>
   );
 }

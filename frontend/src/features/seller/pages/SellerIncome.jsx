@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { sellerApi } from '../api';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { MaterialIcon } from '@/features/depot/components/DepotIcon';
+import { PageHeader } from '@/components/ui/kit';
 
 export default function SellerIncome() {
   const { data: stats } = useQuery({
@@ -65,15 +66,7 @@ export default function SellerIncome() {
 
   return (
     <div className="flex flex-col p-4 md:p-6 gap-6 w-full max-w-7xl mx-auto">
-      {/* Page Title */}
-      <div>
-        <h1 className="font-d-headline-xl-mobile md:font-d-headline-xl text-d-headline-xl-mobile md:text-d-headline-xl text-d-on-surface">
-          Thống kê thu nhập
-        </h1>
-        <p className="font-d-body-md text-d-body-md text-d-on-surface-variant mt-2">
-          Tổng quan số tiền nhận được từ các đơn thu gom và lô thanh lý đã hoàn thành.
-        </p>
-      </div>
+      <PageHeader title="Thống kê thu nhập" description="Tổng quan số tiền nhận được từ các đơn thu gom và lô thanh lý đã hoàn thành." />
 
       {/* KPI Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

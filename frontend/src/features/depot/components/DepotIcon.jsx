@@ -6,6 +6,8 @@ import {
   LockKeyhole, Menu, PackageCheck, Plus, Recycle, ReceiptText, Scale, Search,
   ShoppingCart, SquarePlus, Star, TrendingUp, TriangleAlert, Truck, Undo2,
   UserRoundPlus, Wallet, Warehouse,
+  ScanLine, Bot, Gavel, CheckCheck, Scan, FileSignature, Layers, ChartPie, BatteryWarning, Shirt,
+  Trash2, FileText, Leaf, Footprints, Hammer, Store, Wine,
 } from 'lucide-react';
 
 const icons = {
@@ -25,6 +27,10 @@ const icons = {
   notifications: Bell,
   assignment: ClipboardList,
   account_balance_wallet: Wallet, schedule: Clock, check_circle_filled: CircleCheck,
+  document_scanner: ScanLine, smart_toy: Bot, gavel: Gavel, done_all: CheckCheck, crop_free: Scan,
+  contract: FileSignature, layers: Layers, analytics: ChartPie, battery_alert: BatteryWarning,
+  checkroom: Shirt, delete_sweep: Trash2, description: FileText, eco: Leaf, footwear: Footprints,
+  hardware: Hammer, storefront: Store, wine_bar: Wine, close: CircleX,
 };
 
 // Icon Depot được đóng gói cùng ứng dụng, không phụ thuộc font tải từ bên ngoài.

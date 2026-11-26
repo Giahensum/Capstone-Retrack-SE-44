@@ -37,7 +37,7 @@ export function ServerError({ message, onGoPayees }) {
       <div className="flex flex-col gap-2">
         <span className={bank ? 'font-bold' : ''}>{message}</span>
         {bank && onGoPayees && (
-          <button type="button" onClick={onGoPayees} className="self-start rounded-full bg-red-600 px-4 py-1.5 text-xs font-bold text-white">Mở tab Người nhận để duyệt tài khoản</button>
+          <button type="button" onClick={onGoPayees} className="self-start inline-flex items-center justify-center gap-2 rounded-full font-semibold transition active:scale-[.98] disabled:pointer-events-none disabled:opacity-50 outline-none focus-visible:ring-2 focus-visible:ring-d-primary/30 focus-visible:ring-offset-1 min-h-9 px-4 py-1.5 text-[13px] bg-d-error text-white hover:bg-[#93000a]">Mở tab Người nhận để duyệt tài khoản</button>
         )}
       </div>
     </Notice>

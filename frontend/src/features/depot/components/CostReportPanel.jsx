@@ -13,7 +13,7 @@ export default function CostReportPanel({ period }) {
       { label: 'Chi phí bán đã ghi', value: money(d.sellingCosts), icon: 'receipt_long', description: 'Chi phí giao/bán gắn với giao dịch, gồm cả khoản bổ sung sau kỳ.' },
       { label: 'Chênh lệch tiền hàng', value: amount(d.pretaxDifference), icon: 'analytics', description: 'Tiền hàng sau phí, chưa VAT − giá vốn − chi phí bán. Chưa tính thuế thu nhập.' }
     ]} />
-    <section className="rounded-[20px] border border-d-border-subtle bg-white p-4 sm:p-6 space-y-4" aria-labelledby="cost-report-title">
+    <section className="rounded-2xl border border-d-border-subtle bg-white p-4 sm:p-6 space-y-4" aria-labelledby="cost-report-title">
       <h2 id="cost-report-title" className="text-xl font-semibold">Đối chiếu giá vốn theo kênh bán</h2>
       <p className="text-sm">{number(d.transactionCount)} giao dịch trong kỳ · {number(d.incompleteCount)} giao dịch thiếu dữ liệu hoặc cần đối soát chi phí.</p>
       {d.incompleteCount > 0 && <p role="status" className="rounded-xl border border-d-border-subtle bg-d-surface-accent p-3 text-sm">Chưa thể kết luận tổng lãi/lỗ. Lô thiếu snapshot/vốn/tiền ròng hoặc nguồn có điều chỉnh sau xuất cần được đối soát trước.</p>}

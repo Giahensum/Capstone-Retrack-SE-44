@@ -31,7 +31,7 @@ export default function NotificationBell({ unread }) {
       {unread.isError && <span aria-hidden="true" className="absolute top-0 right-0 rounded-full bg-d-error text-white px-1 text-xs">!</span>}
     </button>
     {open && <section ref={panel} id="depot-notification-panel" role="dialog" aria-label="Thông báo nhanh" tabIndex={-1}
-      className="fixed top-20 left-4 right-4 sm:left-auto sm:absolute sm:top-14 sm:right-0 sm:w-[25rem] rounded-[20px] border border-d-border-subtle bg-d-surface shadow-xl overflow-hidden text-d-on-surface">
+      className="fixed top-20 left-4 right-4 sm:left-auto sm:absolute sm:top-14 sm:right-0 sm:w-[25rem] rounded-2xl border border-d-border-subtle bg-d-surface shadow-xl overflow-hidden text-d-on-surface">
       <div className="flex items-center justify-between gap-3 p-4 border-b border-d-border-subtle"><div><h2 className="font-bold text-lg">Thông báo</h2><p className="text-xs text-d-on-surface-variant">5 thông báo mới nhất của kho đang chọn</p></div><button type="button" aria-label="Đóng thông báo" className="h-11 w-11 shrink-0 rounded-full hover:bg-d-surface-accent" onClick={() => { setOpen(false); trigger.current?.focus(); }}>✕</button></div>
       <div className="max-h-[60dvh] overflow-y-auto p-3 space-y-3"><MutationError mutation={read} /><QueryState query={query}>
         {query.data?.items.map(notice => <NotificationCard key={notice.id} notice={notice} busy={read.isPending} onOpen={show} onRead={item => read.mutate({ id: item.id, body: { isRead: !item.isRead } })} compact />)}

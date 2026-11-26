@@ -105,7 +105,7 @@ function LiquidationList({ view, depotId }) {
             : lot.purchaseStatus === 'IN_PROGRESS' ? 'Đang thực hiện mua'
             : view === 'HISTORY' && lot.phase === 'AWARDED' ? 'Không trúng'
             : liquidationLabels[lot.phase] ?? lot.phase;
-          return <article key={lot.id} className="flex flex-col overflow-hidden rounded-[20px] border border-d-border-subtle bg-white shadow-sm">
+          return <article key={lot.id} className="flex flex-col overflow-hidden rounded-2xl border border-d-border-subtle bg-white shadow-sm">
             {lot.imageUrls[0] && <img src={lot.imageUrls[0]} alt={`Hiện trạng ${lot.title}`} className="h-44 w-full object-cover" loading="lazy" />}
             <div className="flex flex-1 flex-col space-y-3 p-5">
               <div className="flex flex-wrap items-center justify-between gap-2">

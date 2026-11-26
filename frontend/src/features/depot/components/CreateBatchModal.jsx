@@ -2,7 +2,7 @@ import { Form, Input, Select, Textarea } from '@/components/forms/ValidatedForm'
 import { materialLabel } from '../materialLabels';
 import { useEffect, useId, useState } from 'react';
 import { useDepotQuery, useDepotMutation, number, money, date } from '../depotApi';
-import { Dialog, QueryState, MutationError, inputClass, buttonClass, Pager } from './DepotUI';
+import { Dialog, QueryState, MutationError, inputClass, buttonClass, secondaryButtonClass, Pager } from './DepotUI';
 import BatchSalePreview from './BatchSalePreview';
 
 export default function CreateBatchModal({ isOpen, onClose, initialMaterial = '', initialFactoryId = '', initialDemand = null }) {
@@ -35,7 +35,7 @@ function CreateBatchForm({ onClose, initialMaterial, initialFactoryId, initialDe
   const maximumWeight = initialDemand ? Math.min(available, initialDemand.requiredWeightKg) : available;
   const field = (key, value) => setForm({ ...form, [key]: value });
   return <Dialog title="Tạo Lô Xuất Hàng" onClose={onClose} busy={save.isPending} wide footer={<div className="flex flex-wrap justify-end gap-3">
-    <button type="button" className={buttonClass} onClick={onClose} disabled={save.isPending}>Hủy bỏ</button>
+    <button type="button" className={secondaryButtonClass} onClick={onClose} disabled={save.isPending}>Hủy bỏ</button>
     <button type="submit" form={formId} className={buttonClass} disabled={save.isPending || stock.isPending || stock.isError || selectedFactoryBlocked || (selectedFactoryUnavailable && !!form.targetFactoryId) || strategy === 'direct' && (factories.isPending || factories.isError)}>{save.isPending ? 'Đang tạo…' : 'Tạo lô xuất hàng'}</button>
   </div>}>
     <Form id={formId} className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4" onSubmit={(e) => {
