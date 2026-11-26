@@ -28,10 +28,20 @@ public class DepotCostingTests
 
     [Theory]
     [InlineData(0, 10)]
-    [InlineData(1, 0)]
+    [InlineData(1, -1)]
     [InlineData(-1, 10)]
     public void Invalid_quantities_or_reference_values_are_rejected(decimal quantity, decimal reference)
         => Assert.Throws<ArgumentException>(() => DepotCosting.Allocate(1000, 0, [new(quantity, reference, 0)]));
+
+    [Fact]
+    public void One_output_uses_actual_received_quantity_without_reference_price()
+    {
+        var cost = Assert.Single(DepotCosting.Allocate(300000, 50000, [new(90, 0, 0)]));
+        Assert.Equal(350000, cost);
+        Assert.Equal(350000m / 90m, cost / 90m);
+        Assert.Equal(370000, Assert.Single(DepotCosting.Allocate(300000, 50000, [new(90, 0, 20000)])));
+        Assert.Throws<ArgumentException>(() => DepotCosting.Allocate(300000, 50000, [new(90, 0, 0), new(2, 1, 0)]));
+    }
 
     [Fact]
     public void Fifo_preserves_costs_from_two_sources_and_does_not_hide_unknown_cost()
