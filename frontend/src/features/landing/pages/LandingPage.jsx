@@ -34,6 +34,8 @@ const FOOTER_LINKS = {
     'Dịch vụ': ['Bán phế liệu', 'Kho vựa', 'Vận chuyển', 'Nhà máy'],
     'Hỗ trợ': ['Trung tâm trợ giúp', 'Báo cáo sự cố', 'Chính sách', 'Điều khoản'],
 };
+// Liên kết footer đã có trang thật.
+const FOOTER_ROUTES = { 'Kho vựa': '/goi-dich-vu', 'Chính sách': '/dieu-khoan', 'Điều khoản': '/dieu-khoan', 'Bảo mật': '/dieu-khoan#quyen-rieng-tu' };
 // ── Components ────────────────────────────────────────────────────────────────
 function TrendIcon({ trend }) {
     if (trend === 'up')
@@ -74,6 +76,7 @@ export default function LandingPage() {
             {['Trang chủ', 'Cách hoạt động', 'Bán phế liệu', 'Kho vựa', 'Marketplace', 'Bảng giá'].map((item, i) => (<a key={item} href={i === 0 ? '#' : `#section-${i}`} className={`text-sm font-semibold transition-colors ${i === 0 ? 'text-[#446900]' : 'text-[#424936] hover:text-[#446900]'}`}>
                 {item}
               </a>))}
+            <Link to="/goi-dich-vu" className="text-sm font-semibold text-[#424936] hover:text-[#446900]">Gói kho vựa</Link>
           </nav>
 
           {/* Auth buttons */}
@@ -107,6 +110,7 @@ export default function LandingPage() {
             {['Trang chủ', 'Cách hoạt động', 'Bán phế liệu', 'Kho vựa', 'Marketplace', 'Bảng giá'].map((item) => (<a key={item} href="#" className="block text-sm font-semibold text-[#424936] py-2 hover:text-[#446900]">
                 {item}
               </a>))}
+            <Link to="/goi-dich-vu" className="block text-sm font-semibold text-[#424936] py-2 hover:text-[#446900]">Gói kho vựa</Link>
           </div>)}
       </header>
 
@@ -543,9 +547,11 @@ export default function LandingPage() {
                   <h4 className="font-bold text-white mb-4 uppercase tracking-wider text-sm">{title}</h4>
                   <ul className="space-y-3">
                     {links.map((link) => (<li key={link}>
-                        <a href="#" className="text-white/60 hover:text-white text-sm font-medium transition-colors">
+                        {FOOTER_ROUTES[link] ? (<Link to={FOOTER_ROUTES[link]} className="text-white/60 hover:text-white text-sm font-medium transition-colors">
+                            {link}
+                          </Link>) : (<a href="#" className="text-white/60 hover:text-white text-sm font-medium transition-colors">
                           {link}
-                        </a>
+                        </a>)}
                       </li>))}
                   </ul>
                 </div>))}
@@ -554,9 +560,11 @@ export default function LandingPage() {
             <div className="border-t border-white/10 pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
               <p className="text-white/40 text-sm font-medium">© 2024 RETRACK. All rights reserved. — Capstone SE-44</p>
               <div className="flex gap-6">
-                {['Điều khoản', 'Bảo mật', 'Cookie'].map((item) => (<a key={item} href="#" className="text-white/40 hover:text-white/80 text-sm font-medium transition-colors">
+                {['Điều khoản', 'Bảo mật', 'Cookie'].map((item) => (FOOTER_ROUTES[item] ? (<Link key={item} to={FOOTER_ROUTES[item]} className="text-white/40 hover:text-white/80 text-sm font-medium transition-colors">
                     {item}
-                  </a>))}
+                  </Link>) : (<a key={item} href="#" className="text-white/40 hover:text-white/80 text-sm font-medium transition-colors">
+                    {item}
+                  </a>)))}
               </div>
             </div>
           </div>

@@ -9,6 +9,8 @@ const RegisterPage = lazy(() => import('@/features/auth/pages/RegisterPage'));
 const ForgotPasswordPage = lazy(() => import('@/features/auth/pages/ForgotPasswordPage'));
 // Landing
 const LandingPage = lazy(() => import('@/features/landing/pages/LandingPage'));
+const DepotPlanPage = lazy(() => import('@/features/landing/pages/DepotPlanPage'));
+const TermsPage = lazy(() => import('@/features/landing/pages/TermsPage'));
 // Seller
 const SellerDashboard = lazy(() => import('@/features/seller/pages/SellerDashboard'));
 // Depot
@@ -52,6 +54,8 @@ export function AppRoutes() {
         <Routes>
           {/* Public */}
           <Route path="/" element={<LandingPage />}/>
+          <Route path="/goi-dich-vu" element={<DepotPlanPage />}/>
+          <Route path="/dieu-khoan" element={<TermsPage />}/>
           <Route path="/login" element={<LoginPage />}/>
           <Route path="/register" element={<RegisterPage />}/>
           <Route path="/forgot-password" element={<ForgotPasswordPage />}/>

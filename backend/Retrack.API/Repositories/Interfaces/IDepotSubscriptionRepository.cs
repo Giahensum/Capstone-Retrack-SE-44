@@ -25,5 +25,12 @@ public interface IDepotSubscriptionRepository
     void Add(DepotSubscription subscription);
     void Add(DepotSubscriptionOrder order);
     void Audit(Guid actorId, string action, Guid id, string detail);
+    Task<DepotSubscriptionRefund?> RefundAsync(Guid id);
+    Task<List<DepotSubscriptionRefund>> OrderRefundsAsync(Guid orderId);
+    Task<DateTime?> PreviousPaidEndAsync(Guid depotId, Guid excludeOrderId);
+    Task<PagedResult<SubscriptionRefundDto>> RefundsAsync(Guid? depotId, int page, int pageSize, string? status, Guid? refundId = null);
+    Task<bool> TrialUsedByTaxCodeAsync(Guid depotId, string taxCode);
+    void Add(DepotSubscriptionRefund refund);
+    void Notify(Guid depotId, Guid ownerId, string title, string message);
     Task SaveAsync();
 }

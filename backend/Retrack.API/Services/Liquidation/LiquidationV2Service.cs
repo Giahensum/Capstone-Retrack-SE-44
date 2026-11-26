@@ -97,7 +97,7 @@ public sealed class LiquidationV2Service(ILiquidationV2Repository repository, ID
                 LotId = lot.Id, Position = position++, Kind = LiquidationV2Rules.KindOf(i.Unit), MaterialCode = i.MaterialCode, Name = i.Name,
                 Description = i.Description, Unit = i.Unit, Quantity = i.Quantity, StartingUnitPrice = i.StartingUnitPrice, BidIncrement = i.BidIncrement,
             });
-        repository.AddNotice(Notification.ForLiquidation(sellerId, lot.Id, "Đã đăng phiên thanh lý nhiều hạng mục",
+        repository.AddNotice(SellerNotice(sellerId, lot.Id, "Đã đăng phiên thanh lý nhiều hạng mục",
             $"Phiên {lot.Title} gồm {dto.Items.Count} hạng mục đã được đăng. Bạn theo dõi đăng ký khảo sát và giá từng hạng mục trong chi tiết phiên."));
         await work.SaveAsync(); await tx.CommitAsync();
         return await SellerDetailAsync(lot, now);
@@ -147,7 +147,7 @@ public sealed class LiquidationV2Service(ILiquidationV2Repository repository, ID
         if (lot.Status != "PUBLISHED" || Now >= lot.BiddingEnd) throw new DepotConflictException("Phiên đã kết thúc hoặc không còn ở trạng thái mở.");
         if (lot.BidCount > 0) throw new DepotConflictException("Phiên đã có lượt trả giá nên không thể tự hủy; cần Admin xử lý để không bỏ rơi người trả giá.");
         lot.Status = "CANCELLED"; lot.CancelReason = reason;
-        repository.AddNotice(Notification.ForLiquidation(sellerId, lot.Id, "Đã hủy phiên thanh lý", $"Phiên {lot.Title} đã bị hủy. Lý do: {reason}"));
+        repository.AddNotice(SellerNotice(sellerId, lot.Id, "Đã hủy phiên thanh lý", $"Phiên {lot.Title} đã bị hủy. Lý do: {reason}"));
         foreach (var p in await repository.ParticipantsAsync(lotId))
             repository.AddNotice(Notification.ForDepot(p.OwnerId, p.DepotId, "LIQUIDATION", "Phiên thanh lý đã bị hủy",
                 $"Seller đã hủy phiên {lot.Title}. Lý do: {reason}", targetType: "LIQUIDATION_V2", targetId: lot.Id));
@@ -289,7 +289,7 @@ public sealed class LiquidationV2Service(ILiquidationV2Repository repository, ID
             {
                 participation = new() { LotId = lotId, DepotId = depotId, OwnerId = ownerId, RegisteredAt = now };
                 repository.AddParticipation(participation);
-                repository.AddNotice(Notification.ForLiquidation(lot.SellerId, lot.Id, "Có kho đăng ký khảo sát",
+                repository.AddNotice(SellerNotice(lot.SellerId, lot.Id, "Có kho đăng ký khảo sát",
                     $"Một kho đã đăng ký khảo sát {added.Count} hạng mục của phiên {lot.Title}."));
             }
             foreach (var id in added) repository.AddParticipationItem(new() { ParticipationId = participation.Id, ItemId = id, RegisteredAt = now });
@@ -315,7 +315,7 @@ public sealed class LiquidationV2Service(ILiquidationV2Repository repository, ID
         {
             await scope.RequireTradingAsync(ownerId, depotId);
             participation.SurveyDeclaredAt = now;
-            repository.AddNotice(Notification.ForLiquidation(lot.SellerId, lot.Id, "Kho đã xác nhận khảo sát",
+            repository.AddNotice(SellerNotice(lot.SellerId, lot.Id, "Kho đã xác nhận khảo sát",
                 $"Một kho đã xác nhận hiểu hiện trạng phiên {lot.Title} và có thể trả giá khi phiên mở."));
             await work.SaveAsync();
         }
@@ -366,7 +366,7 @@ public sealed class LiquidationV2Service(ILiquidationV2Repository repository, ID
         item.HighestUnitPrice = input.UnitPrice; item.HighestBidId = bid.Id; item.BidCount++;
         lot.BidCount++; lot.BiddingEnd = end; lot.ExtensionCount = count;
         if (extended)
-            repository.AddNotice(Notification.ForLiquidation(lot.SellerId, lot.Id, "Phiên được gia hạn sát giờ",
+            repository.AddNotice(SellerNotice(lot.SellerId, lot.Id, "Phiên được gia hạn sát giờ",
                 $"Phiên {lot.Title} nhận giá mới trong 2 phút cuối nên giờ đóng chung lùi thêm {LiquidationV2Rules.ExtensionMinutes} phút (lần {count}/{LiquidationV2Rules.MaxExtensions})."));
         await work.SaveAsync(); await tx.CommitAsync();
         return new(bid.Id, item.Id, bid.UnitPrice, LiquidationV2Rules.Amount(item.Quantity, bid.UnitPrice), bid.CreatedAt, lot.BiddingEnd, lot.ExtensionCount, extended);
@@ -414,7 +414,7 @@ public sealed class LiquidationV2Service(ILiquidationV2Repository repository, ID
                 if (a.PaymentReportedAt == null)
                 {
                     a.PaymentReference = reference; a.PaymentReportedAt = now;
-                    repository.AddNotice(Notification.ForLiquidation(a.Lot.SellerId, a.LotId, "Chủ kho báo đã thanh toán",
+                    repository.AddNotice(SellerNotice(a.Lot.SellerId, a.LotId, "Chủ kho báo đã thanh toán",
                         $"Chủ kho báo đã thanh toán {a.Amount:N0} đ cho phiên {a.Lot.Title}. Hãy đối chiếu tiền thực nhận trước khi xác nhận."));
                 }
             }
@@ -425,7 +425,7 @@ public sealed class LiquidationV2Service(ILiquidationV2Repository repository, ID
                 if (a.OwnerCollectedAt == null)
                 {
                     a.OwnerCollectedAt = now;
-                    repository.AddNotice(Notification.ForLiquidation(a.Lot.SellerId, a.LotId, "Chủ kho đã nhận hàng",
+                    repository.AddNotice(SellerNotice(a.Lot.SellerId, a.LotId, "Chủ kho đã nhận hàng",
                         $"Chủ kho xác nhận đã nhận đủ các hạng mục đã mua của phiên {a.Lot.Title}. Thỏa thuận hoàn tất."));
                 }
             }
@@ -499,7 +499,7 @@ public sealed class LiquidationV2Service(ILiquidationV2Repository repository, ID
             if (!winners.Contains((p.OwnerId, p.DepotId)))
                 repository.AddNotice(Notification.ForDepot(p.OwnerId, p.DepotId, "LIQUIDATION", "Phiên thanh lý đã kết thúc",
                     $"Phiên {lot.Title} đã đóng. Kho của bạn không thắng hạng mục nào.", targetType: "LIQUIDATION_V2", targetId: lot.Id));
-        repository.AddNotice(Notification.ForLiquidation(lot.SellerId, lot.Id, won.Count > 0 ? "Phiên thanh lý đã có kết quả" : "Phiên kết thúc chưa bán được",
+        repository.AddNotice(SellerNotice(lot.SellerId, lot.Id, won.Count > 0 ? "Phiên thanh lý đã có kết quả" : "Phiên kết thúc chưa bán được",
             won.Count > 0 ? $"Phiên {lot.Title}: {won.Count}/{items.Count} hạng mục có kho thắng, chia cho {winners.Count} kho. Mở chi tiết để theo dõi thanh toán và bàn giao."
                 : $"Phiên {lot.Title} kết thúc mà không có lượt trả giá hợp lệ."));
         await work.SaveAsync(); await tx.CommitAsync();
@@ -536,7 +536,7 @@ public sealed class LiquidationV2Service(ILiquidationV2Repository repository, ID
         var text = resolution == "CANCELLED"
             ? $"Admin đã hủy thỏa thuận phiên {a.Lot.Title}. Hệ thống không tự phạt hay chuyển cho người trả giá khác; tiền đã giao (nếu có) do hai bên tự hoàn trả. Ghi chú: {note}"
             : $"Admin quyết định tiếp tục thực hiện thỏa thuận phiên {a.Lot.Title}. Ghi chú: {note}";
-        repository.AddNotice(Notification.ForLiquidation(a.Lot.SellerId, a.LotId, "Admin đã xử lý báo bỏ mua", text));
+        repository.AddNotice(SellerNotice(a.Lot.SellerId, a.LotId, "Admin đã xử lý báo bỏ mua", text));
         repository.AddNotice(Notification.ForDepot(a.BuyerId, a.DepotId, "LIQUIDATION", "Admin đã xử lý báo bỏ mua", text, targetType: "LIQUIDATION_V2", targetId: a.LotId));
         await work.SaveAsync(); await tx.CommitAsync();
         return DisputeDto(await DisputeRowAsync(a));
@@ -554,6 +554,10 @@ public sealed class LiquidationV2Service(ILiquidationV2Repository repository, ID
         r.Agreement.AbandonReason!, r.Agreement.Resolution, r.Agreement.ResolutionNote, r.Agreement.ResolvedAt);
 
     // ───────────────────────── Dùng chung ─────────────────────────
+    // Thông báo cho Seller của phiên V2: đích LIQUIDATION_V2 để giao diện mở trang phiên nhiều hạng mục, không mở nhầm trang V1.
+    private static Notification SellerNotice(Guid seller, Guid lot, string title, string message) => new()
+        { UserId = seller, Category = "LIQUIDATION", TargetType = "LIQUIDATION_V2", TargetId = lot, Title = title, Message = message };
+
     private static void CheckPage(int page, int pageSize, string? search)
     {
         if (page < 1 || pageSize is < 1 or > 100 || search?.Length > 255) throw new ArgumentException("Bộ lọc hoặc phân trang không hợp lệ.");
@@ -580,7 +584,7 @@ public sealed class LiquidationV2Service(ILiquidationV2Repository repository, ID
         var message = $"Có báo bỏ mua/không thực hiện cho phiên {a.Lot.Title}. Lý do: {reason}. Thỏa thuận tạm dừng chờ Admin xử lý.";
         repository.AddNotice(depotId.HasValue
             ? Notification.ForDepot(toUser, depotId.Value, "LIQUIDATION", "Thỏa thuận có báo bỏ mua", message, targetType: "LIQUIDATION_V2", targetId: a.LotId)
-            : Notification.ForLiquidation(toUser, a.LotId, "Thỏa thuận có báo bỏ mua", message));
+            : SellerNotice(toUser, a.LotId, "Thỏa thuận có báo bỏ mua", message));
     }
 
     /// <summary>Giai đoạn kinh tế suy từ các mốc xác nhận rõ ràng, không nén thành một chữ COMPLETED khó hiểu.</summary>

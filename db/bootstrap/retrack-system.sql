@@ -1444,6 +1444,39 @@ CREATE TABLE IF NOT EXISTS liquidation_agreement_items (
 CREATE INDEX IF NOT EXISTS ix_liquidation_agreement_items_agreement ON liquidation_agreement_items(agreement_id);
 -- RETRACK_LIQUIDATION_V2_END
 
+-- RETRACK_SUBSCRIPTION_REFUND_V1: yêu cầu hoàn tiền gói quản lý Depot do Admin duyệt.
+-- Tách "đã duyệt" với "đã chuyển tiền hoàn thật"; lưu số tiền, lý do, người duyệt, chứng từ và lịch sử (audit_logs).
+-- Hoàn kỳ chưa bắt đầu chỉ rút đúng kỳ đó (period_revoked_at), không xóa các kỳ khác. Tiền hàng không đi qua bảng này.
+ALTER TABLE depot_subscription_orders ADD COLUMN IF NOT EXISTS period_revoked_at TIMESTAMPTZ;
+CREATE TABLE IF NOT EXISTS depot_subscription_refunds (
+ id UUID PRIMARY KEY,
+ order_id UUID NOT NULL REFERENCES depot_subscription_orders(id) ON DELETE RESTRICT,
+ depot_id UUID NOT NULL REFERENCES depots(id) ON DELETE RESTRICT,
+ kind VARCHAR(30) NOT NULL CHECK (kind IN ('DUPLICATE_OR_EXCESS','SHORT_PAYMENT','UNUSED_PERIOD','SERVICE_ERROR','LATE_PAYMENT')),
+ status VARCHAR(20) NOT NULL DEFAULT 'REQUESTED' CHECK (status IN ('REQUESTED','APPROVED','REJECTED','REFUNDED')),
+ requested_by UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+ requested_role VARCHAR(10) NOT NULL CHECK (requested_role IN ('OWNER','ADMIN')),
+ requested_at TIMESTAMPTZ NOT NULL,
+ requested_amount NUMERIC(18,0) NOT NULL CHECK (requested_amount BETWEEN 1 AND 10000000),
+ reason VARCHAR(1000) NOT NULL, evidence_url TEXT, evidence_reference VARCHAR(255),
+ approved_amount NUMERIC(18,0) CHECK (approved_amount BETWEEN 1 AND 10000000),
+ decided_by UUID REFERENCES users(id) ON DELETE RESTRICT, decided_at TIMESTAMPTZ, decision_note VARCHAR(1000),
+ refunded_by UUID REFERENCES users(id) ON DELETE RESTRICT, refunded_at TIMESTAMPTZ,
+ refund_reference VARCHAR(255), refund_proof_url TEXT,
+ period_revoked BOOLEAN NOT NULL DEFAULT FALSE,
+ CONSTRAINT ck_subscription_refund_flow CHECK (
+   (status = 'REQUESTED' AND decided_at IS NULL AND approved_amount IS NULL AND refunded_at IS NULL)
+   OR (status = 'REJECTED' AND decided_at IS NOT NULL AND decided_by IS NOT NULL AND decision_note IS NOT NULL AND approved_amount IS NULL AND refunded_at IS NULL)
+   OR (status = 'APPROVED' AND decided_at IS NOT NULL AND decided_by IS NOT NULL AND approved_amount IS NOT NULL AND refunded_at IS NULL)
+   OR (status = 'REFUNDED' AND decided_at IS NOT NULL AND approved_amount IS NOT NULL AND refunded_at IS NOT NULL AND refunded_by IS NOT NULL AND refund_reference IS NOT NULL)),
+ CONSTRAINT ck_subscription_refund_amount CHECK (approved_amount IS NULL OR approved_amount <= requested_amount),
+ CONSTRAINT ck_subscription_refund_period CHECK (NOT period_revoked OR (kind = 'UNUSED_PERIOD' AND status IN ('APPROVED','REFUNDED')))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_subscription_refund_open ON depot_subscription_refunds(order_id) WHERE status = 'REQUESTED';
+CREATE INDEX IF NOT EXISTS ix_subscription_refunds_status ON depot_subscription_refunds(status, requested_at DESC, id);
+CREATE INDEX IF NOT EXISTS ix_subscription_refunds_depot ON depot_subscription_refunds(depot_id, requested_at DESC, id);
+-- RETRACK_SUBSCRIPTION_REFUND_V1_END
+
 -- RETRACK_SCHEMA_END
 
 -- RETRACK_SEED_BEGIN
