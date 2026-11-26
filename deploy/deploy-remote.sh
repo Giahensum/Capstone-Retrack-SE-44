@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # CD — chạy TRÊN VPS (GitHub Actions gọi qua SSH, hoặc chạy tay): đưa image API đã build sẵn lên chạy cùng Postgres.
 #   IMAGE=ghcr.io/<owner>/retrack-api:<tag> bash /opt/retrack/deploy-remote.sh
-# Biến: GHCR_USER + GHCR_TOKEN (để kéo image riêng tư; CD truyền token tạm), HEALTH_TIMEOUT=120 (giây), KEEP_BACKUPS=7, SKIP_PULL=1 (dùng image có sẵn).
+# Biến: GHCR_USER + GHCR_TOKEN (để kéo image riêng tư; CD truyền token tạm), HEALTH_TIMEOUT=120 (giây), KEEP_BACKUPS=7, SKIP_PULL=1 (dùng image có sẵn),
+#       MIN_FREE_MB=1500 (dung lượng trống tối thiểu; thiếu thì dừng TRƯỚC khi đụng tới Postgres).
+# Ổ đĩa: dọn image API cũ (giữ image đang chạy + image mới), image treo, build cache và container đã dừng. KHÔNG bao giờ xoá volume.
 # Các bước: sinh file khởi tạo DB → đảm bảo Postgres chạy → sao lưu DB (nếu DB đã có dữ liệu) → ghi image mới → chạy API → chờ khoẻ → dọn.
 # Lỗi sau khi đổi image ⇒ tự quay về image cũ (CHỈ code). Schema KHÔNG tự đổi: file SQL chỉ chạy khi volume DB còn trống (lần đầu);
 # sửa schema sau đó do nhóm chạy tay (đúng quy ước AGENTS.md: không migrate tự động lên DB dùng chung).
@@ -28,6 +30,40 @@ set_env() {   # set_env KEY VALUE — ghi/cập nhật một dòng trong .env.pr
   chmod 600 .env.production
 }
 
+MIN_FREE_MB=${MIN_FREE_MB:-1500}
+DOCKER_ROOT=$(docker info -f '{{.DockerRootDir}}' 2>/dev/null || echo /var/lib/docker)
+free_mb() { df -Pm "$1" 2>/dev/null | awk 'NR==2 {print $4}'; }
+min_free() {   # dung lượng trống nhỏ nhất (MB) giữa thư mục Docker (chứa volume pg_data) và thư mục triển khai (chứa backups/)
+  local a b; a=$(free_mb "$DOCKER_ROOT"); b=$(free_mb .)
+  a=${a:-0}; b=${b:-0}; [ "$a" -lt "$b" ] && echo "$a" || echo "$b"
+}
+# Dọn image API cũ: chỉ giữ các tag được truyền vào (image đang chạy, image sắp chạy). Image đang được container dùng sẽ tự bị docker từ chối xoá.
+prune_api_images() {
+  local repo=${IMAGE%:*} keep tag
+  docker images "$repo" --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | while read -r tag; do
+    keep=0
+    for k in "$@"; do [ -n "$k" ] && [ "$tag" = "$k" ] && keep=1; done
+    [ "$keep" = 1 ] || [ "$tag" = "$repo:<none>" ] || docker rmi "$tag" >/dev/null 2>&1 || true
+  done
+}
+free_disk() {   # free_disk <tag giữ lại>... — an toàn khi DB đang chạy/hỏng: không đụng volume, không đụng container đang chạy
+  prune_api_images "$@"
+  docker container prune -f >/dev/null 2>&1 || true
+  docker image prune -f >/dev/null 2>&1 || true
+  docker builder prune -f >/dev/null 2>&1 || true
+}
+require_space() {   # require_space <bước> — dừng sớm với hướng dẫn nếu ổ đĩa vẫn thiếu
+  local free; free=$(min_free)
+  if [ "$free" -lt "$MIN_FREE_MB" ]; then
+    echo "Ổ đĩa còn ${free} MB (< ${MIN_FREE_MB} MB) trước bước: $1 — dừng để Postgres không bị PANIC \"No space left on device\"."
+    df -h "$DOCKER_ROOT" . || true
+    docker system df || true
+    echo "Xem mục 'Ổ đĩa đầy' trong deploy/README.md (dọn image/log/backups cũ; KHÔNG xoá volume pg_data)."
+    exit 1
+  fi
+  echo "Ổ đĩa trống: ${free} MB (bước: $1)"
+}
+
 POSTGRES_USER=$(envval POSTGRES_USER); POSTGRES_USER=${POSTGRES_USER:-retrack}
 POSTGRES_DB=$(envval POSTGRES_DB); POSTGRES_DB=${POSTGRES_DB:-retrack}
 SEED_DEMO=$(envval SEED_DEMO); SEED_DEMO=${SEED_DEMO:-off}
@@ -45,6 +81,9 @@ fi
 
 # 2) Đăng nhập GHCR (nếu có) và kéo image
 PREV=$(envval API_IMAGE)
+# Dọn trước khi kéo: lần deploy lỗi trước đó có thể đã để lại image và log làm đầy ổ đĩa.
+free_disk "$PREV" "$IMAGE"
+require_space "kéo image $IMAGE"
 if [ -n "${GHCR_TOKEN:-}" ]; then echo "$GHCR_TOKEN" | docker login ghcr.io -u "${GHCR_USER:-github}" --password-stdin >/dev/null; fi
 if [ "${SKIP_PULL:-0}" != 1 ]; then
   # Kéo image có thử lại: lỗi mạng/containerd thoáng qua không làm hỏng cả lần triển khai (nhưng lỗi thật vẫn dừng script).
@@ -58,7 +97,8 @@ fi
 # 3) Compose cần API_IMAGE hợp lệ cho mọi lệnh ⇒ ghi image mới ngay; lỗi thì đặt lại $PREV ở bước 6
 set_env API_IMAGE "$IMAGE"
 
-# 4) Postgres lên trước, đợi sẵn sàng
+# 4) Postgres lên trước, đợi sẵn sàng (Postgres cần chỗ ghi WAL/checkpoint; thiếu là crash lặp vô hạn)
+require_space "bật Postgres"
 "${COMPOSE[@]}" up -d db
 for i in $(seq 1 60); do
   "${COMPOSE[@]}" exec -T db pg_isready -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1 && break
@@ -69,6 +109,8 @@ done
 # 5) Sao lưu DB trước khi đổi code (bỏ qua nếu DB mới tinh: chưa có bảng nào)
 TABLES=$("${COMPOSE[@]}" exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "select count(*) from information_schema.tables where table_schema='public'" 2>/dev/null || echo 0)
 if [ "${TABLES:-0}" -gt 0 ]; then
+  ls -1t backups/pre-*.dump 2>/dev/null | tail -n +$((KEEP_BACKUPS)) | xargs -r rm -f   # chừa chỗ cho bản mới
+  require_space "sao lưu DB"
   "${COMPOSE[@]}" exec -T db pg_dump -U "$POSTGRES_USER" -Fc "$POSTGRES_DB" > "backups/pre-$TS.dump"
   [ -s "backups/pre-$TS.dump" ] || { echo "Sao lưu DB rỗng — dừng, chưa đổi code"; rm -f "backups/pre-$TS.dump"; set_env API_IMAGE "$PREV"; exit 1; }
   echo "Đã sao lưu DB: backups/pre-$TS.dump"
@@ -94,7 +136,8 @@ healthy() {
 
 if healthy; then
   echo "Triển khai thành công: $IMAGE"
-  docker image prune -f >/dev/null || true
+  free_disk "$IMAGE" "$PREV"   # giữ bản trước để quay lui tay khi cần
+  echo "Ổ đĩa trống sau khi dọn: $(min_free) MB"
   [ -n "${GHCR_TOKEN:-}" ] && docker logout ghcr.io >/dev/null 2>&1 || true
   exit 0
 fi
