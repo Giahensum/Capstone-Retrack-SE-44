@@ -5,6 +5,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { labels } from "../data/factoryState";
 import { loadFactoryState, performFactoryAction } from "../data/factoryApi";
 import { downloadFactoryAttachment } from "../data/factoryApi";
+import { useShellPage } from "@/components/layout/AppShell";
+import { X } from "lucide-react";
 
 const Context = createContext(null);
 export const useFactory = () => useContext(Context);
@@ -103,7 +105,9 @@ export function Button({ children, secondary, danger, disabled = false, ...props
   return <button className={`btn ${secondary ? "secondary" : ""} ${danger ? "danger" : ""}`} type="button" disabled={disabled || mutationBusy} {...props}>{children}</button>;
 }
 export function PageHead({ eyebrow, title, text, children }) {
-  return <div className="page-head"><div><span className="eyebrow">{eyebrow || "VẬN HÀNH NHÀ MÁY"}</span><h1>{title}</h1><p>{text}</p></div><div className="actions">{children}</div></div>;
+  const shell = useShellPage();
+  const Icon = shell?.icon;
+  return <div className="page-head"><div className="page-head-main">{Icon && <span className="page-head-icon" aria-hidden="true"><Icon size={23} /></span>}<div><span className="eyebrow">{eyebrow || "VẬN HÀNH NHÀ MÁY"}</span><h1>{title}</h1><p>{text}</p></div></div><div className="actions">{children}</div></div>;
 }
 export function Card({ title, children, action, className = "" }) {
   return <section className={`panel ${className}`}>{title && <div className="panel-heading"><h2>{title}</h2>{action}</div>}<div className="panel-body">{children}</div></section>;
@@ -134,7 +138,7 @@ export function Modal({ title, children, onClose, busy = false }) {
     return () => { dialog.close(); document.body.style.overflow = overflow; previous?.focus(); };
   }, []);
   return <dialog ref={ref} className="factory-dialog" aria-labelledby="factory-dialog-title" onCancel={(e) => { if (isBusy) e.preventDefault(); else onClose(); }}>
-    <div className="dialog-head"><h2 id="factory-dialog-title">{title}</h2><button disabled={isBusy} onClick={onClose} aria-label="Đóng hộp thoại">×</button></div>
+    <div className="dialog-head"><h2 id="factory-dialog-title">{title}</h2><button type="button" className="dialog-close" disabled={isBusy} onClick={onClose} aria-label="Đóng hộp thoại"><X size={20} aria-hidden="true" /></button></div>
     <div className="dialog-body">{children}</div>
   </dialog>;
 }

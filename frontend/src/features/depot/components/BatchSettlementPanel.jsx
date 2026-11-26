@@ -28,7 +28,7 @@ export default function BatchSettlementPanel({ detail, id }) {
       <label className="flex gap-2 text-sm"><Input name="confirmation" data-field-label="Xác nhận đối chiếu giá và số tiền" type="checkbox" checked={checked} disabled={decision.isPending} onChange={e => setChecked(e.target.checked)} />{detail.quality?.isAccepted === false ? "Tôi đồng ý bán lô theo hiện trạng KCS không đạt, với khối lượng, đơn giá và số tiền của phiên bản này." : "Tôi đồng ý khối lượng, đơn giá và số tiền của phiên bản này."}</label>
       <div className="flex flex-wrap gap-3">
         <button type="submit" value="accept" className={buttonClass} disabled={decision.isPending}>Đồng ý giá và số tiền</button>
-        <button type="submit" value="dispute" className="rounded-full border border-d-border-subtle px-4 py-2 text-d-primary disabled:opacity-40" disabled={decision.isPending}>Yêu cầu điều chỉnh giá</button>
+        <button type="submit" value="dispute" className="inline-flex items-center justify-center gap-2 rounded-full font-semibold transition active:scale-[.98] disabled:pointer-events-none disabled:opacity-50 outline-none focus-visible:ring-2 focus-visible:ring-d-primary/30 focus-visible:ring-offset-1 min-h-11 px-5 py-2 text-sm border border-d-border-subtle bg-white text-d-on-surface hover:bg-d-surface-container" disabled={decision.isPending}>Yêu cầu điều chỉnh giá</button>
       </div><MutationError mutation={decision} />
     </Form>}
     <BatchDetailSection title={<span role="heading" aria-level="4">Lịch sử xác nhận của hai bên</span>}>

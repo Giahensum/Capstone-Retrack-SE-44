@@ -5,6 +5,7 @@ import { buttonClass, inputClass, MutationError, Pager, QueryState } from './com
 import ProofUpload from './components/ProofUpload';
 import PlatformFees from './PlatformFees';
 import { Link } from 'react-router-dom';
+import { PageHeader, buttonClass as kitButton } from '@/components/ui/kit';
 
 const labels = { ACTIVE: 'Đang sử dụng', TRIAL: 'Đang dùng thử', NOT_STARTED: 'Chưa bắt đầu', EXPIRED: 'Đã hết hạn', DISABLED: 'Chưa mở bán gói' };
 const orderLabels = { PENDING: 'Chờ thanh toán', PAID: 'Đã kích hoạt', CANCELLED: 'Đã đóng' };
@@ -32,7 +33,7 @@ function OrderPayment({ order, payOsAvailable }) {
         {!payOsAvailable && <p role="status" className="text-sm">PayOS chưa được cấu hình. Chọn chuyển khoản và gửi chứng từ nếu Admin đã cung cấp tài khoản nhận tiền.</p>}
         {!safeCheckout && <button type="button" className={buttonClass} disabled={busy || !payOsAvailable} onClick={() => link.mutate()}>{link.isPending ? 'Đang tạo…' : 'Tạo mã thanh toán gói'}</button>}
         {safeCheckout && <a className={buttonClass} href={checkout} target="_blank" rel="noopener noreferrer">Mở trang thanh toán PayOS</a>}
-        {(order.payOsStarted || safeCheckout || link.isError) && <button type="button" className="min-h-11 rounded-full border border-d-border-subtle px-4" disabled={busy} onClick={() => sync.mutate()}>Kiểm tra đã thanh toán</button>}
+        {(order.payOsStarted || safeCheckout || link.isError) && <button type="button" className="inline-flex items-center justify-center gap-2 rounded-full font-semibold transition active:scale-[.98] disabled:pointer-events-none disabled:opacity-50 outline-none focus-visible:ring-2 focus-visible:ring-d-primary/30 focus-visible:ring-offset-1 min-h-11 px-5 py-2 text-sm border border-d-border-subtle bg-white text-d-on-surface hover:bg-d-surface-container" disabled={busy} onClick={() => sync.mutate()}>Kiểm tra đã thanh toán</button>}
         {sync.isSuccess && <p role="status">Đã kiểm tra: {orderLabels[sync.data?.data?.data] ?? 'Đang chờ kết quả thanh toán'}. Hạn gói chỉ cập nhật khi đã nhận đủ tiền.</p>}
       </div> : <ManualPaymentAccount account={account} />}
       {method === 'manual' && <Form className="space-y-3" onSubmit={e => { e.preventDefault(); submit.mutate({ body: { proofUrl: proof, reference } }); }}>
@@ -63,11 +64,11 @@ export default function Subscription() {
   const d = q.data;
   const pending = orders.data?.items.find(x => x.status === 'PENDING');
   const busy = trial.isPending || buy.isPending;
-  if (legacy) return <><button className="m-4 min-h-11 rounded-full border border-d-border-subtle px-5" onClick={() => setLegacy(false)}>← Quay lại gói dịch vụ</button><PlatformFees /></>;
+  if (legacy) return <><button type="button" className={kitButton({ variant: 'secondary', className: 'm-4' })} onClick={() => setLegacy(false)}>← Quay lại gói dịch vụ</button><PlatformFees /></>;
   return <div className="mx-auto w-full max-w-7xl space-y-6 p-4 md:p-6">
-    <div><h1 className="text-2xl font-bold">Gói quản lý kho</h1><p className="mt-2 text-d-on-surface-variant">Thanh toán cho phần mềm quản lý của kho đang chọn. RETRACK không thu hoa hồng giao dịch mới; tiền hàng do các bên tự thanh toán.</p></div>
-    <QueryState query={q}>{d && <section className="rounded-2xl border border-d-border-subtle bg-white p-5 space-y-4">
-      <div className="flex flex-wrap justify-between gap-4"><div><h2 className="text-xl font-bold">RETRACK Quản lý kho</h2><p className="mt-2 text-2xl font-bold text-d-primary">{money(d.monthlyPrice)} <span className="text-base font-normal">/ kho / tháng</span></p></div><span className="self-start rounded-full bg-d-surface-accent px-4 py-2 font-semibold">{labels[d.status]}</span></div>
+    <PageHeader title="Gói quản lý kho" description="Thanh toán cho phần mềm quản lý của kho đang chọn. RETRACK không thu hoa hồng giao dịch mới; tiền hàng do các bên tự thanh toán." />
+    <QueryState query={q}>{d && <section className="rounded-2xl border border-d-border-subtle bg-white p-5 shadow-sm space-y-4">
+      <div className="flex flex-wrap justify-between gap-4"><div><h2 className="text-lg font-bold">RETRACK Quản lý kho</h2><p className="mt-2 text-2xl font-bold text-d-primary">{money(d.monthlyPrice)} <span className="text-base font-normal">/ kho / tháng</span></p></div><span className="self-start rounded-full bg-d-surface-accent px-4 py-2 font-semibold">{labels[d.status]}</span></div>
       <p>Thu mua, nhập–xuất–tồn, đồ tái sử dụng, chi phí, báo cáo và quản lý đội ngũ. Seller, Factory, Employee và Driver không mua gói riêng.</p>
       <p className="text-sm">Hạn trả phí: <strong>{d.paidUntil ? date(d.paidUntil) : 'Chưa có'}</strong>{d.trialEndsAt && <> · Hạn dùng thử: <strong>{date(d.trialEndsAt)}</strong></>}</p>
       <p className="text-sm text-d-on-surface-variant">Gia hạn cộng một tháng lịch vào hạn còn lại; gói hết hạn thì tính từ ngày kích hoạt. Không tự gia hạn. Hết hạn vẫn xem dữ liệu, đối soát và hoàn tất giao dịch đang có; cần gói để mở nghiệp vụ mới. Hồ sơ kho vẫn cần Admin xác minh.</p>
@@ -77,7 +78,7 @@ export default function Subscription() {
     </section>}</QueryState>
     <QueryState query={orders}>
       {pending && <OrderPayment key={pending.id} order={pending} payOsAvailable={d?.payOsAvailable} />}
-      <section className="space-y-3"><h2 className="text-xl font-bold">Lịch sử mua và gia hạn</h2><div className="overflow-x-auto rounded-2xl border border-d-border-subtle bg-white"><table className="w-full min-w-[560px] text-left text-sm"><thead><tr>{['Ngày lập', 'Số tiền', 'Trạng thái', 'Thời hạn được cộng'].map(x => <th key={x} className="p-4">{x}</th>)}</tr></thead><tbody>{orders.data?.items.map(o => <tr key={o.id} className="border-t border-d-border-subtle"><td className="p-4">{date(o.createdAt)}</td><td className="p-4">{money(o.amount)}</td><td className="p-4">{o.status === 'PENDING' && o.proofUrl ? 'Chờ đối soát' : orderLabels[o.status] ?? o.status}</td><td className="p-4">{o.periodStart && o.periodEnd ? `${date(o.periodStart)} – ${date(o.periodEnd)}` : 'Chưa kích hoạt'}</td></tr>)}</tbody></table>{orders.data?.items.length === 0 && <p className="p-5">Chưa có đơn mua gói.</p>}</div><Pager page={page} setPage={setPage} total={orders.data?.totalCount} /></section>
+      <section className="space-y-3"><h2 className="text-lg font-bold">Lịch sử mua và gia hạn</h2><div className="overflow-x-auto rounded-2xl border border-d-border-subtle bg-white shadow-sm"><table className="w-full min-w-[560px] text-left text-sm"><thead><tr>{['Ngày lập', 'Số tiền', 'Trạng thái', 'Thời hạn được cộng'].map(x => <th key={x} className="p-4">{x}</th>)}</tr></thead><tbody>{orders.data?.items.map(o => <tr key={o.id} className="border-t border-d-border-subtle"><td className="p-4">{date(o.createdAt)}</td><td className="p-4">{money(o.amount)}</td><td className="p-4">{o.status === 'PENDING' && o.proofUrl ? 'Chờ đối soát' : orderLabels[o.status] ?? o.status}</td><td className="p-4">{o.periodStart && o.periodEnd ? `${date(o.periodStart)} – ${date(o.periodEnd)}` : 'Chưa kích hoạt'}</td></tr>)}</tbody></table>{orders.data?.items.length === 0 && <p className="p-5">Chưa có đơn mua gói.</p>}</div><Pager page={page} setPage={setPage} total={orders.data?.totalCount} /></section>
     </QueryState>
     <p className="text-sm text-d-on-surface-variant">Lịch sử mua gói là ghi nhận dịch vụ, chưa thay thế hóa đơn điện tử hợp pháp.</p>
     <button className="min-h-11 text-sm underline text-d-primary" onClick={() => setLegacy(true)}>Xem phí giao dịch và hóa đơn cũ</button>

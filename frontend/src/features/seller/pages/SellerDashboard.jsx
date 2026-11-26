@@ -17,7 +17,7 @@ const LiquidationDetail = lazy(() => import('./LiquidationDetail'));
 
 const PageLoader = () => (
   <div className="flex items-center justify-center h-64">
-    <div className="w-8 h-8 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+    <div className="w-8 h-8 border-[3px] border-[#446900] border-t-transparent rounded-full animate-spin" />
   </div>
 );
 

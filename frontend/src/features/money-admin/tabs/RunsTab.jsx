@@ -40,7 +40,7 @@ function MarkPaidDialog({ run, onClose, onDone }) {
       footer={(
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <GhostButton onClick={onClose} disabled={m.isPending}>Hủy</GhostButton>
-          <button type="submit" form="markpaid-form" disabled={m.isPending} className="rounded-full bg-d-primary px-6 py-2.5 text-sm font-bold text-white disabled:opacity-60">{m.isPending ? 'Đang lưu…' : 'Đánh dấu đã chi'}</button>
+          <button type="submit" form="markpaid-form" disabled={m.isPending} className="inline-flex items-center justify-center gap-2 rounded-full font-semibold transition active:scale-[.98] disabled:pointer-events-none disabled:opacity-50 outline-none focus-visible:ring-2 focus-visible:ring-d-primary/30 focus-visible:ring-offset-1 min-h-11 px-5 py-2 text-sm bg-d-primary text-white hover:bg-[#385500]">{m.isPending ? 'Đang lưu…' : 'Đánh dấu đã chi'}</button>
         </div>
       )}>
       <form id="markpaid-form" onSubmit={submit} className="flex flex-col gap-4">

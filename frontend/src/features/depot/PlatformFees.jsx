@@ -4,7 +4,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import ProofUpload from './components/ProofUpload';
 import { useDepotQuery, useDepotMutation, money, date } from './depotApi';
-import { Page, Cards, QueryState, GridTable, Pager, PeriodFilter, Dialog, MutationError, inputClass, buttonClass, cellClass } from './components/DepotUI';
+import { Page, Cards, QueryState, GridTable, Pager, PeriodFilter, Dialog, MutationError, inputClass, buttonClass, secondaryButtonClass, cellClass } from './components/DepotUI';
 const labels={UNPAID:'Chưa thanh toán',SUBMITTED:'Chờ đối soát',PAID:'Đã thanh toán'};
 function ConfirmInvoice({invoice,onClose}){
  const [proof,setProof]=useState(''); const [uploading,setUploading]=useState(false); const save=useDepotMutation('patch',`reports/invoices/${invoice.id}/confirmation`,onClose);
@@ -20,7 +20,7 @@ function SimulatePayment({invoice,onClose}){
   <p>Hóa đơn tháng {date(invoice.periodStart)}: {money(invoice.amount)}</p>
   <p className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">Chế độ thử nghiệm: không gọi PayOS và không chuyển tiền thật. Hệ thống chỉ lưu chứng từ giả lập, hóa đơn sẽ chờ Admin đối soát.</p>
   <MutationError mutation={save}/>
-  <div className="mt-4 flex flex-wrap gap-3"><button disabled={save.isPending} className={buttonClass} onClick={()=>save.mutate({})}>{save.isPending?'Đang giả lập…':'Mô phỏng thanh toán thành công'}</button><button disabled={save.isPending} className={buttonClass} type="button" onClick={onClose}>Đóng</button></div>
+  <div className="mt-4 flex flex-wrap gap-3"><button disabled={save.isPending} className={buttonClass} onClick={()=>save.mutate({})}>{save.isPending?'Đang giả lập…':'Mô phỏng thanh toán thành công'}</button><button disabled={save.isPending} className={secondaryButtonClass} type="button" onClick={onClose}>Đóng</button></div>
  </Dialog>;
 }
 const orderCodeOf=(invoice)=>invoice?.payOsOrderCode==null?null:String(invoice.payOsOrderCode);

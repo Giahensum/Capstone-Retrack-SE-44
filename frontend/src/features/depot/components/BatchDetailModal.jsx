@@ -49,7 +49,7 @@ function Proof({ title, url }) {
   const [error, setError] = useState('');
   const path = factoryProofPath(url);
   if (path) return <div className="text-sm"><span>{title}: </span><button type="button" disabled={busy}
-    className="rounded-full border border-d-border-subtle px-4 py-2 text-d-primary disabled:opacity-40"
+    className="inline-flex items-center justify-center gap-2 rounded-full font-semibold transition active:scale-[.98] disabled:pointer-events-none disabled:opacity-50 outline-none focus-visible:ring-2 focus-visible:ring-d-primary/30 focus-visible:ring-offset-1 min-h-11 px-5 py-2 text-sm border border-d-border-subtle bg-white text-d-on-surface hover:bg-d-surface-container"
     onClick={async () => {
       setBusy(true); setError('');
       try {
@@ -102,7 +102,7 @@ export default function BatchDetailModal({ id, onClose }) {
       <h3 className="font-semibold text-d-primary">Xác nhận tiền thực nhận</h3>
       <p className="text-sm text-d-on-surface-variant">Hình thức {paymentMethodLabel(s.paymentMethod)}. Đối chiếu đã nhận đủ {cash(s.netAmount)} và căn cứ {s.paymentReference} trước khi xác nhận.</p>
       <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={confirming} onChange={(e) => setConfirming(e.target.checked)} />Tôi đã kiểm tra và nhận đủ số tiền trên.</label>
-      <button type="button" disabled={!confirming || confirmPayment.isPending} className="rounded-xl bg-d-primary px-4 py-2 text-white disabled:opacity-40"
+      <button type="button" disabled={!confirming || confirmPayment.isPending} className="inline-flex items-center justify-center gap-2 rounded-full font-semibold transition active:scale-[.98] disabled:pointer-events-none disabled:opacity-50 outline-none focus-visible:ring-2 focus-visible:ring-d-primary/30 focus-visible:ring-offset-1 min-h-11 px-5 py-2 text-sm bg-d-primary text-white hover:bg-[#385500]"
         onClick={() => confirmPayment.mutate({ body: { amount: s.netAmount, paymentReference: s.paymentReference } })}>
         {confirmPayment.isPending ? 'Đang xác nhận…' : 'Xác nhận đã nhận tiền'}
       </button>

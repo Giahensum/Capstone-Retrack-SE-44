@@ -11,7 +11,7 @@ export function StockExpenseFields({ expenses, setExpenses }) {
       <label>Nhóm chi phí {index + 1}<Select className={inputClass} value={x.category} onChange={e => update(x.key, { category: e.target.value })}>{Object.entries(categories).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</Select></label>
       <label>Số tiền (đ)<Input data-field-label={`Số tiền (đ) — chi phí ${index + 1}`} required type="number" min="0" max="1000000000000" step="1" className={inputClass} value={x.amount} onChange={e => update(x.key, { amount: e.target.value })} /></label>
       <label className="sm:col-span-2">Mô tả / căn cứ phân bổ<Input data-field-label={`Mô tả / căn cứ phân bổ — chi phí ${index + 1}`} required maxLength={255} className={inputClass} value={x.description} onChange={e => update(x.key, { description: e.target.value })} /></label>
-      <button type="button" className="justify-self-start min-h-11 rounded-full px-3 border border-d-border-subtle text-d-error" onClick={() => setExpenses(expenses.filter(e => e.key !== x.key))}>Bỏ chi phí {index + 1}</button>
+      <button type="button" className="inline-flex items-center justify-center gap-2 rounded-full font-semibold transition active:scale-[.98] disabled:pointer-events-none disabled:opacity-50 outline-none focus-visible:ring-2 focus-visible:ring-d-primary/30 focus-visible:ring-offset-1 min-h-11 px-5 py-2 text-sm border border-d-border-subtle bg-white text-d-on-surface hover:bg-d-surface-container" onClick={() => setExpenses(expenses.filter(e => e.key !== x.key))}>Bỏ chi phí {index + 1}</button>
     </div>)}
   </section>;
 }

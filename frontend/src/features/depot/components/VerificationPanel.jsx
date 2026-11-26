@@ -17,7 +17,7 @@ export default function VerificationPanel({ admin = false, status }) {
     queryFn: async () => (await api.get(admin ? '/admin/depot-verifications' : '/depot/verifications', { params: { depotId: admin ? undefined : depot.depotId, page, status: filter } })).data.data });
   const decide = useMutation({ mutationFn: () => api.patch(`/admin/depot-verifications/${review.id}`, { approve: review.approve, reason }),
     onSuccess: async () => { setReview(null); setReason(''); await refresh(); } });
-  return <section className="rounded-[20px] border border-d-border-subtle bg-white p-4 md:p-6 space-y-5 mt-6">
+  return <section className="rounded-2xl border border-d-border-subtle bg-white p-4 md:p-6 space-y-5 mt-6">
     <h2 className="text-xl font-bold">{admin ? 'Duyệt hồ sơ kho vựa' : 'Hồ sơ xác minh kho'}</h2>
     {!admin && <><p role="status" className="font-semibold text-d-primary">{verificationLabels[status] ?? status}</p><p className="text-sm text-d-on-surface-variant">Hồ sơ chỉ chủ kho và Admin được xem. Kho chưa được duyệt chưa thể tạo giao dịch mới; các đơn và nghĩa vụ thanh toán đang có vẫn được xử lý.</p>
       {['UNVERIFIED', 'REJECTED'].includes(status) && <VerificationUploadForm key={depot.depotId} depotId={depot.depotId} onSuccess={refresh} />}</>}

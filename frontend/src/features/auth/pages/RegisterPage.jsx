@@ -304,7 +304,7 @@ export default function RegisterPage() {
   return (
     <div className="min-h-screen bg-[#f8f9ff] flex">
       {/* Left panel - Branding */}
-      <div className="hidden lg:flex lg:w-[45%] bg-gradient-to-br from-[#1f6c3a] to-[#0d3d20] relative overflow-hidden flex-col items-center justify-center p-12">
+      <div className="hidden lg:flex lg:w-[45%] bg-gradient-to-br from-[#446900] to-[#2d4700] relative overflow-hidden flex-col items-center justify-center p-12">
         <div className="absolute top-0 right-0 w-96 h-96 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2" />
         <div className="absolute bottom-0 left-0 w-64 h-64 bg-[#a4f1b2]/10 rounded-full translate-y-1/2 -translate-x-1/2" />
 

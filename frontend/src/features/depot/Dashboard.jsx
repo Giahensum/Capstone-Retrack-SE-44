@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { useDepotQuery, number, money } from './depotApi';
 import { QueryState } from './components/DepotUI';
 import { MaterialIcon } from './components/DepotIcon';
+import { PageHeader, StatCard } from '@/components/ui/kit';
 
 const Dashboard = () => {
   const query = useDepotQuery('dashboard');
@@ -26,72 +27,14 @@ const Dashboard = () => {
 
   return (
     <div className="flex flex-col p-4 md:p-6 gap-4 md:gap-5 w-full max-w-7xl mx-auto">
-      {/* Page Title */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between shrink-0">
-        <div>
-          <h1 className="font-d-headline-xl-mobile md:font-d-headline-xl text-d-headline-xl-mobile md:text-d-headline-xl text-d-on-surface">Bảng điều khiển</h1>
-          <p className="font-d-body-md text-d-body-md text-d-on-surface-variant mt-2">Theo dõi hoạt động kho vựa hôm nay.</p>
-        </div>
-      </div>
+      <PageHeader title="Bảng điều khiển" description="Theo dõi hoạt động kho vựa hôm nay." />
 
       <QueryState query={query}>
-        {/* KPI Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 shrink-0">
-          {/* KPI 1 */}
-          <div className="d-glass-panel rounded-xl p-4 md:p-5 relative overflow-hidden group">
-            <div className="absolute top-0 right-0 w-24 h-24 bg-d-primary/5 rounded-bl-full -mr-4 -mt-4 transition-transform group-hover:scale-110"></div>
-            <div className="flex justify-between items-start mb-3">
-              <div className="w-10 h-10 rounded-lg bg-d-surface-container flex items-center justify-center text-d-primary">
-                <MaterialIcon name="receipt_long" />
-              </div>
-            </div>
-            <div>
-              <p className="font-d-body-sm text-d-body-sm text-d-on-surface-variant mb-1">Đơn hàng mới (Hôm nay)</p>
-              <h3 className="font-d-headline-lg text-d-headline-lg text-d-on-surface">{d?.newRequestsToday ?? 0}</h3>
-            </div>
-          </div>
-
-          {/* KPI 2 */}
-          <div className="d-glass-panel rounded-xl p-4 md:p-5 relative overflow-hidden group">
-            <div className="absolute top-0 right-0 w-24 h-24 bg-d-secondary/5 rounded-bl-full -mr-4 -mt-4 transition-transform group-hover:scale-110"></div>
-            <div className="flex justify-between items-start mb-3">
-              <div className="w-10 h-10 rounded-lg bg-d-surface-container flex items-center justify-center text-d-secondary">
-                <MaterialIcon name="inventory" />
-              </div>
-            </div>
-            <div>
-              <p className="font-d-body-sm text-d-body-sm text-d-on-surface-variant mb-1">Tồn kho khả dụng (kg)</p>
-              <h3 className="font-d-headline-lg text-d-headline-lg text-d-on-surface">{number(d?.availableKg)}</h3>
-            </div>
-          </div>
-
-          {/* KPI 3 */}
-          <div className="d-glass-panel rounded-xl p-4 md:p-5 relative overflow-hidden group">
-            <div className="absolute top-0 right-0 w-24 h-24 bg-[#784f85]/5 rounded-bl-full -mr-4 -mt-4 transition-transform group-hover:scale-110"></div>
-            <div className="flex justify-between items-start mb-3">
-              <div className="w-10 h-10 rounded-lg bg-d-surface-container flex items-center justify-center text-[#784f85]">
-                <MaterialIcon name="local_shipping" />
-              </div>
-            </div>
-            <div>
-              <p className="font-d-body-sm text-d-body-sm text-d-on-surface-variant mb-1">Lô đang xuất</p>
-              <h3 className="font-d-headline-lg text-d-headline-lg text-d-on-surface">{d?.activeBatches ?? 0}</h3>
-            </div>
-          </div>
-
-          {/* KPI 4 */}
-          <div className="d-glass-panel rounded-xl p-4 md:p-5 relative overflow-hidden group">
-            <div className="absolute top-0 right-0 w-24 h-24 bg-d-primary/5 rounded-bl-full -mr-4 -mt-4 transition-transform group-hover:scale-110"></div>
-            <div className="flex justify-between items-start mb-3">
-              <div className="w-10 h-10 rounded-lg bg-d-surface-container flex items-center justify-center text-d-primary">
-                <MaterialIcon name="payments" />
-              </div>
-            </div>
-            <div>
-              <p className="font-d-body-sm text-d-body-sm text-d-on-surface-variant mb-1">Giá trị lô đã quyết toán tháng này</p>
-              <h3 className="font-d-headline-lg text-d-headline-lg text-d-on-surface">{money(d?.revenue)}</h3>
-            </div>
-          </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard label="Đơn hàng mới (hôm nay)" value={d?.newRequestsToday ?? 0} icon={<MaterialIcon name="receipt_long" className="text-xl" />} />
+          <StatCard label="Tồn kho khả dụng (kg)" value={number(d?.availableKg)} icon={<MaterialIcon name="inventory" className="text-xl" />} />
+          <StatCard label="Lô đang xuất" value={d?.activeBatches ?? 0} icon={<MaterialIcon name="local_shipping" className="text-xl" />} />
+          <StatCard label="Giá trị lô đã quyết toán tháng này" value={money(d?.revenue)} icon={<MaterialIcon name="payments" className="text-xl" />} />
         </div>
       </QueryState>
 
@@ -124,7 +67,7 @@ const Dashboard = () => {
       {/* Two Column Layout: Table & Chart */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 pb-4 md:pb-0">
         {/* Left: Recent Inbound Table (60%) */}
-        <div className="lg:col-span-7 bg-d-surface-container-lowest rounded-[20px] p-5 border border-d-border-subtle shadow-[0_20px_40px_rgba(23,33,27,0.02)] flex flex-col h-full overflow-hidden">
+        <div className="lg:col-span-7 bg-d-surface-container-lowest rounded-2xl p-5 border border-d-border-subtle shadow-[0_20px_40px_rgba(23,33,27,0.02)] flex flex-col h-full overflow-hidden">
           <div className="flex justify-between items-center mb-4 shrink-0">
             <h2 className="font-d-headline-md text-d-headline-md text-d-on-surface">Hoạt động nhập gần đây</h2>
             <Link to="/depot/inventory?tab=receipts" className="text-d-primary font-d-label-sm text-d-label-sm hover:underline">Xem tất cả</Link>
@@ -169,7 +112,7 @@ const Dashboard = () => {
         </div>
 
         {/* Right: Inventory Donut Chart (40%) */}
-        <div className="lg:col-span-5 bg-d-surface-container-lowest rounded-[20px] p-5 border border-d-border-subtle shadow-[0_20px_40px_rgba(23,33,27,0.02)] flex flex-col h-full overflow-hidden">
+        <div className="lg:col-span-5 bg-d-surface-container-lowest rounded-2xl p-5 border border-d-border-subtle shadow-[0_20px_40px_rgba(23,33,27,0.02)] flex flex-col h-full overflow-hidden">
           <h2 className="font-d-headline-md text-d-headline-md text-d-on-surface mb-2 shrink-0">Cơ cấu tồn kho</h2>
           <QueryState query={stock}>
             <div className="flex-1 flex flex-col items-center justify-center relative min-h-0">

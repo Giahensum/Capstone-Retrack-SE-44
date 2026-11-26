@@ -42,7 +42,7 @@ function ReuseSaleForm({ item, onClose }) {
         <label className="block">Ghi chú giao nhận / chứng từ<Input required maxLength={1000} className={inputClass} value={form.note} onChange={e => field('note', e.target.value)} /></label>
       </fieldset>
 
-      <MutationError mutation={save} /><div className="flex justify-end gap-3"><button type="button" disabled={save.isPending} className="rounded-full border border-d-border-subtle px-4 py-2.5" onClick={onClose}>Hủy bỏ</button><button className={buttonClass} disabled={save.isPending}>{save.isPending ? 'Đang ghi…' : 'Xác nhận đã giao và ghi bán'}</button></div>
+      <MutationError mutation={save} /><div className="flex justify-end gap-3"><button type="button" disabled={save.isPending} className="inline-flex items-center justify-center gap-2 rounded-full font-semibold transition active:scale-[.98] disabled:pointer-events-none disabled:opacity-50 outline-none focus-visible:ring-2 focus-visible:ring-d-primary/30 focus-visible:ring-offset-1 min-h-11 px-5 py-2 text-sm border border-d-border-subtle bg-white text-d-on-surface hover:bg-d-surface-container" onClick={onClose}>Hủy bỏ</button><button className={buttonClass} disabled={save.isPending}>{save.isPending ? 'Đang ghi…' : 'Xác nhận đã giao và ghi bán'}</button></div>
     </Form>
   </Dialog>;
 }
