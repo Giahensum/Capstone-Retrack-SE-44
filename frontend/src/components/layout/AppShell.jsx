@@ -162,9 +162,15 @@ export default function AppShell({
   sidebarExtra,
   storageKey = 'retrack_sidebar',
   navLabel = 'Menu điều hướng',
+  contentScroll = false,
+  scrollKey,
   children,
 }) {
   const location = useLocation();
+  const contentRef = useRef(null);
+  useEffect(() => {
+    if (contentScroll) contentRef.current?.scrollTo({ top: 0, left: 0 });
+  }, [contentScroll, location.pathname, scrollKey]);
   const [collapsed, toggleCollapsed] = useCollapsed(storageKey);
   const [drawer, setDrawer] = useState(false);
   const [menu, setMenu] = useState(false);
@@ -192,7 +198,7 @@ export default function AppShell({
   const home = { homeTo, onHome, homeLabel };
 
   return (
-    <div className="flex min-h-screen bg-d-background font-d-body-md text-d-on-background">
+    <div className={`flex bg-d-background font-d-body-md text-d-on-background ${contentScroll ? 'h-dvh overflow-hidden' : 'min-h-screen'}`}>
       {/* Sidebar desktop: ghim vào khung nhìn, menu cuộn trong chính nó */}
       <aside
         aria-label="Thanh điều hướng"
@@ -235,12 +241,12 @@ export default function AppShell({
         </div>
       )}
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-40 flex h-16 items-center gap-3 border-b border-d-border-subtle bg-white/90 px-4 backdrop-blur md:px-6">
+      <div className={`flex min-w-0 flex-1 flex-col ${contentScroll ? 'min-h-0' : ''}`}>
+        <header className="sticky top-0 z-40 flex h-16 shrink-0 items-center gap-3 border-b border-d-border-subtle bg-white/90 px-4 backdrop-blur md:px-6">
           <button type="button" onClick={() => setDrawer(true)} aria-label="Mở menu" aria-expanded={drawer} className="flex size-10 items-center justify-center rounded-full text-d-on-surface-variant hover:bg-d-surface-container lg:hidden"><Menu size={22} /></button>
           <HomeLink home={home} className="lg:hidden"><BrandMark size={30} /></HomeLink>
 
-          <nav aria-label="Đường dẫn" className="flex min-w-0 flex-1 items-center gap-1.5 text-sm text-d-on-surface-variant">
+          <nav aria-label="Đường dẫn" className={`${contentScroll ? 'hidden sm:flex' : 'flex'} min-w-0 flex-1 items-center gap-1.5 text-sm text-d-on-surface-variant`}>
             <HomeLink home={home} className="flex items-center gap-1.5 hover:text-d-primary"><Home size={15} /><span className="hidden sm:inline">{homeLabel}</span></HomeLink>
             {crumbText && <><ChevronRight size={14} className="hidden shrink-0 sm:block" /><span className="hidden truncate font-bold text-d-primary sm:inline">{crumbText}</span></>}
           </nav>
@@ -275,7 +281,7 @@ export default function AppShell({
           </div>
         </header>
 
-        <main className="retrack-content min-w-0 flex-1"><ShellPageContext.Provider value={shellPage}>{children}</ShellPageContext.Provider></main>
+        <main ref={contentRef} tabIndex={contentScroll ? 0 : undefined} className={`retrack-content min-w-0 flex-1 ${contentScroll ? 'min-h-0 overflow-y-auto overscroll-contain' : ''}`}><ShellPageContext.Provider value={shellPage}>{children}</ShellPageContext.Provider></main>
       </div>
     </div>
   );
