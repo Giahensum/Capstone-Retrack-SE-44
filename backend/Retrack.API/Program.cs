@@ -68,6 +68,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 
 builder.Services.AddAuthorization();
+builder.Services.AddOptions<Retrack.API.Services.Depot.DepotCapacityOptions>()
+    .Bind(builder.Configuration.GetSection("DepotCapacity")).ValidateDataAnnotations().ValidateOnStart();
 builder.Services.AddVerificationRateLimits();
 builder.Services.AddOptions<Retrack.API.Services.Depot.VerificationScannerOptions>()
     .Bind(builder.Configuration.GetSection("VerificationScanner"))

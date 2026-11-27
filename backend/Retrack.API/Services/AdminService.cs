@@ -60,6 +60,7 @@ namespace Retrack.API.Services
         private readonly INotificationService _notificationService;
         private readonly AppDbContext _db;
         private readonly TimeProvider _clock;
+        private readonly Depot.DepotCapacityOptions _capacity;
 
         public AdminService(
             IUserRepository userRepo,
@@ -67,7 +68,7 @@ namespace Retrack.API.Services
             IAuditLogRepository auditRepo,
             IPlatformInvoiceRepository invoiceRepo,
             INotificationService notificationService,
-            AppDbContext db, TimeProvider? clock = null)
+            AppDbContext db, TimeProvider? clock = null, Microsoft.Extensions.Options.IOptions<Depot.DepotCapacityOptions>? capacity = null)
         {
             _userRepo = userRepo;
             _priceRepo = priceRepo;
@@ -76,6 +77,7 @@ namespace Retrack.API.Services
             _notificationService = notificationService;
             _db = db;
             _clock = clock ?? TimeProvider.System;
+            _capacity = capacity?.Value ?? new();
         }
 
         // ── Dashboard ──────────────────────────────────────────────────
@@ -202,11 +204,23 @@ namespace Retrack.API.Services
                     throw new InvalidOperationException("Không thể vô hiệu hóa tài khoản Admin cuối cùng.");
             }
 
+            // Dùng cùng khóa với StaffService để Admin không kích hoạt vượt hạn mức kho.
+            var staffRepository = new DepotStaffRepository(_db);
+            var depotIds = await _db.DepotStaffs.Where(s => s.UserId == id).Select(s => s.DepotId).Distinct().ToArrayAsync();
+            await using var capacityTransaction = await staffRepository.LockAsync(depotIds);
+            await _db.Entry(user).ReloadAsync();
+            if (isActive && !user.IsActive)
+            {
+                foreach (var depotId in depotIds)
+                    if (await _db.DepotStaffs.AnyAsync(s => s.UserId == id && s.DepotId == depotId && s.IsActive))
+                        _capacity.RequireStaffSlot(await staffRepository.CountActiveAsync(depotId));
+            }
             var wasActive = user.IsActive;
             user.IsActive = isActive;
             await _userRepo.UpdateAsync(user);
 
             await LogAsync(actorId, isActive ? "ACTIVATE" : "DEACTIVATE", "User", user.Id, new { IsActive = wasActive }, new { user.IsActive });
+            await capacityTransaction.CommitAsync();
             return MapDetail(user);
         }
 
