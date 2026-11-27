@@ -18,11 +18,16 @@ public sealed class EmployeeDailyPlanRepository(AppDbContext db)
         .Select(s => s.UserId).Distinct().OrderBy(id => id).ToListAsync(ct);
     public Task<List<EmployeeDispatchShift>> DayShiftsAsync(Guid[] employees, DateTime start, DateTime end, CancellationToken ct) =>
         db.EmployeeDispatchShifts.Where(s => employees.Contains(s.EmployeeId) && s.StartsAt < end && s.EndsAt > start).ToListAsync(ct);
-    public Task<List<DailyPoint>> PointsAsync(Guid depot, DateTime end, CancellationToken ct) => db.PickupRequests
-        .Where(p => p.TargetDepotId == depot && (p.Status == "PENDING" || p.Status == "SCHEDULED" || p.Status == "IN_PROGRESS")
+    public Task<List<DailyPoint>> PointsAsync(Guid depot, DateTime end, CancellationToken ct) {
+        var day=DateOnly.FromDateTime(end.AddHours(7).AddDays(-1));
+        return db.PickupRequests
+        .Where(p => !p.RequiresOwnerReview && p.TargetDepotId == depot && (p.Status == "PENDING" || p.Status == "SCHEDULED" || p.Status == "IN_PROGRESS")
+            && (p.CollectionDate == null || p.CollectionDate == day)
+            && (p.CollectionDate != null || (p.PreferredDatetime ?? p.CreatedAt) >= end.AddDays(-1))
             && (p.PreferredDatetime == null || p.PreferredDatetime < end) && p.Latitude.HasValue && p.Longitude.HasValue)
         .GroupBy(p => new { p.Latitude, p.Longitude })
         .Select(g => new DailyPoint(g.Key.Latitude!.Value, g.Key.Longitude!.Value, g.Count())).ToListAsync(ct);
+    }
     public Task<HashSet<Guid>> BusyAsync(Guid[] employees, CancellationToken ct) => BusyListAsync(employees, ct);
     private async Task<HashSet<Guid>> BusyListAsync(Guid[] employees, CancellationToken ct) => (await db.PickupRequests
         .Where(p => p.AcceptedCollectorId.HasValue && employees.Contains(p.AcceptedCollectorId.Value)

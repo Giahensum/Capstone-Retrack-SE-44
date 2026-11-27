@@ -11,13 +11,17 @@ namespace Retrack.Tests;
 public sealed class DepotDispatchTests : IAsyncLifetime
 {
     private readonly Guid owner = Guid.NewGuid(), other = Guid.NewGuid(), seller = Guid.NewGuid(), employee = Guid.NewGuid(), depot = Guid.NewGuid(), foreign = Guid.NewGuid(), area = Guid.NewGuid(), pickup = Guid.NewGuid();
+    // Cố định 10:00 giờ Việt Nam để ca phân công không phụ thuộc giờ chạy CI.
+    private static readonly DateTime Now = new(2030, 1, 15, 3, 0, 0, DateTimeKind.Utc);
+    private sealed class DispatchClock : TimeProvider { public override DateTimeOffset GetUtcNow() => new(Now); }
+    private static readonly TimeProvider Clock = new DispatchClock();
     private static AppDbContext Open()
     {
         var cs = Environment.GetEnvironmentVariable("RETRACK_TEST_CONNECTION")!;
         if (new NpgsqlConnectionStringBuilder(cs).Database != "Retrack_TV2_test" || cs != Environment.GetEnvironmentVariable("RETRACK_TEST_POSTGRES")) throw new InvalidOperationException("Sai DB test");
         return new(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(cs).Options);
     }
-    private static DepotDispatchService Service(AppDbContext db) => new(new DepotDispatchRepository(db), new DepotService(new DepotOwnerRepository(db), new DepotPaymentReadRepository(db)), new DepotUnitOfWork(db));
+    private static DepotDispatchService Service(AppDbContext db) => new(new DepotDispatchRepository(db), new DepotService(new DepotOwnerRepository(db), new DepotPaymentReadRepository(db)), new DepotUnitOfWork(db), Clock);
     public async Task InitializeAsync()
     {
         await using var db = Open(); await TestDatabase.MigrateAsync(db);
@@ -25,7 +29,7 @@ public sealed class DepotDispatchTests : IAsyncLifetime
         db.Depots.AddRange(new Depot { Id = depot, OwnerId = owner, Name = "Kho điều phối", VerificationStatus = "APPROVED" }, new Depot { Id = foreign, OwnerId = other, Name = "Kho khác" });
         db.DepotStaffs.Add(new() { DepotId = depot, UserId = employee, StaffType = "DEPOT_EMPLOYEE" });
         db.EmployeeCollectionAreas.Add(new() { Id = area, DepotId = depot, Name = "Ngũ Hành Sơn", Latitude = 16.02, Longitude = 108.25 });
-        db.PickupRequests.Add(new() { Id = pickup, TargetDepotId = depot, SellerId = seller, Address = "Đà Nẵng", Status = "PENDING" }); await db.SaveChangesAsync();
+        db.PickupRequests.Add(new() { Id = pickup, TargetDepotId = depot, SellerId = seller, Address = "Đà Nẵng", CreatedAt = Now, Status = "PENDING" }); await db.SaveChangesAsync();
     }
     public async Task DisposeAsync()
     {
@@ -34,7 +38,7 @@ public sealed class DepotDispatchTests : IAsyncLifetime
         await db.EmployeeDispatchShifts.Where(x => x.EmployeeId == employee).ExecuteDeleteAsync(); await db.EmployeeCollectionAreas.Where(x => x.DepotId == depot || x.DepotId == foreign).ExecuteDeleteAsync();
         await db.DepotStaffs.Where(x => x.DepotId == depot).ExecuteDeleteAsync(); await db.Depots.Where(x => x.Id == depot || x.Id == foreign).ExecuteDeleteAsync(); await db.Users.Where(x => x.Id == owner || x.Id == other || x.Id == seller || x.Id == employee).ExecuteDeleteAsync();
     }
-    private DispatchShiftInput Input() => new(area, employee, DateTimeOffset.FromUnixTimeSeconds(DateTimeOffset.UtcNow.AddHours(-1).ToUnixTimeSeconds()), DateTimeOffset.FromUnixTimeSeconds(DateTimeOffset.UtcNow.AddHours(2).ToUnixTimeSeconds()), "motorcycle", 100, 10, Guid.NewGuid());
+    private DispatchShiftInput Input() => new(area, employee, DateTimeOffset.FromUnixTimeSeconds(new DateTimeOffset(Now).AddHours(-1).ToUnixTimeSeconds()), DateTimeOffset.FromUnixTimeSeconds(new DateTimeOffset(Now).AddHours(2).ToUnixTimeSeconds()), "motorcycle", 100, 10, Guid.NewGuid());
     [Fact]
     public async Task Shared_catalog_is_available_to_new_depots_but_creates_no_areas_or_shifts_on_read()
     {
@@ -96,7 +100,7 @@ public sealed class DepotDispatchTests : IAsyncLifetime
     {
         await using var db = Open();
         var future = Guid.NewGuid();
-        db.PickupRequests.Add(new() { Id = future, TargetDepotId = depot, SellerId = seller, Address = "Đơn ngày mai", Status = "PENDING", PreferredDatetime = DateTime.UtcNow.AddDays(2) });
+        db.PickupRequests.Add(new() { Id = future, TargetDepotId = depot, SellerId = seller, Address = "Đơn ngày mai", Status = "PENDING", PreferredDatetime = Now.AddDays(2) });
         db.EmployeeDispatchQueues.AddRange(new EmployeeDispatchQueue { PickupId = pickup, Reason = "Không còn nhân viên nhận đơn" }, new EmployeeDispatchQueue { PickupId = future, Reason = "Không còn nhân viên nhận đơn" });
         await db.SaveChangesAsync();
         var rows = await Service(db).PickupsAsync(owner, depot, new() { Status = "EXCEPTIONS", PageSize = 1 });
@@ -110,9 +114,9 @@ public sealed class DepotDispatchTests : IAsyncLifetime
         await using var db = Open(); var service = Service(db);
         await service.CreateShiftAsync(owner, depot, Input());
         var row = await db.PickupRequests.SingleAsync(x => x.Id == pickup);
-        row.PreferredDatetime = DateTime.UtcNow.AddHours(4); await db.SaveChangesAsync();
+        row.PreferredDatetime = Now.AddHours(4); await db.SaveChangesAsync();
         Assert.Empty((await service.ShiftsAsync(owner, depot, new(), true, pickupId: pickup)).Items);
-        row.PreferredDatetime = DateTime.UtcNow.AddMinutes(30); await db.SaveChangesAsync();
+        row.PreferredDatetime = Now.AddMinutes(30); await db.SaveChangesAsync();
         Assert.Single((await service.ShiftsAsync(owner, depot, new(), true, pickupId: pickup)).Items);
         await Assert.ThrowsAsync<KeyNotFoundException>(() => service.ShiftsAsync(other, foreign, new(), true, pickupId: pickup));
     }
@@ -140,7 +144,7 @@ public sealed class DepotDispatchTests : IAsyncLifetime
         Assert.Single((await service.HistoryAsync(owner, depot, pickup, new())).Items); Assert.Equal(2, await db.Notifications.CountAsync(x => x.DepotId == depot));
         Assert.Equal(0, (await service.SummaryAsync(owner, depot)).WaitingCount); Assert.Single((await service.PickupsAsync(owner, depot, new() { Status = "SCHEDULED" })).Items);
         Assert.Empty((await service.ShiftsAsync(owner, depot, new(), true, employee)).Items);
-        await new Retrack.API.Services.Employee.EmployeeDispatchService(new Retrack.API.Repositories.EmployeeDispatchRepository(db), new Retrack.API.Repositories.StaffUnitOfWork(db)).DispatchAsync(default);
+        await new Retrack.API.Services.Employee.EmployeeDispatchService(new Retrack.API.Repositories.EmployeeDispatchRepository(db), new Retrack.API.Repositories.StaffUnitOfWork(db), Clock).DispatchAsync(default);
         Assert.Equal(employee, (await service.DetailAsync(owner, depot, pickup)).EmployeeId);
         Assert.Equal(pickup, Assert.Single(await service.LegacyHistoryAsync(owner, depot, pickup, 1)).PickupId);
         using var configuration = System.Text.Json.JsonDocument.Parse(System.Text.Json.JsonSerializer.Serialize(await service.ConfigurationAsync(owner, depot, 1), new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)));
@@ -165,7 +169,7 @@ public sealed class DepotDispatchTests : IAsyncLifetime
     {
         await using var db = Open(); var service = Service(db); var shift = await service.CreateShiftAsync(owner, depot, Input()); var dto = new DispatchAssignInput(Guid.NewGuid(), shift.Id, "Chủ kho xử lý đơn chờ phân công");
         var row = await db.PickupRequests.SingleAsync(x => x.Id == pickup); row.CheckinImageUrl = "https://example.test/checkin"; await db.SaveChangesAsync(); await Assert.ThrowsAsync<DepotConflictException>(() => service.AssignAsync(owner, depot, pickup, dto));
-        row.CheckinImageUrl = null; row.PreferredDatetime = DateTime.UtcNow.AddDays(1); await db.SaveChangesAsync(); await Assert.ThrowsAsync<DepotConflictException>(() => service.AssignAsync(owner, depot, pickup, dto));
+        row.CheckinImageUrl = null; row.PreferredDatetime = Now.AddDays(1); await db.SaveChangesAsync(); await Assert.ThrowsAsync<DepotConflictException>(() => service.AssignAsync(owner, depot, pickup, dto));
         row.PreferredDatetime = null; shift.Availability = "FULL"; shift.Reason = "Xe đã đầy hàng, chờ bàn giao"; await db.SaveChangesAsync(); await Assert.ThrowsAsync<DepotConflictException>(() => service.AssignAsync(owner, depot, pickup, dto));
         shift.Availability = "AVAILABLE"; shift.Reason = null; var warehouse = await db.Depots.SingleAsync(x => x.Id == depot); warehouse.VerificationStatus = "UNVERIFIED"; await db.SaveChangesAsync(); await Assert.ThrowsAsync<DepotConflictException>(() => service.AssignAsync(owner, depot, pickup, dto));
         Assert.Empty(await db.Notifications.Where(x => x.DepotId == depot).ToListAsync());
@@ -190,7 +194,7 @@ public sealed class DepotDispatchTests : IAsyncLifetime
         Assert.Empty((await service.ShiftsAsync(owner, depot, new(), true)).Items);
         // Owner không trực tiếp sửa giao nhận/tồn khi ngừng ca; worker TV3 xử lý đơn chưa check-in.
         Assert.Equal("SCHEDULED", (await service.DetailAsync(owner, depot, pickup)).Status);
-        await new Retrack.API.Services.Employee.EmployeeDispatchService(new Retrack.API.Repositories.EmployeeDispatchRepository(db), new Retrack.API.Repositories.StaffUnitOfWork(db)).DispatchAsync(default);
+        await new Retrack.API.Services.Employee.EmployeeDispatchService(new Retrack.API.Repositories.EmployeeDispatchRepository(db), new Retrack.API.Repositories.StaffUnitOfWork(db), Clock).DispatchAsync(default);
         Assert.Equal("PENDING", (await service.DetailAsync(owner, depot, pickup)).Status);
         Assert.Equal(1, await db.Notifications.CountAsync(x => x.Title == "Chủ kho đã ngừng ca thu gom" && x.DepotId == depot));
         await Assert.ThrowsAsync<DepotForbiddenException>(() => service.StopShiftAsync(other, depot, shift.Id, "Không đúng chủ kho của nhân viên"));
@@ -202,7 +206,7 @@ public sealed class DepotDispatchTests : IAsyncLifetime
         await using (var db = Open())
         {
             shiftId = (await Service(db).CreateShiftAsync(owner, depot, Input() with { MaxPendingOrders = 1 })).Id;
-            db.PickupRequests.Add(new() { Id = second, TargetDepotId = depot, SellerId = seller, Address = "Đơn thứ hai kiểm thử giới hạn", Status = "PENDING" }); await db.SaveChangesAsync();
+            db.PickupRequests.Add(new() { Id = second, TargetDepotId = depot, SellerId = seller, Address = "Đơn thứ hai kiểm thử giới hạn", CreatedAt = Now, Status = "PENDING" }); await db.SaveChangesAsync();
         }
         async Task<bool> Assign(Guid id)
         {

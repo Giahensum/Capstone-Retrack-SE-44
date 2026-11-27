@@ -5,7 +5,7 @@ using Retrack.API.Repositories.Interfaces;
 using Retrack.API.Services.Interfaces;
 namespace Retrack.API.Services.Depot;
 
-public sealed class DepotDispatchService(IDepotDispatchRepository repository, IDepotService scope, IDepotUnitOfWork work)
+public sealed class DepotDispatchService(IDepotDispatchRepository repository, IDepotService scope, IDepotUnitOfWork work, TimeProvider? clock = null)
 {
     public async Task<IReadOnlyList<CollectionRegion>> CatalogAsync(Guid owner, Guid depot)
     {
@@ -55,7 +55,7 @@ public sealed class DepotDispatchService(IDepotDispatchRepository repository, ID
             var pickup = await repository.DetailAsync(depot, pickupId.Value) ?? throw new KeyNotFoundException("Không tìm thấy đơn trong kho.");
             preferred = pickup.PreferredDatetime;
         }
-        return await repository.ShiftsAsync(depot, query, DateTime.UtcNow, availableOnly, excludeEmployeeId, preferred);
+        return await repository.ShiftsAsync(depot, query, (clock ?? TimeProvider.System).GetUtcNow().UtcDateTime, availableOnly, excludeEmployeeId, preferred);
     }
     public async Task<PagedResult<DispatchPickupDto>> PickupsAsync(Guid owner, Guid depot, DepotQuery query)
     {
@@ -64,7 +64,7 @@ public sealed class DepotDispatchService(IDepotDispatchRepository repository, ID
         return await repository.PickupsAsync(depot, query);
     }
     public async Task<DispatchSummaryDto> SummaryAsync(Guid owner, Guid depot)
-    { await scope.RequireOwnerAsync(owner, depot); return await repository.SummaryAsync(depot, DateTime.UtcNow); }
+    { await scope.RequireOwnerAsync(owner, depot); return await repository.SummaryAsync(depot, (clock ?? TimeProvider.System).GetUtcNow().UtcDateTime); }
     public async Task<DispatchPickupDto> DetailAsync(Guid owner, Guid depot, Guid id)
     { await scope.RequireOwnerAsync(owner, depot); return await repository.DetailAsync(depot, id) ?? throw new KeyNotFoundException("Không tìm thấy đơn trong kho."); }
     public async Task<PagedResult<DispatchHistoryDto>> HistoryAsync(Guid owner, Guid depot, Guid id, DepotQuery query)
@@ -85,7 +85,7 @@ public sealed class DepotDispatchService(IDepotDispatchRepository repository, ID
     public async Task<EmployeeDispatchShift> CreateShiftAsync(Guid owner, Guid depot, DispatchShiftInput input)
     {
         await scope.RequireOwnerAsync(owner, depot);
-        var start = input.StartsAt.UtcDateTime; var end = input.EndsAt.UtcDateTime; var now = DateTime.UtcNow;
+        var start = input.StartsAt.UtcDateTime; var end = input.EndsAt.UtcDateTime; var now = (clock ?? TimeProvider.System).GetUtcNow().UtcDateTime;
         if (input.OperationId == Guid.Empty || end <= start || end - start > TimeSpan.FromHours(24) ||
             input.Vehicle is not ("motorcycle" or "car" or "truck") || input.CapacityKg is <= 0 or > 20000 || decimal.Round(input.CapacityKg, 2) != input.CapacityKg || input.MaxPendingOrders is < 1 or > 50)
             throw new ArgumentException("Ca tối đa 24 giờ; phương tiện/tải trọng tối đa hai số lẻ/giới hạn đơn không hợp lệ.");
@@ -114,23 +114,45 @@ public sealed class DepotDispatchService(IDepotDispatchRepository repository, ID
     public async Task AssignAsync(Guid owner, Guid depot, Guid id, DispatchAssignInput input)
     {
         await scope.RequireOwnerAsync(owner, depot);
-        if (input.OperationId == Guid.Empty || input.ShiftId == Guid.Empty || string.IsNullOrWhiteSpace(input.Reason) || input.Reason.Trim().Length is < 10 or > 1000)
+        if (input.OperationId == Guid.Empty || (input.ShiftId == Guid.Empty && !input.EmployeeId.HasValue) || string.IsNullOrWhiteSpace(input.Reason) || input.Reason.Trim().Length is < 10 or > 1000)
             throw new ArgumentException("Cần ca và lý do phân công từ 10 đến 1.000 ký tự.");
+        if(input.EmployeeId.HasValue && input.ShiftId!=Guid.Empty) throw new ArgumentException("Chỉ chọn ca hoặc người dự phòng, không chọn đồng thời.");
         await using var tx = await work.BeginAsync(); await repository.LockAsync();
         var pickup = await repository.LockPickupAsync(depot, id) ?? throw new KeyNotFoundException("Không tìm thấy đơn trong kho.");
         var old = await repository.EventAsync(input.OperationId);
         if (old != null)
         {
-            if (old.PickupId != id || old.ShiftId != input.ShiftId || old.Reason != input.Reason.Trim()) throw new DepotConflictException("Mã thao tác đã dùng cho phân công khác.");
+            if (old.PickupId != id || (input.ShiftId!=Guid.Empty && old.ShiftId != input.ShiftId) || (input.EmployeeId.HasValue && old.ToEmployeeId!=input.EmployeeId) || old.Reason != input.Reason.Trim()) throw new DepotConflictException("Mã thao tác đã dùng cho phân công khác.");
             await tx.CommitAsync(); return;
         }
         await scope.RequireTradingAsync(owner, depot);
         if (pickup.Status is not ("PENDING" or "SCHEDULED") || !string.IsNullOrEmpty(pickup.CheckinImageUrl) || await repository.HasCheckInAsync(id))
             throw new DepotConflictException("Đơn đã bắt đầu thu gom/giữ hàng hoặc kết thúc; không được chuyển người bằng điều phối.");
-        var shift = await repository.ShiftAsync(input.ShiftId) ?? throw new ArgumentException("Không tìm thấy ca.");
-        var area = await repository.AreaAsync(shift.AreaId); var now = DateTime.UtcNow;
+        if(pickup.RequiresOwnerReview || Retrack.API.Services.Employee.PickupSchedule.Day(pickup)!=Retrack.API.Services.Employee.PickupSchedule.Today((clock ?? TimeProvider.System).GetUtcNow().UtcDateTime) || (clock ?? TimeProvider.System).GetUtcNow().UtcDateTime>=Retrack.API.Services.Employee.PickupSchedule.End(pickup))
+            throw new DepotConflictException("Đơn đã quá hẹn hoặc đang chờ xử lý. Hãy xác nhận lịch mới với người bán trước khi phân công.");
+        var shift = input.ShiftId!=Guid.Empty ? await repository.ShiftAsync(input.ShiftId) : null;
+        if(shift==null && input.EmployeeId.HasValue) {
+            if(!await repository.ActiveEmployeeAsync(depot,input.EmployeeId.Value)) throw new ArgumentException("Nhân viên không thuộc kho đang hoạt động.");
+            var existing=await repository.ShiftsAsync(depot,new DepotQuery {Page=1,PageSize=100},(clock ?? TimeProvider.System).GetUtcNow().UtcDateTime,true);
+            shift=existing.Items.FirstOrDefault(x=>x.EmployeeId==input.EmployeeId.Value) is {} candidate ? await repository.ShiftAsync(candidate.Id) : null;
+            if(shift==null) {
+                var day=Retrack.API.Services.Employee.PickupSchedule.Today((clock ?? TimeProvider.System).GetUtcNow().UtcDateTime);
+                var start=Retrack.API.Services.Employee.PickupSchedule.At(day,7);var end=Retrack.API.Services.Employee.PickupSchedule.At(day,19);
+                if(end<=(clock ?? TimeProvider.System).GetUtcNow().UtcDateTime || await repository.OverlapAsync(input.EmployeeId.Value,start,end))
+                    throw new DepotConflictException("Nhân viên đang có ca đầy/tạm ngừng hoặc trùng giờ. Không tự bật lại ca; hãy chọn người khác hoặc yêu cầu nhân viên sẵn sàng trở lại.");
+                var areas=await repository.AreasAsync(depot,new DepotQuery {Page=1,PageSize=100});
+                var target=areas.Items.Where(a=>a.IsActive).OrderBy(a=>pickup.Latitude.HasValue && pickup.Longitude.HasValue ?
+                    Retrack.API.Services.Employee.CollectionValidation.Distance((double)pickup.Latitude.Value,(double)pickup.Longitude.Value,a.Latitude,a.Longitude) : 0).ThenBy(a=>a.Id).FirstOrDefault()
+                    ?? throw new DepotConflictException("Kho chưa có vùng hoạt động.");
+                shift=new EmployeeDispatchShift {EmployeeId=input.EmployeeId.Value,AreaId=target.Id,StartsAt=start,EndsAt=end,IsAutomatic=true,Reason="Chủ kho bố trí người dự phòng xử lý ngoại lệ"};
+                repository.AddShift(shift);
+                await work.SaveAsync(); // Lưu ca trước sự kiện có FK, vẫn trong cùng transaction.
+            }
+        }
+        if(shift==null) throw new ArgumentException("Không tìm thấy ca.");
+        var area = await repository.AreaAsync(shift.AreaId); var now = (clock ?? TimeProvider.System).GetUtcNow().UtcDateTime;
         if (area == null || area.DepotId != depot || !area.IsActive || !await repository.ActiveEmployeeAsync(depot, shift.EmployeeId)) throw new ArgumentException("Ca hoặc nhân viên không thuộc kho đang hoạt động.");
-        if (shift.Availability != "AVAILABLE" || shift.StartsAt > now || shift.EndsAt <= now || pickup.PreferredDatetime >= shift.EndsAt ||
+        if (shift.Availability != "AVAILABLE" || shift.StartsAt >= Retrack.API.Services.Employee.PickupSchedule.End(pickup) || shift.EndsAt <= now || pickup.PreferredDatetime >= shift.EndsAt ||
             pickup.PreferredDatetime >= now.AddHours(7).Date.AddDays(1).AddHours(-7)) throw new DepotConflictException("Ca chưa sẵn sàng/không phù hợp ngày hẹn; đơn ngày sau chờ đúng ngày phân công.");
         if (pickup.AcceptedCollectorId == shift.EmployeeId) throw new DepotConflictException("Đơn đã thuộc nhân viên này. Hãy tải lại dữ liệu.");
         if (!shift.IsAutomatic && await repository.AssignedCountAsync(depot, shift.EmployeeId) >= shift.MaxPendingOrders) throw new DepotConflictException("Nhân viên đã đủ giới hạn số đơn trong ca.");
@@ -143,6 +165,30 @@ public sealed class DepotDispatchService(IDepotDispatchRepository repository, ID
         if (previous.HasValue) Notify(previous.Value, "Chủ kho đã chuyển đơn sang nhân viên khác");
         await work.SaveAsync(); await tx.CommitAsync();
     }
+    public async Task RescheduleAsync(Guid owner,Guid depot,Guid id,DispatchRescheduleInput input)
+    {
+        await scope.RequireOwnerAsync(owner,depot);
+        if(input.OperationId==Guid.Empty || string.IsNullOrWhiteSpace(input.Reason) || input.Reason.Trim().Length is <10 or >1000)
+            throw new ArgumentException("Cần mã thao tác và lý do đã thống nhất với người bán từ 10–1.000 ký tự.");
+        Retrack.API.Services.Employee.PickupSchedule.Validate(input.CollectionDate,input.PreferredDatetime,input.PreferredEndDatetime,(clock ?? TimeProvider.System).GetUtcNow().UtcDateTime);
+        if(!input.PreferredDatetime.HasValue && Retrack.API.Services.Employee.PickupSchedule.At(input.CollectionDate,19)<=(clock ?? TimeProvider.System).GetUtcNow().UtcDateTime)
+            throw new ArgumentException("Ngày thu gom đã hết giờ hoạt động.");
+        await using var tx=await work.BeginAsync();await repository.LockAsync();
+        var pickup=await repository.LockPickupAsync(depot,id) ?? throw new KeyNotFoundException("Không tìm thấy đơn trong kho.");
+        var audit=$"Hẹn lại {input.CollectionDate:yyyy-MM-dd} {input.PreferredDatetime:O} {input.PreferredEndDatetime:O}: {input.Reason.Trim()}";
+        var retry=await repository.EventAsync(input.OperationId);
+        if(retry!=null) {if(retry.PickupId!=id || !retry.Reason.StartsWith(audit+"\nLịch trước:",StringComparison.Ordinal)) throw new DepotConflictException("Mã thao tác đã dùng cho yêu cầu khác.");await tx.CommitAsync();return;}
+        if(pickup.Status is not ("PENDING" or "SCHEDULED") || !string.IsNullOrEmpty(pickup.CheckinImageUrl) || await repository.HasCheckInAsync(id))
+            throw new DepotConflictException("Đơn đã bắt đầu thu gom hoặc kết thúc; không được hẹn lại bằng điều phối.");
+        var previous=pickup.AcceptedCollectorId;
+        repository.AddEvent(new() {Id=input.OperationId,PickupId=id,FromEmployeeId=previous,Reason=audit+$"\nLịch trước: {pickup.CollectionDate:yyyy-MM-dd} {pickup.PreferredDatetime:O} → {pickup.PreferredEndDatetime:O}",CreatedAt=(clock ?? TimeProvider.System).GetUtcNow().UtcDateTime});
+        pickup.CollectionDate=input.CollectionDate;pickup.PreferredDatetime=input.PreferredDatetime;pickup.PreferredEndDatetime=input.PreferredEndDatetime;
+        pickup.RequiresOwnerReview=false;pickup.DispatchReviewReason=null;pickup.AcceptedCollectorId=null;pickup.Status="PENDING";pickup.UpdatedAt=(clock ?? TimeProvider.System).GetUtcNow().UtcDateTime;
+        var queue=await repository.QueueAsync(id);if(queue==null){queue=new(){PickupId=id};repository.AddQueue(queue);}queue.Reason="Đã xác nhận lịch mới, chờ điều phối";queue.UpdatedAt=(clock ?? TimeProvider.System).GetUtcNow().UtcDateTime;
+        void Notice(Guid user,string title){var n=Notification.ForDepot(user,depot,"PICKUP",title,audit,targetType:"PICKUP_REQUEST",targetId:id);n.PickupRequestId=id;repository.AddNotice(n);}
+        Notice(pickup.SellerId,"Kho đã cập nhật lịch thu gom");if(previous.HasValue)Notice(previous.Value,"Đơn đã được hẹn lại");
+        await work.SaveAsync();await tx.CommitAsync();
+    }
     public async Task StopShiftAsync(Guid owner, Guid depot, Guid id, string reason)
     {
         await scope.RequireOwnerAsync(owner, depot);
@@ -153,8 +199,8 @@ public sealed class DepotDispatchService(IDepotDispatchRepository repository, ID
         if (area?.DepotId != depot) throw new KeyNotFoundException("Không tìm thấy ca trong kho.");
         if (shift.Availability == "STOPPED")
         { if (shift.Reason != reason.Trim()) throw new DepotConflictException("Ca đã ngừng với lý do khác; không sửa lịch sử."); await tx.CommitAsync(); return; }
-        if (shift.EndsAt <= DateTime.UtcNow) throw new DepotConflictException("Ca đã kết thúc; không sửa lịch sử ca cũ.");
-        shift.Availability = "STOPPED"; shift.Reason = reason.Trim(); shift.UpdatedAt = DateTime.UtcNow;
+        if (shift.EndsAt <= (clock ?? TimeProvider.System).GetUtcNow().UtcDateTime) throw new DepotConflictException("Ca đã kết thúc; không sửa lịch sử ca cũ.");
+        shift.Availability = "STOPPED"; shift.Reason = reason.Trim(); shift.UpdatedAt = (clock ?? TimeProvider.System).GetUtcNow().UtcDateTime;
         var notice = Notification.ForDepot(shift.EmployeeId, depot, "PICKUP", "Chủ kho đã ngừng ca thu gom", reason.Trim()); repository.AddNotice(notice);
         await work.SaveAsync(); await tx.CommitAsync();
         // Worker TV3 điều phối lại đơn chưa check-in trong lượt kế tiếp; không bỏ người đang giữ hàng.

@@ -7,7 +7,7 @@ public sealed record ActivePickupSummaryDto(Guid Id, string SellerName, string? 
     string Status, DateTime? PreferredDatetime);
 public sealed record PickupPoolItemDto(Guid Id, string SellerName, string? SellerPhone, string Address,
     decimal? Latitude, decimal? Longitude, DateTime? PreferredDatetime,
-    string? Description, string? RequestImageUrl, DateTime CreatedAt);
+    string? Description, string? RequestImageUrl, DateTime CreatedAt, DateTime? PreferredEndDatetime = null, DateOnly? CollectionDate = null);
 public sealed record EmployeePickupDetailDto(Guid Id, string SellerName, string? SellerPhone, string Address,
     decimal? Latitude, decimal? Longitude, DateTime? PreferredDatetime,
-    string? Description, string? RequestImageUrl, DateTime CreatedAt, string Status, bool IsAcceptedByMe);
+    string? Description, string? RequestImageUrl, DateTime CreatedAt, string Status, bool IsAcceptedByMe, DateTime? PreferredEndDatetime = null, DateOnly? CollectionDate = null);

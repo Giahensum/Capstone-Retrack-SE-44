@@ -8,10 +8,11 @@ public record DispatchShiftDto(Guid Id, Guid AreaId, string AreaName, Guid Emplo
     DateTime StartsAt, DateTime EndsAt, string Availability, string? Reason, string Vehicle, decimal CapacityKg, int MaxPendingOrders, int AssignedCount, bool IsAutomatic = false);
 public record DispatchPickupDto(Guid Id, string SellerName, string SellerPhone, string Address, string? Description,
     decimal? Latitude, decimal? Longitude, DateTime? PreferredDatetime, string Status, Guid? EmployeeId,
-    string? EmployeeName, string? QueueReason, bool HasCheckIn, DateTime CreatedAt);
+    string? EmployeeName, string? QueueReason, bool HasCheckIn, DateTime CreatedAt, DateTime? PreferredEndDatetime = null, DateOnly? CollectionDate = null, bool RequiresOwnerReview = false);
 public record DispatchHistoryDto(Guid Id, Guid? FromEmployeeId, string? FromEmployeeName, Guid? ToEmployeeId,
     string? ToEmployeeName, string Reason, DateTime CreatedAt);
-public record DispatchAssignInput(Guid OperationId, Guid ShiftId, string Reason);
+public record DispatchAssignInput(Guid OperationId, Guid ShiftId, string Reason, Guid? EmployeeId = null);
+public record DispatchRescheduleInput(Guid OperationId, DateOnly CollectionDate, DateTime? PreferredDatetime, DateTime? PreferredEndDatetime, string Reason);
 public record DispatchStopInput(string Reason);
 public record DispatchSummaryDto(int AreaCount, int ActiveShiftCount, int WaitingCount);
 public record DispatchEventCompatDto(Guid Id, Guid PickupId, Guid? FromEmployeeId, Guid? ToEmployeeId, Guid? ShiftId, string Reason, DateTime CreatedAt);

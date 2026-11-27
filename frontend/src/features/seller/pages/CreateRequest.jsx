@@ -427,10 +427,16 @@ export default function CreateRequest() {
       imageUrl = urls.join(',');
     }
 
+    if (form.preferredTimeSlot && !form.preferredDate) {
+      toast.error('Hãy chọn ngày thu gom khi chọn khung giờ cụ thể.');
+      return;
+    }
     let preferredDatetime = null;
     if (form.preferredDate) {
-      const timeStr = form.preferredTimeSlot ? form.preferredTimeSlot.split(' - ')[0] : '08:00';
-      preferredDatetime = new Date(`${form.preferredDate}T${timeStr}:00`).toISOString();
+      if (form.preferredTimeSlot) {
+        const timeStr = form.preferredTimeSlot.split(' - ')[0];
+        preferredDatetime = new Date(`${form.preferredDate}T${timeStr}:00+07:00`).toISOString();
+      }
     }
 
     createMutation.mutate({
@@ -439,6 +445,8 @@ export default function CreateRequest() {
       latitude: form.latitude,
       longitude: form.longitude,
       preferredDatetime,
+      collectionDate: form.preferredDate || null,
+      preferredEndDatetime: preferredDatetime ? new Date(new Date(preferredDatetime).getTime() + 2 * 3600000).toISOString() : null,
       requestImageUrl: imageUrl,
       targetDepotId: mode === 'choose' ? form.targetDepotId : null,
     });
