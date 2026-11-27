@@ -16,6 +16,9 @@ namespace Retrack.API.Controllers.Depot;
 public class DepotStaffController(IStaffService service) : ControllerBase
 {
     private Guid OwnerId => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    [HttpGet("capacity")]
+    public async Task<IActionResult> Capacity([FromQuery] Guid depotId) =>
+        Ok(ApiResponse<CapacityDto>.Ok(await service.GetCapacityAsync(OwnerId, depotId)));
     [HttpGet]
     public async Task<IActionResult> List([FromQuery] Guid depotId, [FromQuery] DepotQuery query) =>
         Ok(ApiResponse<PagedResult<StaffDto>>.Ok(await service.ListAsync(OwnerId, depotId, query)));

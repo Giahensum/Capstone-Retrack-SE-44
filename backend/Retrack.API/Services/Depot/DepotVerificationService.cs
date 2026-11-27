@@ -9,8 +9,14 @@ using Retrack.API.Services.Shared;
 namespace Retrack.API.Services.Depot;
 
 public sealed class DepotVerificationService(IDepotVerificationRepository repository, IDepotUnitOfWork work, IDepotService scope,
-    IVerificationFileScanner scanner, IVerificationDocumentStorage storage, ILogger<DepotVerificationService> logger)
+    IVerificationFileScanner scanner, IVerificationDocumentStorage storage, ILogger<DepotVerificationService> logger, Microsoft.Extensions.Options.IOptions<DepotCapacityOptions>? capacity = null)
 {
+    private readonly DepotCapacityOptions limits = capacity?.Value ?? new();
+    public async Task<CapacityDto> GetCapacityAsync(Guid ownerId)
+    {
+        await scope.GetDepotsAsync(ownerId);
+        return new(await repository.CountDepotsAsync(ownerId), limits.MaxDepotsPerOwner);
+    }
     public async Task<DepotProfileDto> CreateDepotAsync(Guid ownerId, CreateDepotDto dto)
     {
         await scope.GetDepotsAsync(ownerId);
@@ -27,6 +33,9 @@ public sealed class DepotVerificationService(IDepotVerificationRepository reposi
         }
         else
         {
+            // Kiểm tra trong cùng khóa Owner; retry kho đã tạo không chiếm thêm chỗ.
+            if (await repository.CountDepotsAsync(ownerId) >= limits.MaxDepotsPerOwner)
+                throw new DepotConflictException($"Mỗi chủ kho được tạo tối đa {limits.MaxDepotsPerOwner} kho vựa, bao gồm kho chờ xác minh.");
             depot = new Retrack.API.Models.Depot { Id = dto.OperationId, OwnerId = ownerId, Name = dto.Profile.Name.Trim(), Address = dto.Profile.Address.Trim(),
                 TaxCode = dto.Profile.TaxCode, ContactPhone = dto.Profile.ContactPhone, Description = dto.Profile.Description,
                 Latitude = dto.Profile.Latitude, Longitude = dto.Profile.Longitude };

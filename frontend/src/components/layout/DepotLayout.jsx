@@ -19,7 +19,7 @@ const DepotLayout = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const [createDepot, setCreateDepot] = useState(false);
-  const { depotId, query: ownedDepots } = useDepot();
+  const { depotId, query: ownedDepots, capacity } = useDepot();
   const profile = useDepotQuery('profile');
   const unread = useDepotQuery('notifications/unread-count', {}, true, 30000);
   const user = useAuthStore((s) => s.user);
@@ -97,12 +97,14 @@ const DepotLayout = () => {
         {depotId && <NotificationBell key={`${depotId}-${location.pathname}`} unread={unread} />}
         <DepotSelector />
       </>}
-      sidebarExtra={
-        <button type="button" onClick={() => setCreateDepot(true)}
-          className="flex w-full items-center justify-center gap-2 rounded-[10px] border border-dashed border-white/20 px-3 py-2.5 text-[13px] font-semibold text-[#e3efcb] transition hover:border-[#a3e635] hover:bg-white/5 hover:text-white">
+      sidebarExtra={<div className="space-y-2">
+        <button type="button" disabled={!capacity.data?.canAdd} onClick={() => setCreateDepot(true)}
+          className="flex w-full items-center justify-center gap-2 rounded-[10px] border border-dashed border-white/20 px-3 py-2.5 text-[13px] font-semibold text-[#e3efcb] transition hover:border-[#a3e635] hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-50">
           <Plus size={16} />Thêm kho vựa
         </button>
-      }
+        <p className="text-center text-xs text-[#b5cf86]">{capacity.data ? 'Kho đã tạo: ' + capacity.data.used + '/' + capacity.data.limit + (capacity.data.canAdd ? '' : ' · Đã đạt hạn mức') : capacity.isError ? 'Chưa tải được hạn mức kho.' : 'Đang tải hạn mức kho…'}</p>
+        {capacity.isError && <button type="button" className="w-full text-xs text-white underline" onClick={() => capacity.refetch()}>Thử lại hạn mức</button>}
+      </div>}
     >
       <SubscriptionBanner />
       {profile.data && verification !== 'APPROVED' && (
@@ -120,7 +122,7 @@ const DepotLayout = () => {
               <span className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-d-primary-container/40 text-d-primary"><Warehouse size={26} /></span>
               <h1 className="mt-4 text-2xl font-bold text-d-on-surface">Bắt đầu với kho vựa của bạn</h1>
               <p className="mt-2 text-d-on-surface-variant">Tạo kho đầu tiên, sau đó nộp hồ sơ để Admin xác minh.</p>
-              <button type="button" className="mt-6 inline-flex items-center gap-2 rounded-full bg-d-primary px-5 py-3 font-semibold text-white transition hover:bg-[#385500]" onClick={() => setCreateDepot(true)}><Plus size={18} />Tạo kho đầu tiên</button>
+              <button type="button" disabled={!capacity.data?.canAdd} className="mt-6 inline-flex items-center gap-2 disabled:opacity-50 rounded-full bg-d-primary px-5 py-3 font-semibold text-white transition hover:bg-[#385500]" onClick={() => setCreateDepot(true)}><Plus size={18} />Tạo kho đầu tiên</button>
             </div>
           </div>
         )}

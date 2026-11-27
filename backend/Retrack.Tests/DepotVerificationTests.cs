@@ -225,7 +225,7 @@ public sealed class DepotVerificationTests : IAsyncLifetime
     public async Task DisposeAsync()
     {
         await using var db = Open();
-        await db.Depots.Where(x => x.Id == depot).ExecuteDeleteAsync();
+        await db.Depots.Where(x => x.OwnerId == owner).ExecuteDeleteAsync();
         await db.Users.Where(x => x.Id == owner || x.Id == admin || x.Id == stranger).ExecuteDeleteAsync();
     }
     [Fact]
@@ -383,5 +383,42 @@ public sealed class DepotVerificationTests : IAsyncLifetime
         var submission = await verify.DepotVerificationSubmissions.SingleAsync(x => x.Id == depot);
         Assert.Equal(submission.Status, (await verify.Depots.SingleAsync(x => x.Id == depot)).VerificationStatus);
         Assert.Equal(admin, submission.ReviewedBy);
+    }
+
+    [Fact]
+    public async Task Depot_limit_allows_fifth_retries_it_and_rejects_sixth()
+    {
+        await using var db = Open(); var service = Service(db);
+        for (var i = 0; i < 4; i++) { var input = Input(); input.OperationId = Guid.NewGuid(); await service.CreateDepotAsync(owner, input); }
+        var fifth = Input(); var created = await service.CreateDepotAsync(owner, fifth);
+        Assert.Equal(created.Id, (await service.CreateDepotAsync(owner, fifth)).Id);
+        var sixth = Input(); sixth.OperationId = Guid.NewGuid();
+        await Assert.ThrowsAsync<DepotConflictException>(() => service.CreateDepotAsync(owner, sixth));
+        Assert.Equal(5, await db.Depots.CountAsync(x => x.OwnerId == owner));
+    }
+    [Fact]
+    public async Task Concurrent_depot_creation_cannot_exceed_five()
+    {
+        await using (var db = Open()) for (var i = 0; i < 4; i++) { var input = Input(); input.OperationId = Guid.NewGuid(); await Service(db).CreateDepotAsync(owner, input); }
+        async Task<bool> Create()
+        {
+            await using var db = Open(); var input = Input(); input.OperationId = Guid.NewGuid();
+            try { await Service(db).CreateDepotAsync(owner, input); return true; }
+            catch (DepotConflictException) { return false; }
+        }
+        Assert.Single(await Task.WhenAll(Create(), Create()), x => x);
+        await using var verify = Open(); Assert.Equal(5, await verify.Depots.CountAsync(x => x.OwnerId == owner));
+    }
+
+    [Fact]
+    public async Task Configured_depot_limit_counts_unverified_depots_without_deleting_legacy_data()
+    {
+        await using var db = Open();
+        for (var i = 0; i < 6; i++) { var input = Input(); input.OperationId = Guid.NewGuid(); await new DepotVerificationService(new DepotVerificationRepository(db), new DepotUnitOfWork(db), Scope(db), new FixtureScanner(), new DatabaseFixtureStorage(), NullLogger<DepotVerificationService>.Instance, Microsoft.Extensions.Options.Options.Create(new DepotCapacityOptions { MaxDepotsPerOwner = 6 })).CreateDepotAsync(owner, input); }
+        var capacity = await Service(db).GetCapacityAsync(owner);
+        Assert.Equal(6, capacity.Used); Assert.Equal(5, capacity.Limit); Assert.Equal(0, capacity.Remaining); Assert.False(capacity.CanAdd);
+        await Assert.ThrowsAsync<DepotConflictException>(() => Service(db).CreateDepotAsync(owner, Input()));
+        Assert.Equal(6, await db.Depots.CountAsync(x => x.OwnerId == owner));
+        await Assert.ThrowsAsync<DepotForbiddenException>(() => Service(db).GetCapacityAsync(admin));
     }
 }

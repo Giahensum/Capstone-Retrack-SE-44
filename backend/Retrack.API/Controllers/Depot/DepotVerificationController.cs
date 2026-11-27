@@ -23,6 +23,8 @@ public sealed class DepotVerificationController(DepotVerificationService service
     private Guid Actor => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
     [HttpGet("policy")]
     public IActionResult Policy() => Ok(ApiResponse<VerificationScanPolicy>.Ok(scanner.Policy));
+    [HttpGet("/api/depot/owned/capacity"), Authorize(Roles = "DEPOT_OWNER")]
+    public async Task<IActionResult> Capacity() => Ok(ApiResponse<CapacityDto>.Ok(await service.GetCapacityAsync(Actor)));
     [HttpPost("/api/depot/owned"), Authorize(Roles = "DEPOT_OWNER")]
     public async Task<IActionResult> Create(CreateDepotDto dto) => Ok(ApiResponse<DepotProfileDto>.Ok(await service.CreateDepotAsync(Actor, dto)));
     [HttpGet, Authorize(Roles = "DEPOT_OWNER")]

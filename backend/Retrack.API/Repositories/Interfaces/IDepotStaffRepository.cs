@@ -7,6 +7,8 @@ namespace Retrack.API.Repositories.Interfaces;
 public interface IDepotStaffRepository
 {
     Task<PagedResult<StaffDto>> ListAsync(Guid depotId, DepotQuery query);
+    Task<IDepotTransaction> LockAsync(params Guid[] depotIds);
+    Task<int> CountActiveAsync(Guid depotId);
     Task<bool> EmailExistsAsync(string email);
     Task<bool> TryCreateAsync(DepotStaff staff);
     Task<DepotStaff?> FindAsync(Guid depotId, Guid staffId);

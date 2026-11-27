@@ -6,6 +6,7 @@ namespace Retrack.API.Repositories.Interfaces;
 public interface IDepotVerificationRepository
 {
     Task LockOwnerAsync(Guid ownerId);
+    Task<int> CountDepotsAsync(Guid ownerId);
     Task<Depot?> FindDepotAsync(Guid id);
     void AddDepot(Depot depot);
     Task LockDepotAsync(Guid id);
