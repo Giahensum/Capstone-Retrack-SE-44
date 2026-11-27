@@ -9,6 +9,7 @@ namespace Retrack.API.Tests;
 
 public sealed class EmployeeDispatchPostgresTests
 {
+    private sealed class DispatchClock(DateTime now) : TimeProvider { public override DateTimeOffset GetUtcNow() => new(now); }
     [PostgresPickupFact]
     public async Task BootstrapUpgradeAndDanangSeedRunTwiceAndDispatchWithoutChangingCompletedOrders()
     {
@@ -131,14 +132,18 @@ public sealed class EmployeeDispatchPostgresTests
                 new DepotStaff { User = second, Depot = depot, StaffType = second.Role });
             var area = new EmployeeCollectionArea { DepotId = depot.Id, Name = "Test", Latitude = 16.05, Longitude = 108.22 };
             setup.EmployeeCollectionAreas.Add(area);
+            // Giữ ca điều phối ở 10:00 Việt Nam; check-in vẫn kiểm tra ảnh bằng giờ thực.
+            var now = PickupSchedule.At(PickupSchedule.Today(DateTime.UtcNow), 10);
+            var clock = new DispatchClock(now);
+            EmployeeDispatchService DispatchService(AppDbContext db) => new(new Retrack.API.Repositories.EmployeeDispatchRepository(db), new Retrack.API.Repositories.StaffUnitOfWork(db), clock);
             var shift = new EmployeeDispatchShift { AreaId = area.Id, EmployeeId = first.Id,
-                StartsAt = DateTime.UtcNow.AddMinutes(-1), EndsAt = DateTime.UtcNow.AddHours(1) };
+                StartsAt = now.AddMinutes(-1), EndsAt = now.AddHours(1) };
             setup.EmployeeDispatchShifts.Add(shift);
             var pickup = new PickupRequest { Seller = UserFor("SELLER"), TargetDepot = depot,
-                Address = "Test", Latitude = 16.05m, Longitude = 108.22m };
+                Address = "Test", CreatedAt = now, Latitude = 16.05m, Longitude = 108.22m };
             setup.PickupRequests.Add(pickup);
             await setup.SaveChangesAsync();
-            async Task Dispatch() { await using var db = NewDb(); await StaffTestServices.Dispatch(db).DispatchAsync(default); }
+            async Task Dispatch() { await using var db = NewDb(); await DispatchService(db).DispatchAsync(default); }
             await Task.WhenAll(Dispatch(), Dispatch());
             Assert.Single(await setup.EmployeeDispatchEvents.ToListAsync());
             Assert.Equal(2,await setup.Notifications.CountAsync());
@@ -149,7 +154,7 @@ public sealed class EmployeeDispatchPostgresTests
             async Task Pause()
             {
                 await using var db = NewDb();
-                await StaffTestServices.Dispatch(db).ChangeAvailabilityAsync(first.Id, shift.Id,
+                await DispatchService(db).ChangeAvailabilityAsync(first.Id, shift.Id,
                     new("FULL","Xe đầy cần về kho bàn giao"),default);
             }
             await Task.WhenAll(Pause(), Dispatch());
@@ -164,7 +169,7 @@ public sealed class EmployeeDispatchPostgresTests
                 },default);
             var secondShift = await setup.EmployeeDispatchShifts.AsNoTracking().SingleAsync(s => s.EmployeeId == second.Id);
             await using var pauseDb = NewDb();
-            await StaffTestServices.Dispatch(pauseDb).ChangeAvailabilityAsync(second.Id,secondShift.Id,
+            await DispatchService(pauseDb).ChangeAvailabilityAsync(second.Id,secondShift.Id,
                 new("STOPPED","Không thể tiếp tục ca thu gom"),default);
             var final = await setup.PickupRequests.AsNoTracking().SingleAsync();
             Assert.Equal(second.Id,final.AcceptedCollectorId); Assert.Equal("IN_PROGRESS",final.Status);
