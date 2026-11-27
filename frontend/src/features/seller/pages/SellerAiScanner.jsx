@@ -9,7 +9,7 @@ import {
   CheckCircle2, AlertTriangle, ShieldCheck, Check, Layers,
   MapPin, Scale, Award, Truck, Store, Calculator,
   ChevronDown, ChevronUp, Coins, Info, Lightbulb,
-  Eye, EyeOff, RotateCcw,
+  Eye, EyeOff, RotateCcw, CalendarClock,
 } from 'lucide-react';
 import { normalizeAiPredictions, buildLogicalOrderDescription } from '../aiWasteMetadata';
 import {
@@ -380,9 +380,10 @@ export default function SellerAiScanner() {
   };
 
   // Transfer AI Result to Create Request
-  const handleProceedToCreateRequest = (targetItem = null, customPrice = null, overrideDepot = null) => {
+  const handleProceedToCreateRequest = (targetItem = null, customPrice = null, overrideDepot = null, options = {}) => {
     if (!aiResult) return;
 
+    const focusSchedule = Boolean(options?.focusSchedule);
     const chosenDepot = overrideDepot || depotsList.find((d) => d.id === selectedDepotId) || null;
     const pricingDepot = chosenDepot || nearestDepot;
 
@@ -439,6 +440,7 @@ export default function SellerAiScanner() {
             fulfillmentMethod,
             detected_objects: mixedPricing.items,
             mixed_summary: aiResult.mixed_summary,
+            focusSchedule,
           },
         },
       });
@@ -500,6 +502,7 @@ export default function SellerAiScanner() {
           fulfillmentMethod,
           priceSource: calcPrice.priceSource,
           breakdown: calcPrice.breakdown,
+          focusSchedule,
         },
       },
     });
@@ -1420,14 +1423,26 @@ export default function SellerAiScanner() {
                       </p>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => handleProceedToCreateRequest()}
-                      className="px-5 py-3 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0"
-                    >
-                      <span>{chosenDepot ? `Tạo đơn gửi ${chosenDepot.name}` : 'Tạo đơn gom cả đống phế liệu'}</span>
-                      <ArrowRight size={14} />
-                    </button>
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handleProceedToCreateRequest()}
+                        className="px-5 py-3 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0"
+                      >
+                        <span>{chosenDepot ? `Tạo đơn gửi ${chosenDepot.name}` : 'Tạo đơn gom cả đống phế liệu'}</span>
+                        <ArrowRight size={14} />
+                      </button>
+                      <button
+                        id="btn-mixed-choose-schedule"
+                        type="button"
+                        onClick={() => handleProceedToCreateRequest(null, null, null, { focusSchedule: true })}
+                        className="px-4 py-2.5 rounded-full border border-d-primary/40 bg-d-surface-container-lowest hover:bg-d-primary/10 text-d-primary font-bold text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
+                        title="Chuyển sang trang Tạo đơn để chọn ngày và khung giờ thu gom mong muốn"
+                      >
+                        <CalendarClock size={15} />
+                        <span>Chọn ngày & giờ thu gom</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1963,7 +1978,7 @@ export default function SellerAiScanner() {
                 )}
 
                 {/* Primary Call to Action */}
-                <div className="pt-2">
+                <div className="pt-2 space-y-2.5">
                   <button
                     id="btn-proceed-create-request"
                     type="button"
@@ -1978,6 +1993,17 @@ export default function SellerAiScanner() {
                         : `Tạo đơn thu gom với: ${currentSelected.name_vi}`}
                     </span>
                     <ArrowRight size={16} />
+                  </button>
+
+                  <button
+                    id="btn-single-choose-schedule"
+                    type="button"
+                    onClick={() => handleProceedToCreateRequest(currentSelected, smartPrice, null, { focusSchedule: true })}
+                    className="w-full py-2.5 px-5 rounded-full border border-d-primary/40 bg-d-surface-container-lowest hover:bg-d-primary/10 text-d-primary font-bold text-sm transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <CalendarClock size={16} />
+                    <span>Muốn chọn giờ thu gom? Chọn ngày & khung giờ tại trang Tạo đơn</span>
+                    <ArrowRight size={14} />
                   </button>
                 </div>
               </div>

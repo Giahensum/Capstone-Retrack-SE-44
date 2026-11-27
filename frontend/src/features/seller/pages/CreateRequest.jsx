@@ -66,6 +66,7 @@ export default function CreateRequest() {
   const queryClient = useQueryClient();
   const fileInputRef = useRef(null);
   const aiFileInputRef = useRef(null);
+  const scheduleSectionRef = useRef(null);
 
   const [step, setStep] = useState(1);
   const [mode, setMode] = useState(null);
@@ -75,6 +76,7 @@ export default function CreateRequest() {
   const [isAiScanning, setIsAiScanning] = useState(false);
   const [detectedAiData, setDetectedAiData] = useState(null);
   const [selectedDepot, setSelectedDepot] = useState(null);
+  const [highlightSchedule, setHighlightSchedule] = useState(false);
 
   const [form, setForm] = useState({
     description: '',
@@ -138,7 +140,13 @@ export default function CreateRequest() {
           return prev;
         });
       }
-      if (ai.selectedDepot?.name) {
+      if (ai.focusSchedule) {
+        setHighlightSchedule(true);
+        toast.success('📅 Đã áp dụng thông tin AI — chọn ngày & khung giờ thu gom bên dưới');
+        setTimeout(() => {
+          scheduleSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 250);
+      } else if (ai.selectedDepot?.name) {
         toast.success(`✨ Đã áp dụng thông tin AI & chọn kho: ${ai.selectedDepot.name}`);
       } else {
         toast.success(`✨ Đã áp dụng phân loại AI: ${ai.name_vi}`);
@@ -835,7 +843,13 @@ export default function CreateRequest() {
             </div>
 
             {/* Ngày & Khung giờ thu gom */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+            <div
+              ref={scheduleSectionRef}
+              id="pickup-schedule-section"
+              className={`grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 rounded-2xl transition-all ${
+                highlightSchedule ? 'p-3 bg-d-primary/5 ring-2 ring-d-primary/40' : ''
+              }`}
+            >
               <div>
                 <label className="text-xs font-semibold text-d-on-surface mb-1.5 block">
                   📅 Ngày mong muốn thu gom
@@ -843,7 +857,10 @@ export default function CreateRequest() {
                 <input
                   type="date"
                   value={form.preferredDate}
-                  onChange={(e) => setForm({ ...form, preferredDate: e.target.value })}
+                  onChange={(e) => {
+                    setHighlightSchedule(false);
+                    setForm({ ...form, preferredDate: e.target.value });
+                  }}
                   min={new Date().toISOString().split('T')[0]}
                   className="w-full rounded-xl border border-d-border-subtle bg-d-surface-container-lowest p-3 text-sm text-d-on-surface focus:border-d-primary focus:ring-1 focus:ring-d-primary outline-none transition-all"
                 />
@@ -855,7 +872,10 @@ export default function CreateRequest() {
                 </label>
                 <select
                   value={form.preferredTimeSlot}
-                  onChange={(e) => setForm({ ...form, preferredTimeSlot: e.target.value })}
+                  onChange={(e) => {
+                    setHighlightSchedule(false);
+                    setForm({ ...form, preferredTimeSlot: e.target.value });
+                  }}
                   className="w-full rounded-xl border border-d-border-subtle bg-d-surface-container-lowest p-3 text-sm text-d-on-surface focus:border-d-primary focus:ring-1 focus:ring-d-primary outline-none transition-all"
                 >
                   <option value="">Linh hoạt theo điều phối</option>
