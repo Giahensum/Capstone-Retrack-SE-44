@@ -6,6 +6,7 @@ namespace Retrack.API.Repositories.Interfaces;
 
 public interface IEmployeeCollectionRepository
 {
+    Task<bool> CanStartShiftAsync(Guid userId,Guid depotId,DateTime now,CancellationToken ct);
     Task<bool> HasActiveStaffAsync(Guid userId, Guid? depotId, CancellationToken ct);
     Task<PickupRequest?> FindPickupAsync(Guid id, bool locked, CancellationToken ct);
     Task<PickupCheckIn?> FindCheckInAsync(Guid id, CancellationToken ct);

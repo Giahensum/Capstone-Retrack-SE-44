@@ -26,10 +26,10 @@ public sealed class EmployeePickupRepository(AppDbContext db) : IEmployeePickupR
         var depots = ActiveDepotIds(userId);
         var own = db.PickupRequests.AsNoTracking().Where(p => p.AcceptedCollectorId == userId
             && p.TargetDepotId != null && depots.Contains(p.TargetDepotId.Value) && p.Status == "SCHEDULED");
-        var items = await own.OrderBy(p => p.PreferredDatetime ?? p.CreatedAt).ThenBy(p => p.Id)
+        var items = await own.OrderBy(p => p.PreferredEndDatetime ?? DateTime.MaxValue).ThenBy(p => p.CreatedAt).ThenBy(p => p.Id)
             .Skip((page - 1) * 20).Take(20)
             .Select(p => new PickupPoolItemDto(p.Id, p.Seller.FullName, p.Seller.Phone, p.Address,
-                p.Latitude, p.Longitude, p.PreferredDatetime, p.Description, p.RequestImageUrl, p.CreatedAt)).ToListAsync(ct);
+                p.Latitude, p.Longitude, p.PreferredDatetime, p.Description, p.RequestImageUrl, p.CreatedAt, p.PreferredEndDatetime, p.CollectionDate)).ToListAsync(ct);
         return (items, await own.CountAsync(ct));
     }
     public Task<List<PickupPoolCandidate>> ManualPoolAsync(Guid depotId, CancellationToken ct) =>
@@ -37,7 +37,7 @@ public sealed class EmployeePickupRepository(AppDbContext db) : IEmployeePickupR
             .Where(p => (p.TargetDepotId == depotId || p.TargetDepotId == null) && p.Status == "PENDING" && p.AcceptedCollectorId == null)
             .OrderBy(p => p.PreferredDatetime == null).ThenBy(p => p.PreferredDatetime).ThenBy(p => p.CreatedAt).ThenBy(p => p.Id)
             .Select(p => new PickupPoolCandidate(new PickupPoolItemDto(p.Id, p.Seller.FullName, p.Seller.Phone, p.Address,
-                p.Latitude, p.Longitude, p.PreferredDatetime, p.Description, p.RequestImageUrl, p.CreatedAt),
+                p.Latitude, p.Longitude, p.PreferredDatetime, p.Description, p.RequestImageUrl, p.CreatedAt, p.PreferredEndDatetime, p.CollectionDate),
                 p.TargetDepotId, p.Latitude, p.Longitude)).ToListAsync(ct);
     public async Task<object> ActiveAsync(Guid userId, int page, CancellationToken ct)
     {
@@ -57,7 +57,7 @@ public sealed class EmployeePickupRepository(AppDbContext db) : IEmployeePickupR
                     && !db.EmployeeCollectionAreas.Any(a => a.DepotId == depotId)) || p.AcceptedCollectorId == userId))
             .Select(p => new PickupDetailCandidate(new EmployeePickupDetailDto(p.Id, p.Seller.FullName, p.Seller.Phone, p.Address,
                 p.Latitude, p.Longitude, p.PreferredDatetime, p.Description, p.RequestImageUrl, p.CreatedAt,
-                p.Status, p.AcceptedCollectorId == userId), p.TargetDepotId, p.Latitude, p.Longitude)).FirstOrDefaultAsync(ct);
+                p.Status, p.AcceptedCollectorId == userId, p.PreferredEndDatetime, p.CollectionDate), p.TargetDepotId, p.Latitude, p.Longitude)).FirstOrDefaultAsync(ct);
     }
     public Task<PickupRequest?> FindAvailableAsync(Guid depotId, Guid pickupId, CancellationToken ct) =>
         db.PickupRequests.AsNoTracking().Include(p => p.Seller)

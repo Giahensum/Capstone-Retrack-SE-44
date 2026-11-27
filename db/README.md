@@ -240,3 +240,13 @@ Schema vận chuyển nằm trong `bootstrap/retrack-system.sql`, giữa `-- RET
 Với DB đang có dữ liệu: sao lưu, xác minh đúng database, chọn duy nhất nội dung giữa hai marker Shipping và chạy trong transaction `BEGIN;` … `COMMIT;`. Không chạy kèm phần seed hoặc thay toàn bộ database chỉ để thêm vận chuyển. Khối này bổ sung hai cột `shipping_method`, `shipping_quote_id` vào `inventory_batches` và ba bảng `shipping_quotes`, `external_shipments`, `shipping_events`. Lô cũ mặc định dùng `INTERNAL`.
 
 Bài test `ShippingPostgresTests` chỉ đọc bootstrap chung, tắt seed rồi chạy lại khối Shipping từ chính nội dung đã đọc để kiểm tra tính lặp an toàn và đặt xe đồng thời. Khi đưa code lên Git cần giữ cả hai marker Shipping trong bootstrap.
+
+
+### Bộ kiểm thử điều phối bảo vệ ngày 07/12/2026
+
+Bootstrap hiện seed 10 Employee dispatch01–10 (5 người Thành Đạt, 5 người Minh Phát), 20 Seller và 160 đơn tại vị trí tra cứu Goong. Không seed ca hoặc phân công; worker tự tạo ca 07:00–19:00. Mỗi vùng có 16 đơn: 4 linh hoạt và 2 đơn cho mỗi khung 07–09, 09–11, 11–13, 13–15, 15–17, 17–19. Giữ nguyên ID 001–100, thêm 101–160. Đơn quá giờ/ngày phải chờ Owner hẹn lại, không tự dời ngày. Ngày demo cố định tại biến `demo_day` trong khối `RETRACK_AUTO_DISPATCH_BULK_SEED_BEGIN/END`; chạy lại file không reset lịch sử đã sử dụng.
+
+Schema lịch mới nằm trong khối `RETRACK_PICKUP_SCHEDULE_V2_BEGIN/END` trước `RETRACK_SCHEMA_END`; DB cũ chỉ nâng schema sau backup, không seed chồng. Hướng dẫn test từng tình huống và cập nhật APK: [AUTO_DAILY_COLLECTION.md](../docs/AUTO_DAILY_COLLECTION.md).
+
+
+Theo yêu cầu chuẩn bị bảo vệ, có tác vụ riêng `employee/prepare_defense_demo.sql` để nâng bộ 100 lên 160 và đổi lịch bộ demo trên DB demo đã có bootstrap mới; không phải bootstrap thứ hai. Chỉnh một dòng `SET LOCAL retrack.demo_date = '2026-12-07';`. File không reset đơn đã check-in/kết thúc, chỉ thêm 60 mã mở rộng còn thiếu, không tạo lại tài khoản/100 mã gốc. Upload, backup, chạy và kiểm tra theo [DEFENSE_DEMO_DEPLOY_GUIDE.md](../docs/DEFENSE_DEMO_DEPLOY_GUIDE.md). Cài APK/test local và chuyển HTTPS deploy xem [MOBILE_APK_LOCAL_AND_DEPLOY.md](../docs/MOBILE_APK_LOCAL_AND_DEPLOY.md).

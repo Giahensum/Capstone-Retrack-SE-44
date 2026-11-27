@@ -2,7 +2,7 @@
 -- RETRACK — KHỞI TẠO TOÀN HỆ THỐNG VÀ DỮ LIỆU DEMO
 -- Máy mới: tạo database rỗng bằng pgAdmin, mở Query Tool của đúng DB,
 -- mở file này và nhấn F5 để chạy TOÀN BỘ, không cần lệnh terminal.
--- Đây là FILE SQL DUY NHẤT của dự án: schema + seed chung + demo Employee/Driver/điều phối.
+-- Đây là FILE KHỞI TẠO DUY NHẤT của dự án: schema + seed chung + demo Employee/Driver/điều phối.
 -- Mặc định có seed demo các role tại Đà Nẵng. Không dùng cho production.
 -- Muốn chỉ tạo cấu trúc: đổi retrack.seed_demo từ 'on' thành 'off' bên dưới.
 -- Không thay kết nối/mật khẩu PostgreSQL; cấu hình backend bằng .env local.
@@ -1509,6 +1509,13 @@ CREATE TABLE IF NOT EXISTS shipping_events (
 CREATE INDEX IF NOT EXISTS ix_shipping_events_shipment ON shipping_events(shipment_id,created_at);
 -- RETRACK_SHIPPING_END
 
+-- RETRACK_PICKUP_SCHEDULE_V2_BEGIN
+ALTER TABLE pickup_requests ADD COLUMN IF NOT EXISTS collection_date date;
+ALTER TABLE pickup_requests ADD COLUMN IF NOT EXISTS preferred_end_datetime timestamptz;
+ALTER TABLE pickup_requests ADD COLUMN IF NOT EXISTS requires_owner_review boolean NOT NULL DEFAULT false;
+ALTER TABLE pickup_requests ADD COLUMN IF NOT EXISTS dispatch_review_reason text;
+CREATE INDEX IF NOT EXISTS ix_pickup_dispatch_date ON pickup_requests(collection_date,status) WHERE requires_owner_review=false;
+-- RETRACK_PICKUP_SCHEDULE_V2_END
 -- RETRACK_SCHEMA_END
 
 -- RETRACK_SEED_BEGIN
@@ -1517,9 +1524,9 @@ DO $retrack_seed$
 BEGIN
 IF current_setting('retrack.seed_demo', true) = 'on' THEN
 -- Hai bản ghi giữ FK của lịch sử/cân/thanh toán chung; không còn là tài khoản test đăng nhập.
-UPDATE users SET email='employee.dispatch07@retrack.test', is_active=FALSE
+UPDATE users SET email='employee.dispatch01@retrack.test', is_active=FALSE
 WHERE id='00000000-0000-0000-0000-000000000004' AND email='employee@retrack.vn' AND role='DEPOT_EMPLOYEE';
-UPDATE users SET email='employee.dispatch08@retrack.test', is_active=FALSE
+UPDATE users SET email='employee.dispatch06@retrack.test', is_active=FALSE
 WHERE id='00000000-0000-0000-0000-00000000000c' AND email='employee2@retrack.vn' AND role='DEPOT_EMPLOYEE';
 
 -- Dữ liệu demo dùng cục bộ/phát triển, không dùng production.
@@ -1536,7 +1543,7 @@ VALUES
     ('00000000-0000-0000-0000-000000000001', 'admin@retrack.vn',    '$2a$11$eNEiPwGZnOqVlHiSydDe4exEtVDa5h2t8vR.VBK/tTAv/W1mHBOwW', 'ADMIN',          'Quản trị viên ReTrack', '0900000001', TRUE, NOW(), NOW()),
     ('00000000-0000-0000-0000-000000000002', 'seller@retrack.vn',   '$2a$11$J/edu1SVelH8SrExp6JGNuuWmaRMULzpLjFhA.1/WcMzB2.O8Hsom', 'SELLER',         'Nguyễn Thị Lan',        '0911111111', TRUE, NOW(), NOW()),
     ('00000000-0000-0000-0000-000000000003', 'depot@retrack.vn',    '$2a$11$i0GJ0.h60xsCKWZ8XvYkJ.guY1aYe9ykxcsg22/KvM4PZ7kXr6Sce', 'DEPOT_OWNER',    'Ngô Sỹ Giá',             '0922222222', TRUE, NOW(), NOW()),
-    ('00000000-0000-0000-0000-000000000004', 'employee.dispatch07@retrack.test', '$2a$11$7cergszHVwtBQKDOOIM.POdnPLveC9s7edhE2hY6/rStLyg.889hm', 'DEPOT_EMPLOYEE', 'Lê Minh Tuấn',           '0933333333', FALSE, NOW(), NOW()),
+    ('00000000-0000-0000-0000-000000000004', 'employee.dispatch01@retrack.test', '$2a$11$7cergszHVwtBQKDOOIM.POdnPLveC9s7edhE2hY6/rStLyg.889hm', 'DEPOT_EMPLOYEE', 'Lê Hoàng Phúc',           '0933333333', TRUE, NOW(), NOW()),
     ('00000000-0000-0000-0000-000000000005', 'driver@retrack.vn',   '$2a$11$d7vd3QQIgwwE8U/3VvpwGuThZU0vhoxsA2jrzvkQ5qkL3KiWgx3UG', 'DRIVER',         'Phạm Văn Hùng',          '0944444444', TRUE, NOW(), NOW()),
     ('00000000-0000-0000-0000-000000000006', 'factory@retrack.vn',  '$2a$11$mIHozvQGf7pIuXnWk4j03OKdxo7q27HVkx3LzqUu3cm2rrhjNCzmG', 'FACTORY',        'Eco Plastics Vietnam',   '0955555551', TRUE, NOW(), NOW()),
     ('00000000-0000-0000-0000-000000000007', 'factory2@retrack.vn', '$2a$11$mIHozvQGf7pIuXnWk4j03OKdxo7q27HVkx3LzqUu3cm2rrhjNCzmG', 'FACTORY',        'Công Ty Kim Loại Phú Lợi','0955555552', TRUE, NOW(), NOW()),
@@ -1544,7 +1551,7 @@ VALUES
     ('00000000-0000-0000-0000-000000000009', 'seller2@retrack.vn',  '$2a$11$J/edu1SVelH8SrExp6JGNuuWmaRMULzpLjFhA.1/WcMzB2.O8Hsom', 'SELLER',         'Trần Thị Hương',        '0911111112', TRUE, NOW(), NOW()),
     ('00000000-0000-0000-0000-00000000000a', 'seller3@retrack.vn',  '$2a$11$J/edu1SVelH8SrExp6JGNuuWmaRMULzpLjFhA.1/WcMzB2.O8Hsom', 'SELLER',         'Phạm Minh Khoa',        '0911111113', TRUE, NOW(), NOW()),
     ('00000000-0000-0000-0000-00000000000b', 'seller4@retrack.vn',  '$2a$11$J/edu1SVelH8SrExp6JGNuuWmaRMULzpLjFhA.1/WcMzB2.O8Hsom', 'SELLER',         'Lê Thanh Mai',          '0911111114', TRUE, NOW(), NOW()),
-    ('00000000-0000-0000-0000-00000000000c', 'employee.dispatch08@retrack.test','$2a$11$7cergszHVwtBQKDOOIM.POdnPLveC9s7edhE2hY6/rStLyg.889hm', 'DEPOT_EMPLOYEE', 'Nguyễn Quốc Bảo',       '0933333334', FALSE, NOW(), NOW()),
+    ('00000000-0000-0000-0000-00000000000c', 'employee.dispatch06@retrack.test','$2a$11$7cergszHVwtBQKDOOIM.POdnPLveC9s7edhE2hY6/rStLyg.889hm', 'DEPOT_EMPLOYEE', 'Nguyễn Anh Khoa',       '0933333334', TRUE, NOW(), NOW()),
     ('00000000-0000-0000-0000-00000000000d', 'driver2@retrack.vn',  '$2a$11$d7vd3QQIgwwE8U/3VvpwGuThZU0vhoxsA2jrzvkQ5qkL3KiWgx3UG', 'DRIVER',         'Trần Văn Hải',          '0944444445', TRUE, NOW(), NOW())
 ON CONFLICT DO NOTHING;
 
@@ -1557,7 +1564,7 @@ BEGIN
             ('00000000-0000-0000-0000-000000000001'::uuid, 'admin@retrack.vn', 'ADMIN'),
             ('00000000-0000-0000-0000-000000000002'::uuid, 'seller@retrack.vn', 'SELLER'),
             ('00000000-0000-0000-0000-000000000003'::uuid, 'depot@retrack.vn', 'DEPOT_OWNER'),
-            ('00000000-0000-0000-0000-000000000004'::uuid, 'employee.dispatch07@retrack.test', 'DEPOT_EMPLOYEE'),
+            ('00000000-0000-0000-0000-000000000004'::uuid, 'employee.dispatch01@retrack.test', 'DEPOT_EMPLOYEE'),
             ('00000000-0000-0000-0000-000000000005'::uuid, 'driver@retrack.vn', 'DRIVER'),
             ('00000000-0000-0000-0000-000000000006'::uuid, 'factory@retrack.vn', 'FACTORY'),
             ('00000000-0000-0000-0000-000000000007'::uuid, 'factory2@retrack.vn', 'FACTORY'),
@@ -1565,7 +1572,7 @@ BEGIN
             ('00000000-0000-0000-0000-000000000009'::uuid, 'seller2@retrack.vn', 'SELLER'),
             ('00000000-0000-0000-0000-00000000000a'::uuid, 'seller3@retrack.vn', 'SELLER'),
             ('00000000-0000-0000-0000-00000000000b'::uuid, 'seller4@retrack.vn', 'SELLER'),
-            ('00000000-0000-0000-0000-00000000000c'::uuid, 'employee.dispatch08@retrack.test', 'DEPOT_EMPLOYEE'),
+            ('00000000-0000-0000-0000-00000000000c'::uuid, 'employee.dispatch06@retrack.test', 'DEPOT_EMPLOYEE'),
             ('00000000-0000-0000-0000-00000000000d'::uuid, 'driver2@retrack.vn', 'DRIVER')
         ) AS expected(id, email, role)
         LEFT JOIN users u ON u.id = expected.id AND u.email = expected.email AND u.role = expected.role
@@ -1599,13 +1606,9 @@ WHERE id IN ('00000000-0000-0000-0000-000000000010', '00000000-0000-0000-0000-00
 
 INSERT INTO depot_staffs (id, depot_id, user_id, staff_type, is_active)
 VALUES
-    ('00000000-0000-0000-0000-000000000030', '00000000-0000-0000-0000-000000000010', '00000000-0000-0000-0000-000000000004', 'DEPOT_EMPLOYEE', TRUE),
     ('00000000-0000-0000-0000-000000000031', '00000000-0000-0000-0000-000000000010', '00000000-0000-0000-0000-000000000005', 'DRIVER', TRUE),
-    ('00000000-0000-0000-0000-000000000032', '00000000-0000-0000-0000-000000000011', '00000000-0000-0000-0000-000000000004', 'DEPOT_EMPLOYEE', TRUE),
     ('00000000-0000-0000-0000-000000000033', '00000000-0000-0000-0000-000000000011', '00000000-0000-0000-0000-000000000005', 'DRIVER', TRUE),
-    ('00000000-0000-0000-0000-000000000034', '00000000-0000-0000-0000-000000000012', '00000000-0000-0000-0000-000000000004', 'DEPOT_EMPLOYEE', TRUE),
     ('00000000-0000-0000-0000-000000000035', '00000000-0000-0000-0000-000000000012', '00000000-0000-0000-0000-000000000005', 'DRIVER', TRUE),
-    ('00000000-0000-0000-0000-000000000036', '00000000-0000-0000-0000-000000000010', '00000000-0000-0000-0000-00000000000c', 'DEPOT_EMPLOYEE', TRUE),
     ('00000000-0000-0000-0000-000000000037', '00000000-0000-0000-0000-000000000011', '00000000-0000-0000-0000-00000000000d', 'DRIVER', TRUE)
 ON CONFLICT DO NOTHING;
 
@@ -1989,29 +1992,11 @@ $retrack_seed$;
 
 
 -- RETRACK_DISPATCH_DEMO_SEED_BEGIN
-DO $retrack_dispatch_demo_seed$
-<<fixture>>
-DECLARE
-    owner_id uuid;
-    employee_source users%ROWTYPE;
-    seller_source users%ROWTYPE;
-    depot_id uuid := 'ef400000-0000-4000-8000-000000000001';
-    area_id uuid; employee_id uuid; seller_id uuid; pickup_id uuid; shift_id uuid;
-    point record; seller_point record; i integer; j integer;
-    employee_names text[] := ARRAY['Trần Minh Quân','Lê Văn Hòa','Nguyễn Đức Thành','Phạm Quốc Huy','Võ Thanh Tùng','Đặng Minh Hải'];
-    seller_names text[] := ARRAY['Nguyễn Thị Mai','Trần Văn Sơn','Lê Thu Hà','Phạm Ngọc Anh','Võ Thị Hương','Đặng Quốc Bảo','Hoàng Thanh Bình','Bùi Thị Loan','Đỗ Minh Khang','Ngô Thị Thảo','Hồ Văn Phúc','Dương Hải Yến'];
-    descriptions text[] := ARRAY['Tôi có hai bao chai nhựa đã rửa sạch, nhờ gọi trước khi tới.', 'Cửa hàng có thùng carton đã gấp gọn sau đợt nhập hàng.', 'Gia đình cần bán giấy báo và sách cũ, đã buộc thành từng bó.', 'Có lon nhôm và chai nước, tôi đã phân loại riêng.', 'Cần thu gom bìa carton và túi giấy ở cửa hàng.', 'Nhà có quạt hỏng và vài thanh sắt, nhờ đến xem rồi cân.', 'Văn phòng có giấy in cũ, vui lòng liên hệ trước khi lấy.', 'Tôi có chai nhựa và can nhựa rỗng, để sẵn ở tầng trệt.', 'Nhờ thu gom thùng giấy đóng đồ và lon nước ngọt.', 'Có một ít đồng dây điện và đồ nhôm cũ cần bán.', 'Cửa hàng dọn kho có giấy bìa và chai nhựa.', 'Gia đình có sách cũ và giấy vụn đã đóng bao.'];
-    shift_start timestamptz := date_trunc('day', CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Ho_Chi_Minh') AT TIME ZONE 'Asia/Ho_Chi_Minh';
-    shift_end timestamptz := (date_trunc('day', CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Ho_Chi_Minh') + interval '1 day') AT TIME ZONE 'Asia/Ho_Chi_Minh';
+DO $keep_depots$
+DECLARE owner_id uuid;depot_id uuid;j int;
 BEGIN
-    IF current_setting('retrack.seed_demo', true) IS DISTINCT FROM 'on' THEN RETURN; END IF;
-    SELECT * INTO employee_source FROM users WHERE email = 'employee.dispatch07@retrack.test' AND role = 'DEPOT_EMPLOYEE';
-    SELECT * INTO seller_source FROM users WHERE email = 'seller@retrack.vn' AND role = 'SELLER' AND is_active;
-    SELECT d.owner_id INTO owner_id FROM depots d JOIN users u ON u.id = d.owner_id
-        WHERE u.is_active AND u.role = 'DEPOT_OWNER' ORDER BY d.id LIMIT 1;
-    IF employee_source.id IS NULL OR seller_source.id IS NULL OR owner_id IS NULL THEN
-        RAISE EXCEPTION 'Cần employee.dispatch07@retrack.test, seller@retrack.vn và Owner đang hoạt động. Chưa seed gì.';
-    END IF;
+ IF current_setting('retrack.seed_demo',true) IS DISTINCT FROM 'on' THEN RETURN; END IF;
+ SELECT d.owner_id INTO owner_id FROM depots d JOIN users u ON u.id=d.owner_id WHERE u.is_active AND u.role='DEPOT_OWNER' ORDER BY d.id LIMIT 1;
     FOR j IN 1..2 LOOP
         depot_id := ('ef400000-0000-4000-8000-' || lpad(j::text,12,'0'))::uuid;
         INSERT INTO depots(id,owner_id,name,address,latitude,longitude,rating,verification_status,created_at)
@@ -2020,134 +2005,226 @@ BEGIN
             CASE WHEN j=1 THEN 16.06836 ELSE 16.06817 END, CASE WHEN j=1 THEN 108.22443 ELSE 108.21453 END,
             0,'APPROVED',CURRENT_TIMESTAMP) ON CONFLICT(id) DO NOTHING;
     END LOOP;
-    i := 0;
-    FOR point IN SELECT * FROM (VALUES
-        ('Trần Phú',16.06836,108.22443),
-        ('Hùng Vương',16.06817,108.21453),
-        ('Nguyễn Lương Bằng',16.0746638,108.1506880),
-        ('Bờ Tây sông Hàn',16.06836,108.22443),
-        ('Hải Phòng',16.06817,108.21453),
-        ('Ngũ Hành Sơn',15.9874125,108.2562344)
-    ) AS v(name,lat,lng)
-    LOOP
-        i := i + 1;
-        depot_id := CASE WHEN i<=3 THEN 'ef400000-0000-4000-8000-000000000001'::uuid ELSE 'ef400000-0000-4000-8000-000000000002'::uuid END;
-        area_id := ('ef410000-0000-4000-8000-' || lpad(i::text,12,'0'))::uuid;
-        employee_id := ('ef420000-0000-4000-8000-' || lpad(i::text,12,'0'))::uuid;
-        seller_id := ('ef430000-0000-4000-8000-' || lpad(i::text,12,'0'))::uuid;
-        -- UUID cố định/unique email: xung đột với dữ liệu ngoài fixture làm transaction dừng.
-        INSERT INTO users(id,email,password_hash,role,full_name,phone,is_active,created_at,updated_at)
-        VALUES(employee_id,'employee.dispatch' || lpad(i::text,2,'0') || '@retrack.test',employee_source.password_hash,
-            'DEPOT_EMPLOYEE',employee_names[i],'090990000' || i,true,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
-        ON CONFLICT(id) DO NOTHING;
-        INSERT INTO depot_staffs(id,depot_id,user_id,staff_type,is_active)
-        VALUES(('ef440000-0000-4000-8000-' || lpad(i::text,12,'0'))::uuid,depot_id,employee_id,'DEPOT_EMPLOYEE',true)
-        ON CONFLICT(id) DO NOTHING;
-        INSERT INTO employee_collection_areas(id,depot_id,name,latitude,longitude,radius_meters,is_active)
-        VALUES(area_id,depot_id,point.name,point.lat,point.lng,2500,true) ON CONFLICT(id) DO NOTHING;
-        -- Chạy lại trong ca không bật lại người đã STOPPED/FULL. Ngày khác chỉ thêm ca khi ca cũ đã hết.
-        IF NOT EXISTS(SELECT 1 FROM employee_dispatch_shifts WHERE employee_dispatch_shifts.employee_id = fixture.employee_id
-            AND ends_at > shift_start) THEN
-            shift_id := gen_random_uuid();
-            INSERT INTO employee_dispatch_shifts(id,area_id,employee_id,starts_at,ends_at,availability,vehicle,is_automatic,
-                capacity_kg,max_pending_orders,updated_at)
-            VALUES(shift_id,area_id,employee_id,shift_start,shift_end,'AVAILABLE',
-                CASE WHEN i % 2 = 0 THEN 'car' ELSE 'motorcycle' END,true,
-                CASE WHEN i % 2 = 0 THEN 500 ELSE 100 END,14,CURRENT_TIMESTAMP);
-        END IF;
-    END LOOP;
-    -- 12 Seller / 12 đơn / 12 địa chỉ riêng. Không lặp địa điểm để tạo thêm số lượng.
-    -- Tọa độ kế thừa bộ địa điểm dự án; hai điểm bổ sung đối chiếu Mapcarta/OSM:
-    -- https://mapcarta.com/W404714309 ; https://mapcarta.com/W675604354
-    -- Điểm công cộng chỉ dùng mô phỏng, không phải yêu cầu thu gom thực tế.
-    i := 0;
-    FOR seller_point IN SELECT * FROM (VALUES
-        ('Chợ Hàn, 119 Trần Phú, Đà Nẵng',16.0683600,108.2244300),
-        ('Nhà thờ Chính tòa, 156 Trần Phú, Đà Nẵng',16.0666800,108.2230600),
-        ('Bảo tàng Điêu khắc Chăm, 2 đường 2 Tháng 9, Đà Nẵng',16.0602000,108.2231700),
-        ('Công viên APEC, đường 2 Tháng 9, Đà Nẵng',16.0586000,108.2232700),
-        ('Chợ Cồn, đường Hùng Vương, Đà Nẵng',16.0681700,108.2145300),
-        ('Bệnh viện Đà Nẵng, 124 Hải Phòng, Đà Nẵng',16.0721056,108.2156940),
-        ('Trung tâm Hành chính, 24 Trần Phú, Đà Nẵng',16.0770864,108.2231701),
-        ('Đại học Bách khoa, 54 Nguyễn Lương Bằng, Đà Nẵng',16.0746638,108.1506880),
-        ('X7P4+XF9 Ngũ Hành Sơn, Đà Nẵng',15.9874125,108.2562344),
-        ('Đại học Đông Á, 33 Xô Viết Nghệ Tĩnh, Đà Nẵng',16.0321559,108.2213119),
-        ('Chợ Túy Loan, Đà Nẵng',15.9903511,108.1409952),
-        ('Khu du lịch Bà Nà Hills, thôn An Sơn, Đà Nẵng',16.0259108,108.0322546)
-    ) AS v(address,lat,lng)
-    LOOP
-        i := i + 1;
-        seller_id := ('ef430000-0000-4000-8000-' || lpad(i::text,12,'0'))::uuid;
-        INSERT INTO users(id,email,password_hash,role,full_name,phone,is_active,created_at,updated_at)
-        VALUES(seller_id,'seller.dispatch' || lpad(i::text,2,'0') || '@retrack.test',seller_source.password_hash,
-            'SELLER',seller_names[i],'090980' || lpad(i::text,4,'0'),true,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
-        ON CONFLICT(id) DO NOTHING;
-        depot_id := CASE WHEN i IN (1,2,3,5,8,12) THEN 'ef400000-0000-4000-8000-000000000001'::uuid
-                         ELSE 'ef400000-0000-4000-8000-000000000002'::uuid END;
-        pickup_id := ('ef350000-0000-4000-8000-' || lpad(i::text,12,'0'))::uuid;
-        INSERT INTO pickup_requests(id,seller_id,target_depot_id,description,address,latitude,longitude,preferred_datetime,
-            status,gross_amount,platform_fee_percentage,platform_fee_amount,net_amount,created_at,updated_at)
-        VALUES(pickup_id,seller_id,depot_id,descriptions[i],seller_point.address,seller_point.lat,seller_point.lng,
-            CASE WHEN i IN (10,11) THEN CURRENT_TIMESTAMP + interval '2 days'
-                 WHEN i=7 THEN CURRENT_TIMESTAMP + interval '1 hour' ELSE NULL END,
-            'PENDING',0,5,0,0,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
-        ON CONFLICT(id) DO NOTHING;
-    END LOOP;
-    RAISE NOTICE 'Đã chuẩn bị 12 đơn tại 12 địa chỉ, 6 nhân viên chia 2 kho. Tài khoản dispatch01–06. Không reset lịch sử.';
-END $retrack_dispatch_demo_seed$;
+END $keep_depots$;
 -- RETRACK_DISPATCH_DEMO_SEED_END
 
 -- RETRACK_AUTO_DISPATCH_BULK_SEED_BEGIN
--- Hai kho mới hoàn toàn không seed vùng/ca: worker tự chuẩn bị sau khi backend chạy.
--- Tọa độ mô phỏng gần điểm tham chiếu thật, không phải địa chỉ nhà khách hàng đã xác minh.
+-- Một nguồn seed; ngày cố định để test có thể lặp. Chỉ sửa demo_day khi đổi ngày demo.
+-- Địa chỉ/tọa độ tra cứu Goong Place Detail 27/11/2026, không cộng lệch tọa độ.
+-- Người bán và nội dung là dữ liệu thử, không phải yêu cầu thật tại các địa chỉ này.
 DO $auto_dispatch_bulk$
 DECLARE
-    depot uuid; emp uuid; seller uuid; n integer; k integer; local_index integer;
-    employee_hash text; seller_hash text; owner uuid;
-    lat numeric; lng numeric; place text;
-    surnames text[] := ARRAY['Nguyễn','Trần','Lê','Phạm','Võ','Đặng','Hoàng','Bùi'];
-    names text[] := ARRAY['Minh Anh','Thanh Hà','Quốc Hưng','Ngọc Lan','Văn Nam','Thu Trang','Đức Hải','Thị Hạnh','Gia Bảo','Khánh Linh'];
+ demo_day date := DATE '2026-12-07';
+ depot uuid;emp uuid;seller uuid;owner uuid;employee_hash text;seller_hash text;
+ n integer;j integer;k integer;point record;day_start timestamptz;scheduled timestamptz;
+ employee_names text[] := ARRAY['Lê Hoàng Phúc','Trần Minh Quân','Nguyễn Đức Thành','Phạm Quốc Huy','Võ Thanh Tùng','Nguyễn Anh Khoa','Đặng Thu Trang','Hoàng Đức Hải','Bùi Thị Hạnh','Đỗ Thanh Bình'];
+ seller_names text[] := ARRAY['Nguyễn Thị Mai','Trần Văn Sơn','Lê Thu Hà','Phạm Ngọc Anh','Võ Thị Hương','Đặng Quốc Bảo','Hoàng Thanh Bình','Bùi Thị Loan','Đỗ Minh Khang','Ngô Thị Thảo','Hồ Văn Phúc','Dương Hải Yến','Nguyễn Thanh Tâm','Trần Ngọc Linh','Lê Hoàng Nam','Phạm Thu Thủy','Võ Minh Đức','Đặng Thị Ánh','Hoàng Văn Dũng','Bùi Thanh Hằng'];
+ descriptions text[] := ARRAY['Tôi có thùng carton sau khi nhập hàng, đã gấp và buộc gọn.','Nhờ thu gom chai nước suối và lon nhôm, tôi đã để riêng.','Gia đình có sách giáo khoa cũ và giấy báo đóng trong bao.','Cửa hàng vừa thay kệ, có một số thanh sắt tháo rời.','Có nồi nhôm và chậu nhựa cũ, vui lòng gọi trước.','Văn phòng dọn giấy in cũ, có người hỗ trợ mang xuống.','Tôi có bìa carton và hộp giấy sạch đã xếp cạnh cửa.','Có dây điện cũ và vài đồ kim loại nhỏ cần thu mua.','Nhờ đến xem chai nhựa và can nhựa rỗng đã rửa sạch.','Gia đình dọn kho có giấy vụn và lon nước ngọt, gọi trước giúp tôi.','Tôi có vài bao vỏ chai nước và giấy bìa, đã để riêng ở cửa.','Cần thu mua sách cũ và giấy in, vui lòng báo trước khi đến.','Cửa hàng có lon nhôm sạch và vỏ hộp, đã đóng gọn trong túi.','Gia đình thay đồ dùng có chậu nhôm và mấy thanh sắt nhỏ.','Tôi có thùng carton sau khi nhận hàng, có người phụ mang ra xe.','Nhờ đến cân bao giấy vụn và chai nhựa, tôi có mặt theo giờ hẹn.'];
 BEGIN
-    IF current_setting('retrack.seed_demo', true) IS DISTINCT FROM 'on' THEN RETURN; END IF;
-    SELECT password_hash INTO employee_hash FROM users WHERE email='employee.dispatch07@retrack.test';
-    SELECT password_hash INTO seller_hash FROM users WHERE email='seller@retrack.vn';
-    SELECT id INTO owner FROM users WHERE email='depot@retrack.vn' AND role='DEPOT_OWNER';
-    IF employee_hash IS NULL OR seller_hash IS NULL OR owner IS NULL THEN RAISE EXCEPTION 'Thiếu tài khoản nguồn seed tự động'; END IF;
-    FOR k IN 1..2 LOOP
-        depot := ('fa100000-0000-4000-8000-' || lpad(k::text,12,'0'))::uuid;
-        INSERT INTO depots(id,owner_id,name,address,latitude,longitude,rating,verification_status,created_at)
-        VALUES(depot,owner,CASE WHEN k=1 THEN 'Kho Thu Mua Thành Đạt' ELSE 'Kho Tái Chế Minh Phát' END,
-            CASE WHEN k=1 THEN 'Khu vực Hòa Khánh, Đà Nẵng' ELSE 'Khu vực Hòa Quý, Đà Nẵng' END,
-            CASE WHEN k=1 THEN 16.0746638 ELSE 15.9874125 END,CASE WHEN k=1 THEN 108.1506880 ELSE 108.2562344 END,
-            0,'APPROVED',CURRENT_TIMESTAMP) ON CONFLICT(id) DO NOTHING;
-        FOR local_index IN 1..4 LOOP
-            n := (k-1)*4+local_index;
-            emp := ('fa200000-0000-4000-8000-' || lpad(n::text,12,'0'))::uuid;
-            INSERT INTO users(id,email,password_hash,role,full_name,phone,is_active,created_at,updated_at)
-            VALUES(emp,'employee.dispatch' || lpad((n+8)::text,2,'0') || '@retrack.test',employee_hash,'DEPOT_EMPLOYEE',
-                surnames[n] || ' ' || names[n],'090970' || lpad(n::text,4,'0'),true,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP) ON CONFLICT(id) DO NOTHING;
-            INSERT INTO depot_staffs(id,depot_id,user_id,staff_type,is_active)
-            VALUES(('fa300000-0000-4000-8000-' || lpad(n::text,12,'0'))::uuid,depot,emp,'DEPOT_EMPLOYEE',true) ON CONFLICT(id) DO NOTHING;
-        END LOOP;
-        FOR local_index IN 1..6 LOOP
-            n := (k-1)*6+local_index;
-            seller := ('fa400000-0000-4000-8000-' || lpad(n::text,12,'0'))::uuid;
-            INSERT INTO users(id,email,password_hash,role,full_name,phone,is_active,created_at,updated_at)
-            VALUES(seller,'seller.dispatch' || (100+n)::text || '@retrack.test',seller_hash,'SELLER',
-                surnames[1+(n-1)/10] || ' ' || names[1+(n-1)%10],'090960' || lpad(n::text,4,'0'),true,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP) ON CONFLICT(id) DO NOTHING;
-            -- Mỗi kho có sáu đơn: ba gần Hòa Khánh, ba gần Hòa Quý (một đơn hẹn ngày sau).
-            lat := CASE WHEN local_index<=3 THEN 16.0746638 ELSE 15.9874125 END + (n%10)*0.00006;
-            lng := CASE WHEN local_index<=3 THEN 108.1506880 ELSE 108.2562344 END + n*0.000035;
-            place := CASE WHEN local_index<=3 THEN 'Nguyễn Lương Bằng, Hòa Khánh' ELSE 'Hòa Quý, Ngũ Hành Sơn' END;
-            INSERT INTO pickup_requests(id,seller_id,target_depot_id,description,address,latitude,longitude,preferred_datetime,
-                status,gross_amount,platform_fee_percentage,platform_fee_amount,net_amount,created_at,updated_at)
-            VALUES(('fa500000-0000-4000-8000-' || lpad(n::text,12,'0'))::uuid,seller,depot,
-                (ARRAY['Tôi có các thùng carton sau khi chuyển nhà, đã tháo và buộc gọn.', 'Nhờ anh chị thu gom chai nước suối và lon nước ngọt, tôi để riêng hai túi.', 'Có sách giáo khoa cũ và giấy báo, vui lòng gọi trước khi đến.', 'Nhà vừa thay kệ sắt nhỏ, cần người tới thu mua giúp.', 'Có chậu nhôm cũ và vài chiếc nồi không dùng nữa.', 'Tôi dọn kho cuối tuần, có giấy bìa và vỏ hộp sữa đã rửa sạch.', 'Cửa hàng có thùng giấy đóng hàng, đã xếp cạnh cửa ra vào.', 'Gia đình có chai nhựa sạch, xin liên hệ trước để tôi mở cổng.', 'Có báo cũ và tập vở đã bỏ bìa nhựa, nhờ đến thu gom.', 'Tôi có một khung bàn sắt đã tháo rời, có thể phụ mang ra xe.', 'Có lon nhôm và hộp kim loại, đã gom riêng trong bao.', 'Nhà có ít bìa carton và chai nhựa, tôi hẹn thu gom sau hai ngày.'])[n],
-                'Điểm mô phỏng ' || n || ' gần ' || place || ', Đà Nẵng',lat,lng,
-                CASE WHEN local_index>5 THEN CURRENT_TIMESTAMP+interval '2 days' ELSE NULL END,
-                'PENDING',0,5,0,0,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP) ON CONFLICT(id) DO NOTHING;
-        END LOOP;
-    END LOOP;
+ IF current_setting('retrack.seed_demo',true) IS DISTINCT FROM 'on' THEN RETURN; END IF;
+ SELECT password_hash INTO employee_hash FROM users WHERE email='employee.dispatch01@retrack.test';
+ SELECT password_hash INTO seller_hash FROM users WHERE email='seller@retrack.vn';
+ SELECT id INTO owner FROM users WHERE email='depot@retrack.vn' AND role='DEPOT_OWNER';
+ IF employee_hash IS NULL OR seller_hash IS NULL OR owner IS NULL THEN RAISE EXCEPTION 'Thiếu tài khoản nguồn seed'; END IF;
+ day_start := demo_day::timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh';
+ FOR k IN 1..2 LOOP
+  depot := ('fa100000-0000-4000-8000-' || lpad(k::text,12,'0'))::uuid;
+  INSERT INTO depots(id,owner_id,name,address,latitude,longitude,rating,verification_status,created_at)
+  VALUES(depot,owner,CASE WHEN k=1 THEN 'Kho Thu Mua Thành Đạt' ELSE 'Kho Tái Chế Minh Phát' END,
+   CASE WHEN k=1 THEN 'Khu vực Hòa Khánh, Đà Nẵng' ELSE 'Khu vực Hòa Quý, Đà Nẵng' END,
+   CASE WHEN k=1 THEN 16.0746638 ELSE 15.9874125 END,CASE WHEN k=1 THEN 108.1506880 ELSE 108.2562344 END,
+   0,'APPROVED',CURRENT_TIMESTAMP) ON CONFLICT(id) DO NOTHING;
+ END LOOP;
+ FOR n IN 1..10 LOOP
+  emp := CASE WHEN n=1 THEN '00000000-0000-0000-0000-000000000004'::uuid WHEN n=6 THEN '00000000-0000-0000-0000-00000000000c'::uuid ELSE ('fa200000-0000-4000-8000-' || lpad(n::text,12,'0'))::uuid END;
+  depot := ('fa100000-0000-4000-8000-' || lpad((CASE WHEN n<=5 THEN 1 ELSE 2 END)::text,12,'0'))::uuid;
+  INSERT INTO users(id,email,password_hash,role,full_name,phone,is_active,created_at,updated_at)
+  VALUES(emp,'employee.dispatch' || lpad(n::text,2,'0') || '@retrack.test',employee_hash,'DEPOT_EMPLOYEE',employee_names[n],'090970' || lpad(n::text,4,'0'),true,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP) ON CONFLICT(id) DO NOTHING;
+  INSERT INTO depot_staffs(id,depot_id,user_id,staff_type,is_active)
+  VALUES(('fa300000-0000-4000-8000-' || lpad(n::text,12,'0'))::uuid,depot,emp,'DEPOT_EMPLOYEE',true) ON CONFLICT(id) DO NOTHING;
+ END LOOP;
+ FOR n IN 1..20 LOOP
+  seller := ('fa400000-0000-4000-8000-' || lpad(n::text,12,'0'))::uuid;
+  INSERT INTO users(id,email,password_hash,role,full_name,phone,is_active,created_at,updated_at)
+  VALUES(seller,'seller.dispatch' || lpad(n::text,2,'0') || '@retrack.test',seller_hash,'SELLER',seller_names[n],'090960' || lpad(n::text,4,'0'),true,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP) ON CONFLICT(id) DO NOTHING;
+ END LOOP;
+ -- Không seed ca/phân công; mỗi vùng 16 đơn (4 linh hoạt + 2 đơn mỗi khung giờ).
+ -- Giữ nguyên ID 001–100; bổ sung ID 101–160 để không đổi danh tính đơn cũ.
+ -- Worker tự lập kế hoạch từ nhu cầu trong ngày.
+ FOR point IN SELECT * FROM (VALUES
+  (1,1,'ATM Ngân hàng Công Thương Việt Nam, 54 Nguyễn Lương Bằng, Phường Hòa Khánh Bắc, Quận Liên Chiểu, Thành phố Đà Nẵng',16.0735824,108.1498739),
+  (1,2,'ATM Ngân hàng Sài Gòn Công Thương, 54 Nguyễn Lương Bằng, Phường Hòa Khánh Bắc, Quận Liên Chiểu, Thành phố Đà Nẵng',16.0735973,108.1498679),
+  (1,3,'ATM Ngân hàng TMCP Quốc Dân, 171 Nguyễn Lương Bằng, Phường Hòa Khánh Bắc, Quận Liên Chiểu, Thành phố Đà Nẵng',16.0769944,108.1481673),
+  (1,4,'ATM Ngân hàng Đầu tư & Phát triển Việt Nam, 54 Nguyễn Lương Bằng, Phường Hòa Khánh Bắc, Quận Liên Chiểu, Thành phố Đà Nẵng',16.0736137,108.1498612),
+  (1,5,'Bún Chả Cá Hằng, 18 Nguyễn Lương Bằng, Phường Hòa Khánh Bắc, Quận Liên Chiểu, Thành phố Đà Nẵng',16.0723487,108.1503628),
+  (1,6,'Cafe Ánh Dương, 74 Nguyễn Lương Bằng, Phường Hòa Khánh Bắc, Quận Liên Chiểu, Thành phố Đà Nẵng',16.0743172,108.1495511),
+  (1,7,'DongA Bank, 79 Nguyễn Lương Bằng, Phường Hòa Khánh Bắc, Quận Liên Chiểu, Thành phố Đà Nẵng',16.0742287,108.1493004),
+  (1,8,'Quán cơm Bà Bảy, 216 Nguyễn Lương Bằng, Phường Hòa Khánh Bắc, Quận Liên Chiểu, Thành phố Đà Nẵng',16.0796242,108.1473798),
+  (1,9,'Quán cơm Bà Sáu, 173 Nguyễn Lương Bằng, Phường Hòa Khánh Bắc, Quận Liên Chiểu, Thành phố Đà Nẵng',16.0779089,108.1477853),
+  (1,10,'Quán phở Nhung, 138 Nguyễn Lương Bằng, Phường Hòa Khánh Bắc, Quận Liên Chiểu, Thành phố Đà Nẵng',16.0770645,108.1484194),
+  (2,1,'ATM Ngân hàng An Bình, 159 Tôn Đức Thắng, Phường Hòa An, Quận Cẩm Lệ, Thành phố Đà Nẵng',16.0582418,108.1735174),
+  (2,2,'ATM Ngân hàng Đại Tín, 158 Tôn Đức Thắng, Phường Hòa Minh, Quận Liên Chiểu, Thành phố Đà Nẵng',16.0583847,108.1732561),
+  (2,3,'Ai Da Nang, 380 Tôn Đức Thắng, Phường Hòa Minh, Quận Liên Chiểu, Thành phố Đà Nẵng',16.0581036,108.1659573),
+  (2,4,'CB Tôn Đức Thắng, 158 Tôn Đức Thắng, Hoà Minh, Liên Chiểu, Đà Nẵng',16.0584252,108.1732745),
+  (2,5,'Café 76 Tôn Đức Tháng, Hòa Minh, Liên Chiểu, Đà Nẵng',16.0602104,108.1760869),
+  (2,6,'Cửa Hàng Tọa Ánh, 219 Tôn Đức Thắng, Phường Hòa Minh, Quận Liên Chiểu, Thành phố Đà Nẵng',16.0567122,108.1715331),
+  (2,7,'Mỳ Quảng Bà Năm, 289 Tôn Đức Thắng, Phường Hòa Minh, Quận Liên Chiểu, Thành phố Đà Nẵng',16.0561403,108.1687030),
+  (2,8,'Tạp hóa Thanh Vân, 335 Tôn Đức Thắng, Phường Hòa Minh, Quận Liên Chiểu, Thành phố Đà Nẵng',16.0565224,108.1675268),
+  (2,9,'VNPT Đà Nẵng, 244 Tôn Đức Thắng, Phường Hòa Minh, Quận Liên Chiểu, Thành phố Đà Nẵng',16.0564372,108.1701961),
+  (2,10,'Xe Lăn Đà Nẵng, 316 Tôn Đức Thắng, Hoà Minh, Liên Chiểu, Đà Nẵng',16.0568061,108.1677321),
+  (3,1,'An Khang, Nam Ô 1, Hòa Hiệp Nam, Liên Chiểu, Đà Nẵng',16.1057190,108.1323130),
+  (3,2,'Hoang Long, Nam Ô 1, Hòa Hiệp Nam, Liên Chiểu, Đà Nẵng',16.1145101,108.1273885),
+  (3,3,'My Hồng, Nam Ô 1, Hòa Hiệp Nam, Liên Chiểu, Đà Nẵng',16.1120635,108.1296115),
+  (3,4,'Nam Hòa Phát, Nam Ô 1, Hòa Hiệp Nam, Liên Chiểu, Đà Nẵng',16.1110565,108.1296645),
+  (3,5,'Nam Ô 1, Hải Vân, Đà Nẵng',16.1102184,108.1295260),
+  (3,6,'Nam Ô 2, Phường Hòa Hiệp Nam, Quận Liên Chiểu, Thành phố Đà Nẵng',16.1123438,108.1306594),
+  (3,7,'Nam Ô 3, Phường Hòa Hiệp Nam, Quận Liên Chiểu, Thành phố Đà Nẵng',16.1164111,108.1287784),
+  (3,8,'Nam Ô Garden, 5 Ngô Xuân Thu, Street, Liên Chiểu, Đà Nẵng',16.1221087,108.1204185),
+  (3,9,'Nam Ô Heritage, Nguyễn Tất Thành, Nam Ô 1, Liên Chiểu, Đà Nẵng',16.1105875,108.1324173),
+  (3,10,'Nam Ô, Nyam Nyam Alley, Xuân Thiều 7, Liên Chiểu, Đà Nẵng',16.1057327,108.1366370),
+  (4,1,'295 Hùng Vương, Vĩnh Trung, Thanh Khê, Đà Nẵng',16.0667397,108.2116323),
+  (4,2,'ATM Ngân hàng An Bình, 195 Hùng Vương, Phường Hải Châu 2, Quận Hải Châu, Thành phố Đà Nẵng',16.0675634,108.2159440),
+  (4,3,'ATM Ngân hàng Kiên Long, 222 Hùng Vương, Phường Hải Châu 2, Quận Hải Châu, Thành phố Đà Nẵng',16.0679005,108.2166585),
+  (4,4,'ATM Ngân hàng Quân Đội, 358 Hùng Vương, Vĩnh Trung, Thanh Khê, Đà Nẵng',16.0670108,108.2123945),
+  (4,5,'ATM Ngân hàng Á Châu, 308 Hùng Vương, Vĩnh Trung, Thanh Khê, Đà Nẵng',16.0672060,108.2134814),
+  (4,6,'ATM Ngân hàng Đông Á, 103 Hùng Vương, Phường Hải Châu 1, Quận Hải Châu, Thành phố Đà Nẵng',16.0680081,108.2180059),
+  (4,7,'Chi nhánh Chi Lăng - Ngân hàng Agribank, 188 Hùng Vương, Phường Hải Châu 2, Quận Hải Châu, Thành phố Đà Nẵng',16.0680714,108.2174703),
+  (4,8,'Go!Đà Nẵng, 255-257 Hùng Vương, Vĩnh Trung, Thanh Khê, Đà Nẵng',16.0669669,108.2134631),
+  (4,9,'Hoa vải Dung Anh, 180 Hùng Vương, Phường Hải Châu 1, Quận Hải Châu, Thành phố Đà Nẵng',16.0681311,108.2179138),
+  (4,10,'Hùng Vương, Phường Hải Châu 1, Quận Hải Châu, Thành phố Đà Nẵng',16.0680260,108.2176058),
+  (5,1,'ATM Ngân hàng TMCP Hàng hải Việt Nam, Hùng Vương, Phường Hải Châu 1, Quận Hải Châu, Thành phố Đà Nẵng',16.0687036,108.2247860),
+  (5,2,'Anh ngữ HACIC, 59 Trần Phú, Phường Hải Châu 1, Quận Hải Châu, Thành phố Đà Nẵng',16.0713644,108.2241733),
+  (5,3,'Beauty Nail, 54 Trần Phú, Phường Hải Châu 1, Quận Hải Châu, Thành phố Đà Nẵng',16.0707810,108.2239011),
+  (5,4,'Chi nhánh Đà Nẵng - Ngân hàng BIDV, 40-42 Hùng Vương, Phường Hải Châu 1, Quận Hải Châu, Thành phố Đà Nẵng',16.0686920,108.2237654),
+  (5,5,'Chợ Hàn, 119 Trần Phú, Phường Hải Châu 1, Quận Hải Châu, Thành phố Đà Nẵng',16.0682177,108.2241994),
+  (5,6,'Cộng Spa & Nail, 80 Trần Phú, Phường Hải Châu 1, Quận Hải Châu, Thành phố Đà Nẵng',16.0697519,108.2239163),
+  (5,7,'Hoa Quỳnh Mai, 137 Trần Phú, Phường Hải Châu 1, Quận Hải Châu, Thành phố Đà Nẵng',16.0673710,108.2238753),
+  (5,8,'Hoa tươi Đạm Nhã 2, 142 Trần Phú, Phường Hải Châu 1, Quận Hải Châu, Thành phố Đà Nẵng',16.0678096,108.2237144),
+  (5,9,'Hoa tươi Đạm Nhã 3, 139 Trần Phú, Phường Hải Châu 1, Quận Hải Châu, Thành phố Đà Nẵng',16.0672836,108.2238620),
+  (5,10,'Mr. Pizza, 63 Trần Phú, Phường Hải Châu 1, Quận Hải Châu, Thành phố Đà Nẵng',16.0712282,108.2241883),
+  (6,1,'Mân Quang 8, Phường Mân Thái, Quận Sơn Trà, Thành phố Đà Nẵng',16.0917920,108.2423167),
+  (6,2,'Tân Phú 1, Phường Mân Thái, Quận Sơn Trà, Thành phố Đà Nẵng',16.0846823,108.2453444),
+  (6,3,'Tân Phú 2, Phường Mân Thái, Quận Sơn Trà, Thành phố Đà Nẵng',16.0842764,108.2449545),
+  (6,4,'Tân Thái 1, Phường Mân Thái, Quận Sơn Trà, Thành phố Đà Nẵng',16.0886023,108.2462504),
+  (6,5,'Tân Thái 10, Phường Mân Thái, Quận Sơn Trà, Thành phố Đà Nẵng',16.0865223,108.2438526),
+  (6,6,'Tân Thái 2, Phường Mân Thái, Quận Sơn Trà, Thành phố Đà Nẵng',16.0888285,108.2456463),
+  (6,7,'Tân Thái 3, Phường Mân Thái, Quận Sơn Trà, Thành phố Đà Nẵng',16.0884918,108.2451628),
+  (6,8,'Tân Thái 4, Phường Mân Thái, Quận Sơn Trà, Thành phố Đà Nẵng',16.0873717,108.2456942),
+  (6,9,'Tân Thái 5, Phường Mân Thái, Quận Sơn Trà, Thành phố Đà Nẵng',16.0866945,108.2449168),
+  (6,10,'Tân Thái 6, Phường Mân Thái, Quận Sơn Trà, Thành phố Đà Nẵng',16.0862941,108.2458670),
+  (7,1,'Mỹ An 1, Phường Mỹ An, Quận Ngũ Hành Sơn, Thành phố Đà Nẵng',16.0513026,108.2363612),
+  (7,2,'Mỹ An 10, Phường Mỹ An, Quận Ngũ Hành Sơn, Thành phố Đà Nẵng',16.0423959,108.2371888),
+  (7,3,'Mỹ An 11, Phường Mỹ An, Quận Ngũ Hành Sơn, Thành phố Đà Nẵng',16.0420158,108.2388343),
+  (7,4,'Mỹ An 12, Phường Mỹ An, Quận Ngũ Hành Sơn, Thành phố Đà Nẵng',16.0416069,108.2390170),
+  (7,5,'Mỹ An 14, Phường Mỹ An, Quận Ngũ Hành Sơn, Thành phố Đà Nẵng',16.0412478,108.2378539),
+  (7,6,'Mỹ An 15, Phường Mỹ An, Quận Ngũ Hành Sơn, Thành phố Đà Nẵng',16.0402650,108.2381677),
+  (7,7,'Mỹ An 18, Phường Mỹ An, Quận Ngũ Hành Sơn, Thành phố Đà Nẵng',16.0380128,108.2392871),
+  (7,8,'Mỹ An 19, Phường Mỹ An, Quận Ngũ Hành Sơn, Thành phố Đà Nẵng',16.0384824,108.2384613),
+  (7,9,'Mỹ An 2, Phường Mỹ An, Quận Ngũ Hành Sơn, Thành phố Đà Nẵng',16.0493708,108.2362037),
+  (7,10,'Mỹ An 20, Phường Mỹ An, Quận Ngũ Hành Sơn, Thành phố Đà Nẵng',16.0380109,108.2386044),
+  (8,1,'A25 Xô Viết Nghệ Tĩnh, Phường Khuê Trung, Quận Cẩm Lệ, Thành phố Đà Nẵng',16.0318673,108.2132367),
+  (8,2,'Bình Đinh Quán 5, 155 Xô Viết Nghệ Tĩnh, Khuê Trung, Cẩm Lệ, Đà Nẵng',16.0314673,108.2109838),
+  (8,3,'Bảo hiểm xã hội Thành phố Đà Nẵng, 43 Xô Viết Nghệ Tĩnh, Phường Hòa Cường Nam, Quận Hải Châu, Thành phố Đà Nẵng',16.0320507,108.2185334),
+  (8,4,'Chicken Plus Xô Viết Nghệ Tĩnh - Đà Nẵng, 70 Xô Viết Nghệ Tĩnh, Hoà Cường Nam, Hải Châu, Đà Nẵng',16.0327572,108.2203125),
+  (8,5,'Coffee Ngược Nắng, 42 Xô Viết Nghệ Tĩnh, Phường Hòa Cường Nam, Quận Hải Châu, Thành phố Đà Nẵng',16.0328704,108.2218987),
+  (8,6,'Công Nghệ Đức Pháp - Đà Nẵng, 87 Xô Viết Nghệ Tĩnh, Khuê Trung, Cẩm Lệ, Đà Nẵng',16.0316629,108.2142891),
+  (8,7,'Cơm Bình Dân, 262 Xô Viết Nghệ Tĩnh, Khuê Trung, Cẩm Lệ, Đà Nẵng',16.0318906,108.2127660),
+  (8,8,'Du Cafe Koi Đà Nẵng, 152 Xô Viết Nghệ Tĩnh, Phường Hòa Cường Nam, Quận Hải Châu, Thành phố Đà Nẵng',16.0322907,108.2169796),
+  (8,9,'GenZ Cinema Đà Nẵng, 164 Xô Viết Nghệ Tĩnh, Hòa Cường Nam, Hải Châu, Đà Nẵng',16.0324131,108.2167044),
+  (8,10,'Horemart Đà Nẵng, 1249-1250 Xô Viết Nghệ Tĩnh, Phường Hòa Cường Nam, Quận Hải Châu, Thành phố Đà Nẵng',16.0320815,108.2151964),
+  (9,1,'Bá Giáng 1, Khu Tái định cư Bá Tùng 1, Phường Hòa Quý, Quận Ngũ Hành Sơn, Thành phố Đà Nẵng',15.9888598,108.2357679),
+  (9,2,'Bá Giáng 3, Khu Tái định cư Bá Tùng 1, Phường Hòa Quý, Quận Ngũ Hành Sơn, Thành phố Đà Nẵng',15.9876310,108.2366143),
+  (9,3,'Bá Giáng 6, Khu Tái định cư Bá Tùng 1, Phường Hòa Quý, Quận Ngũ Hành Sơn, Thành phố Đà Nẵng',15.9860093,108.2377391),
+  (9,4,'Bá Giáng 7, Khu Tái định cư Bá Tùng 1, Phường Hòa Quý, Quận Ngũ Hành Sơn, Thành phố Đà Nẵng',15.9856126,108.2380193),
+  (9,5,'Bá Giáng 8, Khu Tái định cư Bá Tùng 1, Phường Hòa Quý, Quận Ngũ Hành Sơn, Thành phố Đà Nẵng',15.9848355,108.2366231),
+  (9,6,'Hòa Bình 1, Khu Tái định cư Bá Tùng 2, Phường Hòa Quý, Quận Ngũ Hành Sơn, Thành phố Đà Nẵng',15.9891809,108.2304434),
+  (9,7,'Hòa Bình 2, Khu Tái định cư Bá Tùng 2, Phường Hòa Quý, Quận Ngũ Hành Sơn, Thành phố Đà Nẵng',15.9885835,108.2309362),
+  (9,8,'Hòa Bình 3, Khu Tái định cư Bá Tùng 2, Phường Hòa Quý, Quận Ngũ Hành Sơn, Thành phố Đà Nẵng',15.9891028,108.2311652),
+  (9,9,'Hòa Bình 4, Khu Tái định cư Bá Tùng 2, Phường Hòa Quý, Quận Ngũ Hành Sơn, Thành phố Đà Nẵng',15.9895114,108.2318787),
+  (9,10,'Hòa Bình 5, Khu Tái định cư Bá Tùng 2, Phường Hòa Quý, Quận Ngũ Hành Sơn, Thành phố Đà Nẵng',15.9900255,108.2316856),
+  (10,1,'Túy Loan 1, Xã Hòa Phong, Huyện Hòa Vang, Thành phố Đà Nẵng',15.9895584,108.1421538),
+  (10,2,'Túy Loan 2, Xã Hòa Phong, Huyện Hòa Vang, Thành phố Đà Nẵng',15.9895038,108.1417190),
+  (10,3,'Túy Loan 3, Xã Hòa Phong, Huyện Hòa Vang, Thành phố Đà Nẵng',15.9891278,108.1403249),
+  (10,4,'Túy Loan 4, Xã Hòa Phong, Huyện Hòa Vang, Thành phố Đà Nẵng',15.9902877,108.1401513),
+  (10,5,'Túy Loan 5, Xã Hòa Phong, Huyện Hòa Vang, Thành phố Đà Nẵng',15.9904001,108.1396820),
+  (10,6,'Túy Loan 6, Xã Hòa Phong, Huyện Hòa Vang, Thành phố Đà Nẵng',15.9906185,108.1391022),
+  (10,7,'Túy Loan 7, Xã Hòa Phong, Huyện Hòa Vang, Thành phố Đà Nẵng',15.9908884,108.1385871),
+  (10,8,'Túy Loan 8, Xã Hòa Phong, Huyện Hòa Vang, Thành phố Đà Nẵng',15.9911103,108.1379213),
+  (10,9,'Túy Loan 9, Xã Hòa Phong, Huyện Hòa Vang, Thành phố Đà Nẵng',15.9913581,108.1372661),
+  (10,10,'Túy Loan Tây 1, Xã Hòa Phong, Huyện Hòa Vang, Thành phố Đà Nẵng',15.9976268,108.1357790),
+  (1,11,'ATM Ngân hàng Phương Đông, Nguyễn Lương Bằng, Phường Hòa Khánh Bắc, Quận Liên Chiểu, Thành phố Đà Nẵng',16.0773036,108.1480878),
+  (1,12,'ATM Ngân hàng Đông Á, Nguyễn Lương Bằng, Phường Hòa Khánh Bắc, Quận Liên Chiểu, Thành phố Đà Nẵng',16.0719988,108.1501861),
+  (1,13,'Quán Trang, Nguyễn Lương Bằng, Phường Hòa Hiệp Nam, Quận Liên Chiểu, Thành phố Đà Nẵng',16.0917321,108.1418001),
+  (1,14,'Quế Sơn quán 2, 106 Nguyễn Lương Bằng, Phường Hòa Khánh Bắc, Quận Liên Chiểu, Thành phố Đà Nẵng',16.0755235,108.1490714),
+  (1,15,'Sân bóng Sư Phạm, Tôn Đức Thắng, Hòa Khánh Nam, Liên Chiểu, Đà Nẵng',16.0616806,108.1582446),
+  (1,16,'Tiệm tóc A Hùng, 80 Nguyễn Lương Bằng, Phường Hòa Khánh Bắc, Quận Liên Chiểu, Thành phố Đà Nẵng',16.0744236,108.1494993),
+  (2,11,'Bến Xe Trung Tâm Đà Nẵng, Tôn Đức Thắng, Liên Chiểu, Đà Nẵng',16.0565364,108.1725454),
+  (2,12,'Cây Xăng, Tôn Đức Thắng, Hòa Minh, Liên Chiểu, Đà Nẵng',16.0572385,108.1717891),
+  (2,13,'Cầu Đa Cô, Tôn Đức Thắng, Hòa Khánh, Đà Nẵng',16.0603151,108.1627108),
+  (2,14,'Hoà Minh, Tôn Đức Thắng, Hòa Minh, Liên Chiểu, Đà Nẵng',16.0593318,108.1641698),
+  (2,15,'Tôn Đức Thắng, An Khê, Đà Nẵng',16.0610319,108.1778739),
+  (2,16,'Tôn Đức Thắng, Phường Hòa Minh, Quận Liên Chiểu, Thành phố Đà Nẵng',16.0598782,108.1633243),
+  (3,11,'Cầu Nam Ô, Hải Vân, Đà Nẵng',16.1216089,108.1224705),
+  (3,12,'Cầu đường sắt Nam Ô, Cầu Nam Ô, Liên Chiểu, Đà Nẵng',16.1211106,108.1232106),
+  (3,13,'Nam Ô - P, Hòa Hiệp Nam, Liên Chiểu, Đà Nẵng',16.1083842,108.1283138),
+  (3,14,'Nam ô, Hòa Hiệp Bắc, Liên Chiểu, Đà Nẵng',16.1242381,108.1223272),
+  (3,15,'Nguyễn Lương Bằng, Nam Ô 1, Hải Vân, Đà Nẵng',16.1110830,108.1294404),
+  (3,16,'Nguyễn Lương Bằng, Phường Hòa Hiệp Nam, Quận Liên Chiểu, Thành phố Đà Nẵng',16.0961057,108.1373637),
+  (4,11,'Phòng giao dịch Cầu Vồng - Ngân hàng ACB, 308 Hùng Vương, Vĩnh Trung, Thanh Khê, Đà Nẵng',16.0672034,108.2134712),
+  (4,12,'Phòng giao dịch Hùng Vương - Ngân hàng ABBank, 195 Hùng Vương, Phường Hải Châu 2, Quận Hải Châu, Thành phố Đà Nẵng',16.0675709,108.2159421),
+  (4,13,'Quán Má Nụ, 200 Hùng Vương, Phường Hải Châu 2, Quận Hải Châu, Thành phố Đà Nẵng',16.0680141,108.2171979),
+  (4,14,'Quán bún Bà Ba, 265 Hùng Vương, Vĩnh Trung, Thanh Khê, Đà Nẵng',16.0668462,108.2122659),
+  (4,15,'Shop No Bi Na, 189 Hùng Vương, Phường Hải Châu 2, Quận Hải Châu, Thành phố Đà Nẵng',16.0676062,108.2160727),
+  (4,16,'Viễn Thông A, 197 Hùng Vương, Phường Hải Châu 2, Quận Hải Châu, Thành phố Đà Nẵng',16.0675450,108.2159143),
+  (5,11,'Phòng giao dịch Hùng Vương - Ngân hàng NCB, 46 Hùng Vương, Phường Hải Châu 1, Quận Hải Châu, Thành phố Đà Nẵng',16.0687054,108.2236402),
+  (5,12,'Quán bún Xương, 89 Trần Phú, Phường Hải Châu 1, Quận Hải Châu, Thành phố Đà Nẵng',16.0695627,108.2241070),
+  (5,13,'Sảnh Hùng Vương, Nhà hát Trưng Vương, 86 Hùng Vương, Phường Hải Châu 1, Quận Hải Châu, Thành phố Đà Nẵng',16.0686907,108.2207116),
+  (5,14,'Tiệm Nhà Uyên Nhi, 215/1 Trần Phú, Phường Phước Ninh, Quận Hải Châu, Thành phố Đà Nẵng',16.0645444,108.2236059),
+  (5,15,'Trần Phú, Phường Hải Châu 1, Quận Hải Châu, Thành phố Đà Nẵng',16.0716326,108.2237960),
+  (5,16,'Tàu hủ xe Lam, 176 Trần Phú, Phường Phước Ninh, Quận Hải Châu, Thành phố Đà Nẵng',16.0656467,108.2234856),
+  (6,11,'Cao Bá Nhạ, Phường Mân Thái, Quận Sơn Trà, Thành phố Đà Nẵng',16.0876288,108.2397881),
+  (6,12,'Dã Tượng, Phường Mân Thái, Quận Sơn Trà, Thành phố Đà Nẵng',16.0903383,108.2413908),
+  (6,13,'Hồ Sĩ Phấn, Phường Mân Thái, Quận Sơn Trà, Thành phố Đà Nẵng',16.0912516,108.2389901),
+  (6,14,'Phường Mân Thái, Quận Sơn Trà, Thành phố Đà Nẵng',16.0893496,108.2400910),
+  (6,15,'Phạm Vấn, Phường Mân Thái, Quận Sơn Trà, Thành phố Đà Nẵng',16.0868453,108.2447873),
+  (6,16,'Tân An, Phường Mân Thái, Quận Sơn Trà, Thành phố Đà Nẵng',16.0900035,108.2469297),
+  (7,11,'Mỹ An 21, Phường Mỹ An, Quận Ngũ Hành Sơn, Thành phố Đà Nẵng',16.0371329,108.2388667),
+  (7,12,'Mỹ An 22, Phường Mỹ An, Quận Ngũ Hành Sơn, Thành phố Đà Nẵng',16.0384906,108.2404219),
+  (7,13,'Mỹ An 3, Phường Mỹ An, Quận Ngũ Hành Sơn, Thành phố Đà Nẵng',16.0496102,108.2347745),
+  (7,14,'Mỹ An 4, Phường Mỹ An, Quận Ngũ Hành Sơn, Thành phố Đà Nẵng',16.0490318,108.2349702),
+  (7,15,'Mỹ An 5, Phường Mỹ An, Quận Ngũ Hành Sơn, Thành phố Đà Nẵng',16.0483855,108.2364963),
+  (7,16,'Mỹ An 6, Phường Mỹ An, Quận Ngũ Hành Sơn, Thành phố Đà Nẵng',16.0479935,108.2354191),
+  (8,11,'GAS PETROL ĐÀ NẴNG, Xô Viết Nghệ Tĩnh, Khuê Trung, Cẩm Lệ, Đà Nẵng',16.0314045,108.2117984),
+  (8,12,'Huỳnh Văn Ninh, Xô Viết Nghệ Tĩnh, Hòa Cường, Hòa Cường Nam, Hải Châu, Đà Nẵng',16.0331504,108.2237515),
+  (8,13,'Hải quan Đà Nẵng, 65-67 Xô Viết Nghệ Tĩnh, Phường Hòa Cường Nam, Quận Hải Châu, Thành phố Đà Nẵng',16.0316965,108.2155531),
+  (8,14,'Max English Đà Nẵng, 11 Xô Viết Nghệ Tĩnh, Hoà Cường Nam, Hải Châu, Đà Nẵng',16.0326893,108.2235961),
+  (8,15,'Ngã ba Xô Viết Nghệ Tĩnh, Xô Viết Nghệ Tĩnh, Khuê Trung, Cẩm Lệ, Đà Nẵng',16.0313143,108.2087868),
+  (8,16,'Tòa nhà WINHOUSE Đà Nẵng, 51 Xô Viết Nghệ Tĩnh, Phường Hòa Cường Nam, Quận Hải Châu, Thành phố Đà Nẵng',16.0319890,108.2171836),
+  (9,11,'Bá Tùng, Phường Hòa Quý, Quận Ngũ Hành Sơn, Thành phố Đà Nẵng',15.9924776,108.2413558),
+  (9,12,'Hòa Bình 6, Khu Tái định cư Bá Tùng 2, Phường Hòa Quý, Quận Ngũ Hành Sơn, Thành phố Đà Nẵng',15.9886793,108.2318371),
+  (9,13,'Hòa Bình 7, Khu Tái định cư Bá Tùng 2, Phường Hòa Quý, Quận Ngũ Hành Sơn, Thành phố Đà Nẵng',15.9886141,108.2323258),
+  (9,14,'Khuê Đông, Khu Tái định cư Bá Tùng 1, Phường Hòa Quý, Quận Ngũ Hành Sơn, Thành phố Đà Nẵng',15.9862713,108.2349504),
+  (9,15,'Phường Hòa Quý, Quận Ngũ Hành Sơn, Thành phố Đà Nẵng',15.9755595,108.2357244),
+  (9,16,'Thái Văn A, Khu Tái định cư Bá Tùng 1, Phường Hòa Quý, Quận Ngũ Hành Sơn, Thành phố Đà Nẵng',15.9873595,108.2374414),
+  (10,11,'Chợ Túy Loan, Xã Hòa Phong, Huyện Hòa Vang, Thành phố Đà Nẵng',15.9903511,108.1409952),
+  (10,12,'Cầu Túy Loan, Xã Hòa Nhơn, Huyện Hòa Vang, Thành phố Đà Nẵng',15.9932341,108.1439149),
+  (10,13,'Cầu Đỏ - Túy Loan, Phường Hòa Thọ Tây, Quận Cẩm Lệ, Thành phố Đà Nẵng',15.9963931,108.1652894),
+  (10,14,'Làng cổ Túy Loan, Xã Hòa Phong, Huyện Hòa Vang, Thành phố Đà Nẵng',15.9975710,108.1365480),
+  (10,15,'Tuý Loan, Xã Hòa Phong, Huyện Hòa Vang, Thành phố Đà Nẵng',15.9914133,108.1425754),
+  (10,16,'Túy Loan Tây 2, Xã Hòa Phong, Huyện Hòa Vang, Thành phố Đà Nẵng',15.9973734,108.1303931)
+ ) AS v(region_index,order_index,address,lat,lng)
+ LOOP
+  n := point.region_index;j := point.order_index;
+  depot := ('fa100000-0000-4000-8000-' || lpad((CASE WHEN n<=5 THEN 1 ELSE 2 END)::text,12,'0'))::uuid;
+  seller := ('fa400000-0000-4000-8000-' || lpad(((n-1)*2+1+(j-1)%2)::text,12,'0'))::uuid;
+  scheduled := CASE WHEN j<=4 THEN NULL ELSE day_start + make_interval(hours => CASE WHEN j<=10 THEN 11+2*((j-5)/2) WHEN j<=14 THEN 7+2*((j-11)/2) ELSE 17 END) END;
+  INSERT INTO pickup_requests(id,seller_id,target_depot_id,description,address,latitude,longitude,
+   preferred_datetime,preferred_end_datetime,collection_date,status,gross_amount,platform_fee_percentage,platform_fee_amount,net_amount,created_at,updated_at)
+  VALUES(('fa500000-0000-4000-8000-' || lpad((CASE WHEN j<=10 THEN (n-1)*10+j ELSE 100+(n-1)*6+j-10 END)::text,12,'0'))::uuid,seller,depot,
+   descriptions[j] || ' Vui lòng liên hệ ' || seller_names[(n-1)*2+1+(j-1)%2] || ' trước khi đến.',point.address,point.lat,point.lng,scheduled,scheduled+interval '2 hours',demo_day,'PENDING',0,5,0,0,
+   day_start+interval '6 hours',CURRENT_TIMESTAMP) ON CONFLICT(id) DO NOTHING;
+ END LOOP;
+ RAISE NOTICE '160 đơn ngày %, 10 nhân viên (01–05 Thành Đạt, 06–10 Minh Phát), 20 Seller. Mỗi vùng 4 đơn linh hoạt và 2 đơn/mỗi khung 07–09, 09–11, 11–13, 13–15, 15–17, 17–19. Không reset lịch sử.',demo_day;
 END $auto_dispatch_bulk$;
 -- RETRACK_AUTO_DISPATCH_BULK_SEED_END
 

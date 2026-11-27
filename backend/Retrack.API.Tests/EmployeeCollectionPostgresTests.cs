@@ -61,13 +61,16 @@ public sealed class EmployeeCollectionPostgresTests
             var before = await depot.GetPaymentSummaryAsync(ownerId, pickup.TargetDepotId.Value);
             await Assert.ThrowsAsync<DepotConflictException>(() => service.MarkPaymentSentAsync(pickupId, ownerId, "https://example.com/proof.png"));
             Assert.False(await db.PlatformTransactions.AnyAsync(t => t.SourceId == pickupId));
-            // Seed giữ hồ sơ nhân viên cũ nhưng khóa đăng nhập: phải chặn bàn giao khi bị khóa.
+            // Khóa người dùng trong fixture để kiểm tra quyền bàn giao, độc lập bộ tài khoản demo.
             var collector = await db.Users.SingleAsync(u => u.Id == pickup.AcceptedCollectorId);
-            Assert.False(collector.IsActive);
+            collector.IsActive=false;
+            await db.SaveChangesAsync();
             await Assert.ThrowsAsync<DepotForbiddenException>(() => StaffTestServices.Collection(db, new ConcurrentImages())
                 .TransitionAsync(collector.Id, pickupId, "HANDED_OVER", 1, default));
-            // Chỉ kích hoạt trong schema fixture riêng để tiếp tục kiểm thử luồng thanh toán lịch sử.
+            // Chỉ bổ sung membership lịch sử trong schema fixture để kiểm thử thanh toán sau thay bộ seed.
             collector.IsActive = true;
+            if(!await db.DepotStaffs.AnyAsync(st=>st.UserId==collector.Id && st.DepotId==pickup.TargetDepotId))
+                db.DepotStaffs.Add(new(){UserId=collector.Id,DepotId=pickup.TargetDepotId!.Value,StaffType="DEPOT_EMPLOYEE",IsActive=true});
             await db.SaveChangesAsync();
             var handedOver = await StaffTestServices.Collection(db, new ConcurrentImages())
                 .TransitionAsync(pickup.AcceptedCollectorId!.Value, pickupId, "HANDED_OVER", 1, default);

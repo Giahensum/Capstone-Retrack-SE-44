@@ -33,57 +33,73 @@ public sealed class EmployeeDispatchPostgresTests
             await Run("db/bootstrap/retrack-system.sql");
             await Run("db/bootstrap/retrack-system.sql");
             await using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(scoped).Options);
-            var depotId = Guid.Parse("ef400000-0000-4000-8000-000000000001");
-            Assert.Equal(6,await db.PickupRequests.CountAsync(p => p.TargetDepotId == depotId));
-            Assert.Equal(6, await db.PickupRequests.Where(p => p.TargetDepotId == depotId)
-                .Select(p => new { p.Latitude, p.Longitude }).Distinct().CountAsync());
-            Assert.Equal(6, await db.PickupRequests.Where(p => p.TargetDepotId == depotId).Select(p => p.SellerId).Distinct().CountAsync());
-            Assert.Equal(6,await db.EmployeeCollectionAreas.CountAsync());
-            Assert.Equal(6,await db.EmployeeDispatchShifts.CountAsync());
-            var otherDepotId = Guid.Parse("ef400000-0000-4000-8000-000000000002");
-            Assert.Equal(6, await db.PickupRequests.CountAsync(p => p.TargetDepotId == otherDepotId));
-            var fixtureOrders = db.PickupRequests.Where(p => p.TargetDepotId == depotId || p.TargetDepotId == otherDepotId);
-            Assert.Equal(12, await fixtureOrders.Select(p => new { p.Latitude, p.Longitude }).Distinct().CountAsync());
-            Assert.False(await db.Users.AnyAsync(u => u.Email == "employee@retrack.vn" || u.Email == "employee2@retrack.vn"));
-            Assert.Equal(14, await db.Users.CountAsync(u => u.Role == "DEPOT_EMPLOYEE" && u.IsActive));
+            var depotId=Guid.Parse("fa100000-0000-4000-8000-000000000001");
+            var otherDepotId=Guid.Parse("fa100000-0000-4000-8000-000000000002");
+            var demoDate=new DateOnly(2026,12,7);var now=PickupSchedule.At(demoDate,7);
+            var clock=new DispatchTestClock(now);
+            EmployeeDispatchService Dispatch(AppDbContext c)=>new(new Retrack.API.Repositories.EmployeeDispatchRepository(c),new Retrack.API.Repositories.StaffUnitOfWork(c),clock);
+            var fixtureOrders=db.PickupRequests.Where(p=>p.TargetDepotId==depotId || p.TargetDepotId==otherDepotId);
+            Assert.Equal(160,await fixtureOrders.CountAsync());
+            Assert.Equal(160,await fixtureOrders.Select(p=>new{p.Latitude,p.Longitude}).Distinct().CountAsync());
+            Assert.Equal(20,await fixtureOrders.Select(p=>p.SellerId).Distinct().CountAsync());
+            Assert.Equal(10,await db.Users.CountAsync(u=>u.Role=="DEPOT_EMPLOYEE"));
+            Assert.Equal(10,await db.Users.CountAsync(u=>u.Role=="DEPOT_EMPLOYEE" && u.IsActive));
+            Assert.Equal(40,await fixtureOrders.CountAsync(p=>p.PreferredDatetime==null && p.CollectionDate==demoDate));
+            foreach(var hour in new[]{7,9,11,13,15,17}) Assert.Equal(20,await fixtureOrders.CountAsync(p=>p.PreferredDatetime==PickupSchedule.At(demoDate,hour) && p.PreferredEndDatetime==PickupSchedule.At(demoDate,hour+2)));
+            Assert.Empty(await db.EmployeeDispatchShifts.ToListAsync());
+            var completed=await db.PickupRequests.AsNoTracking().Where(p=>p.Status=="DONE").Select(p=>new{p.Id,p.AcceptedCollectorId,p.GrossAmount,p.NetAmount}).OrderBy(p=>p.Id).ToListAsync();
+            async Task Plan(){
+                await using var context=new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(scoped).Options);
+                await new EmployeeDailyPlanService(new(context),new Retrack.API.Repositories.EmployeeDispatchRepository(context),new Retrack.API.Repositories.StaffUnitOfWork(context)).PrepareAsync(now,default);
+            }
+            await Task.WhenAll(Plan(),Plan());await Dispatch(db).DispatchAsync(default);
+            foreach(var depot in new[]{depotId,otherDepotId}) {
+                Assert.Equal(15,await db.EmployeeCollectionAreas.CountAsync(a=>a.DepotId==depot));
+                Assert.Equal(5,await db.DepotStaffs.CountAsync(st=>st.DepotId==depot && st.StaffType=="DEPOT_EMPLOYEE" && st.IsActive));
+                Assert.Equal(80,await fixtureOrders.CountAsync(p=>p.TargetDepotId==depot && p.Status=="SCHEDULED"));
+                var loads=await fixtureOrders.Where(p=>p.TargetDepotId==depot).GroupBy(p=>p.AcceptedCollectorId).Select(g=>g.Count()).ToListAsync();
+                Assert.Equal(5,loads.Count);Assert.All(loads,x=>Assert.Equal(16,x));
+                var shifts=await db.EmployeeDispatchShifts.Where(sh=>db.EmployeeCollectionAreas.Any(ar=>ar.Id==sh.AreaId && ar.DepotId==depot)).ToListAsync();
+                Assert.Equal(5,shifts.Count);Assert.All(shifts,sh=>{Assert.Equal(PickupSchedule.At(demoDate,7),sh.StartsAt);Assert.Equal(PickupSchedule.At(demoDate,19),sh.EndsAt);});
+            }
+            Assert.False(await fixtureOrders.AnyAsync(p=>!db.DepotStaffs.Any(st=>st.UserId==p.AcceptedCollectorId && st.DepotId==p.TargetDepotId && st.IsActive)));
+            var eventCount=await db.EmployeeDispatchEvents.CountAsync();await Run("db/bootstrap/retrack-system.sql");await Dispatch(db).DispatchAsync(default);
+            Assert.Equal(eventCount,await db.EmployeeDispatchEvents.CountAsync());
+            Assert.Equal(completed,await db.PickupRequests.AsNoTracking().Where(p=>p.Status=="DONE").Select(p=>new{p.Id,p.AcceptedCollectorId,p.GrossAmount,p.NetAmount}).OrderBy(p=>p.Id).ToListAsync());
+            // Tất cả ca cùng kho tạm dừng: đơn chờ đúng kho, không bị giao sang kho còn người.
+            var firstDepotShifts=await db.EmployeeDispatchShifts.AsNoTracking().Where(sh=>db.EmployeeCollectionAreas.Any(ar=>ar.Id==sh.AreaId && ar.DepotId==depotId)).ToListAsync();
+            foreach(var sh in firstDepotShifts) await Dispatch(db).ChangeAvailabilityAsync(sh.EmployeeId,sh.Id,new("FULL","Về kho bàn giao phế liệu"),default);
+            await Dispatch(db).DispatchAsync(default);
+            Assert.Equal(80,await fixtureOrders.CountAsync(p=>p.TargetDepotId==depotId && p.AcceptedCollectorId==null && !p.RequiresOwnerReview));
+            Assert.Equal(80,await fixtureOrders.CountAsync(p=>p.TargetDepotId==otherDepotId && p.Status=="SCHEDULED"));
+            var resumed=firstDepotShifts[0];await Dispatch(db).ChangeAvailabilityAsync(resumed.EmployeeId,resumed.Id,new("AVAILABLE",null),default);await Dispatch(db).DispatchAsync(default);
+            Assert.True(await fixtureOrders.AnyAsync(p=>p.TargetDepotId==depotId && p.AcceptedCollectorId==resumed.EmployeeId));
+            // Hết giờ: đơn chưa bắt đầu trả về Owner và worker không tự nhặt lại.
+            var expiredService=new EmployeeDispatchService(new Retrack.API.Repositories.EmployeeDispatchRepository(db),new Retrack.API.Repositories.StaffUnitOfWork(db),new DispatchTestClock(PickupSchedule.At(demoDate,20)));
+            await expiredService.DispatchAsync(default);await expiredService.DispatchAsync(default);
+            Assert.Equal(160,await fixtureOrders.CountAsync(p=>p.RequiresOwnerReview && p.AcceptedCollectorId==null));
+            // Owner xác nhận ngày mới, ghi lịch sử và cho phép quay lại điều phối đúng ngày.
+            var owner=await db.Depots.Where(d=>d.Id==depotId).Select(d=>d.OwnerId).SingleAsync();
+            var ownerService=new Retrack.API.Services.Depot.DepotDispatchService(new Retrack.API.Repositories.DepotDispatchRepository(db),
+                new Retrack.API.Services.Depot.DepotService(new Retrack.API.Repositories.DepotOwnerRepository(db),new Retrack.API.Repositories.DepotPaymentReadRepository(db)),new Retrack.API.Repositories.DepotUnitOfWork(db),clock);
+            var pickup=await fixtureOrders.Where(p=>p.TargetDepotId==depotId).Select(p=>p.Id).FirstAsync();
+            var date=demoDate.AddDays(1);
+            var input=new Retrack.API.DTOs.Depot.DispatchRescheduleInput(Guid.NewGuid(),date,null,null,"Đã gọi người bán và thống nhất ngày mới");
+            await ownerService.RescheduleAsync(owner,depotId,pickup,input);await ownerService.RescheduleAsync(owner,depotId,pickup,input);
+            var rescheduled=await db.PickupRequests.AsNoTracking().SingleAsync(p=>p.Id==pickup);
+            Assert.False(rescheduled.RequiresOwnerReview);Assert.Equal(date,rescheduled.CollectionDate);Assert.Null(rescheduled.AcceptedCollectorId);
+            // Người rảnh chưa có ca vẫn được Owner chọn, tạo ca và phân công nguyên tử.
+            var reserve=new User {Role="DEPOT_EMPLOYEE",Email="reserve@test.invalid",IsActive=true};
+            db.DepotStaffs.Add(new(){User=reserve,DepotId=depotId,StaffType="DEPOT_EMPLOYEE",IsActive=true});await db.SaveChangesAsync();
+            await ownerService.RescheduleAsync(owner,depotId,pickup,new(Guid.NewGuid(),demoDate,null,null,"Người bán đồng ý thu gom trong chiều nay"));
+            var manual=new Retrack.API.DTOs.Depot.DispatchAssignInput(Guid.NewGuid(),Guid.Empty,"Bố trí nhân viên dự phòng theo thỏa thuận",reserve.Id);
+            await ownerService.AssignAsync(owner,depotId,pickup,manual);await ownerService.AssignAsync(owner,depotId,pickup,manual);
+            Assert.Equal(reserve.Id,(await db.PickupRequests.AsNoTracking().SingleAsync(p=>p.Id==pickup)).AcceptedCollectorId);
+            Assert.Single(await db.EmployeeDispatchShifts.Where(sh=>sh.EmployeeId==reserve.Id).ToListAsync());
+            var crossDepotEmployee=await db.DepotStaffs.Where(st=>st.DepotId==otherDepotId && st.StaffType=="DEPOT_EMPLOYEE").Select(st=>st.UserId).FirstAsync();
+            await Assert.ThrowsAsync<ArgumentException>(()=>ownerService.AssignAsync(owner,depotId,pickup,new(Guid.NewGuid(),Guid.Empty,"Không được giao sang nhân viên kho khác",crossDepotEmployee)));
 
-            var completed = await db.PickupRequests.AsNoTracking().Where(p => p.Status == "DONE")
-                .Select(p => new {p.Id,p.AcceptedCollectorId,p.GrossAmount,p.NetAmount}).OrderBy(p => p.Id).ToListAsync();
-            var dayEnd = DateTime.UtcNow.AddHours(7).Date.AddDays(1).AddHours(-7);
-            var eligible = await db.PickupRequests.CountAsync(p => p.TargetDepotId == depotId
-                && (p.PreferredDatetime == null || p.PreferredDatetime < dayEnd));
-            await StaffTestServices.Dispatch(db).DispatchAsync(default);
-            Assert.Equal(eligible,await db.PickupRequests.CountAsync(p => p.TargetDepotId == depotId && p.Status == "SCHEDULED"));
-            Assert.Equal(completed,await db.PickupRequests.AsNoTracking().Where(p => p.Status == "DONE")
-                .Select(p => new {p.Id,p.AcceptedCollectorId,p.GrossAmount,p.NetAmount}).OrderBy(p => p.Id).ToListAsync());
-            Assert.False(await fixtureOrders.AnyAsync(p => p.AcceptedCollectorId != null &&
-                !db.DepotStaffs.Any(st => st.UserId == p.AcceptedCollectorId && st.DepotId == p.TargetDepotId && st.IsActive)));
-            var count = await db.EmployeeDispatchEvents.CountAsync();
-            await Run("db/bootstrap/retrack-system.sql");
-            await StaffTestServices.Dispatch(db).DispatchAsync(default);
-            Assert.Equal(count,await db.EmployeeDispatchEvents.CountAsync());
-            Assert.Equal(6,await db.PickupRequests.CountAsync(p => p.TargetDepotId == depotId));
-            // Bộ tải lớn không có ca/vùng seed: hai planner đồng thời vẫn chỉ tạo một kế hoạch.
-            async Task Plan()
-            {
-                await using var context = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(scoped).Options);
-                await new Retrack.API.Services.Employee.EmployeeDailyPlanService(new(context),
-                    new Retrack.API.Repositories.EmployeeDispatchRepository(context), new Retrack.API.Repositories.StaffUnitOfWork(context))
-                    .PrepareAsync(DateTime.UtcNow, default);
-            }
-            await Task.WhenAll(Plan(), Plan());
-            await StaffTestServices.Dispatch(db).DispatchAsync(default);
-            var bulkDepots = new[] { Guid.Parse("fa100000-0000-4000-8000-000000000001"), Guid.Parse("fa100000-0000-4000-8000-000000000002") };
-            foreach (var bulkDepot in bulkDepots)
-            {
-                Assert.Equal(15, await db.EmployeeCollectionAreas.CountAsync(a => a.DepotId == bulkDepot));
-                Assert.Equal(5, await db.PickupRequests.CountAsync(p => p.TargetDepotId == bulkDepot && p.Status == "SCHEDULED"));
-                Assert.Equal(1, await db.PickupRequests.CountAsync(p => p.TargetDepotId == bulkDepot && p.Status == "PENDING"));
-                Assert.Equal(6, await db.PickupRequests.Where(p => p.TargetDepotId == bulkDepot).Select(p => new { p.Latitude, p.Longitude }).Distinct().CountAsync());
-                Assert.Equal(2, await db.EmployeeDispatchShifts.CountAsync(s => s.IsAutomatic && db.EmployeeCollectionAreas.Any(a => a.Id == s.AreaId && a.DepotId == bulkDepot)));
-                Assert.False(await db.PickupRequests.AnyAsync(p => p.TargetDepotId == bulkDepot && p.AcceptedCollectorId != null
-                    && !db.DepotStaffs.Any(st => st.DepotId == bulkDepot && st.UserId == p.AcceptedCollectorId)));
-            }
+
         }
         finally
         {

@@ -30,9 +30,10 @@ public sealed class DepotDispatchRepository(AppDbContext db) : IDepotDispatchRep
                    where area.DepotId == depot
                    select new { shift, area, employee };
         if (excludeEmployeeId.HasValue) rows = rows.Where(x => x.employee.Id != excludeEmployeeId.Value);
-        if (query.Status == "CURRENT" || availableOnly) rows = rows.Where(x => x.shift.StartsAt <= now && x.shift.EndsAt > now);
+        if (query.Status == "CURRENT") rows = rows.Where(x => x.shift.StartsAt <= now && x.shift.EndsAt > now);
         if (query.Status == "UPCOMING") rows = rows.Where(x => x.shift.StartsAt > now);
         if (query.Status == "ENDED") rows = rows.Where(x => x.shift.EndsAt <= now);
+        if(availableOnly) rows=rows.Where(x=>x.shift.EndsAt>now && x.shift.StartsAt<now.AddHours(7).Date.AddDays(1).AddHours(-7));
         if (availableOnly && preferredDatetime.HasValue) rows = rows.Where(x => preferredDatetime < x.shift.EndsAt);
         if (!string.IsNullOrWhiteSpace(query.Search)) rows = rows.Where(x => x.employee.FullName.Contains(query.Search) || x.area.Name.Contains(query.Search));
         if (availableOnly) rows = rows.Where(x => x.shift.Availability == "AVAILABLE" && x.area.IsActive && x.employee.IsActive && x.employee.Role == "DEPOT_EMPLOYEE" &&
@@ -45,16 +46,17 @@ public sealed class DepotDispatchRepository(AppDbContext db) : IDepotDispatchRep
     private IQueryable<DispatchPickupDto> MapPickups(IQueryable<PickupRequest> rows) => rows.Select(x => new DispatchPickupDto(
         x.Id, x.Seller.FullName, x.Seller.Phone, x.Address, x.Description, x.Latitude, x.Longitude, x.PreferredDatetime, x.Status, x.AcceptedCollectorId, x.AcceptedCollector == null ? null : x.AcceptedCollector.FullName,
         db.EmployeeDispatchQueues.Where(q => q.PickupId == x.Id).Select(q => q.Reason).FirstOrDefault(),
-        x.CheckinImageUrl != null && x.CheckinImageUrl != "" || db.PickupCheckIns.Any(c => c.PickupRequestId == x.Id), x.CreatedAt));
+        x.CheckinImageUrl != null && x.CheckinImageUrl != "" || db.PickupCheckIns.Any(c => c.PickupRequestId == x.Id), x.CreatedAt, x.PreferredEndDatetime, x.CollectionDate, x.RequiresOwnerReview));
     public Task<PagedResult<DispatchPickupDto>> PickupsAsync(Guid depot, DepotQuery query)
     {
         // Filter entity trước projection để truy vấn có thể dịch SQL ổn định.
         var ids = db.PickupRequests.Where(x => x.TargetDepotId == depot);
         ids = query.Status == "SCHEDULED" ? ids.Where(x => x.Status == "SCHEDULED") : ids.Where(x => x.Status == "PENDING");
         var endDay = DateTime.UtcNow.AddHours(7).Date.AddDays(1).AddHours(-7);
-        if (query.Status is "TODAY" or "EXCEPTIONS") ids = ids.Where(x => x.PreferredDatetime == null || x.PreferredDatetime < endDay);
-        if (query.Status == "UPCOMING") ids = ids.Where(x => x.PreferredDatetime >= endDay);
-        if (query.Status == "EXCEPTIONS") ids = ids.Where(x => x.AcceptedCollectorId == null && db.EmployeeDispatchQueues.Any(q => q.PickupId == x.Id && q.Reason != "ASSIGNED" && q.Reason != "ASSIGNED_MANUAL"));
+        var today=DateOnly.FromDateTime(endDay.AddHours(7).AddDays(-1));
+        if (query.Status is "TODAY" or "EXCEPTIONS") ids = ids.Where(x => x.CollectionDate.HasValue ? x.CollectionDate<=today : x.PreferredDatetime == null || x.PreferredDatetime < endDay);
+        if (query.Status == "UPCOMING") ids = ids.Where(x => x.CollectionDate.HasValue ? x.CollectionDate>today : x.PreferredDatetime >= endDay);
+        if (query.Status == "EXCEPTIONS") ids = ids.Where(x => x.RequiresOwnerReview || (x.AcceptedCollectorId == null && db.EmployeeDispatchQueues.Any(q => q.PickupId == x.Id && q.Reason != "ASSIGNED" && q.Reason != "ASSIGNED_MANUAL")));
         if (!string.IsNullOrWhiteSpace(query.Search)) ids = ids.Where(x => x.Address.Contains(query.Search) || x.Seller.FullName.Contains(query.Search));
         return DepotRepositoryPage.ReadAsync(MapPickups(ids.AsNoTracking().OrderBy(x => x.CreatedAt).ThenBy(x => x.Id)), query);
     }

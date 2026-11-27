@@ -28,6 +28,9 @@ public sealed class DepotDispatchController(DepotDispatchService service) : Cont
     [HttpPost("pickups/{id:guid}/assign")]
     public async Task<IActionResult> Assign(Guid depotId, Guid id, DispatchAssignInput input)
     { await service.AssignAsync(Owner, depotId, id, input); return Ok(ApiResponse<string>.Ok("Đã lưu phân công và thông báo cho người liên quan.")); }
+    [HttpPost("pickups/{id:guid}/reschedule")]
+    public async Task<IActionResult> Reschedule(Guid depotId,Guid id,DispatchRescheduleInput input)
+    {await service.RescheduleAsync(Owner,depotId,id,input);return Ok(ApiResponse<string>.Ok("Đã lưu lịch mới và thông báo người bán. Hệ thống sẽ phân công theo ngày thu gom."));}
     // Giữ đường dẫn cấu hình cũ; client mới dùng từng danh sách phân trang ở trên.
     [HttpGet]
     public async Task<IActionResult> Legacy(Guid depotId, int page = 1) => Ok(ApiResponse<object>.Ok(await service.ConfigurationAsync(Owner, depotId, page)));

@@ -73,9 +73,19 @@ namespace Retrack.API.Services
             if (dto.Longitude.HasValue && (dto.Longitude.Value < -180 || dto.Longitude.Value > 180))
                 throw new ArgumentException("Kinh độ (longitude) phải nằm trong khoảng từ -180 đến 180.");
 
-            if (dto.PreferredDatetime.HasValue && dto.PreferredDatetime.Value < DateTime.UtcNow.AddMinutes(-30))
+            if (dto.PreferredDatetime.HasValue && dto.PreferredDatetime.Value.AddHours(2) <= DateTime.UtcNow)
                 throw new ArgumentException("Thời gian thu gom mong muốn không thể ở quá khứ.");
 
+            // Client cũ chỉ gửi giờ bắt đầu: giữ tương thích bằng khung hai giờ.
+            var collectionEnd = dto.PreferredEndDatetime ?? dto.PreferredDatetime?.AddHours(2);
+            if(dto.CollectionDate.HasValue || dto.PreferredEndDatetime.HasValue)
+                Retrack.API.Services.Employee.PickupSchedule.Validate(dto.CollectionDate,dto.PreferredDatetime,collectionEnd,DateTime.UtcNow);
+            var collectionDate = dto.CollectionDate ?? (dto.PreferredDatetime.HasValue
+                ? Retrack.API.Services.Employee.PickupSchedule.Today(dto.PreferredDatetime.Value)
+                : Retrack.API.Services.Employee.PickupSchedule.Today(DateTime.UtcNow));
+            // Đơn linh hoạt tạo ngoài giờ được lên lịch vào ngày hoạt động tiếp theo.
+            if(!dto.CollectionDate.HasValue && !dto.PreferredDatetime.HasValue && DateTime.UtcNow.AddHours(7).Hour>=19)
+                collectionDate=collectionDate.AddDays(1);
             // Get platform fee from system config
             var feeConfig = await _db.SystemConfigs.FindAsync("PLATFORM_FEE_PERCENTAGE");
             var feePercent = await BusinessModel.IsSubscriptionAsync(_db) ? 0m : PlatformFees.Rate(feeConfig?.ConfigValue);
@@ -90,6 +100,8 @@ namespace Retrack.API.Services
                 Latitude = dto.Latitude,
                 Longitude = dto.Longitude,
                 PreferredDatetime = dto.PreferredDatetime,
+                PreferredEndDatetime = collectionEnd,
+                CollectionDate = collectionDate,
                 RequestImageUrl = dto.RequestImageUrl,
                 PlatformFeePercentage = feePercent,
                 FeePolicy = PlatformFees.BuyerSeparate,
@@ -346,6 +358,8 @@ namespace Retrack.API.Services
                 Latitude = r.Latitude,
                 Longitude = r.Longitude,
                 PreferredDatetime = r.PreferredDatetime,
+                PreferredEndDatetime = r.PreferredEndDatetime,
+                CollectionDate = r.CollectionDate,
                 RequestImageUrl = r.RequestImageUrl,
                 Status = r.Status,
                 GrossAmount = r.GrossAmount,

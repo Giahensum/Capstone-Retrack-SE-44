@@ -6,7 +6,7 @@ namespace Retrack.API.Services.Employee;
 
 public sealed record AvailabilityInput(string Status, string? Reason);
 
-public sealed class EmployeeDispatchService(IEmployeeDispatchRepository repository, IStaffUnitOfWork work)
+public sealed class EmployeeDispatchService(IEmployeeDispatchRepository repository, IStaffUnitOfWork work, TimeProvider? clock = null)
 {
     // Giới hạn hỗ trợ từ địa điểm Seller tới tâm vùng nhận, không phải bán kính check-in.
     public const double MaxSupportDistanceMeters = 5000;
@@ -16,7 +16,7 @@ public sealed class EmployeeDispatchService(IEmployeeDispatchRepository reposito
     public async Task<object> MineAsync(Guid userId, CancellationToken ct)
     {
         if (!await repository.HasStaffAsync(userId, null, ct)) throw new DepotForbiddenException();
-        return await repository.MineAsync(userId, DateTime.UtcNow, ct);
+        return await repository.MineAsync(userId, (clock ?? TimeProvider.System).GetUtcNow().UtcDateTime, ct);
     }
 
     public async Task ChangeAvailabilityAsync(Guid userId, Guid shiftId, AvailabilityInput input, CancellationToken ct)
@@ -28,7 +28,7 @@ public sealed class EmployeeDispatchService(IEmployeeDispatchRepository reposito
             throw new ArgumentException("Hãy nhập lý do từ 10 đến 1.000 ký tự.");
         await using var tx = await work.BeginAsync(ct);
         await LockAsync(ct);
-        var now = DateTime.UtcNow;
+        var now = (clock ?? TimeProvider.System).GetUtcNow().UtcDateTime;
         var shift = await repository.FindShiftAsync(shiftId, userId, ct)
             ?? throw new KeyNotFoundException("Không tìm thấy ca của bạn.");
         var area = await repository.AreaAsync(shift.AreaId, ct);
@@ -59,7 +59,7 @@ public sealed class EmployeeDispatchService(IEmployeeDispatchRepository reposito
 
     public async Task DispatchAsync(CancellationToken ct)
     {
-        var now = DateTime.UtcNow;
+        var now = (clock ?? TimeProvider.System).GetUtcNow().UtcDateTime;
         // Ngày nghiệp vụ Việt Nam. Đơn hẹn ngày mai không bị giao từ hôm nay.
         var endDay = now.AddHours(7).Date.AddDays(1).AddHours(-7);
         var ids = await repository.DueAsync(endDay, ct);
@@ -81,6 +81,17 @@ public sealed class EmployeeDispatchService(IEmployeeDispatchRepository reposito
         if (pickup.Status is not ("PENDING" or "SCHEDULED")
             || !string.IsNullOrEmpty(pickup.CheckinImageUrl)
             || await repository.HasCheckInAsync(id, ct)) return;
+        if(pickup.RequiresOwnerReview) return;
+        if(now>=PickupSchedule.End(pickup)) {
+            var previous=pickup.AcceptedCollectorId;
+            pickup.AcceptedCollectorId=null;pickup.Status="PENDING";pickup.RequiresOwnerReview=true;
+            pickup.DispatchReviewReason=PickupSchedule.Day(pickup)<PickupSchedule.Today(now) ? "Đơn tồn từ ngày trước, cần liên hệ người bán và hẹn lại." : "Đã hết khung thu gom, cần chủ kho xác nhận lịch mới với người bán.";
+            pickup.UpdatedAt=now;
+            repository.AddEvent(new EmployeeDispatchEvent {PickupId=id,FromEmployeeId=previous,Reason=pickup.DispatchReviewReason,CreatedAt=now});
+            if(previous.HasValue) Notify(previous.Value,id,"Đơn đã chuyển về chủ kho",pickup.DispatchReviewReason,pickup.TargetDepotId);
+            if(pickup.TargetDepotId.HasValue) Notify(await repository.OwnerIdAsync(pickup.TargetDepotId,ct),id,"Đơn thu gom quá hẹn",pickup.DispatchReviewReason,pickup.TargetDepotId);
+            await TouchQueue(id,pickup.DispatchReviewReason,now,ct);return;
+        }
         // Owner xử lý ngoại lệ (ví dụ thiếu tọa độ). Giữ phân công tay khi ca/membership còn hợp lệ;
         // không giữ khi nhân viên báo đầy/ngừng ca hoặc hết giờ để TV3 tiếp tục điều phối lại.
         if (await repository.KeepManualAsync(pickup, now, ct)) return;
@@ -116,22 +127,20 @@ public sealed class EmployeeDispatchService(IEmployeeDispatchRepository reposito
                 return CollectionValidation.Distance((double)pickup.Latitude!.Value,
                     (double)pickup.Longitude!.Value, recipientArea.Latitude, recipientArea.Longitude);
             }
-            bool CoversOrSupports(EmployeeDispatchShift shift) => shift.IsAutomatic || shift.AreaId == home.Id
+            bool CoversOrSupports(EmployeeDispatchShift shift) => shift.AreaId == home.Id
                 || DistanceToShift(shift) <= MaxSupportDistanceMeters;
             var counts = await repository.WorkloadAsync(depotId, ct);
-            var day = now.AddHours(7).Date.AddHours(-7);
-            var excluded = await repository.ExcludedAsync(id, day, ct);
             if (old.HasValue && shifts.Any(s => s.EmployeeId == old && CoversOrSupports(s)
-                && (pickup.PreferredDatetime == null || pickup.PreferredDatetime < s.EndsAt)))
+                && PickupSchedule.Start(pickup) < s.EndsAt))
             {
                 await TouchQueue(id, "ASSIGNED", now, ct);
                 return;
             }
-            // Không quay lại người từng bàn giao đơn trong ngày, tránh vòng lặp.
-            chosen = shifts.Where(s => s.EmployeeId != old && !excluded.Contains(s.EmployeeId)
+            // Chỉ xét ca AVAILABLE; người chủ động bật lại sau FULL có thể nhận đơn chờ.
+            chosen = shifts.Where(s => s.EmployeeId != old
                 && CoversOrSupports(s)
                 && (s.IsAutomatic || counts.GetValueOrDefault(s.EmployeeId) < s.MaxPendingOrders)
-                && (pickup.PreferredDatetime == null || pickup.PreferredDatetime < s.EndsAt))
+                && PickupSchedule.Start(pickup) < s.EndsAt)
                 .OrderBy(s => s.AreaId == home.Id ? 0 : 1)
                 .ThenBy(s => DistanceToShift(s))
                 .ThenBy(s => s.StartsAt)

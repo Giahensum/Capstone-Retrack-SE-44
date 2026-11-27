@@ -53,6 +53,9 @@ public sealed partial class EmployeeCollectionService(IEmployeeCollectionReposit
         }
         if (pickup.Status != "SCHEDULED") throw new DepotConflictException("Chỉ check-in đơn đã nhận và chưa bắt đầu thu gom.");
         var now = DateTimeOffset.UtcNow;
+        PickupSchedule.RequireCheckIn(pickup,now.UtcDateTime);
+        if(pickup.CollectionDate.HasValue && !await repository.CanStartShiftAsync(userId,pickup.TargetDepotId!.Value,now.UtcDateTime,ct))
+            throw new DepotConflictException("Ca chưa sẵn sàng hoặc đã đầy/ngừng. Hãy cập nhật ca và danh sách đơn trước khi check-in.");
         var distance = CollectionValidation.ValidateCheckIn(pickup, input, now);
         var file = input.ImageFile;
         if (file == null || file.Length is <= 0 or > 5 * 1024 * 1024) throw new ArgumentException("Ảnh check-in phải có dung lượng từ 1 byte đến 5 MB.");

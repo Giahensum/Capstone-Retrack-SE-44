@@ -38,6 +38,10 @@ namespace Retrack.API.Models
 
         [Column("preferred_datetime")]
         public DateTime? PreferredDatetime { get; set; }
+        [Column("preferred_end_datetime")] public DateTime? PreferredEndDatetime { get; set; }
+        [Column("collection_date")] public DateOnly? CollectionDate { get; set; }
+        [Column("requires_owner_review")] public bool RequiresOwnerReview { get; set; }
+        [Column("dispatch_review_reason")] public string? DispatchReviewReason { get; set; }
 
         [Column("checkin_image_url")]
         public string? CheckinImageUrl { get; set; }

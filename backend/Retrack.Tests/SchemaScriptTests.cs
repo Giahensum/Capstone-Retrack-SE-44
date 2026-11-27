@@ -72,7 +72,7 @@ public sealed class SchemaScriptTests
         // Chạy lại bootstrap không bật lại ca đã ngừng, phục hồi đơn/chuyến đã hủy hoặc đổi mật khẩu đã sửa.
         await using (var changedDemo = new NpgsqlCommand("""
             UPDATE employee_dispatch_shifts SET availability='STOPPED',reason='Chủ kho ngừng ca trong kiểm thử';
-            UPDATE pickup_requests SET status='CANCELLED' WHERE id='ef350000-0000-4000-8000-000000000001';
+            UPDATE pickup_requests SET status='CANCELLED' WHERE id='fa500000-0000-4000-8000-000000000001';
             UPDATE transport_jobs SET status='CANCELLED' WHERE id='d8600000-0000-4000-8000-000000000001';
             UPDATE users SET password_hash='fixture-custom-hash' WHERE email='employee.dispatch01@retrack.test';
             """, db, tx)) await changedDemo.ExecuteNonQueryAsync();
@@ -101,11 +101,11 @@ public sealed class SchemaScriptTests
         {
             await using var reader = await verify.ExecuteReaderAsync();
             Assert.True(await reader.ReadAsync());
-            Assert.Equal(52L, reader.GetInt64(0));
+            Assert.Equal(42L, reader.GetInt64(0));
             Assert.Equal(8L, reader.GetInt64(1));
             Assert.Equal(4L, reader.GetInt64(2));
-            Assert.Equal(23L, reader.GetInt64(3));
-            Assert.Equal(40L, reader.GetInt64(4));
+            Assert.Equal(15L, reader.GetInt64(3));
+            Assert.Equal(176L, reader.GetInt64(4));
             Assert.Equal(10L, reader.GetInt64(5));
             Assert.Equal(2L, reader.GetInt64(6));
             Assert.Equal(2L, reader.GetInt64(7));
@@ -123,7 +123,7 @@ public sealed class SchemaScriptTests
             SELECT
                 (SELECT count(*) FROM employee_collection_areas),
                 (SELECT count(*) FROM employee_dispatch_shifts WHERE availability='STOPPED'),
-                (SELECT status FROM pickup_requests WHERE id='ef350000-0000-4000-8000-000000000001'),
+                (SELECT status FROM pickup_requests WHERE id='fa500000-0000-4000-8000-000000000001'),
                 (SELECT status FROM transport_jobs WHERE id='d8600000-0000-4000-8000-000000000001'),
                 (SELECT password_hash FROM users WHERE email='employee.dispatch01@retrack.test'),
                 (SELECT count(*) FROM depot_stock_receipts WHERE id IN ('d8800000-0000-4000-8000-000000000001','d8800000-0000-4000-8000-000000000002') AND status='POSTED' AND NOT costs_confirmed),
@@ -132,7 +132,7 @@ public sealed class SchemaScriptTests
             """, db, tx))
         {
             await using var reader=await mergedRoles.ExecuteReaderAsync();Assert.True(await reader.ReadAsync());
-            Assert.Equal(6L,reader.GetInt64(0));Assert.Equal(6L,reader.GetInt64(1));
+            Assert.Equal(0L,reader.GetInt64(0));Assert.Equal(0L,reader.GetInt64(1));
             Assert.Equal("CANCELLED",reader.GetString(2));Assert.Equal("CANCELLED",reader.GetString(3));
             Assert.Equal("fixture-custom-hash",reader.GetString(4));Assert.Equal(2L,reader.GetInt64(5));
             Assert.Equal(900m,reader.GetDecimal(6));Assert.Equal("APPROVED",reader.GetString(7));

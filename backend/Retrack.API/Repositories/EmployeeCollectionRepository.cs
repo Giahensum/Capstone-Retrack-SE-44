@@ -9,6 +9,9 @@ namespace Retrack.API.Repositories;
 
 public sealed class EmployeeCollectionRepository(AppDbContext db) : IEmployeeCollectionRepository
 {
+    public Task<bool> CanStartShiftAsync(Guid userId,Guid depotId,DateTime now,CancellationToken ct) =>
+        db.EmployeeDispatchShifts.AnyAsync(s=>s.EmployeeId==userId && s.Availability=="AVAILABLE" && s.StartsAt<=now && s.EndsAt>now &&
+            db.EmployeeCollectionAreas.Any(a=>a.Id==s.AreaId && a.DepotId==depotId && a.IsActive),ct);
     public Task<bool> HasActiveStaffAsync(Guid userId, Guid? depotId, CancellationToken ct) =>
         db.DepotStaffs.AnyAsync(s => s.UserId == userId && s.IsActive && s.StaffType == "DEPOT_EMPLOYEE"
             && s.User.IsActive && s.User.Role == "DEPOT_EMPLOYEE" && s.Depot.Owner.IsActive
