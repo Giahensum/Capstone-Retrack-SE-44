@@ -80,6 +80,8 @@ namespace Retrack.API.DTOs
         public decimal? Longitude { get; set; }
 
         public DateTime? PreferredDatetime { get; set; }
+        public DateTime? PreferredEndDatetime { get; set; }
+        public DateOnly? CollectionDate { get; set; }
 
         [MaxLength(1000, ErrorMessage = "URL ảnh không được vượt quá 1000 ký tự.")]
         public string? RequestImageUrl { get; set; }
@@ -97,6 +99,8 @@ namespace Retrack.API.DTOs
         public decimal? Latitude { get; set; }
         public decimal? Longitude { get; set; }
         public DateTime? PreferredDatetime { get; set; }
+        public DateTime? PreferredEndDatetime { get; set; }
+        public DateOnly? CollectionDate { get; set; }
         public string? RequestImageUrl { get; set; }
         public string Status { get; set; } = string.Empty;
         public decimal GrossAmount { get; set; }

@@ -16,7 +16,8 @@ public sealed class EmployeeDispatchTests : IAsyncLifetime
     private readonly Depot depot = new() { Owner = NewUser("DEPOT_OWNER"), VerificationStatus = "APPROVED" };
     private EmployeeCollectionArea area = null!, nearby = null!;
     private EmployeeDispatchShift a = null!, b = null!;
-    private EmployeeDispatchService Service => StaffTestServices.Dispatch(db);
+    private static DateTime TestNow => Retrack.API.Services.Employee.PickupSchedule.At(Retrack.API.Services.Employee.PickupSchedule.Today(DateTime.UtcNow),12);
+    private EmployeeDispatchService Service => new(new Retrack.API.Repositories.EmployeeDispatchRepository(db),new Retrack.API.Repositories.StaffUnitOfWork(db),new DispatchTestClock(TestNow));
     private static User NewUser(string role) => new() { Email = $"{Guid.NewGuid():N}@test.local", Role = role, FullName = role };
     public async Task InitializeAsync()
     {
@@ -36,8 +37,8 @@ public sealed class EmployeeDispatchTests : IAsyncLifetime
     }
     private static EmployeeDispatchShift Shift(User user, EmployeeCollectionArea area) => new()
     {
-        EmployeeId = user.Id, AreaId = area.Id, StartsAt = DateTime.UtcNow.AddMinutes(-1),
-        EndsAt = DateTime.UtcNow.AddHours(10), MaxPendingOrders = 10
+        EmployeeId = user.Id, AreaId = area.Id, StartsAt = TestNow.AddMinutes(-1),
+        EndsAt = TestNow.AddHours(7), MaxPendingOrders = 10
     };
     private async Task<Guid> Pickup(string status = "PENDING", Guid? employee = null, DateTime? preferred = null)
     {
@@ -143,14 +144,14 @@ public sealed class EmployeeDispatchTests : IAsyncLifetime
         Assert.NotEqual("ASSIGNED",(await db.EmployeeDispatchQueues.SingleAsync()).Reason);
     }
     [Fact]
-    public async Task RepeatedStopsDoNotCycleBackToPreviousEmployee()
+    public async Task EmployeeExplicitlyResumingCanReceiveWaitingOrdersAgain()
     {
         var id = await Pickup(); await Service.DispatchAsync(default);
         await Service.ChangeAvailabilityAsync(first.Id,a.Id,new("FULL","Xe đã đầy cần bàn giao hàng"),default);
         await Service.ChangeAvailabilityAsync(first.Id,a.Id,new("AVAILABLE",null),default);
         await Service.ChangeAvailabilityAsync(second.Id,b.Id,new("STOPPED","Xe hỏng không thể tiếp tục ca"),default);
         await Service.DispatchAsync(default);
-        Assert.Null((await Read(id)).AcceptedCollectorId);
+        Assert.Equal(first.Id,(await Read(id)).AcceptedCollectorId);
         Assert.Equal(3,await db.EmployeeDispatchEvents.CountAsync());
     }
     [Fact]
@@ -182,7 +183,7 @@ public sealed class EmployeeDispatchTests : IAsyncLifetime
     [Fact]
     public async Task ExpiredShiftTransfersOrder()
     {
-        a.EndsAt = DateTime.UtcNow.AddSeconds(-1); await db.SaveChangesAsync();
+        a.EndsAt = TestNow.AddSeconds(-1); await db.SaveChangesAsync();
         var id = await Pickup("SCHEDULED",first.Id); await Service.DispatchAsync(default);
         Assert.Equal(second.Id,(await Read(id)).AcceptedCollectorId);
     }
@@ -216,4 +217,27 @@ public sealed class EmployeeDispatchTests : IAsyncLifetime
         var id = await Pickup(); await Service.DispatchAsync(default);
         Assert.Null((await Read(id)).AcceptedCollectorId);
     }
+    [Fact] public async Task ExpiredAndYesterdayOrdersRequireOwnerAndDoNotMoveTomorrow(){
+        var id=await Pickup("SCHEDULED",first.Id);
+        var p=await db.PickupRequests.FindAsync(id);p!.CollectionDate=PickupSchedule.Today(TestNow).AddDays(-1);
+        await db.SaveChangesAsync();await Service.DispatchAsync(default);await Service.DispatchAsync(default);
+        p=await Read(id);Assert.True(p.RequiresOwnerReview);Assert.Null(p.AcceptedCollectorId);Assert.Equal("PENDING",p.Status);
+        Assert.Single(await db.EmployeeDispatchEvents.ToListAsync());
+    }
+    [Fact] public async Task FutureSlotAssignedBeforeStartButExpiredSlotRequiresOwner(){
+        var valid=await Pickup();var late=await Pickup();
+        var today=PickupSchedule.Today(TestNow);
+        foreach(var id in new[]{valid,late}) (await db.PickupRequests.FindAsync(id))!.CollectionDate=today;
+        var p=await db.PickupRequests.FindAsync(valid);p!.PreferredDatetime=PickupSchedule.At(today,13);p.PreferredEndDatetime=PickupSchedule.At(today,15);
+        p=await db.PickupRequests.FindAsync(late);p!.PreferredDatetime=PickupSchedule.At(today,9);p.PreferredEndDatetime=PickupSchedule.At(today,11);
+        await db.SaveChangesAsync();await Service.DispatchAsync(default);
+        Assert.Equal(first.Id,(await Read(valid)).AcceptedCollectorId);Assert.True((await Read(late)).RequiresOwnerReview);
+    }
+    [Fact] public async Task WaitingOrderAutomaticallyReturnsWhenEmployeeResumesBeforeWindowExpires(){
+        var id=await Pickup();a.Availability=b.Availability="FULL";await db.SaveChangesAsync();await Service.DispatchAsync(default);
+        Assert.Null((await Read(id)).AcceptedCollectorId);Assert.False((await Read(id)).RequiresOwnerReview);
+        await Service.ChangeAvailabilityAsync(first.Id,a.Id,new("AVAILABLE",null),default);await Service.DispatchAsync(default);
+        Assert.Equal(first.Id,(await Read(id)).AcceptedCollectorId);
+    }
+
 }

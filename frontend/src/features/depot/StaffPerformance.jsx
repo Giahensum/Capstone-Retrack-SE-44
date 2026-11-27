@@ -4,7 +4,7 @@ import { QueryState, Pager } from './components/DepotUI';
 import { MaterialIcon } from './components/DepotIcon';
 import { monthBounds, vietnamMonth } from './reportPeriod';
 import StaffHistoryModal from './components/StaffHistoryModal';
-import { buttonClass } from './components/DepotUI';
+import { secondaryButtonClass } from './components/DepotUI';
 import { PageHeader, StatCard } from '@/components/ui/kit';
 
 export default function StaffPerformance() {
@@ -112,7 +112,7 @@ export default function StaffPerformance() {
                       <td className="p-4">
                         <div className="flex items-center gap-3">
                           <span aria-hidden="true" className="w-8 h-8 rounded-full bg-d-surface-container flex items-center justify-center shrink-0 font-bold">{staff.fullName?.charAt(0) || 'N'}</span>
-                          <div className="min-w-0"><span className="font-medium text-d-on-surface truncate">{staff.fullName}</span><button type="button" className={`${buttonClass} block mt-2 text-xs`} onClick={() => setSelected(staff)}>Xem lịch sử</button></div>
+                          <div className="flex min-w-0 flex-col items-start gap-2"><span className="block max-w-full font-medium text-d-on-surface break-words" title={staff.fullName}>{staff.fullName}</span><button type="button" className={`${secondaryButtonClass} shrink-0 text-xs`} onClick={() => setSelected(staff)}>Xem lịch sử</button></div>
                         </div>
                       </td>
                       <td className="p-4">

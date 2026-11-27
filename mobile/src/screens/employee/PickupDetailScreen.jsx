@@ -1,3 +1,4 @@
+import { pickupScheduleLabel, pickupNotStarted, pickupWindowClosed } from '../../helpers/pickupSchedule';
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Image, RefreshControl, Text, View } from "react-native";
 import { useIsFocused } from "@react-navigation/native";
@@ -10,7 +11,6 @@ import usePickupResource from "../../hooks/usePickupResource";
 import useAcceptPickup from "../../hooks/useAcceptPickup";
 import useEmployeeLocation from "../../hooks/useEmployeeLocation";
 import { pickupApi } from "../../api/pickupApi";
-import { formatViDatetime } from "../../helpers/format";
 import { coordinatesOf } from "../../helpers/coordinates";
 import { getRoutes } from "../../helpers/goongDirections";
 import { selectRoute } from "../../helpers/routeSelection";
@@ -36,6 +36,11 @@ export default function PickupDetailScreen({ route, navigation }) {
   } = usePickupResource(loader);
   const focused = useIsFocused();
   const gps = useEmployeeLocation(focused);
+  const [scheduleNow,setScheduleNow]=useState(()=>Date.now());
+  useEffect(()=>{
+    const timer=setInterval(()=>setScheduleNow(Date.now()),15000);
+    return ()=>clearInterval(timer);
+  },[]);
   const [vehicle, setVehicle] = useState(null);
   const [routeResult, setRouteResult] = useState(null);
   const [retry, setRetry] = useState(0);
@@ -122,7 +127,7 @@ export default function PickupDetailScreen({ route, navigation }) {
               />
             ) : null}
             <Text style={s.muted}>
-              Hẹn lịch: {formatViDatetime(pickup.preferredDatetime)}
+              Hẹn lịch: {pickupScheduleLabel(pickup)}
             </Text>
             <Text style={s.text}>{pickup.description || "Chưa có mô tả."}</Text>
             <Text style={[s.label, { color: colors.primary }]}>
@@ -137,9 +142,11 @@ export default function PickupDetailScreen({ route, navigation }) {
               />
             ) : null}
           </View>
+          {pickup.isAcceptedByMe && pickup.status === "SCHEDULED" && pickupWindowClosed(pickup,scheduleNow) ? <Text style={s.muted}>Khung thu gom đã kết thúc. Hãy tải lại danh sách và liên hệ chủ kho để xác nhận lịch mới.</Text> : null}
+          {pickup.isAcceptedByMe && pickupNotStarted(pickup,scheduleNow) ? <Text style={s.muted}>Chưa đến khung giờ hẹn. Bạn có thể xem trước tuyến đường; check-in khi đến giờ.</Text> : null}
           {pickup.isAcceptedByMe ? <View style={s.card}>
             <Button title="Kết quả cân và bàn giao" onPress={() => navigation.navigate("SubmitResult", { pickupId: id })} />
-            <Button title={pickup.status === "SCHEDULED" ? "Check-in tại địa điểm" : "Xem bằng chứng check-in"}
+            <Button disabled={pickup.status === "SCHEDULED" && (pickupNotStarted(pickup,scheduleNow) || pickupWindowClosed(pickup,scheduleNow))} title={pickup.status === "SCHEDULED" ? "Check-in tại địa điểm" : "Xem bằng chứng check-in"}
               onPress={() => navigation.navigate("CheckIn", { pickupId: id })} />
             {pickup.status !== "SCHEDULED" ? <Button title={pickup.status === "IN_PROGRESS" ? "Phân loại, cân và định giá" : "Xem kết quả cân"}
               onPress={() => navigation.navigate("ClassifyWeigh", { pickupId: id })} /> : null}

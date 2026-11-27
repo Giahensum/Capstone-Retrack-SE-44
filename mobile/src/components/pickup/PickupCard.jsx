@@ -1,7 +1,7 @@
+import { pickupScheduleLabel } from '../../helpers/pickupSchedule';
 import { Pressable, Text, View } from "react-native";
 import Feather from "@expo/vector-icons/Feather";
 import Button from "../common/Button";
-import { formatViDatetime } from "../../helpers/format";
 import { callSeller } from "../../helpers/pickupLinks";
 import { colors, styles as s } from "../../theme";
 
@@ -53,7 +53,7 @@ export default function PickupCard({
       >
         <Text style={s.text}>📍 {pickup.address}</Text>
         <Text style={s.muted}>
-          ◷ {formatViDatetime(pickup.preferredDatetime)}
+          ◷ {pickupScheduleLabel(pickup)}
         </Text>
         {pickup.description ? (
           <Text style={s.muted} numberOfLines={2}>

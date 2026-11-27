@@ -13,6 +13,7 @@ public sealed class EmployeeDailyPlanService(EmployeeDailyPlanRepository reposit
     {
         var start = DateTime.SpecifyKind(now.AddHours(7).Date.AddHours(-7), DateTimeKind.Utc);
         var end = start.AddDays(1);
+        var workStart=start.AddHours(7);var workEnd=start.AddHours(19);
         for (var page = 0; ; page++)
         {
             var depots = await repository.DepotsAsync(page, ct);
@@ -44,7 +45,7 @@ public sealed class EmployeeDailyPlanService(EmployeeDailyPlanRepository reposit
                 // Người đang giữ đơn giữ vùng. Người chưa có việc được điều động vào vùng có nhu cầu.
                 var movable = shifts.Where(s => s.IsAutomatic && s.Availability == "AVAILABLE" && s.StartsAt <= now && s.EndsAt > now
                     && areas.Any(a => a.Id == s.AreaId) && !busy.Contains(s.EmployeeId)).OrderBy(s => s.EmployeeId).ToList();
-                var assigned = shifts.Where(s => !movable.Contains(s) && s.Availability == "AVAILABLE" && s.StartsAt <= now && s.EndsAt > now)
+                var assigned = shifts.Where(s => !movable.Contains(s) && s.Availability == "AVAILABLE" && s.EndsAt > now)
                     .GroupBy(s => s.AreaId).ToDictionary(g => g.Key, g => g.Count());
                 Guid NextArea()
                 {
@@ -65,8 +66,8 @@ public sealed class EmployeeDailyPlanService(EmployeeDailyPlanRepository reposit
                         if (!NeedsEmployee()) break;
                         var areaId = NextArea();
                         repository.AddShift(new EmployeeDispatchShift { EmployeeId = employee, AreaId = areaId,
-                            StartsAt = start, EndsAt = end, IsAutomatic = true, MaxPendingOrders = 50,
-                            Reason = "Kế hoạch thu gom tự động theo ngày Việt Nam" });
+                            StartsAt = workStart, EndsAt = workEnd, IsAutomatic = true, MaxPendingOrders = 50,
+                            Reason = "Ca thu gom tự động 07:00–19:00 giờ Việt Nam" });
                         assigned[areaId] = assigned.GetValueOrDefault(areaId) + 1;
                     }
                 }

@@ -48,9 +48,10 @@ public sealed class EmployeeDispatchRepository(AppDbContext db) : IEmployeeDispa
 
     public Task<List<Guid>> DueAsync(DateTime endDay, CancellationToken ct) =>
         db.PickupRequests.AsNoTracking()
-            .Where(p => (p.Status == "PENDING" || p.Status == "SCHEDULED")
+            .Where(p => !p.RequiresOwnerReview && (p.Status == "PENDING" || p.Status == "SCHEDULED")
                 && (p.TargetDepotId == null || db.EmployeeCollectionAreas.Any(a => a.DepotId == p.TargetDepotId))
                 && (p.PreferredDatetime == null || p.PreferredDatetime < endDay)
+                && (p.CollectionDate == null || p.CollectionDate < DateOnly.FromDateTime(endDay.AddHours(7)))
                 && !db.PickupCheckIns.Any(c => c.PickupRequestId == p.Id))
             .OrderBy(p => db.EmployeeDispatchQueues.Where(q => q.PickupId == p.Id)
                 .Select(q => (DateTime?)q.UpdatedAt).FirstOrDefault())
@@ -73,7 +74,7 @@ public sealed class EmployeeDispatchRepository(AppDbContext db) : IEmployeeDispa
     public async Task<bool> KeepManualAsync(PickupRequest pickup, DateTime now, CancellationToken ct) =>
         pickup.AcceptedCollectorId.HasValue && pickup.TargetDepotId.HasValue &&
             await db.EmployeeDispatchQueues.AnyAsync(q => q.PickupId == pickup.Id && q.Reason == "ASSIGNED_MANUAL", ct) &&
-            await db.EmployeeDispatchShifts.AnyAsync(s => s.EmployeeId == pickup.AcceptedCollectorId && s.Availability == "AVAILABLE" && s.StartsAt <= now && s.EndsAt > now &&
+            await db.EmployeeDispatchShifts.AnyAsync(s => s.EmployeeId == pickup.AcceptedCollectorId && s.Availability == "AVAILABLE" && s.StartsAt < (pickup.PreferredEndDatetime ?? now.AddHours(7).Date.AddDays(1).AddHours(-7)) && s.EndsAt > now &&
                 (pickup.PreferredDatetime == null || pickup.PreferredDatetime < s.EndsAt) &&
                 db.EmployeeCollectionAreas.Any(a => a.Id == s.AreaId && a.DepotId == pickup.TargetDepotId && a.IsActive), ct) &&
             await db.DepotStaffs.AnyAsync(s => s.DepotId == pickup.TargetDepotId && s.UserId == pickup.AcceptedCollectorId && s.IsActive && s.StaffType == "DEPOT_EMPLOYEE" && s.User.IsActive && s.User.Role == "DEPOT_EMPLOYEE" && s.Depot.Owner.IsActive && s.Depot.VerificationStatus == "APPROVED", ct);

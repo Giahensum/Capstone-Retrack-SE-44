@@ -17,7 +17,8 @@ public sealed class EmployeeDailyPlanTests : IAsyncLifetime
     private readonly User seller = User("SELLER");
     private static User User(string role) => new() { Role = role, Email = $"{Guid.NewGuid():N}@test.invalid" };
     private EmployeeDailyPlanService Planner => new(new(db), new EmployeeDispatchRepository(db), new StaffUnitOfWork(db));
-    private EmployeeDispatchService Dispatch => StaffTestServices.Dispatch(db);
+    private static DateTime TestNow => PickupSchedule.At(PickupSchedule.Today(DateTime.UtcNow),12);
+    private EmployeeDispatchService Dispatch => new(new EmployeeDispatchRepository(db),new StaffUnitOfWork(db),new DispatchTestClock(TestNow));
     public async Task InitializeAsync()
     {
         await connection.OpenAsync(); db = new(new DbContextOptionsBuilder<AppDbContext>().UseSqlite(connection).Options);
@@ -41,30 +42,30 @@ public sealed class EmployeeDailyPlanTests : IAsyncLifetime
     [InlineData(75, 1)]
     public async Task Automatically_groups_region_orders_without_splitting_by_count(int count, int people)
     {
-        await AddOrders(count); await Planner.PrepareAsync(DateTime.UtcNow, default); await Dispatch.DispatchAsync(default);
+        await AddOrders(count); await Planner.PrepareAsync(TestNow, default); await Dispatch.DispatchAsync(default);
         var shifts = await db.EmployeeDispatchShifts.AsNoTracking().ToListAsync();
-        Assert.Equal(people, shifts.Count); Assert.All(shifts, s => { Assert.True(s.IsAutomatic); Assert.Equal(50, s.MaxPendingOrders); });
+        Assert.Equal(people, shifts.Count); Assert.All(shifts, s => { Assert.True(s.IsAutomatic); Assert.Equal(50, s.MaxPendingOrders); Assert.Equal(PickupSchedule.At(PickupSchedule.Today(TestNow),7),s.StartsAt); Assert.Equal(PickupSchedule.At(PickupSchedule.Today(TestNow),19),s.EndsAt); });
         var assignments = await db.PickupRequests.GroupBy(p => p.AcceptedCollectorId).Select(g => g.Count()).ToListAsync();
         Assert.Equal(people, assignments.Count); Assert.True(assignments.Max() - assignments.Min() <= 1);
         Assert.False(await db.PickupRequests.AnyAsync(p => p.AcceptedCollectorId == null));
         var events = await db.EmployeeDispatchEvents.CountAsync();
-        await Planner.PrepareAsync(DateTime.UtcNow, default); await Dispatch.DispatchAsync(default);
+        await Planner.PrepareAsync(TestNow, default); await Dispatch.DispatchAsync(default);
         Assert.Equal(events, await db.EmployeeDispatchEvents.CountAsync());
     }
     [Fact]
     public async Task New_order_stays_with_region_employee_without_splitting()
     {
-        await AddOrders(14); await Planner.PrepareAsync(DateTime.UtcNow, default); await Dispatch.DispatchAsync(default);
-        await AddOrders(1); await Planner.PrepareAsync(DateTime.UtcNow, default); await Dispatch.DispatchAsync(default);
+        await AddOrders(14); await Planner.PrepareAsync(TestNow, default); await Dispatch.DispatchAsync(default);
+        await AddOrders(1); await Planner.PrepareAsync(TestNow, default); await Dispatch.DispatchAsync(default);
         var loads = await db.PickupRequests.GroupBy(p => p.AcceptedCollectorId).Select(g => g.Count()).ToListAsync();
         Assert.Single(loads); Assert.Equal(15, loads[0]);
     }
     [Fact]
     public async Task Future_orders_wait_and_catalog_covers_remote_points_without_radius_gaps()
     {
-        await AddOrders(2, future: true); await Planner.PrepareAsync(DateTime.UtcNow, default);
+        await AddOrders(2, future: true); await Planner.PrepareAsync(TestNow, default);
         Assert.Equal(15, await db.EmployeeCollectionAreas.CountAsync()); Assert.Empty(await db.EmployeeDispatchShifts.ToListAsync());
-        await AddOrders(1, remote: true); await Planner.PrepareAsync(DateTime.UtcNow, default); await Dispatch.DispatchAsync(default);
+        await AddOrders(1, remote: true); await Planner.PrepareAsync(TestNow, default); await Dispatch.DispatchAsync(default);
         Assert.Equal(1, await db.PickupRequests.CountAsync(p => p.Status == "SCHEDULED"));
         Assert.Equal(2, await db.PickupRequests.CountAsync(p => p.Status == "PENDING"));
     }
@@ -73,13 +74,13 @@ public sealed class EmployeeDailyPlanTests : IAsyncLifetime
     {
         var foreign = new Depot { Owner = User("DEPOT_OWNER"), VerificationStatus = "APPROVED" };
         db.DepotStaffs.Add(new() { Depot = foreign, User = User("DEPOT_EMPLOYEE"), StaffType = "DEPOT_EMPLOYEE" });
-        await AddOrders(43); await Planner.PrepareAsync(DateTime.UtcNow, default); await Dispatch.DispatchAsync(default);
+        await AddOrders(43); await Planner.PrepareAsync(TestNow, default); await Dispatch.DispatchAsync(default);
         Assert.False(await db.PickupRequests.AnyAsync(p => p.AcceptedCollectorId == null));
         for (var i = 0; i < 3; i++)
         {
             var shift = await db.EmployeeDispatchShifts.AsNoTracking().SingleAsync(s => s.Availability == "AVAILABLE");
             await Dispatch.ChangeAvailabilityAsync(shift.EmployeeId, shift.Id, new("STOPPED", "Nhân viên dừng thu gom để kiểm thử"), default);
-            await Planner.PrepareAsync(DateTime.UtcNow, default); await Dispatch.DispatchAsync(default);
+            await Planner.PrepareAsync(TestNow, default); await Dispatch.DispatchAsync(default);
             Assert.Equal(i + 1, await db.EmployeeDispatchShifts.CountAsync(s => s.Availability == "STOPPED"));
             if (i < 2) Assert.Equal(43, await db.PickupRequests.CountAsync(p => p.Status == "SCHEDULED" && p.AcceptedCollectorId != shift.EmployeeId));
         }
@@ -88,4 +89,11 @@ public sealed class EmployeeDailyPlanTests : IAsyncLifetime
         Assert.All(await db.EmployeeDispatchShifts.ToListAsync(), s => Assert.Equal("STOPPED", s.Availability));
         Assert.Equal(43, await db.PickupRequests.CountAsync(p => p.Status == "PENDING"));
     }
+    [Fact] public async Task PreparingBeforeSevenDoesNotDuplicateRegionAssignment(){
+        await AddOrders(10);var early=PickupSchedule.At(PickupSchedule.Today(TestNow),6);
+        await Planner.PrepareAsync(early,default);await Planner.PrepareAsync(early,default);
+        Assert.Single(await db.EmployeeDispatchShifts.ToListAsync());
+        Assert.Empty(await db.EmployeeDispatchEvents.ToListAsync());
+    }
+
 }
