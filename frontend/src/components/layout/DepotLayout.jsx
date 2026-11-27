@@ -80,6 +80,8 @@ const DepotLayout = () => {
 
   return (
     <AppShell
+      contentScroll
+      scrollKey={`${location.pathname}:${depotId ?? ''}`}
       nav={nav}
       eyebrow="Chủ kho vựa"
       homeTo="/depot/dashboard"
@@ -109,7 +111,7 @@ const DepotLayout = () => {
           <p><strong>{verificationLabels[verification] ?? 'Chưa xác minh kho'}.</strong> Giao dịch mới đang khóa. <Link className="font-semibold text-d-primary underline" to="/depot/profile">Xem và nộp hồ sơ</Link>.</p>
         </div>
       )}
-      {depotId ? <Outlet key={depotId} />
+      <div className="min-w-0">{depotId ? <Outlet key={depotId} />
         : ownedDepots.isPending ? <p role="status" className="p-6 text-d-on-surface-variant">Đang tải danh sách kho…</p>
         : ownedDepots.isError ? <p role="alert" className="p-6 text-d-error">Chưa tải được danh sách kho. Dùng nút Thử lại ở thanh chọn kho.</p>
         : (
@@ -122,6 +124,7 @@ const DepotLayout = () => {
             </div>
           </div>
         )}
+      </div>
       {createDepot && <CreateDepotModal onClose={() => setCreateDepot(false)} />}
     </AppShell>
   );

@@ -25,7 +25,7 @@ const Inventory = () => {
   const sum = (key) => stock.data?.reduce((n, i) => n + i[key], 0) ?? 0;
 
   return (
-    <div className="flex flex-col p-4 md:p-6 w-full max-w-7xl mx-auto h-[calc(100vh-4rem)] gap-4 md:gap-6 overflow-hidden bg-d-surface">
+    <div className="flex flex-col p-4 md:p-6 w-full max-w-7xl mx-auto min-h-0 gap-4 md:gap-6 bg-d-surface">
       <CreateBatchModal isOpen={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} initialMaterial={batchMaterial} />
       <PageHeader title="Quản lý tồn kho" description="Theo dõi lượng hàng đã ghi nhận trên RETRACK, nguồn nhập và lượng còn có thể xuất.">
         <button type="button" className={kitButton({ variant: 'secondary' })} onClick={() => setSearchParams({ tab: 'history', newReceipt: '1' })}>Nhập hàng</button>
@@ -50,7 +50,7 @@ const Inventory = () => {
       </div>
 
       {/* Scrollable Content */}
-      <div className="flex-1 overflow-y-auto min-h-0 flex flex-col gap-6 pr-2">
+      <div className="min-h-0 flex flex-col gap-6">
         {activeTab === 'receipts' || activeTab === 'history' ? <StockHistory key={`${depotId}-${activeTab}`} initialSource={activeTab === 'receipts' ? 'RECEIPT' : ''} /> : activeTab === 'reusable' ? <ReusableInventory key={depotId} /> : activeTab === 'current' ? (
           <QueryState query={stock}>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
