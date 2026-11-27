@@ -250,3 +250,5 @@ Schema lịch mới nằm trong khối `RETRACK_PICKUP_SCHEDULE_V2_BEGIN/END` tr
 
 
 Theo yêu cầu chuẩn bị bảo vệ, có tác vụ riêng `employee/prepare_defense_demo.sql` để nâng bộ 100 lên 160 và đổi lịch bộ demo trên DB demo đã có bootstrap mới; không phải bootstrap thứ hai. Chỉnh một dòng `SET LOCAL retrack.demo_date = '2026-12-07';`. File không reset đơn đã check-in/kết thúc, chỉ thêm 60 mã mở rộng còn thiếu, không tạo lại tài khoản/100 mã gốc. Upload, backup, chạy và kiểm tra theo [DEFENSE_DEMO_DEPLOY_GUIDE.md](../docs/DEFENSE_DEMO_DEPLOY_GUIDE.md). Cài APK/test local và chuyển HTTPS deploy xem [MOBILE_APK_LOCAL_AND_DEPLOY.md](../docs/MOBILE_APK_LOCAL_AND_DEPLOY.md).
+
+Giữ file tác vụ này trong Git tại đúng đường dẫn `db/employee/prepare_defense_demo.sql`, kể cả khi chưa đến ngày sử dụng: `DefenseDemoPostgresTests` đọc file để kiểm thử trên DB test. Không cut ra ngoài repo. Có file trong Git không có nghĩa ứng dụng/CI/CD tự áp lịch lên DB deploy; bước đó vẫn chạy thủ công theo hướng dẫn.
