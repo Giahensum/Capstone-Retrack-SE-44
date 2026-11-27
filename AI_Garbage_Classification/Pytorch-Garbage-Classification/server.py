@@ -4,6 +4,7 @@ import re
 import time
 import base64
 import logging
+import unicodedata
 from typing import Optional, List
 from fastapi import FastAPI, File, UploadFile, HTTPException, Form
 from fastapi.middleware.cors import CORSMiddleware
@@ -260,12 +261,12 @@ CROP_PADDING       = 0.08
 # ── Bảng ánh xạ tri thức ngữ nghĩa từ 80 lớp COCO của YOLOv8 sang 12 nhóm rác ReTrack ──
 # Cơ chế Multi-Model Knowledge Stacking (Late Fusion Ensemble)
 YOLO_TO_RETRACK_PRIOR = {
-    # 1. Chai lọ & đồ chứa
-    'bottle': {'plastic': 2.5, 'white-glass': 2.0, 'brown-glass': 1.8, 'green-glass': 1.8, 'metal': 1.5, 'cardboard': -2.5, 'paper': -2.5, 'clothes': -2.5, 'biological': -2.5, 'shoes': -2.5},
-    'wine glass': {'white-glass': 3.0, 'green-glass': 2.2, 'brown-glass': 2.0, 'plastic': 1.0, 'cardboard': -2.5, 'paper': -2.5, 'clothes': -2.5},
-    'cup': {'metal': 3.5, 'plastic': 2.2, 'white-glass': 1.8, 'paper': -2.5, 'cardboard': -2.5, 'clothes': -2.5},
-    'bowl': {'metal': 2.5, 'plastic': 2.0, 'white-glass': 1.8, 'paper': -2.5, 'cardboard': -2.0, 'clothes': -2.5},
-    'vase': {'white-glass': 2.8, 'brown-glass': 2.0, 'green-glass': 2.0, 'plastic': 1.2, 'cardboard': -2.5, 'paper': -2.5, 'clothes': -2.5},
+    # 1. Chai lọ & đồ chứa (ưu tiên loại trừ giấy/bìa/vải/rác hữu cơ; giữ cân bằng giữa nhựa, lon kim loại và thủy tinh vì COCO không có lớp 'can' riêng)
+    'bottle': {'plastic': 1.2, 'metal': 0.9, 'white-glass': 0.9, 'brown-glass': 0.9, 'green-glass': 0.9, 'cardboard': -3.5, 'paper': -3.5, 'clothes': -3.5, 'biological': -3.5, 'shoes': -3.5, 'trash': -2.0},
+    'wine glass': {'white-glass': 2.2, 'green-glass': 1.5, 'brown-glass': 1.2, 'metal': 0.8, 'cardboard': -3.0, 'paper': -3.0, 'clothes': -3.0, 'shoes': -3.0},
+    'cup': {'metal': 2.4, 'plastic': 1.8, 'paper': -2.0, 'cardboard': -3.0, 'clothes': -3.0, 'shoes': -3.0, 'biological': -3.0},
+    'bowl': {'metal': 2.8, 'plastic': 1.4, 'white-glass': 0.8, 'paper': -3.0, 'cardboard': -2.5, 'clothes': -3.0, 'shoes': -3.0},
+    'vase': {'white-glass': 2.5, 'brown-glass': 1.5, 'green-glass': 1.5, 'cardboard': -3.0, 'paper': -3.0, 'clothes': -3.0},
 
     # 2. Dụng cụ & kim loại
     'fork': {'metal': 4.5, 'cardboard': -2.5, 'paper': -2.5, 'clothes': -2.5},
@@ -285,10 +286,11 @@ YOLO_TO_RETRACK_PRIOR = {
     'book': {'paper': 4.5, 'cardboard': -1.5, 'plastic': -2.5, 'metal': -3.0, 'clothes': -2.5, 'biological': -2.5},
 
     # 4. Rác điện tử & pin
-    'laptop': {'battery': 4.0, 'plastic': 1.2, 'metal': 1.5, 'paper': -2.5, 'cardboard': -2.5, 'clothes': -2.5},
-    'mouse': {'battery': 3.5, 'plastic': 1.8, 'cardboard': -2.5, 'paper': -2.5},
-    'remote': {'battery': 3.8, 'plastic': 1.8, 'cardboard': -2.5, 'paper': -2.5},
-    'keyboard': {'battery': 3.5, 'plastic': 1.8, 'cardboard': -2.5, 'paper': -2.5},
+    'laptop': {'battery': 4.2, 'plastic': 1.2, 'metal': 1.5, 'paper': -3.5, 'cardboard': -3.5, 'clothes': -3.5, 'shoes': -3.5},
+    'mouse': {'battery': 4.0, 'plastic': 1.8, 'cardboard': -3.5, 'paper': -3.5, 'clothes': -3.5, 'shoes': -3.5},
+    'remote': {'battery': 4.0, 'plastic': 1.8, 'cardboard': -3.5, 'paper': -3.5, 'clothes': -3.5, 'shoes': -3.5},
+    'keyboard': {'battery': 4.2, 'plastic': 1.8, 'cardboard': -3.5, 'paper': -3.5, 'clothes': -3.5, 'shoes': -3.5},
+    'cell phone': {'battery': 4.2, 'plastic': 1.5, 'metal': 1.5, 'paper': -3.5, 'cardboard': -3.5, 'clothes': -3.5, 'shoes': -3.5},
 
     # 5. Vải vóc, trang phục
     'backpack': {'clothes': 4.0, 'cardboard': -2.0, 'metal': -2.5, 'paper': -2.5},
@@ -333,7 +335,7 @@ def _get_yolo_semantic_prior(cls_name: Optional[str], conf: float) -> np.ndarray
     return prior
 
 
-def _apply_visual_heuristics(logits_np, crop_img, ocr_text=''):
+def _apply_visual_heuristics(logits_np, crop_img, ocr_text='', yolo_cls=''):
     boost = np.zeros(12, dtype=np.float32)
     if crop_img is None or crop_img.size == 0:
         return boost
@@ -420,27 +422,40 @@ def _apply_visual_heuristics(logits_np, crop_img, ocr_text=''):
     specular_ratio = float(((v_ch > 220) & (s_ch < 50)).mean())
     std_v = float(v_ch.std())
 
-    # Lon nước ngọt / bia màu vàng kim (Red Bull, Bia Sài Gòn Special): sắc độ vàng đậm + ánh sáng chói kim loại
+    # Lon nước ngọt / bia màu vàng kim (Red Bull, Bia Sài Gòn Special): chỉ áp dụng cho đồ uống/vật đơn lẻ, tránh nhầm thùng nhựa màu vàng
     gold_can_ratio = float(((h_ch >= 16) & (h_ch <= 38) & (s_ch > 80) & (v_ch > 185)).mean())
-    if gold_can_ratio > 0.15 and specular_ratio > 0.04:
+    if yolo_cls in ('', 'cup', 'bottle') and gold_can_ratio > 0.15 and specular_ratio > 0.04:
         boost[CLASS_IDX['metal']] += 2.8
         boost[CLASS_IDX['paper']] -= 2.5
         boost[CLASS_IDX['cardboard']] -= 2.0
 
-    # Lon nước giải khát màu đỏ tươi (Coca-Cola, Sting): đỏ bão hòa cao + độ chói/tương phản nếp gấp kim loại
+    # Lon nước giải khát màu đỏ tươi (Coca-Cola, Sting): không áp dụng lên chai ('bottle') có nhãn đỏ để tránh nhầm chai nhựa PET thành lon kim loại
     red_can_ratio = float((((h_ch <= 12) | (h_ch >= 168)) & (s_ch > 100) & (v_ch > 120)).mean())
-    if red_can_ratio > 0.20 and (specular_ratio > 0.04 or std_v > 50):
+    if yolo_cls != 'bottle' and red_can_ratio > 0.20 and (specular_ratio > 0.04 or std_v > 50):
         boost[CLASS_IDX['metal']] += 2.8
         boost[CLASS_IDX['paper']] -= 2.5
+
+    # Ánh kim bạc không màu (inox, nhôm, nồi chảo, vỏ lon bạc): độ bão hòa màu thấp + điểm lóa phản xạ cao
+    if specular_ratio > 0.05 and mean_s < 0.22:
+        if yolo_cls in ('bowl', 'cup', 'spoon', 'fork', 'knife', 'scissors', 'sink'):
+            boost[CLASS_IDX['metal']] += 2.6
+            boost[CLASS_IDX['white-glass']] -= 1.8
+        elif yolo_cls in ('bottle', 'wine glass') and logits_np[CLASS_IDX['metal']] > logits_np[CLASS_IDX['white-glass']] - 0.85:
+            boost[CLASS_IDX['metal']] += 2.2
+            boost[CLASS_IDX['white-glass']] -= 1.5
 
     # Thùng carton màu nâu tự nhiên (không có ánh kim loại)
     brown_ratio = float(((h_ch >= 8) & (h_ch <= 26) & (s_ch > 60) & (v_ch > 70) & (v_ch < 205)).mean())
     if brown_ratio > 0.35 and mean_s > 0.25 and specular_ratio < 0.05:
         boost[CLASS_IDX['cardboard']] += 1.2
 
-    # Thủy tinh xanh lá (Heineken, bia chai xanh)
+    # Thủy tinh xanh lá (Heineken, bia chai xanh) - không ghi đè nếu là cốc/lon ('cup') hoặc nếu EfficientNet nghiêng về nhựa PET xanh (7Up/Sprite)
     green_ratio = float(((h_ch >= 35) & (h_ch <= 85) & (s_ch > 50)).mean())
-    if green_ratio > 0.20:
+    if (
+        green_ratio > 0.20
+        and yolo_cls != 'cup'
+        and logits_np[CLASS_IDX['plastic']] < logits_np[CLASS_IDX['green-glass']] + 0.8
+    ):
         boost[CLASS_IDX['green-glass']] += 1.5
 
     return boost
@@ -560,6 +575,16 @@ def get_classes():
     return {"classes": items}
 
 
+def _to_ascii_no_accent(text: str) -> str:
+    """Chuyển chuỗi tiếng Việt có dấu sang không dấu (ASCII) để OpenCV cv2.putText không bị lỗi font '???'."""
+    if not text:
+        return ""
+    text = text.replace("đ", "d").replace("Đ", "D")
+    normalized = unicodedata.normalize("NFKD", text)
+    ascii_str = "".join(c for c in normalized if not unicodedata.combining(c))
+    return ascii_str.encode("ascii", "ignore").decode("ascii")
+
+
 def _run_classification(image_np_rgb: np.ndarray):
     ih, iw = image_np_rgb.shape[:2]
     annotated = image_np_rgb.copy()
@@ -610,7 +635,7 @@ def _run_classification(image_np_rgb: np.ndarray):
     # Tri thức 2: Định danh hình thái & ngữ nghĩa đồ vật từ YOLOv8 (yolo_prior)
     # Tri thức 3: Thị giác máy tính truyền thống (HSV, Texture STD) & OCR Text (boost)
     yolo_prior = _get_yolo_semantic_prior(detected_yolo_class, yolo_conf)
-    boost = _apply_visual_heuristics(logits_np, crop_img, ocr_text)
+    boost = _apply_visual_heuristics(logits_np, crop_img, ocr_text, yolo_cls=detected_yolo_class or '')
 
     # Chồng kiến thức (Logit Stacking)
     adj_logits = torch.tensor(logits_np + yolo_prior + boost)
@@ -639,14 +664,24 @@ def _run_classification(image_np_rgb: np.ndarray):
             "suggested_description": c_meta.get("suggested_desc", ""),
         })
 
-    # Annotate image
+    # Annotate image (dùng chữ không dấu ASCII để OpenCV render sắc nét, không lỗi font '???')
     cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 3)
     meta = METADATA.get(best_class, {})
-    label = f"{meta.get('name_vi', best_class).split('/')[0].strip()} {best_prob:.1f}% [{box_status}]"
-    ty = max(y1 - 12, 24)
-    (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.75, 2)
-    cv2.rectangle(annotated, (x1, ty - th - 6), (x1 + tw + 6, ty + 4), (20, 20, 20), -1)
-    cv2.putText(annotated, label, (x1 + 3, ty), cv2.FONT_HERSHEY_SIMPLEX, 0.75, color, 2, cv2.LINE_AA)
+    raw_name = meta.get('name_vi', best_class).split('/')[0].strip()
+    clean_name = _to_ascii_no_accent(raw_name)
+    clean_status = _to_ascii_no_accent(box_status)
+    label = f"{clean_name} {best_prob:.1f}% [{clean_status}]"
+    font_scale = 0.65
+    thickness = 2
+    (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, font_scale, thickness)
+    if tw > iw - 12 and iw > 60:
+        font_scale = max(0.42, font_scale * ((iw - 12) / float(tw)))
+        thickness = 1 if font_scale < 0.52 else 2
+        (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, font_scale, thickness)
+    bx = max(0, min(x1, max(0, iw - tw - 8)))
+    ty = max(y1 - 10, th + 10)
+    cv2.rectangle(annotated, (bx, ty - th - 6), (min(iw - 1, bx + tw + 6), ty + 4), (20, 20, 20), -1)
+    cv2.putText(annotated, label, (bx + 3, ty), cv2.FONT_HERSHEY_SIMPLEX, font_scale, color, thickness, cv2.LINE_AA)
 
     # Convert annotated to Base64
     annotated_bgr = cv2.cvtColor(annotated, cv2.COLOR_RGB2BGR)
@@ -733,52 +768,132 @@ YOLO_TO_RETRACK_PRIMARY = {
 BOX_COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4']
 
 
+NON_WASTE_COCO_CLASSES = {
+    'person', 'car', 'truck', 'bus', 'train', 'boat', 'airplane', 'bicycle', 'motorcycle',
+    'traffic light', 'fire hydrant', 'parking meter', 'bench',
+    'bird', 'cat', 'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe',
+    'chair', 'couch', 'bed', 'dining table', 'toilet', 'tv', 'potted plant',
+    'refrigerator', 'oven', 'microwave', 'toaster', 'sink',
+}
+
+FOOD_COCO_CLASSES = {
+    'banana', 'apple', 'sandwich', 'orange', 'broccoli', 'carrot', 'hot dog', 'pizza', 'donut', 'cake',
+}
+
+
+def _suppress_contained_boxes(raw_boxes, img_area=1):
+    """Loại bỏ thùng chứa bao trùm nhiều vật thể bên trong và các khung con lọt lòng (>65% diện tích) để không cắt đôi 1 vật thể."""
+    if len(raw_boxes) >= 3 and img_area > 1:
+        non_container = []
+        for b in raw_boxes:
+            area_ratio = b['area'] / img_area
+            if area_ratio > 0.32:
+                if b['yolo_cls'] in ('suitcase', 'handbag', 'backpack') and b['yolo_conf'] < 0.42:
+                    continue
+                bx1, by1, bx2, by2 = b['box']
+                enclosed = 0
+                for other in raw_boxes:
+                    if other is b or other['area'] >= b['area']:
+                        continue
+                    ox1, oy1, ox2, oy2 = other['box']
+                    ix1, iy1 = max(bx1, ox1), max(by1, oy1)
+                    ix2, iy2 = min(bx2, ox2), min(by2, oy2)
+                    if ix2 > ix1 and iy2 > iy1:
+                        if ((ix2 - ix1) * (iy2 - iy1)) / max(other['area'], 1) > 0.45:
+                            enclosed += 1
+                if area_ratio > 0.42 and enclosed >= 2:
+                    continue
+            non_container.append(b)
+        if len(non_container) >= 2:
+            raw_boxes = non_container
+
+    sorted_b = sorted(raw_boxes, key=lambda b: b['yolo_conf'] * (b['area'] ** 0.25), reverse=True)
+    kept = []
+    for cand in sorted_b:
+        cx1, cy1, cx2, cy2 = cand['box']
+        is_nested = False
+        for k in kept:
+            kx1, ky1, kx2, ky2 = k['box']
+            ix1, iy1 = max(cx1, kx1), max(cy1, ky1)
+            ix2, iy2 = min(cx2, kx2), min(cy2, ky2)
+            if ix2 > ix1 and iy2 > iy1:
+                inter = (ix2 - ix1) * (iy2 - iy1)
+                min_area = min(cand['area'], k['area'])
+                if min_area > 0 and (inter / min_area) > 0.65:
+                    is_nested = True
+                    break
+        if not is_nested:
+            kept.append(cand)
+    return kept
+
+
 def _run_mixed_classification(image_np_rgb: np.ndarray):
     ih, iw = image_np_rgb.shape[:2]
-    # Hạ ngưỡng conf xuống 0.15 và iou=0.45 để phát hiện nhạy hơn các vật thể phế liệu trong đống
-    yolo_res = yolo_model(image_np_rgb, conf=0.15, iou=0.45, verbose=False)
+    # Dùng imgsz=960 và agnostic_nms=True để bắt nhạy các chai/lon nhỏ trong đống rác và chống vẽ trùng 2 khung trên cùng 1 vật thể
+    yolo_res = yolo_model(image_np_rgb, imgsz=960, conf=0.18, iou=0.45, agnostic_nms=True, verbose=False)
 
-    detected_boxes = []
+    raw_candidates = []
     if yolo_res and len(yolo_res[0].boxes) > 0:
         img_area = ih * iw
         for idx, box in enumerate(yolo_res[0].boxes):
             conf = float(box.conf[0])
+            cls_name = yolo_model.names.get(int(box.cls[0]), "").lower()
+            if cls_name in NON_WASTE_COCO_CLASSES:
+                continue
+            if cls_name in FOOD_COCO_CLASSES and conf < 0.45:
+                continue
+
             bx1, by1, bx2, by2 = map(int, box.xyxy[0])
             bx1 = max(0, min(iw - 1, bx1))
             by1 = max(0, min(ih - 1, by1))
             bx2 = max(bx1 + 15, min(iw, bx2))
             by2 = max(by1 + 15, min(ih, by2))
             area = max((bx2 - bx1) * (by2 - by1), 1)
-            if area / img_area < 0.015:
+            if area / img_area < 0.015 or area / img_area > 0.92:
                 continue
 
-            # Crop từng bounding box và chạy EfficientNet-B4 để phân loại chất liệu thật sự
-            crop = image_np_rgb[by1:by2, bx1:bx2]
-            if crop.shape[0] < 10 or crop.shape[1] < 10:
-                continue
-
-            pil_crop = Image.fromarray(crop).convert('RGB')
-            tensor = img_transform(pil_crop).unsqueeze(0).to(DEVICE)
-            with torch.no_grad():
-                logits = classifier_model(tensor)[0].cpu().numpy()
-
-            cls_name = yolo_model.names.get(int(box.cls[0]), "").lower()
-            yolo_prior = _get_yolo_semantic_prior(cls_name, conf)
-            adj_logits = torch.tensor(logits + yolo_prior)
-            probs = torch.softmax(adj_logits, dim=0)
-
-            best_idx = probs.argmax().item()
-            eff_cls = CLASSES[best_idx]
-            eff_conf = float(probs[best_idx])
-
-            detected_boxes.append({
+            raw_candidates.append({
                 'idx': idx,
                 'box': (bx1, by1, bx2, by2),
                 'yolo_cls': cls_name,
-                'retrack_cls': eff_cls,
-                'conf': eff_conf,
-                'area': area
+                'yolo_conf': conf,
+                'area': area,
             })
+
+    filtered_candidates = _suppress_contained_boxes(raw_candidates, img_area=ih * iw)
+    detected_boxes = []
+    for cand in filtered_candidates:
+        bx1, by1, bx2, by2 = cand['box']
+        cls_name = cand['yolo_cls']
+        conf = cand['yolo_conf']
+        area = cand['area']
+
+        crop = _padded_crop(image_np_rgb, bx1, by1, bx2, by2, pad=0.06)
+        if crop.shape[0] < 12 or crop.shape[1] < 12:
+            continue
+
+        pil_crop = Image.fromarray(crop).convert('RGB')
+        tensor = img_transform(pil_crop).unsqueeze(0).to(DEVICE)
+        with torch.no_grad():
+            logits = classifier_model(tensor)[0].cpu().numpy()
+
+        yolo_prior = _get_yolo_semantic_prior(cls_name, max(conf, 0.35))
+        vis_boost = _apply_visual_heuristics(logits, crop, '', yolo_cls=cls_name)
+        adj_logits = torch.tensor(logits + yolo_prior + vis_boost)
+        probs = torch.softmax(adj_logits, dim=0)
+
+        best_idx = probs.argmax().item()
+        eff_cls = CLASSES[best_idx]
+        eff_conf = float(probs[best_idx])
+
+        detected_boxes.append({
+            'idx': cand['idx'],
+            'box': (bx1, by1, bx2, by2),
+            'yolo_cls': cls_name,
+            'retrack_cls': eff_cls,
+            'conf': eff_conf,
+            'area': area
+        })
 
     # Nếu YOLO không phát hiện đủ >= 2 vật thể trong đống phế liệu (hoặc ảnh phế liệu dẹp hỗn hợp):
     # Áp dụng cơ chế Multi-Region Spatial Classification bằng EfficientNet-B4 trên các phân vùng ảnh
@@ -857,6 +972,9 @@ def _run_mixed_classification(image_np_rgb: np.ndarray):
     unique_names = list(dict.fromkeys([o.get('name_vi', '') for o in detected_objects if o.get('name_vi')]))
     natural_names_str = ", ".join(unique_names) if unique_names else "nhiều loại vật liệu tái chế"
 
+    real_avg_conf = round(sum(o['confidence'] for o in detected_objects) / max(len(detected_objects), 1), 1)
+    is_yolo_multi = any(b.get('yolo_cls') != 'segment' for b in detected_boxes)
+
     return {
         "success": True,
         "scan_mode": "mixed_pile",
@@ -864,8 +982,8 @@ def _run_mixed_classification(image_np_rgb: np.ndarray):
         "name_vi": "Đống phế liệu hỗn hợp đa vật thể",
         "material_type": "MIXED",
         "is_recyclable": True,
-        "confidence": 93.0,
-        "box_status": f"YOLO: {len(detected_objects)} Objects Detected",
+        "confidence": real_avg_conf,
+        "box_status": f"YOLO: {len(detected_objects)} Objects Detected" if is_yolo_multi else f"Spatial Regions: {len(detected_objects)} Zones",
         "bounding_box": {
             "x1": min(b['bounding_box']['x1'] for b in detected_objects),
             "y1": min(b['bounding_box']['y1'] for b in detected_objects),

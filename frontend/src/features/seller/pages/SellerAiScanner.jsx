@@ -22,18 +22,40 @@ import {
 } from '../pricingRecommendation';
 import PriceForecastWidget from '../components/PriceForecastWidget';
 
+const stripVietnameseAccents = (str = '') =>
+  String(str)
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+
+const SHORT_BOX_LABELS = {
+  plastic: 'Nhua PET',
+  metal: 'Kim loai / Lon',
+  'green-glass': 'Thuy tinh xanh',
+  'white-glass': 'Thuy tinh trang',
+  'brown-glass': 'Thuy tinh nau',
+  cardboard: 'Bia Carton',
+  paper: 'Giay / Sach bao',
+  battery: 'Pin / Dien tu',
+  clothes: 'Vai / Quan ao',
+  shoes: 'Giay dep cu',
+  biological: 'Rac huu co',
+  trash: 'Rac khac',
+};
+
 const DEMO_SAMPLES = [
   {
     id: 'carton_box',
-    title: 'Thùng carton kraft đơn lẻ',
-    category: 'cardboard',
+    title: 'Chai nhựa PET đơn lẻ (Thực tế)',
+    category: 'plastic',
     icon: 'category',
     url: '/samples/exi.jpg',
     mode: 'single',
   },
   {
     id: 'mixed_pile_demo',
-    title: 'Đống hỗn hợp: Carton + Nhựa + Lon (Tỷ lệ cao)',
+    title: 'Thùng phế liệu hỗn hợp: Thủy tinh + Nhựa + Lon',
     category: 'mixed_pile',
     icon: 'layers',
     url: '/samples/mixed_pile_high_conf.jpg',
@@ -41,7 +63,7 @@ const DEMO_SAMPLES = [
   },
   {
     id: 'mixed_plastic_metal',
-    title: 'Hỗn hợp: Chai nhựa + Lon nhôm (Tỷ lệ cao)',
+    title: 'Đống hỗn hợp: Chai lọ + Vỏ lon thực tế',
     category: 'mixed_pile',
     icon: 'layers',
     url: '/samples/mixed_plastic_metal.jpg',
@@ -54,9 +76,16 @@ export default function SellerAiScanner() {
   const fileInputRef = useRef(null);
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
+  const scanModeRef = useRef('single');
+  const scanReqIdRef = useRef(0);
 
   const [activeTab, setActiveTab] = useState('upload'); // 'upload' | 'camera'
   const [scanMode, setScanMode] = useState('single'); // 'single' | 'mixed_pile'
+
+  const updateScanMode = (nextMode) => {
+    scanModeRef.current = nextMode;
+    setScanMode(nextMode);
+  };
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraLoading, setCameraLoading] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null); // { file, preview, base64 }
@@ -198,39 +227,47 @@ export default function SellerAiScanner() {
     // Convert to Blob & File
     canvas.toBlob((blob) => {
       const file = new File([blob], `ai_snap_${Date.now()}.jpg`, { type: 'image/jpeg' });
+      const currentMode = scanModeRef.current;
       setSelectedImage({
         file,
         preview: base64,
         base64,
       });
-      runScan(file, base64, scanMode);
+      runScan(file, base64, currentMode);
     }, 'image/jpeg', 0.9);
   };
 
-  // Handle File Upload from disk
-  const handleFileSelect = (e) => {
-    const file = e.target.files?.[0];
+  const processSelectedFile = (file) => {
     if (!file) return;
-
     if (!file.type.startsWith('image/')) {
-      return toast.error('Vui lòng chọn tệp hình ảnh hợp lệ (JPG, PNG, WebP)');
+      toast.error('Vui lòng chọn tệp hình ảnh hợp lệ (JPG, PNG, WebP)');
+      return;
     }
 
     const reader = new FileReader();
     reader.onload = (event) => {
       const base64 = event.target.result;
+      const currentMode = scanModeRef.current;
       setSelectedImage({
         file,
         preview: URL.createObjectURL(file),
         base64,
       });
-      runScan(file, base64, scanMode);
+      runScan(file, base64, currentMode);
     };
     reader.readAsDataURL(file);
   };
 
-  // Run AI Scan
-  const runScan = async (file, base64, modeToUse = scanMode) => {
+  // Handle File Upload from disk
+  const handleFileSelect = (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    processSelectedFile(file);
+  };
+
+  // Run AI Scan (có chống ghi đè kết quả cũ khi người dùng chuyển đổi chế độ nhanh)
+  const runScan = async (file, base64, modeToUse = scanModeRef.current) => {
+    const reqId = ++scanReqIdRef.current;
     setIsScanning(true);
     setAiResult(null);
 
@@ -242,26 +279,39 @@ export default function SellerAiScanner() {
         res = await sellerApi.classifyAiBase64(base64, false, modeToUse);
       }
 
+      if (reqId !== scanReqIdRef.current) return;
+
       if (res && (res.primary_class || res.detected_objects?.length > 0)) {
+        if (modeToUse === 'mixed_pile' && (!res.detected_objects || res.detected_objects.length === 0)) {
+          toast.error(
+            'Backend API bạn đang mở chưa cập nhật chế độ Đa vật thể. Hãy mở đúng địa chỉ http://localhost:5173!',
+            { duration: 6000 },
+          );
+          setAiResult(res);
+          return;
+        }
+
         setAiResult(res);
         setSelectedPredictionIndex(0);
-        if (res.scan_mode) {
-          setScanMode(res.scan_mode);
-        }
-        if (res.scan_mode === 'mixed_pile') {
+        if (res.scan_mode === 'mixed_pile' || modeToUse === 'mixed_pile') {
+          updateScanMode('mixed_pile');
           toast.success(`Đã nhận diện đống phế liệu hỗn hợp (${res.detected_objects?.length || 0} vật thể)! 🎉`);
         } else {
+          updateScanMode('single');
           toast.success(`Đã nhận diện: ${res.name_vi} (${res.confidence}%) 🎉`);
         }
       } else {
         toast.error('Không thể xác định loại phế liệu. Vui lòng thử góc chụp rõ hơn.');
       }
     } catch (err) {
+      if (reqId !== scanReqIdRef.current) return;
       console.error('AI Scan error:', err);
       const msg = err?.response?.data?.message || err?.message || 'Có lỗi khi phân tích ảnh AI.';
       toast.error(msg);
     } finally {
-      setIsScanning(false);
+      if (reqId === scanReqIdRef.current) {
+        setIsScanning(false);
+      }
     }
   };
 
@@ -311,7 +361,7 @@ export default function SellerAiScanner() {
     try {
       setIsScanning(true);
       const targetMode = sample.mode || 'single';
-      setScanMode(targetMode);
+      updateScanMode(targetMode);
       const res = await fetch(sample.url);
       const blob = await res.blob();
       const file = new File([blob], `${sample.id}.jpg`, { type: 'image/jpeg' });
@@ -459,7 +509,7 @@ export default function SellerAiScanner() {
   const renderOptionalDepotSelector = (referenceWasteItem = null) => {
     if (!depotsList || depotsList.length === 0) {
       return (
-        <p className="text-[11px] text-d-on-surface-variant italic">
+        <p className="text-xs text-d-on-surface-variant italic">
           * Nhập địa chỉ thu gom cụ thể để hệ thống gợi ý các kho vựa gần nhất và tính cự ly di chuyển.
         </p>
       );
@@ -471,11 +521,11 @@ export default function SellerAiScanner() {
     return (
       <div className="pt-2 space-y-2">
         <div className="flex items-center justify-between gap-2 flex-wrap">
-          <label className="text-xs font-bold text-d-on-surface flex items-center gap-1.5">
+          <label className="text-sm font-bold text-d-on-surface flex items-center gap-1.5">
             <Store size={14} className="text-d-primary" />
             <span>Chọn kho vựa tạo đơn luôn (Tùy chọn):</span>
           </label>
-          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-d-surface-container text-d-on-surface-variant">
+          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-d-surface-container text-d-on-surface-variant">
             {chosenDepot ? `Đã chọn: ${chosenDepot.name}` : 'Không bắt buộc'}
           </span>
         </div>
@@ -484,7 +534,7 @@ export default function SellerAiScanner() {
           {/* Lựa chọn 0: Không chọn cố định trước */}
           <div
             onClick={() => setSelectedDepotId(null)}
-            className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-2 text-xs ${
+            className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-2 text-sm ${
               !chosenDepot
                 ? 'border-2 border-d-primary bg-d-primary/5 shadow-2xs'
                 : 'border-d-border-subtle bg-d-surface hover:bg-d-surface-container'
@@ -505,7 +555,7 @@ export default function SellerAiScanner() {
                   Chưa chọn kho cố định (Chọn sau hoặc Nổ đơn tự do)
                 </span>
                 {nearestDepot && (
-                  <span className="text-[11px] text-d-on-surface-variant block truncate">
+                  <span className="text-xs text-d-on-surface-variant block truncate">
                     Đang tham chiếu giá từ kho gần nhất: {nearestDepot.name}
                   </span>
                 )}
@@ -524,7 +574,7 @@ export default function SellerAiScanner() {
               <div
                 key={depot.id}
                 onClick={() => setSelectedDepotId(isChosen ? null : depot.id)}
-                className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-2.5 text-xs ${
+                className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-2.5 text-sm ${
                   isChosen
                     ? 'border-2 border-emerald-600 bg-emerald-500/10 shadow-xs'
                     : 'border-d-border-subtle bg-d-surface hover:border-d-primary/40 hover:bg-d-surface-container'
@@ -547,20 +597,20 @@ export default function SellerAiScanner() {
                         {depot.name}
                       </span>
                       {isNearest && (
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-600/15 text-emerald-700 dark:text-emerald-300 shrink-0">
+                        <span className="text-[11px] font-bold px-1.5 py-0.5 rounded bg-emerald-600/15 text-emerald-700 dark:text-emerald-300 shrink-0">
                           📍 Gần nhất
                         </span>
                       )}
                       {publishedPrice && (
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-800 dark:text-amber-300 shrink-0">
+                        <span className="text-[11px] font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-800 dark:text-amber-300 shrink-0">
                           Giá niêm yết: {publishedPrice.toLocaleString('vi-VN')} đ/kg
                         </span>
                       )}
                     </div>
-                    <p className="text-[11px] text-d-on-surface-variant truncate mt-0.5">
+                    <p className="text-xs text-d-on-surface-variant truncate mt-0.5">
                       {depot.address}
                     </p>
-                    <div className="flex items-center gap-2 mt-1 text-[10px] text-d-on-surface-variant flex-wrap">
+                    <div className="flex items-center gap-2 mt-1 text-[11px] text-d-on-surface-variant flex-wrap">
                       <span className="font-bold text-amber-700 dark:text-amber-400">
                         ★ {depot.avgRating?.toFixed(1) || '5.0'}
                       </span>
@@ -581,7 +631,7 @@ export default function SellerAiScanner() {
                     setSelectedDepotId(depot.id);
                     handleProceedToCreateRequest(referenceWasteItem, null, depot);
                   }}
-                  className={`px-3 py-1.5 rounded-full text-[11px] font-bold transition-all shrink-0 cursor-pointer ${
+                  className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all shrink-0 cursor-pointer ${
                     isChosen
                       ? 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-2xs'
                       : 'bg-d-surface-container text-d-on-surface hover:bg-d-primary hover:text-d-on-primary'
@@ -598,7 +648,7 @@ export default function SellerAiScanner() {
           <button
             type="button"
             onClick={() => setShowAllDepots((prev) => !prev)}
-            className="text-[11px] font-bold text-d-primary hover:underline flex items-center gap-1 cursor-pointer"
+            className="text-xs font-bold text-d-primary hover:underline flex items-center gap-1 cursor-pointer"
           >
             <span>
               {showAllDepots
@@ -611,6 +661,8 @@ export default function SellerAiScanner() {
       </div>
     );
   };
+
+  const hasResultView = Boolean(aiResult) || isScanning;
 
   return (
     <div className="flex flex-col p-4 md:p-6 gap-6 w-full max-w-7xl mx-auto">
@@ -642,8 +694,8 @@ export default function SellerAiScanner() {
               type="button"
               id="btn-mode-single"
               onClick={() => {
-                setScanMode('single');
-                if (selectedImage && !isScanning) {
+                updateScanMode('single');
+                if (selectedImage) {
                   runScan(selectedImage.file, selectedImage.base64, 'single');
                 }
               }}
@@ -660,8 +712,8 @@ export default function SellerAiScanner() {
               type="button"
               id="btn-mode-mixed"
               onClick={() => {
-                setScanMode('mixed_pile');
-                if (selectedImage && !isScanning) {
+                updateScanMode('mixed_pile');
+                if (selectedImage) {
                   runScan(selectedImage.file, selectedImage.base64, 'mixed_pile');
                 }
               }}
@@ -696,7 +748,7 @@ export default function SellerAiScanner() {
       {/* Main Scan Panel */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Left Column: Camera / Upload / Image Preview (7 cols) */}
-        <div className="lg:col-span-7 space-y-4">
+        <div className={`space-y-4 ${hasResultView ? "lg:col-span-5 lg:sticky lg:top-4" : "lg:col-span-7"}`}>
           {/* Mode Switcher Tabs */}
           <div className="bg-d-surface-container-lowest border border-d-border-subtle rounded-2xl p-1.5 flex gap-1 shadow-xs">
             <button
@@ -760,7 +812,11 @@ export default function SellerAiScanner() {
           </div>
 
           {/* Viewport Box */}
-          <div className="relative bg-black rounded-3xl overflow-hidden border border-d-border-subtle shadow-md aspect-4/3 flex items-center justify-center">
+          <div
+            className={`relative bg-zinc-950 rounded-3xl overflow-hidden border border-d-border-subtle shadow-md flex items-center justify-center ${
+              selectedImage ? 'min-h-[280px] p-2' : 'aspect-4/3'
+            }`}
+          >
             {/* View 1: Live Video Camera */}
             {activeTab === 'camera' && !selectedImage && (
               <div className="relative w-full h-full flex items-center justify-center bg-black">
@@ -813,13 +869,23 @@ export default function SellerAiScanner() {
             {activeTab === 'upload' && !selectedImage && (
               <div
                 onClick={() => fileInputRef.current?.click()}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  const droppedFile = e.dataTransfer?.files?.[0];
+                  if (droppedFile) processSelectedFile(droppedFile);
+                }}
                 className="w-full h-full flex flex-col items-center justify-center p-6 text-center cursor-pointer bg-d-surface-container-low hover:bg-d-surface-container transition-colors group"
               >
                 <div className="w-16 h-16 rounded-2xl bg-d-surface-container text-d-primary flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
                   <Upload size={28} />
                 </div>
                 <h3 className="font-bold text-d-on-surface text-base">
-                  {scanMode === 'mixed_pile' ? 'Tải ảnh đống phế liệu hỗn hợp' : 'Chọn hoặc kéo thả ảnh phế liệu vào đây'}
+                  {scanMode === 'mixed_pile' ? 'Tải hoặc kéo thả ảnh đống phế liệu hỗn hợp' : 'Chọn hoặc kéo thả ảnh phế liệu vào đây'}
                 </h3>
                 <p className="text-xs text-d-on-surface-variant mt-1 max-w-sm">
                   {scanMode === 'mixed_pile'
@@ -837,91 +903,105 @@ export default function SellerAiScanner() {
 
             {/* View 3: Image Preview with AI Bounding Boxes (Single & Mixed Pile) */}
             {selectedImage && (
-              <div className="relative w-full h-full flex items-center justify-center bg-zinc-950 overflow-hidden select-none">
-                <img
-                  src={aiResult?.annotated_image || selectedImage.preview}
-                  alt="Scanned waste"
-                  className="w-full h-full object-contain"
-                />
+              <div className="relative w-full flex items-center justify-center bg-zinc-950 select-none">
+                <div className="relative inline-block max-w-full">
+                  <img
+                    src={scanMode === 'mixed_pile' ? selectedImage.preview : (aiResult?.annotated_image || selectedImage.preview)}
+                    alt="Scanned waste"
+                    className="block max-w-full max-h-[500px] w-auto h-auto rounded-2xl"
+                  />
 
-                {/* ── Interactive Bounding Boxes Overlay ── */}
-                {aiResult && !isScanning && (
-                  <div className="absolute inset-0 pointer-events-none">
-                    {/* Chế độ Mixed Pile: Nhiều bounding box đa màu sắc */}
-                    {scanMode === 'mixed_pile' && aiResult.detected_objects?.length > 0 ? (
-                      aiResult.detected_objects
-                        .filter((obj) => !hiddenBoxIds.has(obj.id))
-                        .map((obj, i) => {
-                          const box = obj.bounding_box || {};
+                  {/* ── Interactive Bounding Boxes Overlay (khớp chính xác 100% khung ảnh thật) ── */}
+                  {aiResult && !isScanning && (
+                    <div className="absolute inset-0 pointer-events-none">
+                      {/* Chế độ Mixed Pile: Nhiều bounding box đa màu sắc */}
+                      {scanMode === 'mixed_pile' && aiResult.detected_objects?.length > 0 ? (
+                        aiResult.detected_objects
+                          .filter((obj) => !hiddenBoxIds.has(obj.id))
+                          .map((obj, i) => {
+                            const box = obj.bounding_box || {};
+                            const imgW = box.image_width || 640;
+                            const imgH = box.image_height || 480;
+                            const x1 = Math.max(0, Math.min(100, (box.x1 / imgW) * 100));
+                            const y1 = Math.max(0, Math.min(100, (box.y1 / imgH) * 100));
+                            const width = Math.max(3, Math.min(100 - x1, (box.width / imgW) * 100));
+                            const height = Math.max(3, Math.min(100 - y1, (box.height / imgH) * 100));
+                            const isHovered = hoveredBoxId === obj.id;
+                            const color = obj.color || '#10b981';
+                            const placeInsideTop = y1 < 9;
+                            const alignRight = x1 > 52;
+                            const shortLabel = SHORT_BOX_LABELS[obj.class_key] || stripVietnameseAccents(obj.name_vi);
+
+                            return (
+                              <div
+                                key={obj.id || i}
+                                onMouseEnter={() => setHoveredBoxId(obj.id)}
+                                onMouseLeave={() => setHoveredBoxId(null)}
+                                className={`absolute pointer-events-auto transition-all duration-150 cursor-pointer rounded-lg ${
+                                  isHovered ? 'ring-4 ring-white shadow-2xl scale-[1.01] z-30' : 'z-20'
+                                }`}
+                                style={{
+                                  left: `${x1}%`,
+                                  top: `${y1}%`,
+                                  width: `${width}%`,
+                                  height: `${height}%`,
+                                  border: `2.5px solid ${color}`,
+                                  backgroundColor: `${color}18`,
+                                }}
+                              >
+                                {/* Label Tag on Bounding Box (không dấu, gọn gàng không tràn mép ảnh) */}
+                                <div
+                                  className={`absolute ${
+                                    placeInsideTop ? 'top-1' : '-top-6'
+                                  } ${
+                                    alignRight ? 'right-0' : 'left-0'
+                                  } px-2 py-0.5 rounded-md text-[10px] font-bold text-white shadow-md flex items-center gap-1 whitespace-nowrap`}
+                                  style={{ backgroundColor: color }}
+                                >
+                                  <span>{shortLabel}</span>
+                                  <span className="opacity-95 font-mono font-normal">
+                                    ({obj.confidence}%)
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })
+                      ) : !aiResult.annotated_image && aiResult.bounding_box ? (
+                        /* Chế độ Single Item dự phòng khi không có annotated_image từ server */
+                        (() => {
+                          const box = aiResult.bounding_box;
                           const imgW = box.image_width || 640;
                           const imgH = box.image_height || 480;
                           const x1 = Math.max(0, Math.min(100, (box.x1 / imgW) * 100));
                           const y1 = Math.max(0, Math.min(100, (box.y1 / imgH) * 100));
                           const width = Math.max(3, Math.min(100 - x1, (box.width / imgW) * 100));
                           const height = Math.max(3, Math.min(100 - y1, (box.height / imgH) * 100));
-                          const isHovered = hoveredBoxId === obj.id;
-                          const color = obj.color || '#10b981';
+                          const placeInsideTop = y1 < 9;
 
                           return (
                             <div
-                              key={obj.id || i}
-                              onMouseEnter={() => setHoveredBoxId(obj.id)}
-                              onMouseLeave={() => setHoveredBoxId(null)}
-                              className={`absolute pointer-events-auto transition-all duration-150 cursor-pointer rounded-lg ${
-                                isHovered ? 'ring-4 ring-white shadow-2xl scale-[1.01] z-30' : 'z-20'
-                              }`}
+                              className="absolute pointer-events-none rounded-lg border-2 border-emerald-500 bg-emerald-500/10 z-20"
                               style={{
                                 left: `${x1}%`,
                                 top: `${y1}%`,
                                 width: `${width}%`,
                                 height: `${height}%`,
-                                border: `2.5px solid ${color}`,
-                                backgroundColor: `${color}18`,
                               }}
                             >
-                              {/* Label Tag on Bounding Box */}
                               <div
-                                className="absolute -top-6 left-0 px-2 py-0.5 rounded-md text-[10px] font-bold text-white shadow-md flex items-center gap-1.5 whitespace-nowrap"
-                                style={{ backgroundColor: color }}
+                                className={`absolute ${
+                                  placeInsideTop ? 'top-1 left-1' : '-top-6 left-0'
+                                } px-2 py-0.5 rounded-md text-[10px] font-bold text-white bg-emerald-600 shadow-md whitespace-nowrap`}
                               >
-                                <span>{obj.name_vi}</span>
-                                <span className="opacity-90 font-mono font-normal">
-                                  ({obj.estimated_share_percent || obj.confidence}%)
-                                </span>
+                                {stripVietnameseAccents(aiResult.name_vi)} ({aiResult.confidence}%)
                               </div>
                             </div>
                           );
-                        })
-                    ) : aiResult.bounding_box ? (
-                      /* Chế độ Single Item: 1 Bounding Box chuẩn xanh lá */
-                      (() => {
-                        const box = aiResult.bounding_box;
-                        const imgW = box.image_width || 640;
-                        const imgH = box.image_height || 480;
-                        const x1 = Math.max(0, Math.min(100, (box.x1 / imgW) * 100));
-                        const y1 = Math.max(0, Math.min(100, (box.y1 / imgH) * 100));
-                        const width = Math.max(3, Math.min(100 - x1, (box.width / imgW) * 100));
-                        const height = Math.max(3, Math.min(100 - y1, (box.height / imgH) * 100));
-
-                        return (
-                          <div
-                            className="absolute pointer-events-none rounded-lg border-2 border-emerald-500 bg-emerald-500/10 z-20"
-                            style={{
-                              left: `${x1}%`,
-                              top: `${y1}%`,
-                              width: `${width}%`,
-                              height: `${height}%`,
-                            }}
-                          >
-                            <div className="absolute -top-6 left-0 px-2 py-0.5 rounded-md text-[10px] font-bold text-white bg-emerald-600 shadow-md">
-                              {aiResult.name_vi} ({aiResult.confidence}%)
-                            </div>
-                          </div>
-                        );
-                      })()
-                    ) : null}
-                  </div>
-                )}
+                        })()
+                      ) : null}
+                    </div>
+                  )}
+                </div>
 
                 {/* Scanning Laser Animation */}
                 {isScanning && (
@@ -984,7 +1064,7 @@ export default function SellerAiScanner() {
         </div>
 
         {/* Right Column: AI Analysis Results Card (5 cols) */}
-        <div className="lg:col-span-5 space-y-4">
+        <div className={`space-y-4 ${hasResultView ? "lg:col-span-7" : "lg:col-span-5"}`}>
           {!aiResult && !isScanning && (
             <div className="bg-d-surface-container-lowest border border-d-border-subtle rounded-3xl p-6 text-center space-y-4 shadow-sm">
               <div className="w-14 h-14 rounded-2xl bg-d-primary-container text-d-on-primary-container flex items-center justify-center mx-auto">
@@ -994,7 +1074,7 @@ export default function SellerAiScanner() {
                 <h3 className="font-bold text-d-on-surface text-base">
                   Sẵn sàng nhận diện phế liệu
                 </h3>
-                <p className="text-xs text-d-on-surface-variant mt-1.5 leading-relaxed">
+                <p className="text-sm text-d-on-surface-variant mt-1.5 leading-relaxed">
                   {scanMode === 'mixed_pile'
                     ? 'Chế độ Đống hỗn hợp giúp bạn chụp toàn bộ đống phế liệu, AI sẽ tự động tách từng loại (nhiều bounding box), tính % khối lượng và tổng tiền.'
                     : 'Chụp ảnh hoặc chọn ảnh phế liệu của bạn. Trí tuệ nhân tạo sẽ tự động nhận biết loại vật liệu, giá bán tham khảo và tư vấn cách phân loại tối ưu.'}
@@ -1003,7 +1083,7 @@ export default function SellerAiScanner() {
 
               {/* Supported Materials Tags */}
               <div className="pt-2 border-t border-d-border-subtle">
-                <p className="text-[11px] font-bold text-d-on-surface-variant uppercase tracking-wider mb-2.5">
+                <p className="text-xs font-bold text-d-on-surface-variant uppercase tracking-wider mb-2.5">
                   12 Nhóm phế liệu AI hỗ trợ:
                 </p>
                 <div className="flex flex-wrap gap-1.5 justify-center">
@@ -1013,7 +1093,7 @@ export default function SellerAiScanner() {
                   ].map((cat) => (
                     <span
                       key={cat}
-                      className="text-[11px] px-2.5 py-1 rounded-lg bg-d-surface-container text-d-on-surface font-medium"
+                      className="text-xs px-2.5 py-1 rounded-lg bg-d-surface-container text-d-on-surface font-medium"
                     >
                       {cat}
                     </span>
@@ -1056,11 +1136,11 @@ export default function SellerAiScanner() {
                         <h3 className="font-bold text-d-on-surface text-lg">
                           Đống phế liệu hỗn hợp
                         </h3>
-                        <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
+                        <span className="inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
                           📦 {detectedObjects.length} Vật thể phát hiện
                         </span>
                       </div>
-                      <p className="text-xs text-d-on-surface-variant mt-0.5">
+                      <p className="text-sm text-d-on-surface-variant mt-0.5">
                         {aiResult.mixed_summary || 'Phát hiện nhiều loại phế liệu khác nhau trong một khung hình.'}
                       </p>
                     </div>
@@ -1068,9 +1148,9 @@ export default function SellerAiScanner() {
                 </div>
 
                 {/* ── Thông tin Khoa học Vật lý: Chuẩn hóa Trọng số Tỷ trọng Rời (Bulk Density) ── */}
-                <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-xs space-y-1.5">
+                <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-sm space-y-1.5">
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1.5 text-xs">
+                    <span className="font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1.5 text-sm">
                       <Sparkles size={14} className="text-amber-600" />
                       <span>Chuẩn hóa Trọng số Tỷ trọng Vật lý (Bulk Density Index):</span>
                     </span>
@@ -1078,14 +1158,14 @@ export default function SellerAiScanner() {
                       <button
                         type="button"
                         onClick={handleResetManualShares}
-                        className="text-[11px] font-bold text-d-primary hover:underline flex items-center gap-1 cursor-pointer"
+                        className="text-xs font-bold text-d-primary hover:underline flex items-center gap-1 cursor-pointer"
                       >
                         <RotateCcw size={12} />
                         <span>Hoàn tác tỷ lệ AI</span>
                       </button>
                     )}
                   </div>
-                  <p className="text-[11px] text-d-on-surface-variant leading-relaxed">
+                  <p className="text-xs text-d-on-surface-variant leading-relaxed">
                     Hệ thống tự động quy đổi diện tích quang học 2D sang khối lượng thực tế (kg) bằng công thức: <code className="font-mono text-d-on-surface bg-d-surface-container px-1 py-0.5 rounded">M = Area × ρ × Conf</code>.
                     Chai nhựa rỗng nhẹ được chiết giảm thể tích (ρ = 0.45), kim loại nặng được tăng trọng số cân ký (ρ = 3.8). Bạn có thể kéo thanh trượt bên dưới để tinh chỉnh theo ý muốn.
                   </p>
@@ -1093,7 +1173,7 @@ export default function SellerAiScanner() {
 
                 {/* ── Visual Stacked Composition Bar ── */}
                 <div className="space-y-1.5">
-                  <div className="flex justify-between text-xs font-bold text-d-on-surface">
+                  <div className="flex justify-between text-sm font-bold text-d-on-surface">
                     <span>Cơ cấu khối lượng phế liệu thực tế (Cân ký):</span>
                     <span className="font-mono text-emerald-600 font-bold">100% khối lượng (~{estimatedWeight} kg)</span>
                   </div>
@@ -1116,9 +1196,9 @@ export default function SellerAiScanner() {
 
                 {/* ── Detected Objects Component Cards List with Interactive Sliders ── */}
                 <div className="space-y-2.5">
-                  <div className="flex items-center justify-between text-xs font-bold text-d-on-surface">
+                  <div className="flex items-center justify-between text-sm font-bold text-d-on-surface">
                     <span>Phân bổ chi tiết & Tinh chỉnh tỷ lệ (Slider):</span>
-                    <span className="text-[11px] text-d-on-surface-variant font-normal">
+                    <span className="text-xs text-d-on-surface-variant font-normal">
                       Kéo trượt để thay đổi %
                     </span>
                   </div>
@@ -1161,22 +1241,22 @@ export default function SellerAiScanner() {
 
                               <div className="min-w-0">
                                 <div className="flex items-center gap-1.5 flex-wrap">
-                                  <span className="font-bold text-xs text-d-on-surface truncate">
+                                  <span className="font-bold text-sm text-d-on-surface truncate">
                                     {item.name_vi}
                                   </span>
                                   <span
-                                    className="text-[10px] font-bold px-1.5 py-0.2 rounded font-mono text-white"
+                                    className="text-[11px] font-bold px-1.5 py-0.2 rounded font-mono text-white"
                                     style={{ backgroundColor: item.color }}
                                   >
                                     {item.estimated_share_percent}% khối lượng
                                   </span>
                                   {item.bulk_density && (
-                                    <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-d-surface-container text-d-on-surface-variant">
+                                    <span className="text-[11px] font-mono px-1.5 py-0.2 rounded bg-d-surface-container text-d-on-surface-variant">
                                       ρ={item.bulk_density}
                                     </span>
                                   )}
                                 </div>
-                                <p className="text-[11px] text-d-on-surface-variant truncate mt-0.5">
+                                <p className="text-xs text-d-on-surface-variant truncate mt-0.5">
                                   Khối lượng: <strong className="text-d-on-surface font-mono">~{item.itemWeightKg} kg</strong> · Đơn giá: {item.unitPrice.toLocaleString('vi-VN')} đ/kg
                                   {item.visual_area_percent != null && (
                                     <span className="opacity-75 font-mono ml-1.5">
@@ -1189,10 +1269,10 @@ export default function SellerAiScanner() {
 
                             {/* Subtotal Payout */}
                             <div className="text-right shrink-0">
-                              <span className="font-mono font-bold text-sm text-emerald-600 block">
+                              <span className="font-mono font-bold text-base text-emerald-600 block">
                                 ~{item.subTotal.toLocaleString('vi-VN')} đ
                               </span>
-                              <span className="text-[10px] text-d-on-surface-variant font-mono">
+                              <span className="text-[11px] text-d-on-surface-variant font-mono">
                                 {item.confidence}% tin cậy
                               </span>
                             </div>
@@ -1200,7 +1280,7 @@ export default function SellerAiScanner() {
 
                           {/* Interactive Share Slider */}
                           <div className="flex items-center gap-3 pt-1 border-t border-d-border-subtle/50">
-                            <span className="text-[10px] text-d-on-surface-variant shrink-0 font-medium">
+                            <span className="text-[11px] text-d-on-surface-variant shrink-0 font-medium">
                               Chỉnh tỷ lệ:
                             </span>
                             <input
@@ -1211,7 +1291,7 @@ export default function SellerAiScanner() {
                               onChange={(e) => handleUpdateShare(item.id, e.target.value)}
                               className="w-full h-1.5 bg-d-surface-container rounded-lg appearance-none cursor-pointer accent-d-primary"
                             />
-                            <span className="text-xs font-mono font-bold text-d-on-surface w-10 text-right shrink-0">
+                            <span className="text-sm font-mono font-bold text-d-on-surface w-10 text-right shrink-0">
                               {item.estimated_share_percent}%
                             </span>
                           </div>
@@ -1225,7 +1305,7 @@ export default function SellerAiScanner() {
                 <div className="rounded-2xl border border-d-border-subtle bg-d-surface-container-low/60 p-4 space-y-4">
                   {/* Location Goong.io & Optional Depot Picker */}
                   <div className="space-y-2">
-                    <label className="text-xs font-bold text-d-on-surface flex items-center gap-1.5">
+                    <label className="text-sm font-bold text-d-on-surface flex items-center gap-1.5">
                       <MapPin size={14} className="text-d-primary" />
                       <span>Địa điểm thu gom thực tế:</span>
                     </label>
@@ -1241,11 +1321,11 @@ export default function SellerAiScanner() {
                   {/* Total Weight Input */}
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between">
-                      <label className="text-xs font-bold text-d-on-surface flex items-center gap-1.5">
+                      <label className="text-sm font-bold text-d-on-surface flex items-center gap-1.5">
                         <Scale size={14} className="text-d-primary" />
                         <span>Tổng khối lượng cả đống ước tính:</span>
                       </label>
-                      <span className="text-xs font-bold text-d-primary font-mono">
+                      <span className="text-sm font-bold text-d-primary font-mono">
                         {estimatedWeight} kg
                       </span>
                     </div>
@@ -1256,7 +1336,7 @@ export default function SellerAiScanner() {
                         max="10000"
                         value={estimatedWeight}
                         onChange={(e) => setEstimatedWeight(Math.max(1, Number(e.target.value) || 1))}
-                        className="w-28 px-3 py-2 rounded-xl border border-d-border-subtle bg-d-surface text-d-on-surface text-sm font-bold focus:outline-d-primary text-center"
+                        className="w-28 px-3 py-2 rounded-xl border border-d-border-subtle bg-d-surface text-d-on-surface text-base font-bold focus:outline-d-primary text-center"
                       />
                       <div className="flex flex-wrap gap-1.5">
                         {[20, 50, 100, 200, 500].map((w) => (
@@ -1264,7 +1344,7 @@ export default function SellerAiScanner() {
                             key={w}
                             type="button"
                             onClick={() => setEstimatedWeight(w)}
-                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                            className={`px-3 py-1.5 rounded-xl text-sm font-bold transition-all cursor-pointer ${
                               estimatedWeight === w
                                 ? 'bg-d-primary text-d-on-primary shadow-xs'
                                 : 'bg-d-surface-container text-d-on-surface-variant hover:bg-d-surface-container-high'
@@ -1279,7 +1359,7 @@ export default function SellerAiScanner() {
 
                   {/* Quality Selector */}
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-d-on-surface flex items-center gap-1.5">
+                    <label className="text-sm font-bold text-d-on-surface flex items-center gap-1.5">
                       <Award size={14} className="text-d-primary" />
                       <span>Tình trạng phân loại thực tế:</span>
                     </label>
@@ -1296,7 +1376,7 @@ export default function SellerAiScanner() {
                                 : 'border-d-border-subtle bg-d-surface hover:bg-d-surface-container'
                             }`}
                           >
-                            <span className="font-bold text-xs block text-d-on-surface">{cond.shortLabel}</span>
+                            <span className="font-bold text-sm block text-d-on-surface">{cond.shortLabel}</span>
                           </div>
                         );
                       })}
@@ -1318,7 +1398,7 @@ export default function SellerAiScanner() {
                           }`}
                         >
                           <MaterialIcon name={f.icon} className="text-base text-d-primary" />
-                          <span className="text-xs font-bold text-d-on-surface truncate">{f.label}</span>
+                          <span className="text-sm font-bold text-d-on-surface truncate">{f.label}</span>
                         </div>
                       );
                     })}
@@ -1329,13 +1409,13 @@ export default function SellerAiScanner() {
                 <div className="p-4 rounded-2xl bg-gradient-to-br from-amber-500/15 via-emerald-500/10 to-transparent border border-amber-500/30 space-y-3">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div>
-                      <span className="text-[11px] font-bold text-amber-800 dark:text-amber-300 uppercase tracking-wider block">
+                      <span className="text-xs font-bold text-amber-800 dark:text-amber-300 uppercase tracking-wider block">
                         💰 Tổng giá trị AI ước tính cả đống:
                       </span>
                       <div className="text-2xl font-black text-emerald-600 font-mono mt-0.5">
                         ~{mixedPricing.totalEstimatedValue.toLocaleString('vi-VN')} đ
                       </div>
-                      <p className="text-[11px] text-d-on-surface-variant">
+                      <p className="text-xs text-d-on-surface-variant">
                         Đơn giá bình quân: <strong className="font-mono text-d-on-surface">~{mixedPricing.averageUnitPrice.toLocaleString('vi-VN')} đ/kg</strong> (Tổng ~{estimatedWeight} kg)
                       </p>
                     </div>
@@ -1343,7 +1423,7 @@ export default function SellerAiScanner() {
                     <button
                       type="button"
                       onClick={() => handleProceedToCreateRequest()}
-                      className="px-5 py-3 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0"
+                      className="px-5 py-3 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0"
                     >
                       <span>{chosenDepot ? `Tạo đơn gửi ${chosenDepot.name}` : 'Tạo đơn gom cả đống phế liệu'}</span>
                       <ArrowRight size={14} />
@@ -1383,16 +1463,16 @@ export default function SellerAiScanner() {
                           {currentSelected.name_vi}
                         </h3>
                         {currentSelected.is_top1 ? (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
+                          <span className="inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
                             🏆 Top 1 (Khuyến nghị cao nhất)
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                          <span className="inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
                             Đã chọn Top {currentSelected.rank}
                           </span>
                         )}
                       </div>
-                      <p className="text-xs text-d-on-surface-variant font-mono mt-0.5">
+                      <p className="text-sm text-d-on-surface-variant font-mono mt-0.5">
                         Mã: {currentSelected.class_key} • Độ tin cậy: {currentSelected.confidence}% • Detection: {aiResult.box_status}
                       </p>
                     </div>
@@ -1401,12 +1481,12 @@ export default function SellerAiScanner() {
                   {/* Recyclability Badge */}
                   <div className="shrink-0">
                     {currentSelected.is_recyclable ? (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 text-xs font-bold">
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 text-sm font-bold">
                         <CheckCircle2 size={12} />
                         <span>Thu gom được</span>
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-600 border border-amber-500/20 text-xs font-bold">
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-600 border border-amber-500/20 text-sm font-bold">
                         <AlertTriangle size={12} />
                         <span>Rác không thu</span>
                       </span>
@@ -1417,11 +1497,11 @@ export default function SellerAiScanner() {
                 {/* Top 5 Selector Section */}
                 <div className="space-y-3">
                   <div>
-                    <h4 className="font-bold text-d-on-surface text-sm flex items-center gap-1.5">
+                    <h4 className="font-bold text-d-on-surface text-base flex items-center gap-1.5">
                       <Layers size={16} className="text-d-primary" />
                       <span>Chọn loại phế liệu để tạo đơn (Top 5 AI nhận diện):</span>
                     </h4>
-                    <p className="text-[11px] text-d-on-surface-variant mt-0.5">
+                    <p className="text-xs text-d-on-surface-variant mt-0.5">
                       Hệ thống tự động ưu tiên Top 1 có độ khớp cao nhất. Bạn có thể bấm chọn bất kỳ loại nào trong 5 gợi ý bên dưới để tạo đơn thu gom:
                     </p>
                   </div>
@@ -1462,20 +1542,20 @@ export default function SellerAiScanner() {
                             {/* Name & price */}
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2 flex-wrap">
-                                <span className="font-bold text-sm text-d-on-surface break-words">
+                                <span className="font-bold text-base text-d-on-surface break-words">
                                   {pred.name_vi}
                                 </span>
                                 {pred.is_top1 ? (
-                                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-amber-500/20 text-amber-700 dark:text-amber-300 shrink-0">
+                                  <span className="text-[11px] font-bold px-1.5 py-0.5 rounded-md bg-amber-500/20 text-amber-700 dark:text-amber-300 shrink-0">
                                     🏆 Top 1
                                   </span>
                                 ) : (
-                                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-d-surface-container text-d-on-surface-variant shrink-0">
+                                  <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded-md bg-d-surface-container text-d-on-surface-variant shrink-0">
                                     Top {idx + 1}
                                   </span>
                                 )}
                               </div>
-                              <p className="text-[11px] text-d-on-surface-variant mt-0.5">
+                              <p className="text-xs text-d-on-surface-variant mt-0.5">
                                 Giá tham khảo: <strong className="text-d-on-surface font-semibold">{pred.price_range}</strong>
                               </p>
                             </div>
@@ -1484,12 +1564,12 @@ export default function SellerAiScanner() {
                           {/* Confidence & Action */}
                           <div className="flex items-center gap-3 shrink-0">
                             <div className="text-right">
-                              <span className={`font-mono font-bold text-sm block ${
+                              <span className={`font-mono font-bold text-base block ${
                                 isSelected ? 'text-d-primary' : 'text-d-on-surface-variant'
                               }`}>
                                 {pred.confidence}%
                               </span>
-                              <span className="text-[10px] text-d-on-surface-variant">độ khớp</span>
+                              <span className="text-[11px] text-d-on-surface-variant">độ khớp</span>
                             </div>
 
                             <button
@@ -1499,7 +1579,7 @@ export default function SellerAiScanner() {
                                 setSelectedPredictionIndex(idx);
                                 handleProceedToCreateRequest(pred);
                               }}
-                              className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all shrink-0 ${
+                              className={`px-3 py-1.5 rounded-full text-sm font-bold transition-all shrink-0 ${
                                 isSelected
                                   ? 'bg-d-primary text-d-on-primary shadow-xs hover:bg-[#385500]'
                                   : 'bg-d-surface-container text-d-on-surface hover:bg-d-primary/10 hover:text-d-primary'
@@ -1516,9 +1596,9 @@ export default function SellerAiScanner() {
 
                 {/* Confidence Meter for selected */}
                 <div className="space-y-1.5 pt-2 border-t border-d-border-subtle">
-                  <div className="flex justify-between text-xs font-bold">
+                  <div className="flex justify-between text-sm font-bold">
                     <span className="text-d-on-surface">Độ tin cậy của lựa chọn ({currentSelected.name_vi}):</span>
-                    <span className="text-d-primary font-mono text-sm">{currentSelected.confidence}%</span>
+                    <span className="text-d-primary font-mono text-base">{currentSelected.confidence}%</span>
                   </div>
                   <div className="w-full h-2.5 bg-d-surface-container rounded-full overflow-hidden">
                     <div
@@ -1532,14 +1612,14 @@ export default function SellerAiScanner() {
                 {!currentSelected.is_recyclable ? (
                   /* Card từ chối rác không thu mua */
                   <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 space-y-2">
-                    <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400 font-bold text-sm">
+                    <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400 font-bold text-base">
                       <AlertTriangle size={18} />
                       <span>Danh mục không thu gom ({currentSelected.name_vi})</span>
                     </div>
                     <div className="text-lg font-bold text-d-on-surface">
                       Mức giá: Không thu mua
                     </div>
-                    <p className="text-xs text-d-on-surface-variant leading-relaxed">
+                    <p className="text-sm text-d-on-surface-variant leading-relaxed">
                       {currentSelected.recycling_tip || 'Vật phẩm này không thuộc danh mục phế liệu tái chế của ReTrack. Vui lòng cho vào túi rác sinh hoạt đô thị hoặc ủ phân vi sinh.'}
                     </p>
                   </div>
@@ -1553,15 +1633,15 @@ export default function SellerAiScanner() {
                           <Calculator size={18} />
                         </div>
                         <div>
-                          <h4 className="font-bold text-d-on-surface text-sm flex items-center gap-1.5">
+                          <h4 className="font-bold text-d-on-surface text-base flex items-center gap-1.5">
                             <span>Định giá & Gợi ý thị trường thông minh AI</span>
                           </h4>
-                          <p className="text-[11px] text-d-on-surface-variant">
+                          <p className="text-xs text-d-on-surface-variant">
                             Tính toán giá thu mua tối ưu theo địa điểm thật (Goong.io), khối lượng và tình trạng
                           </p>
                         </div>
                       </div>
-                      <span className="shrink-0 inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
+                      <span className="shrink-0 inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
                         <Coins size={11} />
                         <span>Dữ liệu thực tế</span>
                       </span>
@@ -1570,12 +1650,12 @@ export default function SellerAiScanner() {
                     {/* Trường 1: Địa điểm thu gom thực tế (Goong.io) & Chọn kho vựa (Tùy chọn) */}
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
-                        <label className="text-xs font-bold text-d-on-surface flex items-center gap-1.5">
+                        <label className="text-sm font-bold text-d-on-surface flex items-center gap-1.5">
                           <MapPin size={14} className="text-d-primary" />
                           <span>Địa điểm thu mua thực tế:</span>
                         </label>
                         {isCalculatingDistance && (
-                          <span className="text-[11px] text-d-primary flex items-center gap-1 font-semibold animate-pulse">
+                          <span className="text-xs text-d-primary flex items-center gap-1 font-semibold animate-pulse">
                             <Loader2 size={12} className="animate-spin" /> Đang tính cự ly Goong...
                           </span>
                         )}
@@ -1592,11 +1672,11 @@ export default function SellerAiScanner() {
                     {/* Trường 2: Khối lượng ước tính */}
                     <div className="space-y-1.5">
                       <div className="flex items-center justify-between">
-                        <label className="text-xs font-bold text-d-on-surface flex items-center gap-1.5">
+                        <label className="text-sm font-bold text-d-on-surface flex items-center gap-1.5">
                           <Scale size={14} className="text-d-primary" />
                           <span>Khối lượng ước tính ({currentSelected.unit || 'kg'}):</span>
                         </label>
-                        <span className="text-xs font-bold text-d-primary">
+                        <span className="text-sm font-bold text-d-primary">
                           {estimatedWeight} {currentSelected.unit || 'kg'}
                         </span>
                       </div>
@@ -1608,7 +1688,7 @@ export default function SellerAiScanner() {
                             max="5000"
                             value={estimatedWeight}
                             onChange={(e) => setEstimatedWeight(Math.max(1, Number(e.target.value) || 1))}
-                            className="w-28 px-3 py-2 rounded-xl border border-d-border-subtle bg-d-surface text-d-on-surface text-sm font-bold focus:outline-d-primary text-center"
+                            className="w-28 px-3 py-2 rounded-xl border border-d-border-subtle bg-d-surface text-d-on-surface text-base font-bold focus:outline-d-primary text-center"
                           />
                         </div>
                         <div className="flex flex-wrap gap-1.5">
@@ -1617,7 +1697,7 @@ export default function SellerAiScanner() {
                               key={w}
                               type="button"
                               onClick={() => setEstimatedWeight(w)}
-                              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                              className={`px-3 py-1.5 rounded-xl text-sm font-bold transition-all cursor-pointer ${
                                 estimatedWeight === w
                                   ? 'bg-d-primary text-d-on-primary shadow-xs'
                                   : 'bg-d-surface-container text-d-on-surface-variant hover:bg-d-surface-container-high'
@@ -1632,7 +1712,7 @@ export default function SellerAiScanner() {
 
                     {/* Trường 3: Tình trạng phân loại chất lượng */}
                     <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-d-on-surface flex items-center gap-1.5">
+                      <label className="text-sm font-bold text-d-on-surface flex items-center gap-1.5">
                         <Award size={14} className="text-d-primary" />
                         <span>Tình trạng phân loại thực tế:</span>
                       </label>
@@ -1650,7 +1730,7 @@ export default function SellerAiScanner() {
                               }`}
                             >
                               <div className="flex items-center justify-between">
-                                <span className="font-bold text-xs text-d-on-surface">{cond.shortLabel}</span>
+                                <span className="font-bold text-sm text-d-on-surface">{cond.shortLabel}</span>
                                 {isSelected ? (
                                   <div className="w-4 h-4 rounded-full bg-d-primary text-d-on-primary flex items-center justify-center">
                                     <Check size={10} strokeWidth={3} />
@@ -1659,7 +1739,7 @@ export default function SellerAiScanner() {
                                   <div className="w-4 h-4 rounded-full border border-d-border-subtle" />
                                 )}
                               </div>
-                              <p className="text-[10px] text-d-on-surface-variant leading-tight">{cond.desc}</p>
+                              <p className="text-[11px] text-d-on-surface-variant leading-tight">{cond.desc}</p>
                             </div>
                           );
                         })}
@@ -1668,7 +1748,7 @@ export default function SellerAiScanner() {
 
                     {/* Trường 4: Hình thức thu gom */}
                     <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-d-on-surface flex items-center gap-1.5">
+                      <label className="text-sm font-bold text-d-on-surface flex items-center gap-1.5">
                         <Truck size={14} className="text-d-primary" />
                         <span>Hình thức bàn giao thu gom:</span>
                       </label>
@@ -1692,10 +1772,10 @@ export default function SellerAiScanner() {
                               </div>
                               <div className="min-w-0">
                                 <div className="flex items-center justify-between">
-                                  <p className="font-bold text-xs text-d-on-surface truncate">{method.label}</p>
+                                  <p className="font-bold text-sm text-d-on-surface truncate">{method.label}</p>
                                   {isSelected && <Check size={12} className="text-d-primary stroke-[3]" />}
                                 </div>
-                                <p className="text-[10px] text-d-on-surface-variant line-clamp-1 mt-0.5">{method.desc}</p>
+                                <p className="text-[11px] text-d-on-surface-variant line-clamp-1 mt-0.5">{method.desc}</p>
                               </div>
                             </div>
                           );
@@ -1707,18 +1787,18 @@ export default function SellerAiScanner() {
                     <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-500/15 via-emerald-500/5 to-transparent border border-emerald-500/30 space-y-3">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                         <div>
-                          <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-800 dark:text-emerald-300">
+                          <div className="flex items-center gap-1.5 text-sm font-bold text-emerald-800 dark:text-emerald-300">
                             <Coins size={15} />
                             <span>MỨC GIÁ THỊ TRƯỜNG AI KHUYẾN NGHỊ:</span>
                           </div>
                           <div className="text-2xl font-black text-d-on-surface tracking-tight mt-0.5 flex items-baseline gap-1">
                             <span>{smartPrice.recommendedUnitPrice.toLocaleString('vi-VN')}</span>
-                            <span className="text-xs font-bold text-d-on-surface-variant">đ/{currentSelected.unit || 'kg'}</span>
+                            <span className="text-sm font-bold text-d-on-surface-variant">đ/{currentSelected.unit || 'kg'}</span>
                           </div>
                         </div>
 
                         <div className="sm:text-right bg-white dark:bg-d-surface-container-low p-2.5 rounded-xl border border-emerald-500/20 shadow-xs">
-                          <span className="text-[11px] font-semibold text-d-on-surface-variant block">
+                          <span className="text-xs font-semibold text-d-on-surface-variant block">
                             Ước tính số tiền thực nhận (~{estimatedWeight} {currentSelected.unit || 'kg'}):
                           </span>
                           <span className="text-lg font-black text-emerald-600 dark:text-emerald-400">
@@ -1728,8 +1808,8 @@ export default function SellerAiScanner() {
                       </div>
 
                       {/* Source tag & Breakdown Toggle */}
-                      <div className="flex items-center justify-between pt-2 border-t border-emerald-500/20 text-xs flex-wrap gap-2">
-                        <span className="text-[11px] text-d-on-surface-variant flex items-center gap-1">
+                      <div className="flex items-center justify-between pt-2 border-t border-emerald-500/20 text-sm flex-wrap gap-2">
+                        <span className="text-xs text-d-on-surface-variant flex items-center gap-1">
                           <CheckCircle2 size={12} className="text-emerald-600" />
                           {smartPrice.priceSource === 'DEPOT_PUBLISHED'
                             ? `Khớp trực tiếp từ bảng giá niêm yết của ${chosenDepot ? `kho đã chọn (${chosenDepot.name})` : pricingDepot?.name}`
@@ -1738,7 +1818,7 @@ export default function SellerAiScanner() {
                         <button
                           type="button"
                           onClick={() => setShowPricingBreakdown(!showPricingBreakdown)}
-                          className="text-[11px] font-bold text-emerald-700 dark:text-emerald-400 hover:underline flex items-center gap-0.5 cursor-pointer"
+                          className="text-xs font-bold text-emerald-700 dark:text-emerald-400 hover:underline flex items-center gap-0.5 cursor-pointer"
                         >
                           <span>{showPricingBreakdown ? 'Thu gọn' : 'Xem công thức định giá'}</span>
                           {showPricingBreakdown ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
@@ -1747,12 +1827,12 @@ export default function SellerAiScanner() {
 
                       {/* Detailed Pricing Breakdown Accordion */}
                       {showPricingBreakdown && smartPrice.breakdown && (
-                        <div className="p-3 rounded-xl bg-d-surface-container-lowest border border-d-border-subtle text-xs space-y-1.5 animate-fadeIn">
-                          <p className="font-bold text-d-on-surface text-[11px] flex items-center gap-1">
+                        <div className="p-3 rounded-xl bg-d-surface-container-lowest border border-d-border-subtle text-sm space-y-1.5 animate-fadeIn">
+                          <p className="font-bold text-d-on-surface text-xs flex items-center gap-1">
                             <Info size={12} className="text-d-primary" />
                             <span>Bóc tách công thức định giá phế liệu thực tế (Zero Hallucination):</span>
                           </p>
-                          <div className="space-y-1 text-[11px]">
+                          <div className="space-y-1 text-xs">
                             <div className="flex justify-between text-d-on-surface-variant">
                               <span>• Giá cơ sở ({smartPrice.priceSource === 'DEPOT_PUBLISHED' ? `Kho ${pricingDepot?.name}` : 'Thị trường chuẩn'}):</span>
                               <span className="font-mono font-bold text-d-on-surface">{smartPrice.breakdown.basePrice.toLocaleString('vi-VN')} đ/kg</span>
@@ -1779,7 +1859,7 @@ export default function SellerAiScanner() {
                             </div>
                             <div className="pt-1.5 border-t border-d-border-subtle flex justify-between font-bold text-d-on-surface">
                               <span>= Đơn giá khuyến nghị chốt:</span>
-                              <span className="font-mono text-emerald-600 text-xs">{smartPrice.recommendedUnitPrice.toLocaleString('vi-VN')} đ/kg</span>
+                              <span className="font-mono text-emerald-600 text-sm">{smartPrice.recommendedUnitPrice.toLocaleString('vi-VN')} đ/kg</span>
                             </div>
                           </div>
                         </div>
@@ -1791,12 +1871,12 @@ export default function SellerAiScanner() {
                 {/* ── Khối Lời khuyên & Chiến lược tối ưu giá bán từ AI (Logic thực tế, không hallucination) ── */}
                 {currentSelected.is_recyclable && (
                   <div className="rounded-2xl border border-blue-500/30 bg-blue-500/5 p-4 space-y-3">
-                    <div className="flex items-center gap-2 text-blue-700 dark:text-blue-300 font-bold text-xs uppercase tracking-wider">
+                    <div className="flex items-center gap-2 text-blue-700 dark:text-blue-300 font-bold text-sm uppercase tracking-wider">
                       <Lightbulb size={16} className="text-amber-500" />
                       <span>Lời khuyên & Chiến lược tối ưu giá từ AI</span>
                     </div>
 
-                    <div className="space-y-2.5 text-xs">
+                    <div className="space-y-2.5 text-sm">
                       {/* Lời khuyên 1: Xử lý vật lý đạt Hạng A */}
                       <div className="flex items-start gap-2.5 bg-d-surface-container-lowest/80 p-3 rounded-xl border border-blue-500/15">
                         <div className="w-6 h-6 rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 mt-0.5">
@@ -1871,9 +1951,9 @@ export default function SellerAiScanner() {
 
                 {/* OCR Text if detected */}
                 {aiResult.ocr_text && (
-                  <div className="p-3.5 rounded-xl bg-d-surface-container-lowest border border-d-border-subtle text-xs space-y-1">
+                  <div className="p-3.5 rounded-xl bg-d-surface-container-lowest border border-d-border-subtle text-sm space-y-1">
                     <span className="font-bold text-d-on-surface flex items-center gap-1.5">
-                      <MaterialIcon name="document_scanner" className="text-sm text-d-primary" />
+                      <MaterialIcon name="document_scanner" className="text-base text-d-primary" />
                       <span>Chữ / Nhãn hiệu nhận diện trên ảnh (OCR):</span>
                     </span>
                     <p className="text-d-on-surface-variant font-mono bg-d-surface-container-low p-2 rounded-lg break-all">
@@ -1888,7 +1968,7 @@ export default function SellerAiScanner() {
                     id="btn-proceed-create-request"
                     type="button"
                     onClick={() => handleProceedToCreateRequest(currentSelected, smartPrice)}
-                    className="w-full py-3.5 px-6 rounded-full bg-d-primary text-d-on-primary font-bold text-sm shadow-md hover:bg-[#385500] active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                    className="w-full py-3.5 px-6 rounded-full bg-d-primary text-d-on-primary font-bold text-base shadow-md hover:bg-[#385500] active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
                   >
                     <span>
                       {currentSelected.is_recyclable
