@@ -20,7 +20,8 @@ public sealed class LiquidationRepository(AppDbContext db) : ILiquidationReposit
     }
     public async Task<PagedResult<LiquidationListRow>> ListAsync(Guid userId, Guid depotId, LiquidationQuery query, DateTime now)
     {
-        var source = db.LiquidationLots.AsNoTracking();
+        // Danh sách V1 (trọn lô); phiên nhiều hạng mục có API riêng.
+        var source = db.LiquidationLots.AsNoTracking().Where(x => x.FormatVersion == 1);
         var participation = db.LiquidationParticipations.Where(p => p.OwnerId == userId && p.DepotId == depotId);
         var purchases = db.LiquidationAgreements.Where(a => a.BuyerId == userId && a.DepotId == depotId);
         var completed = purchases.Where(a => db.DepotStockReceipts.Any(r =>
@@ -77,7 +78,7 @@ public sealed class LiquidationRepository(AppDbContext db) : ILiquidationReposit
         if (agreement != null) await db.Entry(agreement).ReloadAsync();
         return agreement;
     }
-    public Task<LiquidationAgreement?> LotAgreementAsync(Guid lotId) => db.LiquidationAgreements.AsNoTracking().SingleOrDefaultAsync(x => x.LotId == lotId);
+    public Task<LiquidationAgreement?> LotAgreementAsync(Guid lotId) => db.LiquidationAgreements.AsNoTracking().SingleOrDefaultAsync(x => x.LotId == lotId && x.FormatVersion == 1);
     public void AddAgreement(LiquidationAgreement agreement) => db.LiquidationAgreements.Add(agreement);
     public Task<DepotStockReceipt?> AgreementReceiptAsync(Guid id) => db.DepotStockReceipts.AsNoTracking().SingleOrDefaultAsync(x => x.BulkAgreementId == id && x.Status != "VOIDED" && x.Status != "REJECTED");
     public Task<ContractPartiesDto> ContractPartiesAsync(LiquidationAgreement agreement) => db.ContractPartiesAsync(agreement);
@@ -93,5 +94,5 @@ public sealed class LiquidationRepository(AppDbContext db) : ILiquidationReposit
             Items = rows.Select((x, i) => new LiquidationLadderDto((int)offset + i + 1, x.Amount, x.CreatedAt, x.Mine, x.Id == leadingBidId)).ToList() };
     }
     public Task<List<Guid>> ExpiredAsync(DateTime now) => db.LiquidationLots.AsNoTracking()
-        .Where(x => x.Status == "PUBLISHED" && x.BiddingEnd <= now).OrderBy(x => x.BiddingEnd).ThenBy(x => x.Id).Take(100).Select(x => x.Id).ToListAsync();
+        .Where(x => x.FormatVersion == 1 && x.Status == "PUBLISHED" && x.BiddingEnd <= now).OrderBy(x => x.BiddingEnd).ThenBy(x => x.Id).Take(100).Select(x => x.Id).ToListAsync();
 }

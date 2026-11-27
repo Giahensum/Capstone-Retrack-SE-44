@@ -14,6 +14,16 @@
 
 Không cần terminal để dựng DB, không cần file seed thứ hai hoặc `dotnet ef database update`. Backend không tự migrate khi `dotnet run`.
 
+## Cập nhật 25/11/2026: gói quản lý Depot và thanh toán trực tiếp
+
+- Cùng file SQL trên bổ sung hai bảng `depot_subscriptions`, `depot_subscription_orders`, chỉ mục và cột ghi hình thức thanh toán trực tiếp. Không drop bảng, không sửa số tiền/phí đã chốt của đơn cũ.
+- Mặc định `BUSINESS_MODEL=DEPOT_SUBSCRIPTION`: chỉ bán gói cho Depot, 199.000đ/kho/tháng lịch, giá thay đổi được tại Admin → Gói dịch vụ. Giao dịch mới không tính hoa hồng; các role còn lại không mua gói.
+- Owner chọn từng kho → Gói dịch vụ → **Dùng thử 14 ngày** một lần cho kho đã xác minh, hoặc mua/gia hạn. Chạy SQL lại không bắt đầu/kéo dài dùng thử. Mua gói không thay cho việc Admin duyệt hồ sơ kho.
+- DB cũ: sao lưu, dừng backend và áp phần schema của file, kết thúc trước `-- RETRACK_SCHEMA_END`, thêm `COMMIT;`; không chạy seed. Giữ nguyên `.env` và tài khoản PostgreSQL của máy mình. Sau đó khởi động lại backend và tải lại frontend.
+- Hai bên tự thanh toán tiền hàng: chuyển khoản kèm chứng từ, tiền mặt hoặc hình thức khác có căn cứ; bên nhận vẫn xác nhận tiền thực nhận. PayOS mới chỉ dùng để mua gói Depot; khoản thu/chi/hoàn cũ vẫn được đối soát theo dữ liệu đã có.
+- PayOS dùng cấu hình local `PayOS__*` hiện có, webhook chung `/api/payos/webhook`. Server xác minh chữ ký/số tiền hoặc truy vấn provider; URL quay về không tự kích hoạt gói. Có nút kiểm tra và tác vụ đối soát lại. Không bật thanh toán mô phỏng thành tiền thật.
+- Chuyển khoản mua gói thủ công: Admin cấu hình tài khoản nhận tiền, Owner gửi chứng từ; Admin kiểm tra thực nhận rồi kích hoạt hoặc yêu cầu bổ sung. Phiếu mua gói chưa thay thế hóa đơn điện tử hợp pháp.
+
 ## Dữ liệu demo đã gộp
 
 Bổ sung kế hoạch tự động theo ngày: 12 đơn, 12 Seller và 8 Employee ở hai kho mới không có vùng/ca seed. Worker tự chuẩn bị danh mục và phân công; xem [AUTO_DAILY_COLLECTION.md](../docs/AUTO_DAILY_COLLECTION.md). DB cũ cần chạy riêng khối `RETRACK_AUTO_DISPATCH_DAY_V1_BEGIN/END` trước backend mới, không chạy seed trên production. Bộ 6 Employee cũ vẫn giữ để đối chiếu, bộ mới dùng `employee.dispatch09` đến `employee.dispatch16`.
@@ -221,3 +231,12 @@ Các mục hạ tầng này là hướng dẫn triển khai, chưa có số li�
 xác nhận vận hành trên máy chủ của nhóm. Không bật cache tồn kho/thanh toán,
 replica đọc trễ, partition hay sharding khi chưa có nhu cầu đã đo và phương án
 giữ tính nhất quán.
+
+
+### Nâng cấp riêng phần vận chuyển thuê ngoài
+
+Schema vận chuyển nằm trong `bootstrap/retrack-system.sql`, giữa `-- RETRACK_SHIPPING_BEGIN` và `-- RETRACK_SHIPPING_END`, trước `-- RETRACK_SCHEMA_END`. Không có file SQL Shipping riêng.
+
+Với DB đang có dữ liệu: sao lưu, xác minh đúng database, chọn duy nhất nội dung giữa hai marker Shipping và chạy trong transaction `BEGIN;` … `COMMIT;`. Không chạy kèm phần seed hoặc thay toàn bộ database chỉ để thêm vận chuyển. Khối này bổ sung hai cột `shipping_method`, `shipping_quote_id` vào `inventory_batches` và ba bảng `shipping_quotes`, `external_shipments`, `shipping_events`. Lô cũ mặc định dùng `INTERNAL`.
+
+Bài test `ShippingPostgresTests` chỉ đọc bootstrap chung, tắt seed rồi chạy lại khối Shipping từ chính nội dung đã đọc để kiểm tra tính lặp an toàn và đặt xe đồng thời. Khi đưa code lên Git cần giữ cả hai marker Shipping trong bootstrap.

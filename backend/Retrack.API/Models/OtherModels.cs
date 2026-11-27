@@ -147,6 +147,11 @@ namespace Retrack.API.Models
     [Table("inventory_batches")]
     public class InventoryBatch
     {
+        [Column("shipping_method"), MaxLength(16)]
+        public string ShippingMethod { get; set; } = "INTERNAL";
+        [Column("shipping_quote_id")]
+        public Guid? ShippingQuoteId { get; set; }
+
         [Column("code"), MaxLength(40)]
         public string? Code { get; set; }
 
@@ -210,6 +215,7 @@ namespace Retrack.API.Models
         [Column("platform_fee_amount")] public decimal? PlatformFeeAmount { get; set; }
         [Column("net_amount")] public decimal? NetAmount { get; set; }
         [Column("payment_reference")] public string? PaymentReference { get; set; }
+        [Column("payment_method"), MaxLength(20)] public string? PaymentMethod { get; set; }
         [Column("settled_at")] public DateTime? SettledAt { get; set; }
         [Column("depot_payment_confirmed_at")] public DateTime? DepotPaymentConfirmedAt { get; set; }
         [Column("depot_payment_confirmed_by")] public Guid? DepotPaymentConfirmedBy { get; set; }

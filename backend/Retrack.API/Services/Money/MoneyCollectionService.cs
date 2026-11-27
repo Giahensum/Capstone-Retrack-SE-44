@@ -69,6 +69,7 @@ public sealed class MoneyCollectionService(AppDbContext db, Retrack.API.Services
         if (info.PayerId != userId && info.PayeeId != userId) throw new DepotForbiddenException();
         var cfg = await config.GetAsync(ct);
         var c = await LatestAsync(flow, sourceId, ct);
+        if (cfg.SubscriptionOnly) cfg = cfg with { Mode = c?.Status is "PENDING" or "PAID" or "REFUNDING" ? MoneyConfigKeys.ModePlatform : MoneyConfigKeys.ModeLegacy };
         return await ToDtoAsync(c, flow, sourceId, info, userId, cfg, ct);
     }
 
@@ -129,7 +130,7 @@ public sealed class MoneyCollectionService(AppDbContext db, Retrack.API.Services
             {
                 var r = await (from a in db.LiquidationAgreements.AsNoTracking() where a.Id == sourceId
                                join l in db.LiquidationLots.AsNoTracking() on a.LotId equals l.Id
-                               select new { a.BuyerId, l.SellerId, a.Amount, a.DepositAmount, a.SellerSignedAt, a.BuyerSignedAt, a.DepositConfirmedAt, a.PaymentConfirmedAt })
+                               select new { a.BuyerId, l.SellerId, a.Amount, a.DepositAmount, a.SellerSignedAt, a.BuyerSignedAt, a.DepositConfirmedAt, a.PaymentConfirmedAt, a.FormatVersion })
                     .SingleOrDefaultAsync(ct) ?? throw new KeyNotFoundException("Không tìm thấy thỏa thuận thanh lý.");
                 if (flow == MoneyFlows.LiquidationDeposit)
                 {
@@ -138,7 +139,9 @@ public sealed class MoneyCollectionService(AppDbContext db, Retrack.API.Services
                         : r.DepositConfirmedAt != null ? "Tiền cọc đã được ghi nhận." : null;
                     return new(MoneySources.LiquidationAgreement, r.BuyerId, r.SellerId, r.DepositAmount, $"RT COC {tag}", block);
                 }
-                var balBlock = r.DepositAmount > 0 && r.DepositConfirmedAt == null ? "Cần thanh toán và xác nhận tiền cọc trước khi thanh toán phần còn lại."
+                // Phiên nhiều hạng mục (V2): hai bên tự thanh toán trực tiếp, RETRACK không thu hộ tiền hàng mới.
+                var balBlock = r.FormatVersion == 2 ? "Phiên nhiều hạng mục: hai bên tự thanh toán trực tiếp, RETRACK không thu hộ tiền hàng."
+                    : r.DepositAmount > 0 && r.DepositConfirmedAt == null ? "Cần thanh toán và xác nhận tiền cọc trước khi thanh toán phần còn lại."
                     : r.PaymentConfirmedAt != null ? "Thỏa thuận đã ghi nhận thanh toán phần còn lại." : null;
                 return new(MoneySources.LiquidationAgreement, r.BuyerId, r.SellerId, r.Amount - r.DepositAmount, $"RT TL {tag}", balBlock);
             }
@@ -192,7 +195,8 @@ public sealed class MoneyCollectionService(AppDbContext db, Retrack.API.Services
     {
         RequireFlow(flow);
         if (!payos.IsConfigured) throw new DepotConflictException("PayOS chưa sẵn sàng. Vui lòng liên hệ Admin.");
-        if (!(await config.GetAsync(ct)).IsPlatformMode)
+        var cfg = await config.GetAsync(ct);
+        if (!cfg.IsPlatformMode && !(cfg.SubscriptionOnly && await config.UsesPlatformAsync(flow, sourceId, ct)))
             throw new DepotConflictException("Chế độ thu chi qua sàn chưa được bật. Vui lòng dùng luồng chuyển khoản hiện tại.");
         await RequireActiveUserAsync(userId, ct);
 
@@ -239,6 +243,8 @@ public sealed class MoneyCollectionService(AppDbContext db, Retrack.API.Services
             throw new DepotConflictException("Khoản thanh toán chưa có số tiền nguyên VND hợp lệ để thanh toán PayOS. Vui lòng liên hệ Admin.");
 
         var sourceType = SourceTypeOf(flow);
+        if ((await config.GetAsync(ct)).SubscriptionOnly && !await db.MoneyCollections.AnyAsync(x => x.Flow == flow && x.SourceId == sourceId && (x.Status == "PENDING" || x.Status == "PAID"), ct))
+            throw new DepotConflictException("RETRACK chỉ thu tiền gói Depot. Hai bên thanh toán tiền hàng trực tiếp và xác nhận trên hệ thống.");
         var now = Now;
         // Race an toàn: chỉ số duy nhất từng phần ux_money_collections_active_source loại bản thứ hai; nguồn đã bị khóa nên các lần tạo song song tuần tự.
         await db.Database.ExecuteSqlInterpolatedAsync($@"

@@ -17,7 +17,8 @@ export function notificationTarget(notice) {
     case 'PARTNERS': return { to: '/depot/partners', label: 'Xem nhà máy đối tác' };
     case 'FEES': return { to: '/depot/payments/fees', label: 'Xem phí nền tảng' };
     case 'RECEIPT': return uuid(notice.targetId) ? { to: `/depot/inventory?tab=receipts&receiptId=${notice.targetId}`, label: 'Xem phiếu nhập kho' } : null;
-    case 'LIQUIDATION': return uuid(notice.targetId) ? { to: `/depot/liquidations?lotId=${notice.targetId}`, label: 'Xem lô lớn' } : null;
+    case 'LIQUIDATION': return uuid(notice.targetId) ? { to: `/depot/liquidations?kind=v1&lotId=${notice.targetId}`, label: 'Xem lô lớn' } : null;
+    case 'LIQUIDATION_V2': return uuid(notice.targetId) ? { to: `/depot/liquidations?kind=v2&campaignId=${notice.targetId}`, label: 'Xem phiên nhiều hạng mục' } : null;
     default: return null;
   }
 }

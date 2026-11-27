@@ -6,10 +6,12 @@ import { useState } from 'react';
 import api from '@/lib/axios';
 import { depotError } from '../DepotContext';
 import BatchCostPanel from './BatchCostPanel';
+import BatchShippingPanel from './BatchShippingPanel';
 import DriverEventsPanel from './DriverEventsPanel';
 import BatchSettlementPanel from './BatchSettlementPanel';
 import BatchReturnPanel from './BatchReturnPanel';
 import BatchDetailSection from './BatchDetailSection';
+import { paymentMethodLabel } from '@/lib/paymentMethods';
 const missing = 'Chưa cập nhật';
 const kg = (v) => v == null ? missing : `${number(v)} kg`;
 const percent = (v) => v == null ? missing : `${number(v)}%`;
@@ -48,7 +50,7 @@ function Proof({ title, url }) {
   const [error, setError] = useState('');
   const path = factoryProofPath(url);
   if (path) return <div className="text-sm"><span>{title}: </span><button type="button" disabled={busy}
-    className="rounded-full border border-d-border-subtle px-4 py-2 text-d-primary disabled:opacity-40"
+    className="inline-flex items-center justify-center gap-2 rounded-full font-semibold transition active:scale-[.98] disabled:pointer-events-none disabled:opacity-50 outline-none focus-visible:ring-2 focus-visible:ring-d-primary/30 focus-visible:ring-offset-1 min-h-11 px-5 py-2 text-sm border border-d-border-subtle bg-white text-d-on-surface hover:bg-d-surface-container"
     onClick={async () => {
       setBusy(true); setError('');
       try {
@@ -71,11 +73,11 @@ function Proof({ title, url }) {
   return <p className="text-sm">{title}: {safe ? <a className="text-d-primary underline" href={url} target="_blank" rel="noopener noreferrer">Mở chứng từ</a> : missing}</p>;
 }
 export default function BatchDetailModal({ id, onClose }) {
-  const query = useDepotQuery(`batches/${id}`);
+  const query = useDepotQuery(`batches/${id}`, {}, true, 5000);
   const confirmPayment = useDepotMutation('patch', `batches/${id}/confirm-payment`);
   const [confirming, setConfirming] = useState(false);
   const d = query.data, b = d?.batch, q = d?.quality, s = d?.settlement;
-  const transportLabels = { PENDING: 'Chờ phân công', ASSIGNED: 'Đã phân công', ACCEPTED: 'Tài xế đã nhận chuyến', PICKED_UP: 'Đã lấy hàng', IN_TRANSIT: 'Đang vận chuyển', ON_THE_WAY: 'Đang vận chuyển', DELIVERED: 'Đã giao' };
+  const transportLabels = { EXTERNAL_WAITING: 'Chờ đặt xe vận chuyển', PENDING: 'Chờ phân công', ASSIGNED: 'Đã phân công', ACCEPTED: 'Tài xế đã nhận chuyến', PICKED_UP: 'Đã lấy hàng', IN_TRANSIT: 'Đang vận chuyển', ON_THE_WAY: 'Đang vận chuyển', DELIVERED: 'Đã giao' };
   return <Dialog title={`Chi tiết lô ${b?.code ?? ''}`} onClose={onClose} wide><QueryState query={query}>{d && <div className="space-y-4">
     <div className="rounded-xl bg-d-surface-accent p-4 space-y-2"><p className="font-bold text-d-primary">{batchLabels[b.status] ?? b.status}</p><p className="text-sm">{nextSteps[b.status] ?? 'Theo dõi thông tin lô và phản hồi của nhà máy.'}</p><p className="text-xs text-d-on-surface-variant">Thời gian hiển thị theo giờ Việt Nam. Giá vốn và chi phí là thông tin tùy chọn của kho.</p></div>
     {b.status === 'REJECTED' && <p role="status" className="rounded-xl border border-d-error p-3 text-d-error">Lô bị từ chối — cần kiểm tra lý do và hướng xử lý. Trạng thái này không xác nhận hàng đã quay về kho.</p>}
@@ -84,6 +86,7 @@ export default function BatchDetailModal({ id, onClose }) {
       {b.imageUrls?.length ? <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">{b.imageUrls.filter((url) => { try { return new URL(url).protocol === 'https:'; } catch { return false; } }).map((url, index) =>
         <a key={url} href={url} target="_blank" rel="noopener noreferrer"><img src={url} alt={`Ảnh vật liệu ${index + 1}`} className="h-32 w-full rounded-xl object-cover" /></a>)}</div>
         : <p className="text-sm text-d-on-surface-variant">Lô này chưa có ảnh vật liệu.</p>}</BatchDetailSection>}
+    <BatchShippingPanel key={`shipping-${id}`} batch={b} />
     <Rows title="Vận chuyển và nhận hàng" items={[["Vận chuyển", transportLabels[d.transportStatus] ?? d.transportStatus], ["Tài xế", d.driverName], ["Nhà máy nhận hàng", time(d.receivedAt)], ["Quyết định chất lượng", time(d.decidedAt)]]}/>
     {q ? <><Rows title="Cân và kiểm tra chất lượng (KCS)" items={[["Khối lượng thực tế", kg(q.actualWeightKg)], ["Khối lượng tổng", kg(q.grossWeightKg)], ["Khối lượng bì", kg(q.tareWeightKg)], ["Độ lệch", percent(q.differencePercentage)], ["Phân hạng", q.grade === 'PENDING' ? 'Chờ kiểm tra' : q.grade], ["Kết quả", q.isAccepted == null ? 'Chưa chốt' : q.isAccepted ? 'Chấp nhận' : 'Từ chối'], ["Độ tinh khiết", percent(q.purityPercent)], ["Độ ẩm", percent(q.moisturePercent)], ["Tạp chất", percent(q.contaminationPercent)], ["Biên bản cân", q.ticketNumber], ["Lý do từ chối", d.rejectionReason], ["Hướng xử lý", ({ RETURN: 'Trả toàn bộ lô', RENEGOTIATE: 'Thương lượng mua theo hiện trạng' })[q.resolution] ?? q.resolution], ["Ghi chú nhà máy", q.note?.replace(/^(RENEGOTIATE|RETURN):\s*/, '')]]}/>
     {q.ticketImageUrl && <Proof title="Phiếu cân" url={q.ticketImageUrl}/>}</> : <p className="text-sm text-d-on-surface-variant">Chưa có phiếu cân/KCS từ nhà máy.</p>}
@@ -94,14 +97,14 @@ export default function BatchDetailModal({ id, onClose }) {
       ["Thuế suất VAT", percent(s?.vatPercentage)], ["Tiền VAT theo hóa đơn", cash(s?.vatAmount)],
       ["Tổng tiền theo hóa đơn", cash(s?.invoiceTotalAmount)], [s?.feePolicy === "BUYER_SEPARATE_V1" ? "Phí do Factory trả riêng" : "Phí khấu trừ — lô cũ", cash(s?.feeAmount)],
       ["Tiền thanh toán theo quyết toán, gồm VAT đã khai", cash(s?.netAmount)],
-      ["Tham chiếu thanh toán", s?.paymentReference], [d.workflow?.version && b.status !== 'PAID' ? "Ngày đề xuất giá" : "Ngày quyết toán", time(s?.settledAt)], ["Vựa xác nhận nhận tiền", time(s?.paymentConfirmedAt)], ["Số hóa đơn", q?.invoiceNumber]]}/> }
+      ["Hình thức thanh toán", paymentMethodLabel(s?.paymentMethod)], ["Tham chiếu thanh toán", s?.paymentReference], [d.workflow?.version && b.status !== 'PAID' ? "Ngày đề xuất giá" : "Ngày quyết toán", time(s?.settledAt)], ["Vựa xác nhận nhận tiền", time(s?.paymentConfirmedAt)], ["Số hóa đơn", q?.invoiceNumber]]}/> }
     <BatchReturnPanel key={id} detail={d} id={id} handoverProof={<Proof title="Biên bản bàn giao trả" url={d.return?.handoverProofUrl}/>} />
     {(s || ['SETTLEMENT_PENDING', 'SETTLEMENT_ACCEPTED', 'SETTLEMENT_DISPUTED', 'COMPLETED', 'PAID'].includes(b.status)) && <BatchSettlementPanel key={`${id}-${d.workflow?.revision ?? 0}`} detail={d} id={id} />}
-    {b.status === 'COMPLETED' && s?.paymentProofUrl && <section className="rounded-2xl border border-d-border-subtle bg-white p-4 space-y-3">
-      <h3 className="font-semibold text-d-primary">Xác nhận tiền chuyển khoản</h3>
-      <p className="text-sm text-d-on-surface-variant">Đối chiếu tiền thực nhận trong tài khoản ngân hàng, số tiền {cash(s.netAmount)} và mã {s.paymentReference} trước khi xác nhận.</p>
-      <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={confirming} onChange={(e) => setConfirming(e.target.checked)} />Tôi đã kiểm tra tài khoản và nhận đủ số tiền trên.</label>
-      <button type="button" disabled={!confirming || confirmPayment.isPending} className="rounded-xl bg-d-primary px-4 py-2 text-white disabled:opacity-40"
+    {b.status === 'COMPLETED' && (s?.paymentProofUrl || ['CASH', 'OTHER'].includes(s?.paymentMethod)) && <section className="rounded-2xl border border-d-border-subtle bg-white p-4 space-y-3">
+      <h3 className="font-semibold text-d-primary">Xác nhận tiền thực nhận</h3>
+      <p className="text-sm text-d-on-surface-variant">Hình thức {paymentMethodLabel(s.paymentMethod)}. Đối chiếu đã nhận đủ {cash(s.netAmount)} và căn cứ {s.paymentReference} trước khi xác nhận.</p>
+      <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={confirming} onChange={(e) => setConfirming(e.target.checked)} />Tôi đã kiểm tra và nhận đủ số tiền trên.</label>
+      <button type="button" disabled={!confirming || confirmPayment.isPending} className="inline-flex items-center justify-center gap-2 rounded-full font-semibold transition active:scale-[.98] disabled:pointer-events-none disabled:opacity-50 outline-none focus-visible:ring-2 focus-visible:ring-d-primary/30 focus-visible:ring-offset-1 min-h-11 px-5 py-2 text-sm bg-d-primary text-white hover:bg-[#385500]"
         onClick={() => confirmPayment.mutate({ body: { amount: s.netAmount, paymentReference: s.paymentReference } })}>
         {confirmPayment.isPending ? 'Đang xác nhận…' : 'Xác nhận đã nhận tiền'}
       </button>

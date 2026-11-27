@@ -27,8 +27,10 @@ public sealed class DepotPayOsController(IDepotPayOsService service) : Controlle
 
     /// <summary>Webhook PayOS (khai báo URL tại my.payos.vn). Bảo vệ bằng chữ ký HMAC, không dùng JWT.</summary>
     [HttpPost("api/payos/webhook"), AllowAnonymous]
-    public async Task<IActionResult> Webhook([FromBody] JsonElement body, [FromServices] Retrack.API.Services.Money.IMoneyCollectionService? money = null)
+    public async Task<IActionResult> Webhook([FromBody] JsonElement body, [FromServices] Retrack.API.Services.Money.IMoneyCollectionService? money = null,
+        [FromServices] IDepotSubscriptionService? subscriptions = null)
     {
+        if (subscriptions != null && await subscriptions.WebhookAsync(body)) return Ok(new { success = true });
         // Khoản thu qua sàn (money_collection_orders) xử lý riêng; mã đơn lạ rơi xuống luồng hóa đơn phí như cũ.
         if (money != null)
         {

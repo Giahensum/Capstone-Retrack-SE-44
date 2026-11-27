@@ -22,6 +22,12 @@ public sealed class PayOsOptions
     public string MoneyReturnUrl { get; set; } = "";
     public (string Return, string Cancel) Redirects(PayOsRedirect target, string? query = null)
     {
+        if (target == PayOsRedirect.Subscription)
+        {
+            if (!Uri.TryCreate(ReturnUrl, UriKind.Absolute, out var subscriptionBase)) throw new PayOsException("Chưa cấu hình PayOS ReturnUrl cho website.");
+            var url = subscriptionBase.GetLeftPart(UriPartial.Authority) + "/depot/subscription?payos=return";
+            return (url, url.Replace("payos=return", "payos=cancel"));
+        }
         if (target == PayOsRedirect.Money)
         {
             // Trang /pay/return nhận flow + source để biết khoản thu nào cần đồng bộ; PayOS tự nối thêm code, id, cancel, status, orderCode.
@@ -42,11 +48,11 @@ public sealed class PayOsOptions
 }
 
 public sealed record PayOsLink(string CheckoutUrl, string PaymentLinkId);
-public sealed record PayOsPayment(string Status, long Amount, string? Reference, DateTime? PaidAt);
+public sealed record PayOsPayment(string Status, long Amount, string? Reference, DateTime? PaidAt, string? LinkId = null);
 public sealed class PayOsException(string message) : Exception(message);
 
 /// <summary>Trang web mà PayOS đưa người nộp quay lại sau khi thanh toán hoặc hủy.</summary>
-public enum PayOsRedirect { Depot, Factory, Money }
+public enum PayOsRedirect { Depot, Factory, Money, Subscription }
 
 public interface IPayOsClient
 {
@@ -129,7 +135,8 @@ public sealed class PayOsClient(HttpClient http, IOptions<PayOsOptions> options)
             if (first.TryGetProperty("reference", out var r) && r.ValueKind == JsonValueKind.String) reference = r.GetString();
             if (first.TryGetProperty("transactionDateTime", out var t) && DateTime.TryParse(t.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var dt)) paidAt = dt;
         }
-        return new(data.GetProperty("status").GetString() ?? "", data.GetProperty("amountPaid").GetInt64(), reference, paidAt);
+        return new(data.GetProperty("status").GetString() ?? "", data.GetProperty("amountPaid").GetInt64(), reference, paidAt,
+            data.TryGetProperty("id", out var linkId) && linkId.ValueKind == JsonValueKind.String ? linkId.GetString() : null);
     }
 
     private HttpRequestMessage Request(HttpMethod method, string path)

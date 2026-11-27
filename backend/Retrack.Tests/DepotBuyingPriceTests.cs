@@ -20,6 +20,8 @@ public sealed partial class StockReceiptTests
         await db.SaveChangesAsync();
         try
         {
+            db.DepotSubscriptions.AddRange(new() { DepotId = depot, PaidUntil = DateTime.UtcNow.AddDays(30) }, new() { DepotId = second, PaidUntil = DateTime.UtcNow.AddDays(30) });
+            await db.SaveChangesAsync();
             var first = await Prices(db).SaveAsync(owner, depot, "Sắt", new(6000, "Sắt sạch, không lẫn tạp", true, null));
             await Prices(db).SaveAsync(owner, second, "IRON", new(6500, "Chỉ nhận từ 50 kg", true, null));
             var seller = new SellerRepository(db);
@@ -35,7 +37,7 @@ public sealed partial class StockReceiptTests
             await db.Depots.Where(x => x.Id == second).ExecuteUpdateAsync(s => s.SetProperty(x => x.VerificationStatus, "UNVERIFIED"));
             Assert.DoesNotContain(await seller.GetNearbyDepotsAsync(null, null), x => x.Id == second);
         }
-        finally { await db.Depots.Where(x => x.Id == second).ExecuteDeleteAsync(); }
+        finally { await db.DepotSubscriptions.Where(x => x.DepotId == depot || x.DepotId == second).ExecuteDeleteAsync(); await db.Depots.Where(x => x.Id == second).ExecuteDeleteAsync(); }
     }
 
     [Fact]

@@ -7,6 +7,7 @@ import { MaterialIcon } from '@/features/depot/components/DepotIcon';
 import { LIQUIDATION_FILTERS, LIQUIDATION_PHASE_LABEL } from '../liquidationLabels';
 import { MapPin, Coins, TrendingUp, Users, Timer } from 'lucide-react';
 import { Badge, PHASE_TONE } from '@/components/liquidation/LiquidationUI';
+import { PageHeader, buttonClass } from '@/components/ui/kit';
 
 export default function LiquidationList() {
   const [status, setStatus] = useState('');
@@ -24,22 +25,13 @@ export default function LiquidationList() {
 
   return (
     <div className="flex flex-col p-4 md:p-6 gap-6 w-full max-w-7xl mx-auto">
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-        <div>
-          <h1 className="text-d-headline-xl-mobile md:text-d-headline-xl font-d-headline-xl text-d-on-surface">Lô thanh lý của tôi</h1>
-          <p className="text-d-body-md text-d-on-surface-variant mt-2">
-            Đăng lô để các chủ kho vựa khảo sát và trả giá trọn lô. Tiền và giao nhận do hai bên thực hiện ngoài hệ thống.
-          </p>
-        </div>
-        <Link
-          to="/seller/liquidations/new"
-          className="inline-flex items-center justify-center gap-2 rounded-full bg-d-primary hover:bg-[#385500] text-d-on-primary font-semibold px-6 py-3 transition-all shadow-sm active:scale-95 text-sm shrink-0"
-        >
-          <MaterialIcon name="add" className="text-lg" />
-          <span>Đăng lô mới</span>
-        </Link>
-      </div>
+      <PageHeader title="Lô thanh lý của tôi" description="Đăng phiên nhiều hạng mục để các chủ kho khảo sát và trả giá theo đơn giá từng hạng mục. Tiền và giao nhận do hai bên tự thực hiện.">
+        <Link to="/seller/liquidations/new" className={buttonClass()}><MaterialIcon name="add" className="text-lg" />Đăng phiên mới</Link>
+      </PageHeader>
 
+      <V2Campaigns />
+
+      <h2 className="text-sm font-bold text-d-on-surface">Lô trọn gói đã đăng trước đây</h2>
       <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
         {LIQUIDATION_FILTERS.map((tab) => (
           <button
@@ -124,5 +116,45 @@ export default function LiquidationList() {
         </div>
       )}
     </div>
+  );
+}
+
+// Phiên nhiều hạng mục (V2): phiên mới đăng từ nay; lô trọn gói cũ vẫn hiển thị bên dưới để hoàn tất.
+function V2Campaigns() {
+  const [page, setPage] = useState(1);
+  const { data, isLoading, isError, refetch } = useQuery({
+    queryKey: ['seller-liquidations-v2', 'list', page],
+    queryFn: () => sellerApi.getLiquidationsV2({ page, pageSize: 6 }),
+    placeholderData: keepPreviousData, refetchInterval: 30000,
+  });
+  const items = data?.items ?? [];
+  const totalPages = Math.max(1, Math.ceil((data?.totalCount ?? 0) / 6));
+  return (
+    <section className="space-y-3">
+      <h2 className="text-sm font-bold text-d-on-surface">Phiên nhiều hạng mục</h2>
+      {isLoading ? <p role="status" className="text-sm text-d-on-surface-variant">Đang tải…</p>
+        : isError ? <p role="alert" className="text-sm text-d-error">Không tải được phiên. <button className="underline" onClick={() => refetch()}>Thử lại</button></p>
+        : !items.length ? <p className="rounded-2xl border border-d-border-subtle bg-white p-6 text-center text-sm text-d-on-surface-variant">Chưa có phiên nhiều hạng mục. Bấm “Đăng phiên mới” để bắt đầu.</p>
+        : <div className="grid gap-3 md:grid-cols-2">{items.map(({ campaign: c, participantCount }) => (
+          <Link key={c.id} to={`/seller/liquidations/v2/${c.id}`} className="group flex flex-col gap-2 rounded-2xl border border-d-border-subtle bg-white p-4 shadow-sm transition hover:border-d-primary/40">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="font-bold text-d-on-surface group-hover:text-d-primary">{c.title}</h3>
+              <Badge tone={PHASE_TONE[c.phase] ?? 'slate'}>{LIQUIDATION_PHASE_LABEL[c.phase] ?? c.phase}</Badge>
+            </div>
+            <p className="flex items-center gap-1.5 text-xs text-d-on-surface-variant"><MapPin size={13} />{c.publicArea}</p>
+            <p className="text-sm text-d-on-surface-variant">{c.itemCount} hạng mục: {c.itemNames.join(' · ')}{c.itemCount > c.itemNames.length ? ' …' : ''}</p>
+            <div className="flex flex-wrap gap-4 text-xs text-d-on-surface-variant">
+              <span className="inline-flex items-center gap-1"><Users size={13} />{participantCount} kho</span>
+              <span className="inline-flex items-center gap-1"><TrendingUp size={13} />{c.bidCount} lượt giá</span>
+              <span className="inline-flex items-center gap-1"><Timer size={13} />Đóng {formatDate(c.biddingEnd)}</span>
+              {c.wonItemCount > 0 && <span className="inline-flex items-center gap-1 font-semibold text-d-primary"><Coins size={13} />{c.wonItemCount}/{c.itemCount} hạng mục đã bán</span>}
+            </div>
+          </Link>))}</div>}
+      {totalPages > 1 && <div className="flex justify-end gap-2 text-sm">
+        <button disabled={page === 1} onClick={() => setPage(page - 1)} className="rounded-full border border-d-border-subtle px-4 py-1.5 disabled:opacity-40">Trước</button>
+        <span className="py-1.5">{page}/{totalPages}</span>
+        <button disabled={page >= totalPages} onClick={() => setPage(page + 1)} className="rounded-full border border-d-border-subtle px-4 py-1.5 disabled:opacity-40">Sau</button>
+      </div>}
+    </section>
   );
 }

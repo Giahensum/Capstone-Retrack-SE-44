@@ -58,12 +58,12 @@ export default function PayReturnPage() {
     {valid && sync.isError && cancelled && <p role="status" className="rounded-xl border border-slate-300 bg-slate-50 p-4 text-slate-800">Bạn đã hủy thanh toán. Khoản thanh toán chưa được ghi nhận.</p>}
     {valid && sync.isError && !cancelled && <div role="alert" className="space-y-3 rounded-xl border border-red-300 bg-red-50 p-4 text-red-800">
       <p>{depotError(sync.error)}</p>
-      <button type="button" className="rounded-full border border-red-400 bg-white px-5 py-2 font-semibold" disabled={sync.isPending} onClick={() => sync.mutate()}>Thử lại</button></div>}
+      <button type="button" className="inline-flex items-center justify-center gap-2 rounded-full font-semibold transition active:scale-[.98] disabled:pointer-events-none disabled:opacity-50 outline-none focus-visible:ring-2 focus-visible:ring-d-primary/30 focus-visible:ring-offset-1 min-h-11 px-5 py-2 text-sm border border-d-error/40 bg-white text-d-error hover:bg-d-error-container/50" disabled={sync.isPending} onClick={() => sync.mutate()}>Thử lại</button></div>}
     {outcome && <div role="status" className={`space-y-2 rounded-xl border p-4 ${outcome.tone}`}>
       <p className="text-lg font-bold">{outcome.title}</p><p className="text-sm">{outcome.text}</p>
       <p className="text-sm font-semibold">Số tiền: {formatVnd(dto.amount)}</p>
       {dto.hasOpenAnomaly && <p className="text-sm">Khoản thu có bất thường đang được Admin xử lý; vui lòng chưa chuyển thêm tiền.</p>}</div>}
-    {valid && dto && kind !== 'paid' && !sync.isPending && <button type="button" className="self-start rounded-full border border-d-border-subtle bg-white px-5 py-2 text-sm font-semibold" disabled={sync.isPending} onClick={() => sync.mutate()}>Kiểm tra lại với PayOS</button>}
+    {valid && dto && kind !== 'paid' && !sync.isPending && <button type="button" className="self-start inline-flex items-center justify-center gap-2 rounded-full font-semibold transition active:scale-[.98] disabled:pointer-events-none disabled:opacity-50 outline-none focus-visible:ring-2 focus-visible:ring-d-primary/30 focus-visible:ring-offset-1 min-h-11 px-5 py-2 text-sm border border-d-border-subtle bg-white text-d-on-surface hover:bg-d-surface-container" disabled={sync.isPending} onClick={() => sync.mutate()}>Kiểm tra lại với PayOS</button>}
     <div className="flex flex-wrap gap-3">
       {back && <Link className={linkClass} to={back}>{backLabel}</Link>}
       <Link className={back ? 'inline-flex min-h-11 items-center rounded-full border border-d-border-subtle bg-white px-5 py-2.5 text-sm font-semibold' : linkClass} to={homePathFor(role)}>Về trang chính</Link>

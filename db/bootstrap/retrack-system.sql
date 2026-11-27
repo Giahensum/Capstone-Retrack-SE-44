@@ -1312,6 +1312,203 @@ CREATE INDEX IF NOT EXISTS ix_money_refunds_payer ON money_refunds(payer_id, cre
 CREATE INDEX IF NOT EXISTS ix_money_refunds_status ON money_refunds(status, created_at DESC);
 -- RETRACK_MONEY_V4_END
 
+-- RETRACK_DEPOT_SUBSCRIPTION_V1_BEGIN
+-- Mô hình kinh doanh mới: chỉ bán gói quản lý kho. Không sửa snapshot phí/tiền hàng cũ.
+INSERT INTO system_configs(config_key, config_value, description) VALUES
+ ('BUSINESS_MODEL', 'DEPOT_SUBSCRIPTION', 'Chỉ thu tiền gói quản lý Depot; tiền hàng hai bên tự thanh toán'),
+ ('SUBSCRIPTION_MONTHLY_PRICE', '199000', 'Giá một tháng lịch cho một kho; đơn cũ giữ snapshot')
+ON CONFLICT (config_key) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS depot_subscriptions (
+ depot_id UUID PRIMARY KEY REFERENCES depots(id) ON DELETE RESTRICT,
+ trial_started_at TIMESTAMPTZ, trial_ends_at TIMESTAMPTZ, paid_until TIMESTAMPTZ,
+ updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+ CONSTRAINT ck_depot_subscription_trial CHECK ((trial_started_at IS NULL AND trial_ends_at IS NULL)
+   OR (trial_started_at IS NOT NULL AND trial_ends_at > trial_started_at))
+);
+-- Dải mã riêng, nằm trong số nguyên an toàn của JavaScript và tách bộ sinh mã tiền hàng/phí cũ.
+CREATE SEQUENCE IF NOT EXISTS depot_subscription_order_code_seq START 8000000000000000 MAXVALUE 8900000000000000;
+CREATE TABLE IF NOT EXISTS depot_subscription_orders (
+ id UUID PRIMARY KEY, depot_id UUID NOT NULL REFERENCES depots(id) ON DELETE RESTRICT,
+ payer_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+ amount NUMERIC(18,0) NOT NULL CHECK (amount BETWEEN 1000 AND 10000000),
+ status VARCHAR(20) NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING','PAID','CANCELLED')),
+ order_code BIGINT NOT NULL UNIQUE CHECK (order_code > 0 AND order_code <= 9007199254740991),
+ checkout_url TEXT, provider_started_at TIMESTAMPTZ, last_checked_at TIMESTAMPTZ, proof_url TEXT, payment_reference VARCHAR(255),
+ created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), paid_at TIMESTAMPTZ, period_start TIMESTAMPTZ, period_end TIMESTAMPTZ,
+ approved_by UUID REFERENCES users(id) ON DELETE RESTRICT,
+ review_note VARCHAR(1000),
+ CONSTRAINT ck_subscription_paid CHECK (status <> 'PAID' OR (paid_at IS NOT NULL AND period_start IS NOT NULL AND period_end > period_start))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_subscription_pending ON depot_subscription_orders(depot_id) WHERE status = 'PENDING';
+ALTER TABLE depot_subscription_orders ADD COLUMN IF NOT EXISTS last_checked_at TIMESTAMPTZ;
+ALTER TABLE depot_subscription_orders ADD COLUMN IF NOT EXISTS review_note VARCHAR(1000);
+CREATE INDEX IF NOT EXISTS ix_subscription_depot_created ON depot_subscription_orders(depot_id, created_at DESC, id);
+CREATE INDEX IF NOT EXISTS ix_subscription_paid ON depot_subscription_orders(paid_at, id) WHERE status = 'PAID';
+CREATE INDEX IF NOT EXISTS ix_subscription_payos_pending ON depot_subscription_orders((last_checked_at IS NOT NULL), last_checked_at, created_at, id) WHERE status = 'PENDING' AND provider_started_at IS NOT NULL;
+-- Owner chủ động bấm Bắt đầu dùng thử một lần/kho. Chạy SQL không tự bắt đầu/kéo dài gói.
+-- RETRACK_DEPOT_SUBSCRIPTION_V1_END
+
+-- Các bên tự thanh toán trực tiếp. Dòng cũ NULL được hiểu là chuyển khoản như trước.
+ALTER TABLE pickup_requests ADD COLUMN IF NOT EXISTS payment_method VARCHAR(20);
+ALTER TABLE pickup_requests ADD COLUMN IF NOT EXISTS payment_reference VARCHAR(255);
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS payment_method VARCHAR(20);
+
+-- RETRACK_LIQUIDATION_V2: phiên thanh lý nhiều hạng mục, trả giá theo đơn giá từng hạng mục.
+-- Dùng lại liquidation_lots làm phiên (format_version = 2); V1 giữ nguyên dữ liệu và luật cũ.
+-- Tiền mua = đơn giá trúng x số lượng Seller đã đăng; chốt ngay khi đóng phiên, không cọc qua RETRACK.
+-- Mỗi kho thắng có một thỏa thuận (liquidation_agreements format_version = 2) để nối luồng thanh toán/bàn giao/nhập kho sẵn có.
+ALTER TABLE liquidation_lots ADD COLUMN IF NOT EXISTS format_version SMALLINT NOT NULL DEFAULT 1;
+ALTER TABLE liquidation_lots ADD COLUMN IF NOT EXISTS extension_count SMALLINT NOT NULL DEFAULT 0;
+ALTER TABLE liquidation_lots ADD COLUMN IF NOT EXISTS collection_window_hours INTEGER;
+ALTER TABLE liquidation_lots ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ;
+ALTER TABLE liquidation_lots DROP CONSTRAINT IF EXISTS ck_liquidation_lot_version;
+ALTER TABLE liquidation_lots ADD CONSTRAINT ck_liquidation_lot_version CHECK (
+    format_version IN (1, 2) AND extension_count BETWEEN 0 AND 5
+    AND (format_version = 1 OR (collection_window_hours BETWEEN 24 AND 1440 AND deposit_percent = 0)));
+CREATE INDEX IF NOT EXISTS ix_liquidation_v2_closing ON liquidation_lots(bidding_end, id) WHERE format_version = 2 AND status = 'PUBLISHED';
+
+CREATE TABLE IF NOT EXISTS liquidation_items (
+    id UUID PRIMARY KEY, lot_id UUID NOT NULL REFERENCES liquidation_lots(id) ON DELETE CASCADE,
+    position SMALLINT NOT NULL CHECK (position BETWEEN 1 AND 20),
+    kind VARCHAR(20) NOT NULL CHECK (kind IN ('MATERIAL','USED_GOODS')),
+    material_code VARCHAR(30), name VARCHAR(255) NOT NULL, description VARCHAR(1000) NOT NULL,
+    unit VARCHAR(10) NOT NULL CHECK (unit IN ('kg','cai','bo')),
+    quantity NUMERIC(18,3) NOT NULL CHECK (quantity > 0),
+    starting_unit_price NUMERIC(18,0) NOT NULL CHECK (starting_unit_price > 0),
+    bid_increment NUMERIC(18,0) NOT NULL CHECK (bid_increment > 0),
+    highest_unit_price NUMERIC(18,0), highest_bid_id UUID,
+    bid_count INTEGER NOT NULL DEFAULT 0 CHECK (bid_count >= 0),
+    status VARCHAR(10) NOT NULL DEFAULT 'OPEN' CHECK (status IN ('OPEN','WON','UNSOLD')),
+    UNIQUE (lot_id, position),
+    CHECK ((kind = 'MATERIAL' AND unit = 'kg') OR (kind = 'USED_GOODS' AND unit IN ('cai','bo') AND quantity = TRUNC(quantity))),
+    CHECK ((highest_bid_id IS NULL) = (highest_unit_price IS NULL))
+);
+CREATE TABLE IF NOT EXISTS liquidation_participation_items (
+    participation_id UUID NOT NULL REFERENCES liquidation_participations(id) ON DELETE CASCADE,
+    item_id UUID NOT NULL REFERENCES liquidation_items(id) ON DELETE CASCADE,
+    registered_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (participation_id, item_id)
+);
+CREATE TABLE IF NOT EXISTS liquidation_item_bids (
+    id UUID PRIMARY KEY, lot_id UUID NOT NULL REFERENCES liquidation_lots(id) ON DELETE CASCADE,
+    item_id UUID NOT NULL REFERENCES liquidation_items(id) ON DELETE CASCADE,
+    owner_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    depot_id UUID NOT NULL REFERENCES depots(id) ON DELETE RESTRICT,
+    unit_price NUMERIC(18,0) NOT NULL CHECK (unit_price > 0),
+    created_at TIMESTAMPTZ NOT NULL, extended_end TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS ix_liquidation_item_bid_history ON liquidation_item_bids(item_id, created_at DESC, id);
+CREATE INDEX IF NOT EXISTS ix_liquidation_item_bid_owner ON liquidation_item_bids(item_id, owner_id, depot_id, created_at DESC);
+
+-- Thỏa thuận: V1 giữ đúng một thỏa thuận/lô và bắt buộc winning_bid_id; V2 một thỏa thuận cho mỗi kho thắng trong phiên.
+ALTER TABLE liquidation_agreements ADD COLUMN IF NOT EXISTS format_version SMALLINT NOT NULL DEFAULT 1;
+ALTER TABLE liquidation_agreements ALTER COLUMN winning_bid_id DROP NOT NULL;
+DO $liquidation_v2_unique$
+DECLARE c RECORD;
+BEGIN
+    FOR c IN SELECT con.conname FROM pg_constraint con
+        WHERE con.conrelid = 'liquidation_agreements'::regclass AND con.contype = 'u'
+          AND con.conkey = ARRAY[(SELECT attnum FROM pg_attribute WHERE attrelid = 'liquidation_agreements'::regclass AND attname = 'lot_id')]::smallint[]
+    LOOP EXECUTE format('ALTER TABLE liquidation_agreements DROP CONSTRAINT %I', c.conname); END LOOP;
+END $liquidation_v2_unique$;
+CREATE UNIQUE INDEX IF NOT EXISTS ux_liquidation_agreement_v1_lot ON liquidation_agreements(lot_id) WHERE format_version = 1;
+CREATE UNIQUE INDEX IF NOT EXISTS ux_liquidation_agreement_v2_depot ON liquidation_agreements(lot_id, depot_id) WHERE format_version = 2;
+ALTER TABLE liquidation_agreements ADD COLUMN IF NOT EXISTS abandon_reported_at TIMESTAMPTZ;
+ALTER TABLE liquidation_agreements ADD COLUMN IF NOT EXISTS abandon_reported_by UUID REFERENCES users(id) ON DELETE RESTRICT;
+ALTER TABLE liquidation_agreements ADD COLUMN IF NOT EXISTS abandon_reason VARCHAR(1000);
+ALTER TABLE liquidation_agreements ADD COLUMN IF NOT EXISTS resolution VARCHAR(20);
+ALTER TABLE liquidation_agreements ADD COLUMN IF NOT EXISTS resolution_note VARCHAR(1000);
+ALTER TABLE liquidation_agreements ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMPTZ;
+ALTER TABLE liquidation_agreements ADD COLUMN IF NOT EXISTS resolved_by UUID REFERENCES users(id) ON DELETE RESTRICT;
+ALTER TABLE liquidation_agreements DROP CONSTRAINT IF EXISTS ck_liquidation_agreement_version;
+ALTER TABLE liquidation_agreements ADD CONSTRAINT ck_liquidation_agreement_version CHECK (
+    (format_version = 1 AND winning_bid_id IS NOT NULL)
+    OR (format_version = 2 AND winning_bid_id IS NULL AND deposit_amount = 0));
+ALTER TABLE liquidation_agreements DROP CONSTRAINT IF EXISTS ck_liquidation_agreement_abandon;
+ALTER TABLE liquidation_agreements ADD CONSTRAINT ck_liquidation_agreement_abandon CHECK (
+    (abandon_reported_at IS NULL) = (abandon_reported_by IS NULL)
+    AND (abandon_reported_at IS NULL) = (abandon_reason IS NULL)
+    AND (resolution IS NULL OR resolution IN ('CONTINUE','CANCELLED'))
+    AND (resolution IS NULL) = (resolved_at IS NULL)
+    AND (resolution IS NULL) = (resolved_by IS NULL)
+    AND (resolution IS NULL OR abandon_reported_at IS NOT NULL));
+CREATE INDEX IF NOT EXISTS ix_liquidation_agreement_disputes ON liquidation_agreements(abandon_reported_at, id) WHERE abandon_reported_at IS NOT NULL;
+CREATE TABLE IF NOT EXISTS liquidation_agreement_items (
+    id UUID PRIMARY KEY, agreement_id UUID NOT NULL REFERENCES liquidation_agreements(id) ON DELETE RESTRICT,
+    item_id UUID NOT NULL UNIQUE REFERENCES liquidation_items(id) ON DELETE RESTRICT,
+    winning_bid_id UUID NOT NULL UNIQUE REFERENCES liquidation_item_bids(id) ON DELETE RESTRICT,
+    name VARCHAR(255) NOT NULL, unit VARCHAR(10) NOT NULL, quantity NUMERIC(18,3) NOT NULL CHECK (quantity > 0),
+    unit_price NUMERIC(18,0) NOT NULL CHECK (unit_price > 0), amount NUMERIC(18,0) NOT NULL CHECK (amount > 0)
+);
+CREATE INDEX IF NOT EXISTS ix_liquidation_agreement_items_agreement ON liquidation_agreement_items(agreement_id);
+-- RETRACK_LIQUIDATION_V2_END
+
+-- RETRACK_SUBSCRIPTION_REFUND_V1: yêu cầu hoàn tiền gói quản lý Depot do Admin duyệt.
+-- Tách "đã duyệt" với "đã chuyển tiền hoàn thật"; lưu số tiền, lý do, người duyệt, chứng từ và lịch sử (audit_logs).
+-- Hoàn kỳ chưa bắt đầu chỉ rút đúng kỳ đó (period_revoked_at), không xóa các kỳ khác. Tiền hàng không đi qua bảng này.
+ALTER TABLE depot_subscription_orders ADD COLUMN IF NOT EXISTS period_revoked_at TIMESTAMPTZ;
+CREATE TABLE IF NOT EXISTS depot_subscription_refunds (
+ id UUID PRIMARY KEY,
+ order_id UUID NOT NULL REFERENCES depot_subscription_orders(id) ON DELETE RESTRICT,
+ depot_id UUID NOT NULL REFERENCES depots(id) ON DELETE RESTRICT,
+ kind VARCHAR(30) NOT NULL CHECK (kind IN ('DUPLICATE_OR_EXCESS','SHORT_PAYMENT','UNUSED_PERIOD','SERVICE_ERROR','LATE_PAYMENT')),
+ status VARCHAR(20) NOT NULL DEFAULT 'REQUESTED' CHECK (status IN ('REQUESTED','APPROVED','REJECTED','REFUNDED')),
+ requested_by UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+ requested_role VARCHAR(10) NOT NULL CHECK (requested_role IN ('OWNER','ADMIN')),
+ requested_at TIMESTAMPTZ NOT NULL,
+ requested_amount NUMERIC(18,0) NOT NULL CHECK (requested_amount BETWEEN 1 AND 10000000),
+ reason VARCHAR(1000) NOT NULL, evidence_url TEXT, evidence_reference VARCHAR(255),
+ approved_amount NUMERIC(18,0) CHECK (approved_amount BETWEEN 1 AND 10000000),
+ decided_by UUID REFERENCES users(id) ON DELETE RESTRICT, decided_at TIMESTAMPTZ, decision_note VARCHAR(1000),
+ refunded_by UUID REFERENCES users(id) ON DELETE RESTRICT, refunded_at TIMESTAMPTZ,
+ refund_reference VARCHAR(255), refund_proof_url TEXT,
+ period_revoked BOOLEAN NOT NULL DEFAULT FALSE,
+ CONSTRAINT ck_subscription_refund_flow CHECK (
+   (status = 'REQUESTED' AND decided_at IS NULL AND approved_amount IS NULL AND refunded_at IS NULL)
+   OR (status = 'REJECTED' AND decided_at IS NOT NULL AND decided_by IS NOT NULL AND decision_note IS NOT NULL AND approved_amount IS NULL AND refunded_at IS NULL)
+   OR (status = 'APPROVED' AND decided_at IS NOT NULL AND decided_by IS NOT NULL AND approved_amount IS NOT NULL AND refunded_at IS NULL)
+   OR (status = 'REFUNDED' AND decided_at IS NOT NULL AND approved_amount IS NOT NULL AND refunded_at IS NOT NULL AND refunded_by IS NOT NULL AND refund_reference IS NOT NULL)),
+ CONSTRAINT ck_subscription_refund_amount CHECK (approved_amount IS NULL OR approved_amount <= requested_amount),
+ CONSTRAINT ck_subscription_refund_period CHECK (NOT period_revoked OR (kind = 'UNUSED_PERIOD' AND status IN ('APPROVED','REFUNDED')))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_subscription_refund_open ON depot_subscription_refunds(order_id) WHERE status = 'REQUESTED';
+CREATE INDEX IF NOT EXISTS ix_subscription_refunds_status ON depot_subscription_refunds(status, requested_at DESC, id);
+CREATE INDEX IF NOT EXISTS ix_subscription_refunds_depot ON depot_subscription_refunds(depot_id, requested_at DESC, id);
+-- RETRACK_SUBSCRIPTION_REFUND_V1_END
+
+-- RETRACK_SHIPPING_BEGIN
+-- Vận chuyển lô: chạy khối này trên DB hiện có trước khi triển khai code.
+-- Không seed hoặc sửa dữ liệu lô/tiền cũ. Giao dịch do file nâng cấp bao ngoài.
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS shipping_method varchar(16) NOT NULL DEFAULT 'INTERNAL';
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS shipping_quote_id uuid;
+CREATE TABLE IF NOT EXISTS shipping_quotes (
+ id uuid PRIMARY KEY, owner_id uuid NOT NULL REFERENCES users(id), depot_id uuid NOT NULL REFERENCES depots(id),
+ factory_id uuid NOT NULL REFERENCES factories(id), material_type text NOT NULL, weight_kg numeric NOT NULL CHECK(weight_kg>0),
+ method varchar(16) NOT NULL CHECK(method IN ('INTERNAL','EXTERNAL')), provider varchar(32) NOT NULL, service_type text NOT NULL,
+ provider_quote_id text NOT NULL, amount numeric NOT NULL CHECK(amount>=0), factor numeric NOT NULL CHECK(factor>0 AND factor<=1),
+ estimated_cost numeric NOT NULL CHECK(estimated_cost>=0), distance_km numeric NOT NULL CHECK(distance_km>=0), currency varchar(8) NOT NULL,
+ snapshot_json text NOT NULL, provider_json text NOT NULL, created_at timestamptz NOT NULL, expires_at timestamptz NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_shipping_quotes_depot ON shipping_quotes(depot_id,created_at);
+CREATE TABLE IF NOT EXISTS external_shipments (
+ id uuid PRIMARY KEY, batch_id uuid NOT NULL REFERENCES inventory_batches(id), quote_id uuid NOT NULL REFERENCES shipping_quotes(id),
+ operation_id uuid NOT NULL UNIQUE, provider varchar(32) NOT NULL, provider_order_id text, status varchar(32) NOT NULL,
+ share_link text, amount numeric NOT NULL CHECK(amount>=0), currency varchar(8) NOT NULL, contact_json text NOT NULL,
+ last_error text, last_checked_at timestamptz NOT NULL, last_webhook_at timestamptz,
+ created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_external_shipping_order ON external_shipments(provider,provider_order_id) WHERE provider_order_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS ux_external_shipping_active_batch ON external_shipments(batch_id)
+ WHERE status NOT IN ('COMPLETED','CANCELED','REJECTED','EXPIRED');
+CREATE INDEX IF NOT EXISTS ix_external_shipping_poll ON external_shipments(status,last_checked_at);
+CREATE TABLE IF NOT EXISTS shipping_events (
+ id uuid PRIMARY KEY, shipment_id uuid NOT NULL REFERENCES external_shipments(id), status varchar(32) NOT NULL,
+ source varchar(32) NOT NULL, created_at timestamptz NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_shipping_events_shipment ON shipping_events(shipment_id,created_at);
+-- RETRACK_SHIPPING_END
+
 -- RETRACK_SCHEMA_END
 
 -- RETRACK_SEED_BEGIN

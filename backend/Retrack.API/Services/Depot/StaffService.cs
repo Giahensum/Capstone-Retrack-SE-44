@@ -8,7 +8,7 @@ using Retrack.API.Services.Interfaces;
 
 namespace Retrack.API.Services.Depot;
 
-public sealed class StaffService(IDepotStaffRepository repository, IDepotService scope) : IStaffService
+public sealed class StaffService(IDepotStaffRepository repository, IDepotService scope, IDepotSubscriptionService? subscriptions = null) : IStaffService
 {
     public async Task<PagedResult<StaffDto>> ListAsync(Guid ownerId, Guid depotId, DepotQuery query)
     {
@@ -20,6 +20,7 @@ public sealed class StaffService(IDepotStaffRepository repository, IDepotService
     public async Task<StaffDto> CreateAsync(Guid ownerId, Guid depotId, CreateStaffDto dto)
     {
         await scope.RequireOwnerAsync(ownerId, depotId);
+        if (subscriptions != null) await subscriptions.RequireAccessAsync(depotId);
         Validator.ValidateObject(dto, new ValidationContext(dto), true);
         if (Encoding.UTF8.GetByteCount(dto.Password) > 72) throw new ArgumentException("Mật khẩu vượt quá 72 byte UTF-8.");
         var email = dto.Email.Trim().ToLowerInvariant();

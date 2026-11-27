@@ -2,6 +2,16 @@
 
 > Nền tảng số hóa chuỗi cung ứng phế liệu, kết nối Người bán → Kho vựa → Nhà máy tái chế.
 
+## Mô hình dịch vụ trên develop từ 25/11/2026
+
+RETRACK bán gói quản lý cho từng kho Depot; các role khác miễn phí. Giao dịch
+hàng hóa mới do hai bên tự thanh toán, không thu hoa hồng mới. Owner cần mở
+dùng thử hoặc mua/gia hạn cho đúng kho đã xác minh. Kho hết hạn vẫn xem dữ liệu
+và hoàn tất nghĩa vụ đang có. Lịch sử tiền/phí cũ được giữ để đối soát.
+Xem [quy tắc gói và tích hợp các role](docs/goi-quan-ly-depot.md).
+**DB cũ cần nâng schema trước khi chạy backend mới**, theo [db/README.md](db/README.md);
+không chạy lại seed trên DB đã có dữ liệu và không đổi thông tin kết nối local.
+
 ## Phiên bản và triển khai frontend
 
 Bản mã nguồn `v1.0.0` dùng quy trình PR `feature -> develop -> main`.

@@ -1039,7 +1039,7 @@ export default function SellerAiScanner() {
               <button
                 type="button"
                 onClick={resetScanner}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-d-border-subtle bg-d-surface-container-lowest hover:bg-d-surface-container text-xs font-bold text-d-on-surface transition-colors cursor-pointer"
+                className="inline-flex items-center justify-center gap-2 rounded-full font-semibold transition active:scale-[.98] disabled:pointer-events-none disabled:opacity-50 outline-none focus-visible:ring-2 focus-visible:ring-d-primary/30 focus-visible:ring-offset-1 min-h-9 px-4 py-1.5 text-[13px] border border-d-border-subtle bg-white text-d-on-surface hover:bg-d-surface-container"
               >
                 <RefreshCw size={14} />
                 <span>Quét ảnh khác</span>

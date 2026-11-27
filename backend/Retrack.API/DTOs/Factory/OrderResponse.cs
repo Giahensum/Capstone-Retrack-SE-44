@@ -34,6 +34,7 @@ public sealed record OrderResponse
     public required decimal? NetPayableAmount { get; init; }
     public required string? PaymentReference { get; init; }
     public string? PaymentProofUrl { get; init; }
+    public string? PaymentMethod { get; init; }
     public DateTime? DepotPaymentConfirmedAt { get; init; }
     public int SettlementWorkflowVersion { get; init; }
     public int SettlementRevision { get; init; }

@@ -42,6 +42,9 @@ export const adminApi = {
 
   // Audit logs (UC-7.6)
   getAuditLogs: (params) => api.get('/admin/audit-logs', { params }).then((r) => r.data.data),
+  // Phiên thanh lý nhiều hạng mục: báo bỏ mua chờ Admin quyết định tiếp tục/hủy (không phạt, không chuyển người thắng).
+  getLiquidationDisputes: (params) => api.get('/admin/liquidations/disputes', { params }).then((r) => r.data.data),
+  resolveLiquidationDispute: (id, dto) => api.post(`/admin/liquidations/disputes/${id}/resolve`, dto).then((r) => r.data.data),
 };
 
 export function apiErrorMessage(error, fallback = 'Đã xảy ra lỗi, vui lòng thử lại.') {

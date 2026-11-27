@@ -1,3 +1,4 @@
+import { Form, Input, Textarea } from '@/components/forms/ValidatedForm';
 import { useState } from 'react';
 import { useDepotMutation, number } from '../depotApi';
 import { buttonClass, inputClass, MutationError } from './DepotUI';
@@ -17,15 +18,15 @@ export default function BatchReturnPanel({ detail, id, handoverProof }) {
     {returned?.handedOverAt && <div className="rounded-xl bg-d-surface-accent p-4 text-sm space-y-2">
       <p>Nhà máy báo bàn giao trả: {time(returned.handedOverAt)}</p><p>Tham chiếu: {returned.handoverReference}</p><p className="whitespace-pre-wrap">{returned.handoverNote}</p>{handoverProof}
     </div>}
-    {batch.status === 'RETURNING' && <form className="space-y-4" onSubmit={e=>{e.preventDefault();save.mutate({body:{...form,receivedKg:Number(form.receivedKg)}});}}>
+    {batch.status === 'RETURNING' && <Form className="space-y-4" onSubmit={e=>{e.preventDefault();save.mutate({body:{...form,receivedKg:Number(form.receivedKg)}});}}>
       <p className="text-sm font-medium">Chỉ hoàn tồn khi thực nhận đủ {number(batch.weightKg)} kg đã xuất. Nếu khác lượng, giữ chờ đối soát; không sửa số cân cho khớp giả.</p>
-      <label className="block">Khối lượng thực nhận về kho (kg)<input required type="number" min="0.001" step="0.001" className={inputClass} disabled={save.isPending} value={form.receivedKg} onChange={e=>setForm({...form,receivedKg:e.target.value})}/></label>
+      <label className="block">Khối lượng thực nhận về kho (kg)<Input required type="number" min="0.001" step="0.001" className={inputClass} disabled={save.isPending} value={form.receivedKg} onChange={e=>setForm({...form,receivedKg:e.target.value})}/></label>
       {mismatch && <p role="alert" className="text-sm text-d-error">Lượng nhận chưa khớp toàn bộ lô. Chưa thể hoàn tồn; hãy liên hệ nhà máy để đối soát.</p>}
-      <label className="block">Tham chiếu nhận hàng trả<input required maxLength={200} className={inputClass} disabled={save.isPending} value={form.reference} onChange={e=>setForm({...form,reference:e.target.value})}/></label>
-      <label className="block">Ghi chú cân, kiểm nhận<textarea required maxLength={2000} className={inputClass} disabled={save.isPending} value={form.note} onChange={e=>setForm({...form,note:e.target.value})}/></label>
-      <label className="flex gap-2 text-sm"><input type="checkbox" checked={form.confirmed} disabled={save.isPending} onChange={e=>setForm({...form,confirmed:e.target.checked})}/>Tôi đã cân, kiểm và nhận đủ toàn bộ lô thực tế về kho.</label>
+      <label className="block">Tham chiếu nhận hàng trả<Input required maxLength={200} className={inputClass} disabled={save.isPending} value={form.reference} onChange={e=>setForm({...form,reference:e.target.value})}/></label>
+      <label className="block">Ghi chú cân, kiểm nhận<Textarea required maxLength={2000} className={inputClass} disabled={save.isPending} value={form.note} onChange={e=>setForm({...form,note:e.target.value})}/></label>
+      <label className="flex gap-2 text-sm"><Input type="checkbox" checked={form.confirmed} disabled={save.isPending} onChange={e=>setForm({...form,confirmed:e.target.checked})}/>Tôi đã cân, kiểm và nhận đủ toàn bộ lô thực tế về kho.</label>
       <MutationError mutation={save}/><button className={buttonClass} disabled={save.isPending || !form.confirmed || !form.receivedKg || mismatch || !form.reference.trim() || !form.note.trim()}>{save.isPending?'Đang xác nhận…':'Xác nhận nhận đủ lô trả về'}</button>
-    </form>}
+    </Form>}
     {batch.status === 'RETURNED' && <div role="status" className="rounded-xl bg-d-surface-accent p-4 text-sm space-y-2"><p className="font-semibold">Kho đã nhận đủ lô trả về lúc {time(returned?.receivedAt)}.</p><p>Đã hoàn nguồn tồn đúng một lần, không tạo phiếu nhập trùng. Lô này không phải giao dịch đã thanh toán.</p><p>Tham chiếu: {returned?.receiptReference}</p><p className="whitespace-pre-wrap">{returned?.receiptNote}</p></div>}
   </section>;
 }

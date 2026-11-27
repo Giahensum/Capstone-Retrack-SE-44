@@ -1,3 +1,4 @@
+import { Form, Input, Select, Textarea } from '@/components/forms/ValidatedForm';
 import { useEffect, useState } from "react";
 import {
   Attachment,
@@ -19,14 +20,14 @@ import ContractDocument from "../../../../components/ui/ContractDocument";
 import EsignPanel, { useEsignReturn } from "../../../esign/EsignPanel";
 
 const MaterialSelect = ({ value, onChange, all = false }) => (
-  <select value={value} onChange={onChange}>
+  <Select value={value} onChange={onChange}>
     {all && <option value="">Tất cả vật liệu</option>}
     {Object.entries(materials).map(([key, name]) => (
       <option key={key} value={key}>
         {name}
       </option>
     ))}
-  </select>
+  </Select>
 );
 export function Dashboard({ navigate }) {
   const { state } = useFactory();
@@ -71,7 +72,7 @@ export function Dashboard({ navigate }) {
       </div>
       <div className="section-toolbar">
         <h2>Hiệu quả thu mua</h2>
-        <select
+        <Select
           aria-label="Kỳ thống kê"
           value={period}
           onChange={(e) => setPeriod(e.target.value)}
@@ -79,7 +80,7 @@ export function Dashboard({ navigate }) {
           <option value="day">Hôm nay</option>
           <option value="month">Tháng này</option>
           <option value="year">Năm nay</option>
-        </select>
+        </Select>
       </div>
       {isPending && <p role="status">Đang tải số liệu…</p>}
       {error && <p role="alert">{error.message}</p>}
@@ -389,7 +390,7 @@ export function Marketplace({ navigate, directOnly = false }) {
           </div>
           {rejecting && (
             <Field label="Lý do từ chối">
-              <textarea
+              <Textarea
                 required
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
@@ -544,7 +545,7 @@ export function Demands() {
           onClose={() => setEditing(null)}
           busy={busy}
         >
-          <form
+          <Form
             onSubmit={async (e) => {
               e.preventDefault();
               if (await act("SAVE_DEMAND", editing)) setEditing(null);
@@ -579,7 +580,7 @@ export function Demands() {
                 />
               ))}
               <Field label="Yêu cầu chất lượng">
-                <textarea
+                <Textarea
                   value={editing.note}
                   onChange={(e) =>
                     setEditing({ ...editing, note: e.target.value })
@@ -593,7 +594,7 @@ export function Demands() {
               </Button>
               <Button type="submit" disabled={busy}>{busy ? "Đang lưu…" : "Lưu nhu cầu"}</Button>
             </div>
-          </form>
+          </Form>
         </Modal>
       )}
       {remove && (
@@ -629,7 +630,7 @@ export function Partners({ navigate }) {
       />
       <div className="filter-bar">
         <Field label="Trạng thái">
-          <select value={filter} onChange={(e) => { setFilter(e.target.value); setPage(1); }}>
+          <Select value={filter} onChange={(e) => { setFilter(e.target.value); setPage(1); }}>
             <option value="">Tất cả</option>
             {["PENDING", "APPROVED", "DECLINED", "BLOCKED"].map((s) => (
               <option key={s} value={s}>
@@ -642,7 +643,7 @@ export function Partners({ navigate }) {
                 }
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
       </div>
       <div className="partner-grid">
@@ -719,18 +720,18 @@ export function Partners({ navigate }) {
       )}
       {contract && (
         <Modal title={`Hợp đồng điện tử • ${contract.name}`} onClose={() => setContract(null)}>
-          <form onSubmit={async (e) => {
+          <Form onSubmit={async (e) => {
             e.preventDefault();
             if (await act("PROPOSE_CONTRACT", { id: contract.id, terms: contract.terms, validMonths: contract.validMonths, confirmElectronicSignature: contract.confirmed }, "Đã ký và gửi hợp đồng cho chủ vựa.")) setContract(null);
           }}>
             <div className="info-box">Đây là xác nhận điện tử trong hệ thống, lưu phiên bản, thời gian và mã băm nội dung. Chủ vựa phải ký thì hợp đồng mới có hiệu lực.</div>
             <Field label="Nội dung hợp đồng">
-              <textarea required minLength={50} maxLength={10000} rows={14} value={contract.terms} onChange={(e) => setContract({ ...contract, terms: e.target.value })} />
+              <Textarea required minLength={50} maxLength={10000} rows={14} value={contract.terms} onChange={(e) => setContract({ ...contract, terms: e.target.value })} />
             </Field>
             <Field label="Thời hạn (tháng)" type="number" min="1" max="120" required value={contract.validMonths} onChange={(e) => setContract({ ...contract, validMonths: e.target.value })} />
-            <label className="checkbox-line"><input type="checkbox" required checked={contract.confirmed} onChange={(e) => setContract({ ...contract, confirmed: e.target.checked })} />Tôi đã đọc, đồng ý nội dung và xác nhận ký điện tử với tư cách đại diện nhà máy.</label>
+            <label className="checkbox-line"><Input type="checkbox" required checked={contract.confirmed} onChange={(e) => setContract({ ...contract, confirmed: e.target.checked })} />Tôi đã đọc, đồng ý nội dung và xác nhận ký điện tử với tư cách đại diện nhà máy.</label>
             <div className="form-actions"><Button secondary onClick={() => setContract(null)}>Hủy</Button><Button type="submit" disabled={!contract.confirmed}>Ký và gửi chủ vựa</Button></div>
-          </form>
+          </Form>
         </Modal>
       )}
       {contractView && (
@@ -742,11 +743,11 @@ export function Partners({ navigate }) {
       )}
       {termination && (
         <Modal title={termination.mode === "request" ? "Đề nghị chấm dứt hợp đồng" : "Xử lý đề nghị chấm dứt"} onClose={() => setTermination(null)}>
-          {termination.mode === "request" ? <form onSubmit={async (e) => { e.preventDefault(); if (await act("REQUEST_CONTRACT_TERMINATION", { id: termination.id, reason: termination.reason }, "Đã gửi đề nghị chấm dứt cho chủ vựa.")) setTermination(null); }}>
+          {termination.mode === "request" ? <Form onSubmit={async (e) => { e.preventDefault(); if (await act("REQUEST_CONTRACT_TERMINATION", { id: termination.id, reason: termination.reason }, "Đã gửi đề nghị chấm dứt cho chủ vựa.")) setTermination(null); }}>
             <div className="info-box warning">Chỉ gửi được khi không còn lô đang vận chuyển, KCS hoặc chờ quyết toán.</div>
-            <Field label="Lý do chấm dứt"><textarea required minLength={10} maxLength={2000} value={termination.reason} onChange={(e) => setTermination({ ...termination, reason: e.target.value })} /></Field>
+            <Field label="Lý do chấm dứt"><Textarea required minLength={10} maxLength={2000} value={termination.reason} onChange={(e) => setTermination({ ...termination, reason: e.target.value })} /></Field>
             <div className="form-actions"><Button secondary onClick={() => setTermination(null)}>Đóng</Button><Button type="submit" danger>Gửi đề nghị</Button></div>
-          </form> : <div>
+          </Form> : <div>
             <div className="info-box warning">Chủ vựa đề nghị chấm dứt: <strong>{termination.terminationReason}</strong></div>
             <div className="form-actions"><Button secondary onClick={async () => { if (await act("DECIDE_CONTRACT_TERMINATION", { id: termination.id, decision: "REJECT" }, "Đã từ chối đề nghị chấm dứt.")) setTermination(null); }}>Từ chối</Button><Button danger onClick={async () => { if (await act("DECIDE_CONTRACT_TERMINATION", { id: termination.id, decision: "ACCEPT" }, "Hợp đồng đã chấm dứt.")) setTermination(null); }}>Chấp thuận chấm dứt</Button></div>
           </div>}
@@ -779,7 +780,7 @@ export function Profile() {
         </div>
         <p className="muted">Tên, email và số điện thoại tài khoản được quản lý bởi phiên đăng nhập chung.</p>
       </Card>
-      <form
+      <Form
         onSubmit={async (e) => {
           e.preventDefault();
           await act("PROFILE", form, "Đã lưu hồ sơ nhà máy.");
@@ -814,7 +815,7 @@ export function Profile() {
           <div className="checkbox-grid">
             {Object.entries(materials).map(([key, label]) => (
               <label key={key}>
-                <input
+                <Input
                   type="checkbox"
                   checked={form.materials.includes(key)}
                   onChange={(e) =>
@@ -837,7 +838,7 @@ export function Profile() {
             ))}
           </div>
           <Field label="Vật liệu chính">
-            <select
+            <Select
               value={form.primaryMaterial}
               disabled={!form.materials.length}
               onChange={(e) => set("primaryMaterial", e.target.value)}
@@ -847,7 +848,7 @@ export function Profile() {
                   {materials[key]}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
         </Card>
         <Card title="Giấy phép & Hồ sơ pháp lý">
@@ -875,7 +876,7 @@ export function Profile() {
             {busy ? "Đang lưu hồ sơ…" : "Lưu hồ sơ nhà máy"}
           </Button>
         </div>
-      </form>
+      </Form>
     </>
   );
 }

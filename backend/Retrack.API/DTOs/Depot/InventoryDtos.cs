@@ -9,6 +9,8 @@ public record InventoryRowDto(string MaterialType, decimal ReceivedKg, decimal R
 }
 public sealed class CreateDepotBatchDto
 {
+    [RegularExpression("^(INTERNAL|EXTERNAL)$")] public string ShippingMethod { get; set; } = "INTERNAL";
+    public Guid? ShippingQuoteId { get; set; }
     public Guid OperationId { get; set; }
     [Required, StringLength(100)] public string MaterialType { get; set; } = string.Empty;
     public decimal WeightKg { get; set; }

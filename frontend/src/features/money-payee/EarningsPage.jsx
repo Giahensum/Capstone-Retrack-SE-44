@@ -189,7 +189,7 @@ function MyRefunds() {
 /** Trang Thu nhập dùng chung cho Seller, Chủ kho, Nhà máy. */
 export default function EarningsPage() {
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 p-4 md:p-6">
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 p-4 md:p-6">
       <header className="flex items-start gap-3.5">
         <span className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#446900] to-[#5c8a00] text-white shadow-md"><Wallet size={23} aria-hidden="true" /></span>
         <div>

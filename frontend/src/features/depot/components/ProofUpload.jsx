@@ -1,3 +1,4 @@
+import { Input } from '@/components/forms/ValidatedForm';
 import { useMutation } from '@tanstack/react-query';
 import api from '@/lib/axios';
 import { useDepot, depotError } from '../DepotContext';
@@ -18,7 +19,7 @@ export default function ProofUpload({ onUploaded, onBusyChange, disabled }) {
   });
   return <div className="space-y-2">
     <label className="block">Tải ảnh chứng từ
-      <input type="file" accept="image/png,image/jpeg,image/webp" className="block w-full mt-2 text-sm text-d-on-surface-variant file:mr-4 file:min-h-11 file:cursor-pointer file:rounded-full file:border file:border-d-border-subtle file:bg-d-surface-container-low file:px-4 file:py-2 file:font-semibold file:text-d-on-surface hover:file:bg-d-surface-container-high disabled:opacity-50"
+      <Input type="file" accept="image/png,image/jpeg,image/webp" className="block w-full mt-2 text-sm text-d-on-surface-variant file:mr-4 file:min-h-11 file:cursor-pointer file:rounded-full file:border file:border-d-border-subtle file:bg-d-surface-container-low file:px-4 file:py-2 file:font-semibold file:text-d-on-surface hover:file:bg-d-surface-container-high disabled:opacity-50"
         disabled={disabled || upload.isPending || !depotId}
         onChange={(event) => { const file = event.target.files?.[0]; if (file) upload.mutate(file); event.target.value = ''; }} />
     </label>

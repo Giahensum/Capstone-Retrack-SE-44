@@ -6,15 +6,17 @@
 @keyframes popIn { from { opacity: 0; transform: translateY(14px) scale(0.98); } to { opacity: 1; transform: none; } }
 
 @layer base {
+  /* Token toàn cục theo nhận diện RETRACK (nền sáng, xanh lá #446900, điểm nhấn lime #a3e635).
+     Giữ tên biến cũ để không vỡ chỗ đang tham chiếu. */
   :root {
-    --color-primary: #10b981;    /* emerald-500 */
-    --color-primary-dark: #059669;
-    --color-secondary: #6366f1;  /* indigo-500 */
-    --color-bg: #0f172a;         /* slate-900 */
-    --color-surface: #1e293b;    /* slate-800 */
-    --color-border: #334155;     /* slate-700 */
-    --color-text: #f1f5f9;       /* slate-100 */
-    --color-muted: #94a3b8;      /* slate-400 */
+    --color-primary: #446900;
+    --color-primary-dark: #385500;
+    --color-secondary: #a3e635;
+    --color-bg: #f1fcf2;
+    --color-surface: #ffffff;
+    --color-border: rgba(23, 33, 27, 0.08);
+    --color-text: #141e18;
+    --color-muted: #424936;
   }
 
   * {
@@ -29,41 +31,92 @@
     background-color: var(--color-bg);
     color: var(--color-text);
     font-family: 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
     margin: 0;
     padding: 0;
+  }
+
+  /* Tiêu đề bảng trong vùng nội dung AppShell: cùng kiểu với bộ kit (chữ hoa nhỏ, nền xanh nhạt).
+     Ở layer base nên class riêng của từng trang và CSS nhà máy vẫn được ưu tiên. */
+  .retrack-content thead th {
+    background-color: var(--color-d-surface-container-low);
+    color: var(--color-d-on-surface-variant);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  /* Nhãn form viết theo mẫu <label>Chữ<input/></label> (nhiều trang Depot/Seller): cùng kiểu nhãn với bộ kit.
+     Ở layer base nên class riêng trên label vẫn thắng; chỉ label không có class mới được xếp dọc. */
+  .retrack-content label:has(> input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), > select, > textarea) {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--color-d-on-surface-variant);
+  }
+  .retrack-content label:not([class]):has(> input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), > select, > textarea) {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+  .retrack-content label:has(> input, > select, > textarea) > :is(input, select, textarea) {
+    font-weight: 400;
+    color: var(--color-d-on-surface);
+  }
+
+  /* Tailwind v4 bỏ cursor: pointer khỏi preflight; trả lại bàn tay cho mọi nút còn bấm được. */
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
   }
 }
 
 @layer utilities {
   .glass {
-    background: rgba(30, 41, 59, 0.7);
+    background: rgba(255, 255, 255, 0.75);
     backdrop-filter: blur(12px);
-    border: 1px solid rgba(51, 65, 85, 0.5);
+    border: 1px solid var(--color-border);
   }
 
   .text-gradient {
-    background: linear-gradient(135deg, #10b981, #6366f1);
+    background: linear-gradient(135deg, #446900, #a3e635);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
   }
 
   .btn-primary {
-    @apply bg-emerald-500 hover:bg-emerald-600 text-white font-semibold px-4 py-2 rounded-lg transition-all duration-200 active:scale-95;
+    @apply bg-[#446900] hover:bg-[#385500] text-white font-semibold px-4 py-2 rounded-full transition-all duration-200 active:scale-95;
   }
 
   .btn-secondary {
-    @apply bg-slate-700 hover:bg-slate-600 text-white font-semibold px-4 py-2 rounded-lg transition-all duration-200 active:scale-95;
+    @apply bg-white border border-black/10 hover:bg-[#e5f1e7] text-[#141e18] font-semibold px-4 py-2 rounded-full transition-all duration-200 active:scale-95;
   }
 
   .card {
-    @apply bg-slate-800 border border-slate-700 rounded-xl p-4;
+    @apply bg-white border border-black/[0.08] rounded-2xl p-4 shadow-sm;
   }
 
   .input-field {
-    @apply bg-slate-900 border border-slate-600 text-slate-100 rounded-lg px-3 py-2 w-full focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all;
+    @apply bg-white border border-black/15 text-[#141e18] rounded-lg px-3 py-2 w-full focus:outline-none focus:border-[#446900] focus:ring-2 focus:ring-[#a3e635]/40 transition-all;
   }
 }
+
+/* Thanh cuộn mảnh cho menu trên nền tối của AppShell: chỉ hiện tay cầm khi rê chuột. */
+.shell-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+.shell-scroll:hover,
+.shell-scroll:focus-within {
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+.shell-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+.shell-scroll::-webkit-scrollbar-track { background: transparent; }
+.shell-scroll::-webkit-scrollbar-thumb { background-color: transparent; border-radius: 9999px; }
+.shell-scroll:hover::-webkit-scrollbar-thumb { background-color: rgba(255, 255, 255, 0.18); }
+.shell-scroll::-webkit-scrollbar-button { display: none; }
 
 /* Hợp đồng đặt cọc: khổ A4, in và xuất PDF */
 .contract-sheet { font-family: "Times New Roman", Times, serif; font-size: 15px; line-height: 1.5; color: #000; background: #fff; }
@@ -74,3 +127,4 @@
   body > *:not(#contract-print-root) { display: none !important; }
   #contract-print-root { position: static; left: 0; width: auto; }
 }
+

@@ -1,3 +1,4 @@
+import { Form, Input, Select, Textarea } from '@/components/forms/ValidatedForm';
 import { useEffect, useRef, useState } from 'react';
 import { useDepotQuery, useDepotMutation, number, money, date } from './depotApi';
 import { useDepot } from './DepotContext';
@@ -7,6 +8,7 @@ import { materialLabel } from './materialLabels';
 import CreateBatchModal from './components/CreateBatchModal';
 import ContractDocument from '../../components/ui/ContractDocument';
 import EsignPanel, { useEsignReturn } from '../esign/EsignPanel';
+import { PageHeader, StatCard, buttonClass as kitButton } from '@/components/ui/kit';
 
 const labels = { APPROVED: 'Đang hợp tác', PENDING: 'Chưa hợp tác', DECLINED: 'Không hợp tác', BLOCKED: 'Đã chặn' };
 const contractLabels = { PENDING_DEPOT: 'Chờ chủ vựa ký', ACTIVE: 'Đang hiệu lực', REJECTED: 'Đã từ chối', TERMINATED: 'Đã chấm dứt' };
@@ -50,32 +52,25 @@ export default function Partners() {
         <p className="mb-4">{decision.status === 'BLOCKED' ? 'Chặn' : 'Bỏ chặn phía kho đối với'} <strong>{decision.factoryName}</strong>? {decision.status === 'UNBLOCKED' && 'Nếu nhà máy cũng đang chặn, quan hệ vẫn bị chặn.'}</p>
         <MutationError mutation={update} />
         <div className="flex justify-end gap-3"><button onClick={() => setDecision(null)} disabled={update.isPending}>Đóng</button>
-          <button className="bg-d-primary text-white px-4 py-2 rounded-full" disabled={update.isPending} onClick={() => update.mutate({ id: decision.factoryId, body: { status: decision.status } })}>{update.isPending ? 'Đang lưu…' : 'Xác nhận'}</button></div>
+          <button className="inline-flex items-center justify-center gap-2 rounded-full font-semibold transition active:scale-[.98] disabled:pointer-events-none disabled:opacity-50 outline-none focus-visible:ring-2 focus-visible:ring-d-primary/30 focus-visible:ring-offset-1 min-h-11 px-5 py-2 text-sm bg-d-primary text-white hover:bg-[#385500]" disabled={update.isPending} onClick={() => update.mutate({ id: decision.factoryId, body: { status: decision.status } })}>{update.isPending ? 'Đang lưu…' : 'Xác nhận'}</button></div>
       </Dialog>}
       {contractDecision && <Dialog title={`Hợp đồng ${contractDecision.contractCode || ''}`} onClose={() => setContractDecision(null)} busy={decideContract.isPending}>
         <ContractDocument contract={contractDecision} factoryName={contractDecision.factoryName} depotName={profile.data?.name || profile.data?.depotName} />
         {['PENDING_DEPOT', 'ACTIVE'].includes(contractDecision.contractStatus) && <EsignPanel partnershipId={contractDecision.id} contractStatus={contractDecision.contractStatus} onChanged={() => requests.refetch()} />}
-        {contractDecision.contractStatus === 'PENDING_DEPOT' && <><label className="mt-4 flex items-start gap-2 text-sm"><input type="checkbox" checked={contractDecision.confirmed || false} onChange={(e) => setContractDecision({ ...contractDecision, confirmed: e.target.checked })} />Tôi đã đọc, đồng ý nội dung và xác nhận ký điện tử với tư cách chủ vựa.</label><MutationError mutation={decideContract} /></>}
+        {contractDecision.contractStatus === 'PENDING_DEPOT' && <><label className="mt-4 flex items-start gap-2 text-sm"><Input type="checkbox" checked={contractDecision.confirmed || false} onChange={(e) => setContractDecision({ ...contractDecision, confirmed: e.target.checked })} />Tôi đã đọc, đồng ý nội dung và xác nhận ký điện tử với tư cách chủ vựa.</label><MutationError mutation={decideContract} /></>}
         <div className="mt-5 flex flex-wrap justify-end gap-3"><button className="border border-d-primary text-d-primary px-4 py-2 rounded-full" type="button" onClick={() => window.print()}>In / Lưu PDF</button><button onClick={() => setContractDecision(null)} disabled={decideContract.isPending}>Đóng</button>
-          {contractDecision.contractStatus === 'PENDING_DEPOT' && <><button className="border border-d-error text-d-error px-4 py-2 rounded-full" disabled={decideContract.isPending} onClick={() => decideContract.mutate({ id: contractDecision.factoryId, body: { decision: 'REJECT', confirmElectronicSignature: false } })}>Từ chối</button>
-          <button className="bg-d-primary text-white px-4 py-2 rounded-full" disabled={decideContract.isPending || !contractDecision.confirmed} onClick={() => decideContract.mutate({ id: contractDecision.factoryId, body: { decision: 'ACCEPT', confirmElectronicSignature: true } })}>{decideContract.isPending ? 'Đang lưu…' : 'Ký chấp thuận'}</button></>}
-          {contractDecision.contractStatus === 'ACTIVE' && !contractExpired(contractDecision) && !['PENDING_DEPOT', 'PENDING_FACTORY'].includes(contractDecision.terminationStatus) && <button className="border border-d-error text-d-error px-4 py-2 rounded-full" onClick={() => setTermination({ ...contractDecision, mode: 'request', reason: '' })}>Đề nghị chấm dứt</button>}
-          {contractDecision.terminationStatus === 'PENDING_DEPOT' && <button className="bg-d-error text-white px-4 py-2 rounded-full" onClick={() => setTermination({ ...contractDecision, mode: 'decision' })}>Xử lý đề nghị chấm dứt</button>}</div>
+          {contractDecision.contractStatus === 'PENDING_DEPOT' && <><button className="inline-flex items-center justify-center gap-2 rounded-full font-semibold transition active:scale-[.98] disabled:pointer-events-none disabled:opacity-50 outline-none focus-visible:ring-2 focus-visible:ring-d-primary/30 focus-visible:ring-offset-1 min-h-11 px-5 py-2 text-sm border border-d-error/40 bg-white text-d-error hover:bg-d-error-container/50" disabled={decideContract.isPending} onClick={() => decideContract.mutate({ id: contractDecision.factoryId, body: { decision: 'REJECT', confirmElectronicSignature: false } })}>Từ chối</button>
+          <button className="inline-flex items-center justify-center gap-2 rounded-full font-semibold transition active:scale-[.98] disabled:pointer-events-none disabled:opacity-50 outline-none focus-visible:ring-2 focus-visible:ring-d-primary/30 focus-visible:ring-offset-1 min-h-11 px-5 py-2 text-sm bg-d-primary text-white hover:bg-[#385500]" disabled={decideContract.isPending || !contractDecision.confirmed} onClick={() => decideContract.mutate({ id: contractDecision.factoryId, body: { decision: 'ACCEPT', confirmElectronicSignature: true } })}>{decideContract.isPending ? 'Đang lưu…' : 'Ký chấp thuận'}</button></>}
+          {contractDecision.contractStatus === 'ACTIVE' && !contractExpired(contractDecision) && !['PENDING_DEPOT', 'PENDING_FACTORY'].includes(contractDecision.terminationStatus) && <button className="inline-flex items-center justify-center gap-2 rounded-full font-semibold transition active:scale-[.98] disabled:pointer-events-none disabled:opacity-50 outline-none focus-visible:ring-2 focus-visible:ring-d-primary/30 focus-visible:ring-offset-1 min-h-11 px-5 py-2 text-sm border border-d-error/40 bg-white text-d-error hover:bg-d-error-container/50" onClick={() => setTermination({ ...contractDecision, mode: 'request', reason: '' })}>Đề nghị chấm dứt</button>}
+          {contractDecision.terminationStatus === 'PENDING_DEPOT' && <button className="inline-flex items-center justify-center gap-2 rounded-full font-semibold transition active:scale-[.98] disabled:pointer-events-none disabled:opacity-50 outline-none focus-visible:ring-2 focus-visible:ring-d-primary/30 focus-visible:ring-offset-1 min-h-11 px-5 py-2 text-sm bg-d-error text-white hover:bg-[#93000a]" onClick={() => setTermination({ ...contractDecision, mode: 'decision' })}>Xử lý đề nghị chấm dứt</button>}</div>
       </Dialog>}
       {termination && <Dialog title={termination.mode === 'request' ? 'Đề nghị chấm dứt hợp đồng' : 'Xử lý đề nghị chấm dứt'} onClose={() => setTermination(null)} busy={requestTermination.isPending || decideTermination.isPending}>
-        {termination.mode === 'request' ? <form onSubmit={(e) => { e.preventDefault(); requestTermination.mutate({ id: termination.factoryId, body: { reason: termination.reason } }); }}><p className="mb-3 text-sm text-d-on-surface-variant">Chỉ có thể chấm dứt khi các lô đang xử lý đã hoàn tất.</p><label className="block text-sm">Lý do<textarea className={`${inputClass} mt-1`} required minLength={10} maxLength={2000} value={termination.reason} onChange={(e) => setTermination({ ...termination, reason: e.target.value })} /></label><MutationError mutation={requestTermination} /><div className="mt-5 flex justify-end gap-3"><button type="button" onClick={() => setTermination(null)}>Đóng</button><button className="bg-d-error text-white px-4 py-2 rounded-full" type="submit">Gửi đề nghị</button></div></form> : <div><p className="rounded-xl bg-d-surface-container-low p-3">Nhà máy đề nghị chấm dứt: <strong>{termination.terminationReason}</strong></p><MutationError mutation={decideTermination} /><div className="mt-5 flex justify-end gap-3"><button onClick={() => decideTermination.mutate({ id: termination.factoryId, body: { decision: 'REJECT' } })}>Từ chối</button><button className="bg-d-error text-white px-4 py-2 rounded-full" onClick={() => decideTermination.mutate({ id: termination.factoryId, body: { decision: 'ACCEPT' } })}>Chấp thuận chấm dứt</button></div></div>}
+        {termination.mode === 'request' ? <Form onSubmit={(e) => { e.preventDefault(); requestTermination.mutate({ id: termination.factoryId, body: { reason: termination.reason } }); }}><p className="mb-3 text-sm text-d-on-surface-variant">Chỉ có thể chấm dứt khi các lô đang xử lý đã hoàn tất.</p><label className="block text-sm">Lý do<Textarea className={`${inputClass} mt-1`} required minLength={10} maxLength={2000} value={termination.reason} onChange={(e) => setTermination({ ...termination, reason: e.target.value })} /></label><MutationError mutation={requestTermination} /><div className="mt-5 flex justify-end gap-3"><button type="button" onClick={() => setTermination(null)}>Đóng</button><button className="inline-flex items-center justify-center gap-2 rounded-full font-semibold transition active:scale-[.98] disabled:pointer-events-none disabled:opacity-50 outline-none focus-visible:ring-2 focus-visible:ring-d-primary/30 focus-visible:ring-offset-1 min-h-11 px-5 py-2 text-sm bg-d-error text-white hover:bg-[#93000a]" type="submit">Gửi đề nghị</button></div></Form> : <div><p className="rounded-xl bg-d-surface-container-low p-3">Nhà máy đề nghị chấm dứt: <strong>{termination.terminationReason}</strong></p><MutationError mutation={decideTermination} /><div className="mt-5 flex justify-end gap-3"><button onClick={() => decideTermination.mutate({ id: termination.factoryId, body: { decision: 'REJECT' } })}>Từ chối</button><button className="inline-flex items-center justify-center gap-2 rounded-full font-semibold transition active:scale-[.98] disabled:pointer-events-none disabled:opacity-50 outline-none focus-visible:ring-2 focus-visible:ring-d-primary/30 focus-visible:ring-offset-1 min-h-11 px-5 py-2 text-sm bg-d-error text-white hover:bg-[#93000a]" onClick={() => decideTermination.mutate({ id: termination.factoryId, body: { decision: 'ACCEPT' } })}>Chấp thuận chấm dứt</button></div></div>}
       </Dialog>}
 
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-6 shrink-0">
-        <div>
-          <h2 className="font-d-headline-lg text-d-headline-lg text-d-on-surface mb-2">Đối tác nhà máy</h2>
-          <p className="font-d-body-md text-d-body-md text-d-on-surface-variant max-w-2xl">Tìm nhà máy tái chế và theo dõi quan hệ hợp tác.</p>
-        </div>
-        <button onClick={() => { setActiveTab('list'); setPage(1); setSearch(''); requestAnimationFrame(() => searchRef.current?.focus()); }} className="bg-transparent border border-d-primary text-d-primary hover:bg-d-surface-variant hover:border-d-primary-fixed px-6 py-2.5 rounded-full font-d-label-md text-d-label-md font-medium transition-all flex items-center justify-center gap-2 self-start sm:self-auto shrink-0">
-          <MaterialIcon name="search" className="text-[18px]" /> Tìm đối tác mới
-        </button>
-      </div>
+      <PageHeader title="Đối tác nhà máy" description="Tìm nhà máy tái chế và theo dõi quan hệ hợp tác.">
+        <button type="button" onClick={() => { setActiveTab('list'); setPage(1); setSearch(''); requestAnimationFrame(() => searchRef.current?.focus()); }} className={kitButton({ variant: 'secondary' })}><MaterialIcon name="search" className="text-[18px]" />Tìm đối tác mới</button>
+      </PageHeader>
 
       {/* Tabs */}
       <div className="flex border-b border-d-border-subtle overflow-x-auto no-scrollbar space-x-6 shrink-0">
@@ -116,52 +111,20 @@ export default function Partners() {
       <div className="flex flex-col gap-6">
         {activeTab === 'list' ? (
           <>
-            {/* KPI Cards (Bento style grid) */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 shrink-0">
-              {/* Total Partners */}
-              <div className="bg-d-surface-container-low border border-d-border-subtle rounded-[20px] p-6 relative overflow-hidden group hover:shadow-md transition-shadow">
-                <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                  <MaterialIcon name="domain" className="text-6xl text-d-primary" />
-                </div>
-                <p className="font-d-label-sm text-d-label-sm text-d-on-surface-variant uppercase tracking-wider mb-2">Nhà máy trong danh sách</p>
-                <div className="flex items-end gap-3">
-                  <h3 className="font-d-headline-xl text-d-headline-xl text-d-on-surface">{query.data?.totalCount ?? 0}</h3>
-                </div>
-              </div>
-
-              {/* Active Partners */}
-              <div className="bg-d-surface-accent border border-d-secondary-container rounded-[20px] p-6 relative overflow-hidden group hover:shadow-md transition-shadow">
-                <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                  <MaterialIcon name="handshake" className="text-6xl text-d-secondary" />
-                </div>
-                <p className="font-d-label-sm text-d-label-sm text-d-secondary uppercase tracking-wider mb-2">Đang hợp tác</p>
-                <div className="flex items-end gap-3">
-                  <h3 className="font-d-headline-xl text-d-headline-xl text-d-secondary">{query.data?.items.filter((f) => f.partnershipStatus === 'APPROVED' && f.canDirectDelivery).length ?? 0}</h3>
-                  <span className="font-d-body-sm text-d-body-sm text-d-secondary opacity-80 mb-2 font-medium">trong trang này</span>
-                </div>
-              </div>
-
-              {/* Pending Approval */}
-              <div className="bg-d-surface-container-low border border-d-border-subtle rounded-[20px] p-6 relative overflow-hidden group hover:shadow-md transition-shadow">
-                <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                  <MaterialIcon name="hourglass_empty" className="text-6xl text-d-outline" />
-                </div>
-                <p className="font-d-label-sm text-d-label-sm text-d-on-surface-variant uppercase tracking-wider mb-2">Chưa hợp tác</p>
-                <div className="flex items-end gap-3">
-                  <h3 className="font-d-headline-xl text-d-headline-xl text-d-on-surface">{query.data?.items.filter((f) => f.partnershipStatus === 'PENDING').length ?? 0}</h3>
-                  <span className="font-d-body-sm text-d-body-sm text-d-on-surface-variant opacity-80 mb-2 font-medium">trong trang này</span>
-                </div>
-              </div>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              <StatCard label="Nhà máy trong danh sách" value={query.data?.totalCount ?? 0} icon={<MaterialIcon name="domain" className="text-xl" />} />
+              <StatCard label="Đang hợp tác" value={query.data?.items.filter((f) => f.partnershipStatus === 'APPROVED' && f.canDirectDelivery).length ?? 0} hint="Trong trang này" icon={<MaterialIcon name="handshake" className="text-xl" />} />
+              <StatCard label="Chưa hợp tác" value={query.data?.items.filter((f) => f.partnershipStatus === 'PENDING').length ?? 0} hint="Trong trang này" tone="slate" icon={<MaterialIcon name="hourglass_empty" className="text-xl" />} />
             </div>
 
             {/* Data Table Section */}
             <p className="text-sm text-d-on-surface-variant">Điểm hồ sơ chỉ để tham khảo; hiện chưa có luồng chủ kho đánh giá nhà máy sau giao dịch.</p>
-            <div className="bg-d-surface-container-lowest border border-d-border-subtle rounded-[20px] overflow-hidden flex flex-col shadow-sm">
+            <div className="bg-d-surface-container-lowest border border-d-border-subtle rounded-2xl overflow-hidden flex flex-col shadow-sm">
               {/* Table Toolbar */}
               <div className="p-6 border-b border-d-border-subtle flex flex-col sm:flex-row justify-between items-center gap-4 bg-d-surface-container-lowest shrink-0">
                 <div className="relative w-full sm:w-80">
                   <MaterialIcon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 text-d-outline text-[20px]" />
-                  <input
+                  <Input
                     ref={searchRef}
                     aria-label="Tìm tên nhà máy"
                     className="w-full bg-white border border-d-border-subtle rounded-full py-2 pl-10 pr-4 font-d-body-sm text-d-body-sm focus:border-d-primary focus:ring-1 focus:ring-d-primary transition-all text-d-on-surface outline-none"
@@ -172,16 +135,16 @@ export default function Partners() {
                   />
                 </div>
                 <div className="flex gap-3 w-full sm:w-auto">
-                  <select aria-label="Lọc quan hệ đối tác" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }} className={inputClass}><option value="">Tất cả quan hệ</option>{Object.entries(labels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select>
+                  <Select aria-label="Lọc quan hệ đối tác" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }} className={inputClass}><option value="">Tất cả quan hệ</option>{Object.entries(labels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</Select>
                 </div>
               </div>
 
               <div className="px-6 pb-5 flex flex-wrap items-end gap-4 border-b border-d-border-subtle">
                 <label className="text-sm text-d-on-surface-variant">Trong bán kính ước tính (km)
-                  <input aria-label="Bán kính ước tính theo đường chim bay" type="number" min="1" max="2000" step="1" value={maxDistanceKm}
+                  <Input aria-label="Bán kính ước tính theo đường chim bay" type="number" min="1" max="2000" step="1" value={maxDistanceKm}
                     disabled={!hasCoordinates} onChange={(e) => { setMaxDistanceKm(e.target.value); setPage(1); }}
                     placeholder="Không giới hạn" className={`${inputClass} mt-1 w-44`} /></label>
-                <label className="flex items-center gap-2 min-h-11 text-sm text-d-on-surface"><input type="checkbox" checked={nearestFirst}
+                <label className="flex items-center gap-2 min-h-11 text-sm text-d-on-surface"><Input type="checkbox" checked={nearestFirst}
                   disabled={!hasCoordinates} onChange={(e) => { setNearestFirst(e.target.checked); setPage(1); }} />Gần trước</label>
                 <p className="text-sm text-d-on-surface-variant">Khoảng cách đường chim bay để tham khảo, không phải quãng đường xe chạy. {hasCoordinates ? 'Nhà máy thiếu tọa độ sẽ không xuất hiện khi lọc bán kính.' : 'Cập nhật GPS trong hồ sơ kho để dùng bộ lọc.'}</p>
                 {maxDistanceKm !== '' && !validRadius && <p role="alert" className="text-sm text-d-error">Nhập bán kính từ 1 đến 2.000 km; bộ lọc chưa được áp dụng.</p>}
@@ -261,7 +224,7 @@ export default function Partners() {
             </div>
           </>
         ) : activeTab === 'requests' ? (
-          <QueryState query={requests}><div className="bg-white rounded-[20px] border border-d-border-subtle overflow-x-auto"><table className="w-full min-w-[650px] text-left"><thead><tr className="border-b border-d-border-subtle"><th className="p-4">Nhà máy</th><th className="p-4">Liên hệ</th><th className="p-4">Ngày gửi</th><th className="p-4">Trạng thái</th><th className="p-4">Thao tác</th></tr></thead><tbody>
+          <QueryState query={requests}><div className="bg-white rounded-2xl border border-d-border-subtle overflow-x-auto"><table className="w-full min-w-[650px] text-left"><thead><tr className="border-b border-d-border-subtle"><th className="p-4">Nhà máy</th><th className="p-4">Liên hệ</th><th className="p-4">Ngày gửi</th><th className="p-4">Trạng thái</th><th className="p-4">Thao tác</th></tr></thead><tbody>
             {requests.data?.items.map((p) => <tr key={p.id} className="border-b border-d-border-subtle"><td className="p-4">{p.factoryName}</td><td className="p-4">{p.contactPhone || 'Chưa cập nhật'}</td><td className="p-4">{date(p.createdAt)}</td><td className="p-4">{contractExpired(p) && p.status === 'APPROVED' ? 'Chờ gia hạn / duyệt lại' : labels[p.status] ?? p.status}{p.contractStatus && <span className="block text-sm text-d-primary">Hợp đồng: {contractExpired(p) ? 'Đã hết hạn' : contractLabels[p.contractStatus] || p.contractStatus}</span>}{p.blockedByFactory && <span className="block text-sm text-d-on-surface-variant">Nhà máy đã chặn</span>}{p.legacyBlocked && <span className="block text-sm text-d-on-surface-variant">Trạng thái chặn cũ cần đối chiếu</span>}</td><td className="p-4"><div className="flex flex-col items-start gap-2">{p.contractTerms && <button className="text-d-primary underline" onClick={() => setContractDecision(p)}>{p.contractStatus === 'PENDING_DEPOT' ? 'Xem và ký hợp đồng' : 'Xem hợp đồng'}</button>}{p.blockedByDepot ? <button className="text-d-primary underline" onClick={() => setDecision({ factoryId: p.factoryId, factoryName: p.factoryName, status: 'UNBLOCKED' })}>Bỏ chặn phía kho</button> : !p.blockedByFactory && !p.legacyBlocked ? <button className="text-d-error underline" onClick={() => setDecision({ factoryId: p.factoryId, factoryName: p.factoryName, status: 'BLOCKED' })}>Chặn</button> : <span className="text-sm text-d-on-surface-variant">—</span>}</div></td></tr>)}
             {!requests.data?.items.length && <tr><td colSpan="5" className="p-6 text-center">Chưa có yêu cầu hợp tác.</td></tr>}
           </tbody></table><Pager page={page} setPage={setPage} total={requests.data?.totalCount} /></div></QueryState>
@@ -271,7 +234,7 @@ export default function Partners() {
             <div className="flex flex-col md:flex-row gap-4 mb-2">
               <div className="flex-1 flex items-center bg-white rounded-full px-4 py-3 border border-d-border-subtle focus-within:border-d-secondary transition-colors shadow-sm">
                 <MaterialIcon name="search" className="text-d-outline mr-3" />
-                <input
+                <Input
                   className="bg-transparent border-none outline-none w-full font-d-body-md text-d-body-md text-d-on-surface placeholder-d-on-surface-variant/50 focus:ring-0"
                   placeholder="Tìm kiếm theo loại phế liệu..."
                   aria-label="Tìm nhu cầu theo loại phế liệu"
@@ -288,7 +251,7 @@ export default function Partners() {
                 {demands.data?.items.map(d => {
                   const urgent = new Date(d.deadline) < new Date(Date.now() + 7 * 86400000);
                   return (
-                    <div key={d.id} className="bg-white border border-d-border-subtle rounded-[20px] p-6 hover:shadow-xl transition-shadow duration-300 flex flex-col group relative overflow-hidden">
+                    <div key={d.id} className="bg-white border border-d-border-subtle rounded-2xl p-6 hover:shadow-xl transition-shadow duration-300 flex flex-col group relative overflow-hidden">
                       {urgent ? (
                         <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-d-error to-d-tertiary"></div>
                       ) : (
@@ -336,7 +299,7 @@ export default function Partners() {
                   );
                 })}
                 {!demands.data?.items.length && (
-                  <div className="col-span-full py-8 text-center text-d-on-surface-variant bg-white rounded-[20px]">Không có nhu cầu nào đang mở.</div>
+                  <div className="col-span-full py-8 text-center text-d-on-surface-variant bg-white rounded-2xl">Không có nhu cầu nào đang mở.</div>
                 )}
               </div>
               <div className="mt-4"><Pager page={page} setPage={setPage} total={demands.data?.totalCount} /></div>

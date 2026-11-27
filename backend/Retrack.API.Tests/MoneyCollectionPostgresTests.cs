@@ -100,7 +100,7 @@ public sealed class MoneyCollectionPostgresTests(MoneyCollectionDb fixture) : IC
         await using var db = Open();
         await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO system_configs (config_key, config_value) VALUES ({key}, {value}) ON CONFLICT (config_key) DO UPDATE SET config_value = EXCLUDED.config_value");
     }
-    private async Task Mode(string mode) { await SetConfig("money.mode", mode); await SetConfig("payout.hold_minutes", Hold.ToString()); }
+    private async Task Mode(string mode) { await SetConfig("BUSINESS_MODEL", "TRANSACTION_FEES"); await SetConfig("money.mode", mode); await SetConfig("payout.hold_minutes", Hold.ToString()); }
 
     private sealed record PickupWorld(Guid Id, User Seller, User Owner, Guid DepotId);
     private async Task<PickupWorld> NewPickup(string status = "AWAITING_PAYMENT", decimal gross = 500000)

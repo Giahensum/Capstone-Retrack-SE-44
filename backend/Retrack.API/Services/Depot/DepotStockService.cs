@@ -11,7 +11,8 @@ using Retrack.API.Services.Shared;
 namespace Retrack.API.Services.Depot;
 
 public sealed partial class DepotStockService(IDepotStockRepository repository, IDepotBatchRepository batches,
-    IDepotUnitOfWork work, IDepotService scope, Retrack.API.Services.Money.PlatformMoneyHooks? money = null) : IDepotStockService
+    IDepotUnitOfWork work, IDepotService scope, Retrack.API.Services.Money.PlatformMoneyHooks? money = null,
+    IDepotSubscriptionService? subscriptions = null) : IDepotStockService
 {
     private static void ValidatePage(DepotQuery query)
     {
@@ -56,11 +57,15 @@ public sealed partial class DepotStockService(IDepotStockRepository repository, 
             return Map(old, isOwner);
         }
         var purchaseCost = dto.PurchaseCost;
+        // Nhận lô đã mua vẫn được hoàn tất khi gói hết hạn; nguồn nhập mới cần gói đang dùng.
+        if (!dto.BulkAgreementId.HasValue && subscriptions != null) await subscriptions.RequireAccessAsync(depotId);
         LiquidationAgreement? receivedAgreement = null;
         if (dto.BulkAgreementId.HasValue)
         {
             var source = await repository.LockBulkSourceAsync(dto.BulkAgreementId.Value);
             if (source == null || source.DepotId != depotId || source.BuyerId != userId && isOwner) throw new DepotForbiddenException();
+            if (source.Resolution == "CANCELLED" || source.AbandonReportedAt != null && source.Resolution == null)
+                throw new DepotConflictException("Thỏa thuận đã hủy hoặc đang chờ xử lý tranh chấp, không được nhập kho.");
             if (source.PaymentConfirmedAt == null || source.SellerHandedOverAt == null ||
                 source.OwnerCollectedAt == null && !dto.ConfirmBulkReceived || dto.SourceType != "BULK_PURCHASE")
                 throw new DepotConflictException("Lô trúng cần xác nhận đủ tiền và Seller bàn giao đủ; chủ kho xác nhận thực nhận khi ghi kho.");

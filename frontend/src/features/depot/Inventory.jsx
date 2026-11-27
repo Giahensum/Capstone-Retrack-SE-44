@@ -8,6 +8,7 @@ import StockHistory from './StockHistory';
 import ReusableInventory from './ReusableInventory';
 import { useDepot } from './DepotContext';
 import { useSearchParams } from 'react-router-dom';
+import { PageHeader, StatCard, buttonClass as kitButton } from '@/components/ui/kit';
 
 const Inventory = () => {
   const { depotId } = useDepot();
@@ -24,21 +25,12 @@ const Inventory = () => {
   const sum = (key) => stock.data?.reduce((n, i) => n + i[key], 0) ?? 0;
 
   return (
-    <div className="flex flex-col p-4 md:p-6 w-full max-w-7xl mx-auto h-[calc(100vh-4rem)] gap-4 md:gap-6 overflow-hidden bg-d-surface">
+    <div className="flex flex-col p-4 md:p-6 w-full max-w-7xl mx-auto min-h-0 gap-4 md:gap-6 bg-d-surface">
       <CreateBatchModal isOpen={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} initialMaterial={batchMaterial} />
-      {/* Page Header */}
-      <div className="flex flex-wrap gap-4 justify-between items-end shrink-0">
-        <div>
-          <h1 className="font-d-headline-lg text-d-headline-lg text-d-on-surface mb-2">Quản lý tồn kho</h1>
-          <p className="font-d-body-md text-d-on-surface-variant">Theo dõi lượng hàng đã ghi nhận trên RETRACK, nguồn nhập và lượng còn có thể xuất.</p>
-        </div>
-        <div className="flex flex-wrap gap-3"><button type="button" className="min-h-11 rounded-full border border-d-border-subtle bg-white px-5 py-2.5 font-semibold text-d-primary" onClick={() => setSearchParams({ tab: 'history', newReceipt: '1' })}>Nhập hàng</button><button
-          onClick={() => { setBatchMaterial(''); setIsCreateModalOpen(true); }}
-          className="bg-d-primary-fixed text-d-on-primary-fixed font-d-label-md py-2.5 px-6 rounded-full hover:bg-d-primary-container transition-transform transform hover:-translate-y-0.5 duration-200 flex items-center gap-2 shadow-sm"
-        >
-          <MaterialIcon name="add" className="text-[18px]" /> Tạo lô xuất hàng
-        </button></div>
-      </div>
+      <PageHeader title="Quản lý tồn kho" description="Theo dõi lượng hàng đã ghi nhận trên RETRACK, nguồn nhập và lượng còn có thể xuất.">
+        <button type="button" className={kitButton({ variant: 'secondary' })} onClick={() => setSearchParams({ tab: 'history', newReceipt: '1' })}>Nhập hàng</button>
+        <button type="button" className={kitButton()} onClick={() => { setBatchMaterial(''); setIsCreateModalOpen(true); }}><MaterialIcon name="add" className="text-[18px]" />Tạo lô xuất hàng</button>
+      </PageHeader>
 
       {/* Tabs */}
       <div className="flex overflow-x-auto border-b border-d-border-subtle shrink-0 [&>button]:whitespace-nowrap [&>button]:min-h-11">
@@ -58,50 +50,14 @@ const Inventory = () => {
       </div>
 
       {/* Scrollable Content */}
-      <div className="flex-1 overflow-y-auto min-h-0 flex flex-col gap-6 pr-2">
+      <div className="min-h-0 flex flex-col gap-6">
         {activeTab === 'receipts' || activeTab === 'history' ? <StockHistory key={`${depotId}-${activeTab}`} initialSource={activeTab === 'receipts' ? 'RECEIPT' : ''} /> : activeTab === 'reusable' ? <ReusableInventory key={depotId} /> : activeTab === 'current' ? (
           <QueryState query={stock}>
-            {/* KPI Cards Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 shrink-0">
-              <div className="bg-d-surface-container-lowest border border-d-border-subtle p-6 rounded-2xl shadow-sm">
-                <div className="flex justify-between items-start mb-4">
-                  <div className="w-10 h-10 rounded-full bg-d-surface-accent text-d-secondary flex items-center justify-center">
-                    <MaterialIcon name="scale" />
-                  </div>
-                </div>
-                <p className="font-d-body-sm text-d-on-surface-variant mb-1">Tổng tồn kho khả dụng</p>
-                <p className="font-d-headline-md text-d-headline-md text-d-on-surface">{number(sum('availableKg'))} <span className="font-d-body-sm text-d-on-surface-variant">kg</span></p>
-              </div>
-
-              <div className="bg-d-surface-container-lowest border border-d-border-subtle p-6 rounded-2xl shadow-sm">
-                <div className="flex justify-between items-start mb-4">
-                  <div className="w-10 h-10 rounded-full bg-d-surface-accent text-d-secondary flex items-center justify-center">
-                    <MaterialIcon name="inventory" />
-                  </div>
-                </div>
-                <p className="font-d-body-sm text-d-on-surface-variant mb-1">Đang giữ chờ xuất</p>
-                <p className="font-d-headline-md text-d-headline-md text-d-on-surface">{number(sum('reservedKg'))} <span className="font-d-body-sm text-d-on-surface-variant">kg</span></p>
-              </div>
-
-              <div className="bg-d-surface-container-lowest border border-d-border-subtle p-6 rounded-2xl shadow-sm">
-                <div className="flex justify-between items-start mb-4">
-                  <div className="w-10 h-10 rounded-full bg-d-surface-accent text-d-secondary flex items-center justify-center">
-                    <MaterialIcon name="inventory_2" />
-                  </div>
-                </div>
-                <p className="font-d-body-sm text-d-on-surface-variant mb-1">Tổng tồn đã ghi nhận</p>
-                <p className="font-d-headline-md text-d-headline-md text-d-on-surface">{number(sum('onHandKg'))} <span className="font-d-body-sm text-d-on-surface-variant">kg</span></p>
-              </div>
-
-              <div className="bg-d-surface-container-lowest border border-d-border-subtle p-6 rounded-2xl shadow-sm">
-                <div className="flex justify-between items-start mb-4">
-                  <div className="w-10 h-10 rounded-full bg-d-surface-accent text-d-secondary flex items-center justify-center">
-                    <MaterialIcon name="category" />
-                  </div>
-                </div>
-                <p className="font-d-body-sm text-d-on-surface-variant mb-1">Số loại vật liệu</p>
-                <p className="font-d-headline-md text-d-headline-md text-d-on-surface">{stock.data?.length ?? 0}</p>
-              </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <StatCard label="Tổng tồn kho khả dụng" value={`${number(sum('availableKg'))} kg`} icon={<MaterialIcon name="scale" className="text-xl" />} />
+              <StatCard label="Đang giữ chờ xuất" value={`${number(sum('reservedKg'))} kg`} icon={<MaterialIcon name="inventory" className="text-xl" />} />
+              <StatCard label="Tổng tồn đã ghi nhận" value={`${number(sum('onHandKg'))} kg`} icon={<MaterialIcon name="inventory_2" className="text-xl" />} />
+              <StatCard label="Số loại vật liệu" value={stock.data?.length ?? 0} icon={<MaterialIcon name="category" className="text-xl" />} />
             </div>
 
             {/* Inventory Table */}

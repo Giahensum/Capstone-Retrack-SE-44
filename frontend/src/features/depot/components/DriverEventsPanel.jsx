@@ -1,3 +1,4 @@
+import { Form, Select, Textarea } from '@/components/forms/ValidatedForm';
 import { useState } from 'react';
 import { useDepotQuery, useDepotMutation } from '../depotApi';
 import { Dialog, QueryState, Pager, inputClass, buttonClass, MutationError } from './DepotUI';
@@ -21,11 +22,11 @@ function Followup({ event, onClose }) {
   const save = useDepotMutation('post', `driver-events/${event.id}/followups`, () => setForm({ ...form, operationId: crypto.randomUUID(), note: '' }));
   return <Dialog title="Theo dõi xử lý vận chuyển" wide busy={save.isPending} onClose={onClose}>
     <p className="mb-4 text-sm">Ghi nhận phối hợp thực tế với tài xế/nhà máy. Khép theo dõi không xác nhận giao hàng, hoàn hàng hoặc tự cộng hàng vào kho.</p>
-    <form className="space-y-4" onSubmit={e => { e.preventDefault(); save.mutate({ body: form }); }}><fieldset className="space-y-4" disabled={save.isPending}>
-      <label className="block">Trạng thái theo dõi<select className={inputClass} value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}>{Object.entries(statuses).map(([key, label]) => <option value={key} key={key}>{label}</option>)}</select></label>
-      <label className="block">Nội dung đã phối hợp / hướng xử lý<textarea required maxLength={1000} className={inputClass} value={form.note} onChange={e => setForm({ ...form, note: e.target.value })} /></label>
+    <Form className="space-y-4" onSubmit={e => { e.preventDefault(); save.mutate({ body: form }); }}><fieldset className="space-y-4" disabled={save.isPending}>
+      <label className="block">Trạng thái theo dõi<Select className={inputClass} value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}>{Object.entries(statuses).map(([key, label]) => <option value={key} key={key}>{label}</option>)}</Select></label>
+      <label className="block">Nội dung đã phối hợp / hướng xử lý<Textarea required maxLength={1000} className={inputClass} value={form.note} onChange={e => setForm({ ...form, note: e.target.value })} /></label>
       <MutationError mutation={save} /><button className={buttonClass}>{save.isPending ? 'Đang ghi…' : 'Lưu ghi chú xử lý'}</button>
-    </fieldset></form>
+    </fieldset></Form>
     <QueryState query={query}><div className="space-y-3 mt-4">{query.data?.items.map(x => <article className="rounded-xl bg-white border border-d-border-subtle p-3 text-sm" key={x.id}><strong>{statuses[x.status]}</strong><p className="whitespace-pre-wrap break-words my-2">{x.note}</p><p>{new Date(x.createdAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}</p></article>)}</div><Pager page={page} setPage={setPage} total={query.data?.totalCount} /></QueryState>
   </Dialog>;
 }

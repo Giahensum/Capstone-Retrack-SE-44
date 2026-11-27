@@ -19,7 +19,7 @@ namespace Retrack.API.Services
         Task<PickupRequestDto> AcceptRequestAsync(Guid requestId, Guid collectorId);
         Task<PickupRequestDto> WeighAndUpdateAsync(Guid requestId, Guid collectorId, List<WeighItemDto> items, string? checkinImageUrl);
         Task<PickupRequestDto> ConfirmBySellerAsync(Guid requestId, Guid sellerId);
-        Task<PickupRequestDto> MarkPaymentSentAsync(Guid requestId, Guid ownerId, string paymentProofUrl);
+        Task<PickupRequestDto> MarkPaymentSentAsync(Guid requestId, Guid ownerId, string? paymentProofUrl, string paymentMethod = "BANK_TRANSFER", string? reference = null);
         Task<PickupRequestDto> MarkDoneAsync(Guid requestId, Guid sellerId);
     }
 
@@ -29,14 +29,16 @@ namespace Retrack.API.Services
         private readonly AppDbContext _db;
         private readonly Interfaces.IDepotPaymentService _payments;
         private readonly Money.PlatformMoneyHooks? _money;
+        private readonly Interfaces.IDepotSubscriptionService? _subscriptions;
 
         // money: tùy chọn (null = LEGACY) để không đổi nơi khởi tạo hiện có.
-        public PickupService(IPickupRequestRepository repo, AppDbContext db, Interfaces.IDepotPaymentService payments, Money.PlatformMoneyHooks? money = null)
+        public PickupService(IPickupRequestRepository repo, AppDbContext db, Interfaces.IDepotPaymentService payments, Money.PlatformMoneyHooks? money = null, Interfaces.IDepotSubscriptionService? subscriptions = null)
         {
             _repo = repo;
             _db = db;
             _payments = payments;
             _money = money;
+            _subscriptions = subscriptions;
         }
 
         public async Task<PickupRequestDto> CreateAsync(Guid sellerId, CreatePickupRequestDto dto)
@@ -53,6 +55,11 @@ namespace Retrack.API.Services
                 var depotExists = await _db.Depots.AnyAsync(d => d.Id == dto.TargetDepotId.Value && d.VerificationStatus == "APPROVED" && d.Owner.IsActive);
                 if (!depotExists)
                     throw new ArgumentException("Kho vựa chưa xác minh hồ sơ hoặc không còn hoạt động.");
+                if (_subscriptions != null)
+                {
+                    try { await _subscriptions.RequireAccessAsync(dto.TargetDepotId.Value); }
+                    catch (Depot.DepotSubscriptionRequiredException) { throw new ArgumentException("Kho này hiện chưa mở tiếp nhận đơn mới. Vui lòng chọn kho khác hoặc đăng công khai."); }
+                }
             }
             else
             {
@@ -71,7 +78,7 @@ namespace Retrack.API.Services
 
             // Get platform fee from system config
             var feeConfig = await _db.SystemConfigs.FindAsync("PLATFORM_FEE_PERCENTAGE");
-            var feePercent = PlatformFees.Rate(feeConfig?.ConfigValue);
+            var feePercent = await BusinessModel.IsSubscriptionAsync(_db) ? 0m : PlatformFees.Rate(feeConfig?.ConfigValue);
             if (feePercent is < 0 or > 100) throw new InvalidOperationException("Cấu hình phí nền tảng không hợp lệ.");
 
             var request = new PickupRequest
@@ -156,6 +163,7 @@ namespace Retrack.API.Services
                 throw new DepotConflictException("Kho đang phân công tự động. Hãy mở danh sách đơn được giao.");
             if (req.Status != "PENDING" || req.AcceptedCollectorId != null)
                 throw new DepotConflictException("Đơn đã được nhận hoặc không còn chờ nhận.");
+            if (_subscriptions != null) await _subscriptions.RequireAccessAsync(staff.DepotId);
             if (!await _db.Depots.AnyAsync(d => d.Id == staff.DepotId && d.VerificationStatus == "APPROVED"))
                 throw new DepotConflictException("Kho chưa được xác minh hồ sơ để nhận giao dịch mới.");
             req.AcceptedCollectorId = collectorId;
@@ -273,9 +281,9 @@ namespace Retrack.API.Services
             return await MapToDto(req);
         }
 
-        public async Task<PickupRequestDto> MarkPaymentSentAsync(Guid requestId, Guid ownerId, string paymentProofUrl)
+        public async Task<PickupRequestDto> MarkPaymentSentAsync(Guid requestId, Guid ownerId, string? paymentProofUrl, string paymentMethod = "BANK_TRANSFER", string? reference = null)
         {
-            var req = await _payments.MarkSentAsync(requestId, ownerId, paymentProofUrl);
+            var req = await _payments.MarkSentAsync(requestId, ownerId, paymentProofUrl, paymentMethod, reference);
             return await MapToDto(req);
         }
 
@@ -347,6 +355,7 @@ namespace Retrack.API.Services
                 PlatformFeeAmount = r.PlatformFeeAmount,
                 BuyerTotalAmount = r.NetAmount + r.PlatformFeeAmount,
                 PaymentProofUrl = r.PaymentProofUrl,
+                PaymentMethod = r.PaymentMethod, PaymentReference = r.PaymentReference,
                 CreatedAt = r.CreatedAt,
                 UpdatedAt = r.UpdatedAt,
                 Items = r.Items.Select(i => new PickupRequestItemDto

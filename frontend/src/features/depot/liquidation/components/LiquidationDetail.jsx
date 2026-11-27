@@ -1,3 +1,4 @@
+import { Form, Input } from '@/components/forms/ValidatedForm';
 import { useState } from 'react';
 import { useIsMutating } from '@tanstack/react-query';
 import {
@@ -12,11 +13,11 @@ import {
 import { useLiquidationQuery, useLiquidationMutation, useLiquidationScope, liquidationLabels, localTime } from '../liquidationApi';
 import LiquidationAgreement from './LiquidationAgreement';
 
-export default function LiquidationDetail({ id, onClose }) {
+export default function LiquidationDetail({ id, onClose, startWithAgreement = false }) {
   const scope = useLiquidationScope();
   const query = useLiquidationQuery(`/${id}`, {}, true, true);
   const [consent, setConsent] = useState(false);
-  const [agreement, setAgreement] = useState(false);
+  const [agreement, setAgreement] = useState(startWithAgreement);
   const register = useLiquidationMutation('post', `/${id}/participation`, () => setConsent(false));
   const survey = useLiquidationMutation('patch', `/${id}/survey-confirmation`, () => setConsent(false));
   const d = query.data, lot = d?.lot;
@@ -31,7 +32,7 @@ export default function LiquidationDetail({ id, onClose }) {
   ];
 
   return <>
-    <Modal
+    {(!agreement || !d?.agreementId) && <Modal
       icon={Gavel} tone={PHASE_TONE[lot?.phase] ?? 'primary'} title={lot?.title ?? 'Chi tiết lô thanh lý'} onClose={onClose} busy={busy}
       badge={lot && <Badge tone={PHASE_TONE[lot.phase] ?? 'slate'}>{liquidationLabels[lot.phase]}</Badge>}
       subtitle={lot && <span className="inline-flex items-center gap-1"><MapPin size={13} aria-hidden="true" />{lot.publicArea}</span>}
@@ -45,12 +46,12 @@ export default function LiquidationDetail({ id, onClose }) {
           <Steps steps={steps} />
           <div className="mt-4 space-y-3 border-t border-d-border-subtle pt-4">
             {!d.participationDepotId ? <>
-              <label className="flex cursor-pointer gap-3 rounded-xl bg-d-surface-container-low p-3 text-sm"><input type="checkbox" className="mt-0.5 size-4 accent-[#446900]" checked={consent} disabled={busy} onChange={e => setConsent(e.target.checked)} /><span>Tôi chấp nhận điều kiện đã công bố và đăng ký cho kho đang chọn.</span></label>
-              <button type="button" className="inline-flex items-center gap-2 rounded-full bg-d-primary px-6 py-2.5 text-sm font-bold text-white shadow-sm transition active:scale-95 disabled:opacity-50" disabled={!consent || busy || now >= new Date(lot.surveyEnd).getTime()} onClick={() => register.mutate({ accepted: consent })}><ClipboardCheck size={16} />Đăng ký khảo sát</button>
+              <label className="flex cursor-pointer gap-3 rounded-xl bg-d-surface-container-low p-3 text-sm"><Input type="checkbox" className="mt-0.5 size-4 accent-[#446900]" checked={consent} disabled={busy} onChange={e => setConsent(e.target.checked)} /><span>Tôi chấp nhận điều kiện đã công bố và đăng ký cho kho đang chọn.</span></label>
+              <button type="button" className="inline-flex items-center justify-center gap-2 rounded-full font-semibold transition active:scale-[.98] disabled:pointer-events-none disabled:opacity-50 outline-none focus-visible:ring-2 focus-visible:ring-d-primary/30 focus-visible:ring-offset-1 min-h-11 px-5 py-2 text-sm bg-d-primary text-white hover:bg-[#385500]" disabled={!consent || busy || now >= new Date(lot.surveyEnd).getTime()} onClick={() => register.mutate({ accepted: consent })}><ClipboardCheck size={16} />Đăng ký khảo sát</button>
             </> : !mine ? <Notice tone="amber" icon={Building2}>Bạn đã đăng ký bằng một kho khác. Chuyển về đúng kho đó để trả giá; nhiều kho cùng chủ không tham gia như các đối thủ riêng.</Notice>
               : !d.surveyDeclared ? <>
-                <label className="flex cursor-pointer gap-3 rounded-xl bg-d-surface-container-low p-3 text-sm"><input type="checkbox" className="mt-0.5 size-4 accent-[#446900]" checked={consent} disabled={busy} onChange={e => setConsent(e.target.checked)} /><span>Tôi đã tự khảo sát và hiểu hiện trạng, phạm vi cùng điều kiện mua cả lô.</span></label>
-                <button type="button" className="inline-flex items-center gap-2 rounded-full bg-d-primary px-6 py-2.5 text-sm font-bold text-white shadow-sm transition active:scale-95 disabled:opacity-50" disabled={!consent || busy || now < new Date(lot.surveyStart).getTime() || now >= new Date(lot.biddingEnd).getTime()} onClick={() => survey.mutate({ accepted: consent })}><Search size={16} />Xác nhận đã khảo sát / hiểu hiện trạng</button>
+                <label className="flex cursor-pointer gap-3 rounded-xl bg-d-surface-container-low p-3 text-sm"><Input type="checkbox" className="mt-0.5 size-4 accent-[#446900]" checked={consent} disabled={busy} onChange={e => setConsent(e.target.checked)} /><span>Tôi đã tự khảo sát và hiểu hiện trạng, phạm vi cùng điều kiện mua cả lô.</span></label>
+                <button type="button" className="inline-flex items-center justify-center gap-2 rounded-full font-semibold transition active:scale-[.98] disabled:pointer-events-none disabled:opacity-50 outline-none focus-visible:ring-2 focus-visible:ring-d-primary/30 focus-visible:ring-offset-1 min-h-11 px-5 py-2 text-sm bg-d-primary text-white hover:bg-[#385500]" disabled={!consent || busy || now < new Date(lot.surveyStart).getTime() || now >= new Date(lot.biddingEnd).getTime()} onClick={() => survey.mutate({ accepted: consent })}><Search size={16} />Xác nhận đã khảo sát / hiểu hiện trạng</button>
               </> : <Notice tone="primary" icon={ShieldCheck}>Kho đã đăng ký và tự xác nhận hiện trạng. {d.canBid ? 'Nhập giá ở thanh bên dưới để trả giá.' : 'Bạn sẽ trả giá được khi phiên mở.'}</Notice>}
             <MutationError mutation={register} /><MutationError mutation={survey} />
           </div>
@@ -86,16 +87,15 @@ export default function LiquidationDetail({ id, onClose }) {
 
         <Notice tone="blue" icon={Info}>Giờ Việt Nam theo dữ liệu server. Mỗi lượt hợp lệ trong 2 phút cuối có thể gia hạn thêm, tổng không quá 10 phút. Giá trọn lô không thay đổi theo cân sau mua. Khảo sát do chủ kho thực hiện và tự xác nhận, chưa phải kiểm định của RETRACK.</Notice>
       </>}</QueryState>
-    </Modal>
-    {agreement && <LiquidationAgreement id={d.agreementId} onClose={() => setAgreement(false)} />}
+    </Modal>}
+    {agreement && d?.agreementId && <LiquidationAgreement id={d.agreementId} onClose={() => setAgreement(false)} />}
   </>;
 }
 
 // Thanh trả giá cố định ở đáy popup: luôn thấy, không phải cuộn.
 function BidBar({ id, lot, refreshing }) {
   const [form, setForm] = useState({ operationId: crypto.randomUUID(), amount: '', consent: false });
-  const [submitted, setSubmitted] = useState(false);
-  const save = useLiquidationMutation('post', `/${id}/bids`, () => { setForm({ operationId: crypto.randomUUID(), amount: '', consent: false }); setSubmitted(false); });
+  const save = useLiquidationMutation('post', `/${id}/bids`, () => setForm({ operationId: crypto.randomUUID(), amount: '', consent: false }));
   const minimum = lot.highestPrice == null ? lot.startingPrice : lot.highestPrice + lot.bidIncrement;
   // Kiểm tra rõ ràng ở client (server vẫn là nơi quyết định): chặn và báo lỗi, KHÔNG tự đổi số người dùng đã nhập.
   const amount = Number(form.amount);
@@ -103,21 +103,20 @@ function BidBar({ id, lot, refreshing }) {
     : !Number.isSafeInteger(amount) || amount <= 0 ? 'Số tiền phải là số nguyên dương.'
     : amount > 1_000_000_000_000 ? 'Số tiền tối đa là 1.000 tỷ đồng.'
     : amount < minimum ? `Giá bạn nhập (${money(amount)}) thấp hơn mức tối thiểu ${money(minimum)}. Vui lòng nhập lại.` : null;
-  return <form noValidate className="space-y-2.5" onSubmit={e => { e.preventDefault(); setSubmitted(true); if (problem) return; save.mutate({ operationId: form.operationId, amount }); }}>
+  return <Form validate={() => problem ? { bidAmount: problem } : {}} className="space-y-2.5" onSubmit={e => { e.preventDefault(); if (problem || !form.consent || save.isPending || refreshing) return; save.mutate({ operationId: form.operationId, amount }); }}>
     <div className="flex flex-col gap-2.5 sm:flex-row sm:items-end">
       <label className="block flex-1 text-xs font-semibold text-d-on-surface-variant">Tổng tiền trả cho cả lô (đ) — tối thiểu {money(minimum)}
         {/* Ô chữ chỉ nhận chữ số: không có nút tăng/giảm hay cuộn chuột làm đổi giá trị ngoài ý muốn như ô number. */}
-        <input type="text" inputMode="numeric" autoComplete="off" disabled={save.isPending} className={`${inputClass} mt-1 text-base font-bold ${submitted && problem ? 'border-red-500 focus:border-red-500' : ''}`}
-          value={form.amount} aria-invalid={submitted && problem ? true : undefined} aria-describedby="bid-amount-error"
+        <Input name="bidAmount" data-field-label="Tổng tiền trả cho cả lô (đ)" type="text" inputMode="numeric" autoComplete="off" disabled={save.isPending} className={`${inputClass} mt-1 text-base font-bold`}
+          value={form.amount}
           onChange={e => setForm({ ...form, amount: e.target.value.replace(/\D/g, '') })} placeholder={String(minimum)} />
         {form.amount !== '' && Number.isSafeInteger(amount) && <span className="mt-1 block text-xs font-normal">= {money(amount)}</span>}
-        {submitted && problem && <span id="bid-amount-error" role="alert" className="mt-1 block text-xs font-semibold text-red-600">{problem}</span>}
       </label>
-      <button className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full bg-d-primary px-7 py-3 text-sm font-bold text-white shadow-md transition active:scale-95 disabled:opacity-50" disabled={save.isPending || !form.consent || refreshing}><Gavel size={16} />{save.isPending ? 'Đang ghi nhận…' : 'Trả giá cả lô'}</button>
+      <button className="inline-flex items-center justify-center gap-2 rounded-full font-semibold transition active:scale-[.98] disabled:pointer-events-none disabled:opacity-50 outline-none focus-visible:ring-2 focus-visible:ring-d-primary/30 focus-visible:ring-offset-1 min-h-11 px-5 py-2 text-sm bg-d-primary text-white hover:bg-[#385500]" disabled={save.isPending || refreshing}><Gavel size={16} />{save.isPending ? 'Đang ghi nhận…' : 'Trả giá cả lô'}</button>
     </div>
-    <label className="flex cursor-pointer gap-2.5 text-xs text-d-on-surface-variant"><input required type="checkbox" className="mt-0.5 size-4 accent-[#446900]" disabled={save.isPending} checked={form.consent} onChange={e => setForm({ ...form, consent: e.target.checked })} /><span>Tôi xác nhận mua cả lô với mức tiền này nếu trúng; không tự rút hoặc sửa lượt giá đã ghi.{lot.depositPercent > 0 && ` Nếu trúng: ký hợp đồng và cọc ${lot.depositPercent}% giá trúng (tối thiểu ≈ ${money(Math.round(minimum * lot.depositPercent / 100))}) ngoài hệ thống.`}</span></label>
+    <label className="flex cursor-pointer gap-2.5 text-xs text-d-on-surface-variant"><Input required type="checkbox" className="mt-0.5 size-4 accent-[#446900]" disabled={save.isPending} checked={form.consent} onChange={e => setForm({ ...form, consent: e.target.checked })} /><span>Tôi xác nhận mua cả lô với mức tiền này nếu trúng; không tự rút hoặc sửa lượt giá đã ghi.{lot.depositPercent > 0 && ` Nếu trúng: ký hợp đồng và cọc ${lot.depositPercent}% giá trúng (tối thiểu ≈ ${money(Math.round(minimum * lot.depositPercent / 100))}) ngoài hệ thống.`}</span></label>
     <MutationError mutation={save} />
-  </form>;
+  </Form>;
 }
 
 // Thang giá ẩn danh: thấy mọi mức giá đang có để biết giá đang ở đâu, không thấy kho nào đặt.

@@ -66,6 +66,8 @@ namespace Retrack.API.Repositories
             var rawDepots = await _db.Depots
                 .Include(d => d.Owner)
                 .Where(d => d.Owner.IsActive && d.Owner.Role == "DEPOT_OWNER" && d.VerificationStatus == "APPROVED")
+                .Where(d => !_db.SystemConfigs.Any(c => c.ConfigKey == "BUSINESS_MODEL" && c.ConfigValue == "DEPOT_SUBSCRIPTION") ||
+                    _db.DepotSubscriptions.Any(s => s.DepotId == d.Id && (s.PaidUntil > DateTime.UtcNow || s.TrialEndsAt > DateTime.UtcNow)))
                 .Select(d => new
                 {
                     d.Id,
@@ -138,14 +140,14 @@ namespace Retrack.API.Repositories
             var requests = _db.PickupRequests.AsNoTracking().Where(r => r.SellerId == sellerId);
             // Lô thanh lý chỉ tính thu nhập khi Seller đã xác nhận nhận đủ tiền (payment_confirmed_at).
             var sales = _db.LiquidationAgreements.AsNoTracking()
-                .Where(a => a.Lot.SellerId == sellerId && a.PaymentConfirmedAt != null);
+                .Where(a => a.Lot.SellerId == sellerId && a.PaymentConfirmedAt != null && a.Resolution != "CANCELLED");
 
             var pickupIncome = await requests.Where(r => r.Status == "DONE").SumAsync(r => (decimal?)r.NetAmount) ?? 0;
             var pickupMonthly = await requests.Where(r => r.Status == "DONE" && r.UpdatedAt >= monthStart && r.UpdatedAt < nextMonthStart).SumAsync(r => (decimal?)r.NetAmount) ?? 0;
             var liquidationIncome = await sales.SumAsync(a => (decimal?)a.Amount) ?? 0;
             var liquidationMonthly = await sales.Where(a => a.PaymentConfirmedAt >= monthStart && a.PaymentConfirmedAt < nextMonthStart).SumAsync(a => (decimal?)a.Amount) ?? 0;
             var recentSales = await sales.OrderByDescending(a => a.PaymentConfirmedAt).ThenBy(a => a.Id).Take(50)
-                .Select(a => new SellerLiquidationSaleDto { LotId = a.LotId, Title = a.Lot.Title, DepotName = a.Depot.Name, Amount = a.Amount, ConfirmedAt = a.PaymentConfirmedAt!.Value })
+                .Select(a => new SellerLiquidationSaleDto { LotId = a.LotId, Title = a.Lot.Title, DepotName = a.Depot.Name, Amount = a.Amount, ConfirmedAt = a.PaymentConfirmedAt!.Value, FormatVersion = a.FormatVersion })
                 .ToListAsync();
 
             return new SellerStatsDto

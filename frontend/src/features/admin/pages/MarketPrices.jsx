@@ -1,3 +1,4 @@
+import { Form, Input, Select } from '@/components/forms/ValidatedForm';
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
@@ -85,19 +86,19 @@ export default function MarketPrices() {
       {modalOpen && (
         <Modal size="md" icon={Tags} title={editingId ? 'Cập nhật giá tham khảo' : 'Thêm giá tham khảo'} onClose={closeModal} busy={upsertMutation.isPending}
           footer={<FormFooter formId="price-form" onCancel={closeModal} submitting={upsertMutation.isPending} submitLabel={editingId ? 'Lưu thay đổi' : 'Thêm giá'} icon={Check} />}>
-          <form id="price-form" className="flex flex-col gap-4" onSubmit={handleSubmit}>
+          <Form id="price-form" className="flex flex-col gap-4" onSubmit={handleSubmit}>
             <Field label="Loại vật liệu">
-              <select required value={form.materialType} onChange={(e) => setForm((f) => ({ ...f, materialType: e.target.value }))} className={`${inputClass} cursor-pointer`}>
+              <Select required value={form.materialType} onChange={(e) => setForm((f) => ({ ...f, materialType: e.target.value }))} className={`${inputClass} cursor-pointer`}>
                 <option value="" disabled>-- Chọn loại vật liệu --</option>
                 {MATERIAL_OPTIONS.map((m) => <option key={m} value={m}>{MATERIAL_TYPE_LABEL[m]}</option>)}
-              </select>
+              </Select>
             </Field>
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Giá / kg (VNĐ)"><input type="number" min="0" step="100" required value={form.pricePerKg} onChange={(e) => setForm((f) => ({ ...f, pricePerKg: e.target.value }))} className={inputClass} /></Field>
-              <Field label="Ngày hiệu lực"><input type="date" required value={form.effectiveDate} onChange={(e) => setForm((f) => ({ ...f, effectiveDate: e.target.value }))} className={inputClass} /></Field>
+              <Field label="Giá / kg (VNĐ)"><Input type="number" min="0" step="100" required value={form.pricePerKg} onChange={(e) => setForm((f) => ({ ...f, pricePerKg: e.target.value }))} className={inputClass} /></Field>
+              <Field label="Ngày hiệu lực"><Input type="date" required value={form.effectiveDate} onChange={(e) => setForm((f) => ({ ...f, effectiveDate: e.target.value }))} className={inputClass} /></Field>
             </div>
-            <Field label="Nguồn (tùy chọn)"><input placeholder="VD: Thị trường HCM" value={form.source} onChange={(e) => setForm((f) => ({ ...f, source: e.target.value }))} className={inputClass} /></Field>
-          </form>
+            <Field label="Nguồn (tùy chọn)"><Input placeholder="VD: Thị trường HCM" value={form.source} onChange={(e) => setForm((f) => ({ ...f, source: e.target.value }))} className={inputClass} /></Field>
+          </Form>
         </Modal>
       )}
 

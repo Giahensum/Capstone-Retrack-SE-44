@@ -39,7 +39,7 @@ export default function ContractViewer({ contract, onClose }) {
             <p className="text-xs text-d-on-surface-variant">Khổ A4 • in một mặt • có thể ký tay bổ sung trên bản in</p>
             <div className="flex flex-col gap-2 sm:flex-row">
               <button type="button" onClick={() => window.print()} disabled={busy} className="inline-flex items-center justify-center gap-2 rounded-full border border-d-border-subtle bg-white px-5 py-2.5 text-sm font-bold text-d-on-surface hover:bg-d-surface-container disabled:opacity-60"><Printer size={16} />In hợp đồng</button>
-              <button type="button" onClick={downloadPdf} disabled={busy} className="inline-flex items-center justify-center gap-2 rounded-full bg-d-primary px-6 py-2.5 text-sm font-bold text-white shadow-sm transition active:scale-95 disabled:opacity-60">
+              <button type="button" onClick={downloadPdf} disabled={busy} className="inline-flex items-center justify-center gap-2 rounded-full font-semibold transition active:scale-[.98] disabled:pointer-events-none disabled:opacity-50 outline-none focus-visible:ring-2 focus-visible:ring-d-primary/30 focus-visible:ring-offset-1 min-h-11 px-5 py-2 text-sm bg-d-primary text-white hover:bg-[#385500]">
                 {busy ? <Loader2 size={16} className="animate-spin" /> : <FileDown size={16} />}{busy ? 'Đang tạo PDF…' : 'Tải file PDF'}
               </button>
             </div>

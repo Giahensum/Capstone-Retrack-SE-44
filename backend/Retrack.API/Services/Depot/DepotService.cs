@@ -4,7 +4,8 @@ using Retrack.API.Services.Interfaces;
 
 namespace Retrack.API.Services.Depot;
 
-public sealed partial class DepotService(Retrack.API.Repositories.Interfaces.IDepotOwnerRepository owners, Retrack.API.Repositories.Interfaces.IDepotPaymentReadRepository payments) : IDepotService
+public sealed partial class DepotService(Retrack.API.Repositories.Interfaces.IDepotOwnerRepository owners, Retrack.API.Repositories.Interfaces.IDepotPaymentReadRepository payments,
+    IDepotSubscriptionService? subscriptions = null) : IDepotService
 {
     public async Task<List<DepotSummaryDto>> GetDepotsAsync(Guid ownerId)
     {
@@ -30,6 +31,7 @@ public sealed partial class DepotService(Retrack.API.Repositories.Interfaces.IDe
         await RequireOwnerAsync(ownerId, depotId);
         if ((await owners.FindAsync(depotId)).VerificationStatus != "APPROVED")
             throw new DepotConflictException("Kho chưa được Admin xác minh hồ sơ. Vui lòng nộp hồ sơ và chờ duyệt trước khi tạo giao dịch mới.");
+        if (subscriptions != null) await subscriptions.RequireAccessAsync(depotId);
     }
 
     public async Task<PagedResult<DepotPaymentDto>> GetPaymentsAsync(Guid ownerId, Guid depotId, DepotQuery query)
