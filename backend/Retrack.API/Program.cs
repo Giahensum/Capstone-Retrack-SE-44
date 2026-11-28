@@ -102,6 +102,7 @@ builder.Services.AddCors(options =>
 // ===== DEPENDENCY INJECTION =====
 // Repositories
 builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IFactoryRepository, Retrack.API.Repositories.FactoryRepository>();
 builder.Services.AddScoped<IPickupRequestRepository, PickupRequestRepository>();
 builder.Services.AddScoped<IMarketPriceRepository, MarketPriceRepository>();
 builder.Services.AddScoped<IAuditLogRepository, AuditLogRepository>();

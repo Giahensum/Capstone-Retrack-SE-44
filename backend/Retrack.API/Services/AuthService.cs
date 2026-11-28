@@ -31,9 +31,10 @@ namespace Retrack.API.Services
         private readonly IConfiguration _config;
         private readonly IEmailService? _emailService;
         private readonly Repositories.Interfaces.IPasswordResetOtpRepository? _otpRepo;
+        private readonly Repositories.Interfaces.IFactoryRepository? _factoryRepo;
 
         public AuthService(IUserRepository userRepo, IConfiguration config)
-            : this(userRepo, config, (Repositories.Interfaces.IPasswordResetOtpRepository)null!, null!)
+            : this(userRepo, config, (Repositories.Interfaces.IPasswordResetOtpRepository)null!, null!, null!)
         {
         }
 
@@ -42,12 +43,14 @@ namespace Retrack.API.Services
             IUserRepository userRepo,
             IConfiguration config,
             Repositories.Interfaces.IPasswordResetOtpRepository otpRepo,
-            IEmailService emailService)
+            IEmailService emailService,
+            Repositories.Interfaces.IFactoryRepository? factoryRepo = null)
         {
             _userRepo = userRepo;
             _config = config;
             _otpRepo = otpRepo;
             _emailService = emailService;
+            _factoryRepo = factoryRepo;
         }
 
         // ── Email / Password Login ──────────────────────────────────────
@@ -121,7 +124,36 @@ namespace Retrack.API.Services
                 IsActive = true
             };
 
-            await _userRepo.CreateAsync(user);
+            // Thêm User (và hồ sơ Factory cho role FACTORY) vào cùng context rồi lưu một lần.
+            // EF bọc SaveChangesAsync trong một transaction, nên User và Factory hoặc cùng
+            // được lưu, hoặc cùng không lưu. Chỉ trả token sau khi lưu thành công.
+            await _userRepo.AddAsync(user);
+
+            if (role == "FACTORY" && _factoryRepo != null)
+            {
+                var existingFactory = await _factoryRepo.GetByOwnerIdAsync(user.Id);
+                if (existingFactory == null)
+                {
+                    await _factoryRepo.AddAsync(new Retrack.API.Models.Factory
+                    {
+                        OwnerId = user.Id,
+                        Name = fullName,
+                        Address = "Chưa cập nhật"
+                    });
+                }
+            }
+
+            try
+            {
+                await _userRepo.SaveChangesAsync();
+            }
+            catch (DbUpdateException ex)
+            {
+                // Trùng email/số điện thoại do đăng ký đồng thời: trả lỗi nghiệp vụ thay vì 500.
+                throw new InvalidOperationException(
+                    "Email hoặc số điện thoại đã được đăng ký. Vui lòng thử lại hoặc dùng thông tin khác.", ex);
+            }
+
             return BuildResponse(user);
         }
 
