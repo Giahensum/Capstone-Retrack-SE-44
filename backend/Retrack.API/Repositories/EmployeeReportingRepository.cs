@@ -3,7 +3,6 @@ using Retrack.API.Data;
 using Retrack.API.DTOs;
 using Retrack.API.DTOs.Employee;
 using Retrack.API.Models;
-using Retrack.API.Services.Employee;
 using Retrack.API.Repositories.Interfaces;
 
 namespace Retrack.API.Repositories;
