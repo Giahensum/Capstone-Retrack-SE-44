@@ -42,7 +42,7 @@ public sealed class EmployeePickupTests : IAsyncLifetime
     public async Task DisposeAsync() { await db.DisposeAsync(); await connection.DisposeAsync(); }
     private EmployeePickupController Controller(User? user = null, INotificationService? notifications = null)
     {
-        var controller = StaffTestServices.Pickup(db, notifications ?? new NotificationService(db));
+        var controller = StaffTestServices.Pickup(db, notifications ?? new Retrack.API.Services.Shared.NotificationService(new Retrack.API.Repositories.NotificationRepository(db)));
         controller.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(
             new ClaimsIdentity(new[] { new Claim(ClaimTypes.NameIdentifier, (user ?? employee).Id.ToString()), new Claim(ClaimTypes.Role, (user ?? employee).Role) }, "test")) } };
         return controller;

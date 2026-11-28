@@ -143,7 +143,7 @@ public sealed class BuyerFeeWorkflowTests : IAsyncLifetime
         var now = DateTime.UtcNow.AddHours(7);
         // Tiến đồng hồ kiểm thử tới lúc kỳ đóng; không đổi CreatedAt giao dịch để lách quy tắc.
         var closedAt = new DateTimeOffset(new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc).AddMonths(1).AddHours(-7));
-        var adminService = new AdminService(new UserRepository(saved), new MarketPriceRepository(saved), new AuditLogRepository(saved), new PlatformInvoiceRepository(saved), new NotificationService(saved), saved, new global::Retrack.API.Repositories.DepotStaffRepository(saved), new BillingClock(closedAt));
+        var adminService = new AdminService(new UserRepository(saved), new MarketPriceRepository(saved), new AuditLogRepository(saved), new PlatformInvoiceRepository(saved), new Retrack.API.Services.Shared.NotificationService(new Retrack.API.Repositories.NotificationRepository(saved)), saved, new global::Retrack.API.Repositories.DepotStaffRepository(saved), new BillingClock(closedAt));
         var invoices = await adminService.GenerateMonthlyInvoicesAsync(now.Year, now.Month, depot.OwnerId);
         Assert.Empty(invoices);
         Assert.Empty(await adminService.GenerateMonthlyInvoicesAsync(now.Year, now.Month, depot.OwnerId));

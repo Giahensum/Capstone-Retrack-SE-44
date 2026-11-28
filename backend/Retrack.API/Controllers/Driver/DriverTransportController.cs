@@ -21,7 +21,7 @@ public class DriverTransportController(DriverJobService jobs, DriverNoticeServic
     public async Task<IActionResult> Accept(Guid jobId, CancellationToken ct)
     {
         var result = await jobs.AcceptAsync(GetUserId(), jobId, ct);
-        return Ok(Retrack.API.DTOs.ApiResponse<Retrack.API.Services.Driver.DriverJobDto>.Ok(result));
+        return Ok(Retrack.API.DTOs.ApiResponse<Retrack.API.DTOs.Driver.DriverJobDto>.Ok(result));
     }
     // API URL ảnh cũ không còn đủ bằng chứng camera/GPS; chặn đường đi tắt.
     [HttpPost("{jobId:guid}/pickup")]

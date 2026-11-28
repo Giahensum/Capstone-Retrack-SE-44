@@ -1,9 +1,8 @@
+using Retrack.API.DTOs.Driver;
 using Microsoft.EntityFrameworkCore;
 using Retrack.API.Data;
 using Retrack.API.DTOs;
 using Retrack.API.Repositories.Interfaces;
-using Retrack.API.Services.Driver;
-using Retrack.API.Services.Employee;
 namespace Retrack.API.Repositories;
 public sealed class DriverReportingRepository(AppDbContext db, DriverJobRepository jobs) : IDriverReportingRepository
 {
@@ -45,7 +44,7 @@ public sealed class DriverReportingRepository(AppDbContext db, DriverJobReposito
 
     private static IQueryable<DriverHistoryRow> Month(IQueryable<DriverHistoryRow> source, DateTime now)
     {
-        var start = EmployeeReportingService.VietnamMonthStart(now);
+        var start = Retrack.API.Helpers.VietnamTime.MonthStart(now);
         var end = start.AddHours(7).AddMonths(1).AddHours(-7);
         return source.Where(j => j.DeliveredAt >= start && j.DeliveredAt < end);
     }

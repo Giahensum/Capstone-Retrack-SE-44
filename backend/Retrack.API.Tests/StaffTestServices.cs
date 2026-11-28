@@ -23,7 +23,7 @@ internal static class StaffTestServices
     public static DriverDeliveryService Delivery(AppDbContext db, DriverJobService jobs, ICloudinaryService images) =>
         new(new DriverDeliveryRepository(db), new DriverJobRepository(db), new StaffUnitOfWork(db), jobs, images);
     public static EmployeePickupController Pickup(AppDbContext db, INotificationService? notifications = null) =>
-        new(new EmployeePickupService(new EmployeePickupRepository(db), Reports(db), new StaffUnitOfWork(db), notifications ?? new NotificationService(db)));
+        new(new EmployeePickupService(new EmployeePickupRepository(db), Reports(db), new StaffUnitOfWork(db), notifications ?? new Retrack.API.Services.Shared.NotificationService(new Retrack.API.Repositories.NotificationRepository(db))));
     public static DriverNoticeController Notices(AppDbContext db, DriverJobService jobs) =>
         new(new DriverNoticeService(new DriverNoticeRepository(db), jobs));
 }

@@ -1,13 +1,10 @@
+using Retrack.API.DTOs.Driver;
 using Retrack.API.Repositories.Interfaces;
 using Retrack.API.Models;
 using Retrack.API.DTOs;
 using Retrack.API.Services.Depot;
 
 namespace Retrack.API.Services.Driver;
-
-public sealed record JobPlace(string Name, string Address, decimal? Latitude, decimal? Longitude);
-public sealed record DriverJobDto(Guid Id, Guid BatchId, string? BatchCode, string MaterialType,
-    decimal WeightKg, string Status, bool IsMine, JobPlace Depot, JobPlace Factory, DateTime CreatedAt);
 
 public sealed class DriverJobService(IDriverJobRepository repository, IDriverDeliveryRepository delivery, IStaffUnitOfWork work)
 {

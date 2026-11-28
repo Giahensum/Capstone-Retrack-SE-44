@@ -1,5 +1,5 @@
+using Retrack.API.DTOs.Driver;
 using Retrack.API.Models;
-using Retrack.API.Services.Driver;
 
 namespace Retrack.API.Repositories.Interfaces;
 

@@ -17,12 +17,8 @@ public sealed class EmployeeReportingService(IEmployeeReportingRepository reposi
     {
         if (page is < 1 or > 100000 || size is < 1 or > 50) throw new ArgumentException("Trang từ 1 đến 100.000; kích thước trang từ 1 đến 50.");
     }
-    public static DateTime VietnamDayStart(DateTime utc) => DateTime.SpecifyKind(utc.AddHours(7).Date.AddHours(-7), DateTimeKind.Utc);
-    public static DateTime VietnamMonthStart(DateTime utc)
-    {
-        var local = utc.AddHours(7);
-        return new DateTime(local.Year, local.Month, 1, 0, 0, 0, DateTimeKind.Utc).AddHours(-7);
-    }
+    public static DateTime VietnamDayStart(DateTime utc) => Retrack.API.Helpers.VietnamTime.DayStart(utc);
+    public static DateTime VietnamMonthStart(DateTime utc) => Retrack.API.Helpers.VietnamTime.MonthStart(utc);
     public async Task<EmployeeDashboardDto> DashboardAsync(Guid id, CancellationToken ct)
     {
         await RequireAsync(id, ct);
@@ -50,9 +46,3 @@ public sealed class EmployeeReportingService(IEmployeeReportingRepository reposi
         if (await repository.MarkReadAsync(userId, notificationId, ct) == 0) throw new KeyNotFoundException("Không tìm thấy thông báo của bạn.");
     }
 }
-
-public sealed record EmployeeHistoryRow(Guid Id, string SellerName, string Address, string Status, DateTime UpdatedAt, decimal GrossAmount);
-public sealed record EmployeeTotals(int Pickups, decimal WeightKg, decimal GrossAmount);
-public sealed record EmployeeStatsDto(EmployeeTotals AllTime, EmployeeTotals ThisMonth, string Timezone, string DateBasis);
-public sealed record EmployeeNotificationDto(Guid Id, string Title, string? Message, bool IsRead, DateTime CreatedAt, Guid? PickupRequestId);
-public sealed record EmployeeNotificationPage(List<EmployeeNotificationDto> Items, int TotalCount, int UnreadCount, int Page, int PageSize);

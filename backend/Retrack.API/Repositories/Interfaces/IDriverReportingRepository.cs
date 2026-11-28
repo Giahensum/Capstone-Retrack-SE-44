@@ -1,5 +1,5 @@
+using Retrack.API.DTOs.Driver;
 using Retrack.API.DTOs;
-using Retrack.API.Services.Driver;
 namespace Retrack.API.Repositories.Interfaces;
 public interface IDriverReportingRepository
 {

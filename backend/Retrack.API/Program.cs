@@ -186,6 +186,7 @@ builder.Services.Configure<Retrack.API.Services.ESign.DocuSignOptions>(builder.C
 builder.Services.AddHttpClient<Retrack.API.Services.ESign.IDocuSignClient, Retrack.API.Services.ESign.DocuSignClient>(c => c.Timeout = TimeSpan.FromSeconds(30));
 builder.Services.AddScoped<Retrack.API.Services.ESign.IContractEsignService, Retrack.API.Services.ESign.ContractEsignService>();
 builder.Services.AddScoped<Retrack.API.Services.ESign.ILiquidationEsignService, Retrack.API.Services.ESign.LiquidationEsignService>();
+builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.INotificationRepository, Retrack.API.Repositories.NotificationRepository>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.INotificationService, Retrack.API.Services.Shared.NotificationService>();
 
 
@@ -224,7 +225,10 @@ builder.Services.Configure<Retrack.API.Services.Money.PayoutWorkerOptions>(build
 builder.Services.AddHostedService<Retrack.API.Services.Money.AutoPayoutWorker>();
 builder.Services.AddHostedService<Retrack.API.Services.Money.PayoutReconcileWorker>();
 builder.Services.AddHostedService<Retrack.API.Services.Money.RefundReconcileWorker>();
+builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IFactoryNotificationRepository, Retrack.API.Repositories.FactoryNotificationRepository>();
 builder.Services.AddScoped<Retrack.API.Services.Factory.FactoryNotificationService>();
+builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.ISellerNotificationRepository, Retrack.API.Repositories.SellerNotificationRepository>();
+builder.Services.AddScoped<Retrack.API.Services.Seller.SellerNotificationService>();
 
 // Vận chuyển ngoài chỉ Sandbox hoặc Demo theo cấu hình; không tự chuyển chế độ.
 builder.Services.AddOptions<Retrack.API.Services.Shipping.ShippingOptions>()

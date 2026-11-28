@@ -1,9 +1,9 @@
+using Retrack.API.DTOs.Driver;
 using Microsoft.EntityFrameworkCore;
 using Retrack.API.Data;
 using Retrack.API.DTOs;
 using Retrack.API.Models;
 using Retrack.API.Repositories.Interfaces;
-using Retrack.API.Services.Driver;
 namespace Retrack.API.Repositories;
 
 public sealed class DriverJobRepository(AppDbContext db) : IDriverJobRepository
