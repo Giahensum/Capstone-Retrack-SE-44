@@ -6,11 +6,13 @@ using Retrack.API.Repositories.Interfaces;
 
 namespace Retrack.API.Services.Factory;
 
-public abstract class FactoryServiceBase(AppDbContext db, IFactoryOrderRepository? orders = null, IFactoryUnitOfWork? unitOfWork = null)
+public abstract class FactoryServiceBase(AppDbContext db, IFactoryOrderRepository? orders = null, IFactoryUnitOfWork? unitOfWork = null,
+    IFactoryProfileRepository? profiles = null)
 {
     protected AppDbContext Db { get; } = db;
     protected IFactoryOrderRepository OrderRepository { get; } = orders ?? new FactoryOrderRepository(db);
     protected IFactoryUnitOfWork Work { get; } = unitOfWork ?? new FactoryUnitOfWork(db);
+    protected IFactoryProfileRepository Profiles { get; } = profiles ?? new FactoryProfileRepository(db);
 
     // Giữ transaction/DbContext hiện hành của Factory; chỉ bổ sung thông báo cho Owner.
     protected async Task NotifyDepotAsync(Guid depotId, string title, string message, Guid? batchId = null,
@@ -26,16 +28,16 @@ public abstract class FactoryServiceBase(AppDbContext db, IFactoryOrderRepositor
 
     protected async Task<Retrack.API.Models.Factory> CurrentFactory(Guid userId, CancellationToken ct = default)
     {
-        var owner = await Db.Users.AsNoTracking().SingleOrDefaultAsync(x => x.Id == userId, ct);
+        var owner = await Profiles.FindOwnerAsync(userId, ct);
         if (owner is null || !owner.IsActive || !string.Equals(owner.Role, "FACTORY", StringComparison.OrdinalIgnoreCase))
             throw new KeyNotFoundException("Tài khoản chưa có hồ sơ nhà máy.");
 
-        var factory = await Db.Factories.SingleOrDefaultAsync(x => x.OwnerId == userId, ct);
+        var factory = await Profiles.FindByOwnerAsync(userId, ct);
         if (factory is not null) return factory;
 
         factory = new Retrack.API.Models.Factory { OwnerId = owner.Id, Name = owner.FullName, Address = "Chưa cập nhật" };
-        Db.Factories.Add(factory);
-        await Db.SaveChangesAsync(ct);
+        Profiles.Add(factory);
+        await Work.SaveAsync(ct);
         return factory;
     }
 }

@@ -1,4 +1,3 @@
-using Microsoft.EntityFrameworkCore;
 using Retrack.API.Data;
 using Retrack.API.DTOs.Factory;
 using Retrack.API.Models;
@@ -10,7 +9,8 @@ using Retrack.API.Repositories.Interfaces;
 
 namespace Retrack.API.Services.Factory;
 
-public class FactoryProfileService(AppDbContext db, FactoryAttachmentService? attachments = null, IFactoryProfileReadRepository? reads = null) : FactoryServiceBase(db), IFactoryProfileService
+public class FactoryProfileService(AppDbContext db, FactoryAttachmentService? attachments = null, IFactoryProfileReadRepository? reads = null,
+    IFactoryProfileRepository? profiles = null, IFactoryUnitOfWork? work = null) : FactoryServiceBase(db, unitOfWork: work, profiles: profiles), IFactoryProfileService
 {
     private readonly IFactoryProfileReadRepository profileReads = reads ?? new FactoryProfileReadRepository(db);
     public async Task<ServiceResult<ProfileResponse>> GetAsync(Guid userId, CancellationToken ct)
@@ -51,11 +51,11 @@ public class FactoryProfileService(AppDbContext db, FactoryAttachmentService? at
 
     public async Task<ServiceResult<ProfileUpdatedResponse>> UpdateAsync(Guid userId, ProfileRequest request, CancellationToken ct)
     {
-        var factory = await Db.Factories.SingleOrDefaultAsync(x => x.OwnerId == userId, ct);
+        var factory = await Profiles.FindByOwnerAsync(userId, ct);
         if (factory is null)
         {
             factory = new Retrack.API.Models.Factory { OwnerId = userId, Name = request.CompanyName.Trim(), Address = request.Address.Trim() };
-            Db.Factories.Add(factory);
+            Profiles.Add(factory);
         }
         if (attachments is not null &&
             ((request.BusinessLicenseUrl != factory.BusinessLicenseUrl && !attachments.IsOwnedUrl(request.BusinessLicenseUrl, userId)) ||
@@ -73,7 +73,7 @@ public class FactoryProfileService(AppDbContext db, FactoryAttachmentService? at
         factory.AcceptedMaterialsCsv = string.Join(',', request.AcceptedMaterials.Distinct());
         factory.Latitude = request.Latitude;
         factory.Longitude = request.Longitude;
-        await Db.SaveChangesAsync(ct);
+        await Work.SaveAsync(ct);
         return ServiceResult<ProfileUpdatedResponse>.Success(data: new ProfileUpdatedResponse
         {
             Id = factory.Id
