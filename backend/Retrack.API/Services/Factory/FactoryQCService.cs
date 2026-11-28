@@ -5,10 +5,12 @@ using Retrack.API.Models;
 using Retrack.API.Models.Enums;
 using Retrack.API.Services.Interfaces;
 using Retrack.API.Services.Shared;
+using Retrack.API.Repositories.Interfaces;
 
 namespace Retrack.API.Services.Factory;
 
-public class FactoryQCService(AppDbContext db, IConfiguration configuration, FactoryAttachmentService? attachments = null) : FactoryServiceBase(db), IQCService
+public class FactoryQCService(AppDbContext db, IConfiguration configuration, FactoryAttachmentService? attachments = null,
+    IFactoryOrderRepository? orders = null, IFactoryUnitOfWork? work = null) : FactoryServiceBase(db, orders, work), IQCService
 {
     public async Task<ServiceResult<WeighResponse>> WeighAsync(Guid userId, Guid id, WeighRequest request, CancellationToken ct)
     {
@@ -18,7 +20,7 @@ public class FactoryQCService(AppDbContext db, IConfiguration configuration, Fac
         if (request.GrossWeightKg <= request.TareWeightKg)
             return ServiceResult<WeighResponse>.Invalid("Khối lượng tổng phải lớn hơn khối lượng bì.");
         var factory = await CurrentFactory(userId, ct);
-        await using var tx = Db.Database.IsRelational() ? await Db.Database.BeginTransactionAsync(ct) : null;
+        await using var tx = await Work.BeginAsync(ct);
         var batch = await LockOrderAsync(id, factory.Id, ct);
         if (batch is null) return ServiceResult<WeighResponse>.NotFound("Không tìm thấy đơn hàng.");
         if (batch.SettledAt != null || batch.Status is not ("RECEIVED" or "WEIGHED"))
@@ -54,8 +56,8 @@ public class FactoryQCService(AppDbContext db, IConfiguration configuration, Fac
         batch.ActualWeightKg = net;
         batch.Status = "WEIGHED";
         if (notifyWeigh) await NotifyDepotAsync(batch.DepotId, "Nhà máy đã cân lô hàng", $"{factory.Name} đã cập nhật cân lô {batch.Code ?? batch.Id.ToString()}. Xem khối lượng thực tế và độ lệch trong chi tiết lô.", batch.Id, ct: ct);
-        await Db.SaveChangesAsync(ct);
-        if (tx != null) await tx.CommitAsync(ct);
+        await Work.SaveAsync(ct);
+        await tx.CommitAsync(ct);
         return ServiceResult<WeighResponse>.Success(data: new WeighResponse
         {
             Id = batch.Id,
@@ -72,7 +74,7 @@ public class FactoryQCService(AppDbContext db, IConfiguration configuration, Fac
     public async Task<ServiceResult<QualityResponse>> QualityAsync(Guid userId, Guid id, QualityRequest request, CancellationToken ct)
     {
         var factory = await CurrentFactory(userId, ct);
-        await using var tx = Db.Database.IsRelational() ? await Db.Database.BeginTransactionAsync(ct) : null;
+        await using var tx = await Work.BeginAsync(ct);
         var batch = await LockOrderAsync(id, factory.Id, ct);
         if (batch is null) return ServiceResult<QualityResponse>.NotFound("Không tìm thấy đơn hàng.");
         if (batch.SettledAt != null || batch.Status != "WEIGHED" || batch.QualityCheck is null)
@@ -98,8 +100,8 @@ public class FactoryQCService(AppDbContext db, IConfiguration configuration, Fac
             Db.BatchWorkflowEvents.Add(Retrack.API.Services.Depot.BatchSettlementService.Event(batch, userId, request.Accept ? "QC_ACCEPTED" : "QC_REJECTED", from, request.Note));
         await NotifyDepotAsync(batch.DepotId, request.Accept ? "Lô hàng đã đạt KCS" : "Nhà máy từ chối sau KCS",
             request.Accept ? $"{factory.Name} đã chấp nhận KCS lô {batch.Code ?? batch.Id.ToString()}." : $"Lô {batch.Code ?? batch.Id.ToString()}: {request.Note?.Trim()}. Hướng xử lý: {request.Resolution}. Hàng chưa được tính là đã trả về kho.", batch.Id, ct: ct);
-        await Db.SaveChangesAsync(ct);
-        if (tx != null) await tx.CommitAsync(ct);
+        await Work.SaveAsync(ct);
+        await tx.CommitAsync(ct);
         return ServiceResult<QualityResponse>.Success(data: new QualityResponse
         {
             Id = batch.Id,

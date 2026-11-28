@@ -10,7 +10,8 @@ using Retrack.API.Repositories.Interfaces;
 
 namespace Retrack.API.Services.Factory;
 
-public class FactoryMarketService(AppDbContext db, IFactoryMarketRepository? reads = null) : FactoryServiceBase(db), IFactoryMarketService
+public class FactoryMarketService(AppDbContext db, IFactoryMarketRepository? reads = null,
+    IFactoryOrderRepository? orders = null, IFactoryUnitOfWork? work = null) : FactoryServiceBase(db, orders, work), IFactoryMarketService
 {
     private readonly IFactoryMarketRepository marketReads = reads ?? new FactoryMarketRepository(db);
     public async Task<ServiceResult<PageResponse<MarketBatchResponse>>> BatchesAsync(Guid userId, MarketQuery query, CancellationToken ct)
@@ -69,19 +70,9 @@ public class FactoryMarketService(AppDbContext db, IFactoryMarketRepository? rea
     public async Task<ServiceResult<BatchAcceptedResponse>> AcceptAsync(Guid userId, Guid batchId, BatchOfferRequest request, CancellationToken ct)
     {
         var factory = await CurrentFactory(userId, ct);
-        await using var transaction = Db.Database.IsRelational() ? await Db.Database.BeginTransactionAsync(ct) : null;
-        var depotId = await Db.InventoryBatches.AsNoTracking().Where(x => x.Id == batchId).Select(x => (Guid?)x.DepotId).SingleOrDefaultAsync(ct);
-        if (depotId == null) return ServiceResult<BatchAcceptedResponse>.NotFound("Không tìm thấy lô hàng.");
-        if (Db.Database.IsRelational())
-        {
-            // Cùng thứ tự khóa với Depot: kho trước, lô sau.
-            await Db.Depots.FromSqlInterpolated($"SELECT * FROM depots WHERE id = {depotId.Value} FOR UPDATE").LoadAsync(ct);
-            await Db.InventoryBatches.FromSqlInterpolated($"SELECT * FROM inventory_batches WHERE id = {batchId} FOR UPDATE").LoadAsync(ct);
-        }
-        var batch = await Db.InventoryBatches.Include(x => x.Depot).Include(x => x.TransportJob)
-            .SingleOrDefaultAsync(x => x.Id == batchId, ct);
+        await using var transaction = await Work.BeginAsync(ct);
+        var batch = await OrderRepository.LockMarketAsync(batchId, includeTransport: true, ct);
         if (batch is null) return ServiceResult<BatchAcceptedResponse>.NotFound("Không tìm thấy lô hàng.");
-        await Db.Entry(batch).ReloadAsync(ct);
         var availableOnMarketplace = (batch.Status is "MARKETPLACE" or "LISTED" or "DRAFT") && batch.TargetFactoryId is null;
         var directOfferForFactory = ((batch.Status is "PENDING_FACTORY" or "READY_FOR_PICKUP" or "PENDING_APPROVAL") && batch.DirectOfferFactoryId == factory.Id) ||
             (batch.Status == "PENDING_APPROVAL" && batch.TargetFactoryId == factory.Id);
@@ -97,7 +88,7 @@ public class FactoryMarketService(AppDbContext db, IFactoryMarketRepository? rea
             partnership = new FactoryDepotPartnership { FactoryId = factory.Id, DepotId = batch.DepotId, Status = "PENDING" };
             Db.FactoryDepotPartnerships.Add(partnership);
         }
-        await Db.SaveChangesAsync(ct);
+        await Work.SaveAsync(ct);
         // Nhận lô đầu không tự thiết lập quan hệ hợp tác lâu dài.
         if (directOfferForFactory) batch.DirectOfferFactoryId = null;
         batch.TargetFactoryId = factory.Id;
@@ -109,8 +100,8 @@ public class FactoryMarketService(AppDbContext db, IFactoryMarketRepository? rea
             Db.TransportJobs.Add(job);
             if (batch.ShippingMethod == "INTERNAL") await Retrack.API.Services.Driver.DriverJobNotices.QueueAsync(new Retrack.API.Repositories.DriverDeliveryRepository(Db), batch.DepotId, job.Id, ct);
         }
-        await Db.SaveChangesAsync(ct);
-        if (transaction != null) await transaction.CommitAsync(ct);
+        await Work.SaveAsync(ct);
+        await transaction.CommitAsync(ct);
         return ServiceResult<BatchAcceptedResponse>.Success(data: new BatchAcceptedResponse
         {
             Id = batch.Id,
@@ -124,17 +115,9 @@ public class FactoryMarketService(AppDbContext db, IFactoryMarketRepository? rea
     {
         if (string.IsNullOrWhiteSpace(request.Reason)) return ServiceResult.Invalid("Nhập lý do từ chối.");
         var factory = await CurrentFactory(userId, ct);
-        await using var transaction = Db.Database.IsRelational() ? await Db.Database.BeginTransactionAsync(ct) : null;
-        var depotId = await Db.InventoryBatches.AsNoTracking().Where(x => x.Id == batchId).Select(x => (Guid?)x.DepotId).SingleOrDefaultAsync(ct);
-        if (depotId == null) return ServiceResult.NotFound("Không tìm thấy lời mời hợp tác.");
-        if (Db.Database.IsRelational())
-        {
-            await Db.Depots.FromSqlInterpolated($"SELECT * FROM depots WHERE id = {depotId.Value} FOR UPDATE").LoadAsync(ct);
-            await Db.InventoryBatches.FromSqlInterpolated($"SELECT * FROM inventory_batches WHERE id = {batchId} FOR UPDATE").LoadAsync(ct);
-        }
-        var batch = await Db.InventoryBatches.SingleOrDefaultAsync(x => x.Id == batchId, ct);
+        await using var transaction = await Work.BeginAsync(ct);
+        var batch = await OrderRepository.LockMarketAsync(batchId, includeTransport: false, ct);
         if (batch is null) return ServiceResult.NotFound("Không tìm thấy lời mời hợp tác.");
-        await Db.Entry(batch).ReloadAsync(ct);
         var directOfferForFactory = ((batch.Status is "PENDING_FACTORY" or "READY_FOR_PICKUP" or "PENDING_APPROVAL") && batch.DirectOfferFactoryId == factory.Id) ||
             (batch.Status == "PENDING_APPROVAL" && batch.TargetFactoryId == factory.Id);
         // Không cho một nhà máy gỡ lô công khai của chủ kho khỏi chợ.
@@ -144,8 +127,8 @@ public class FactoryMarketService(AppDbContext db, IFactoryMarketRepository? rea
         batch.RejectionReason = request.Reason.Trim();
         batch.DirectOfferFactoryId = null;
         await NotifyDepotAsync(batch.DepotId, "Nhà máy từ chối nhận lô", $"{factory.Name} từ chối lô {batch.Code ?? batch.Id.ToString()}: {batch.RejectionReason}", batch.Id, ct: ct);
-        await Db.SaveChangesAsync(ct);
-        if (transaction != null) await transaction.CommitAsync(ct);
+        await Work.SaveAsync(ct);
+        await transaction.CommitAsync(ct);
         return ServiceResult.Success(message: "Đã từ chối lời mời.");
     }
 }

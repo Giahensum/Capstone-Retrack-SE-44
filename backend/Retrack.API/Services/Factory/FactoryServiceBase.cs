@@ -1,12 +1,16 @@
 using Microsoft.EntityFrameworkCore;
 using Retrack.API.Data;
 using Retrack.API.Models;
+using Retrack.API.Repositories;
+using Retrack.API.Repositories.Interfaces;
 
 namespace Retrack.API.Services.Factory;
 
-public abstract class FactoryServiceBase(AppDbContext db)
+public abstract class FactoryServiceBase(AppDbContext db, IFactoryOrderRepository? orders = null, IFactoryUnitOfWork? unitOfWork = null)
 {
     protected AppDbContext Db { get; } = db;
+    protected IFactoryOrderRepository OrderRepository { get; } = orders ?? new FactoryOrderRepository(db);
+    protected IFactoryUnitOfWork Work { get; } = unitOfWork ?? new FactoryUnitOfWork(db);
 
     // Giữ transaction/DbContext hiện hành của Factory; chỉ bổ sung thông báo cho Owner.
     protected async Task NotifyDepotAsync(Guid depotId, string title, string message, Guid? batchId = null,
@@ -17,24 +21,8 @@ public abstract class FactoryServiceBase(AppDbContext db)
     }
 
     // Các thao tác nhận/cân/KCS/quyết toán dùng cùng thứ tự khóa với Depot.
-    protected async Task<InventoryBatch?> LockOrderAsync(Guid id, Guid factoryId, CancellationToken ct)
-    {
-        var depotId = await Db.InventoryBatches.AsNoTracking().Where(x => x.Id == id && x.TargetFactoryId == factoryId)
-            .Select(x => (Guid?)x.DepotId).SingleOrDefaultAsync(ct);
-        if (depotId is null) return null;
-        if (Db.Database.IsRelational())
-            await Db.Depots.FromSqlInterpolated($"SELECT * FROM depots WHERE id = {depotId.Value} FOR UPDATE").LoadAsync(ct);
-        var query = Db.Database.IsRelational()
-            ? Db.InventoryBatches.FromSqlInterpolated($"SELECT * FROM inventory_batches WHERE id = {id} AND target_factory_id = {factoryId} FOR UPDATE")
-            : Db.InventoryBatches.Where(x => x.Id == id && x.TargetFactoryId == factoryId);
-        var batch = await query.Include(x => x.QualityCheck).SingleOrDefaultAsync(ct);
-        if (batch != null)
-        {
-            await Db.Entry(batch).ReloadAsync(ct);
-            if (batch.QualityCheck != null) await Db.Entry(batch.QualityCheck).ReloadAsync(ct);
-        }
-        return batch;
-    }
+    protected Task<InventoryBatch?> LockOrderAsync(Guid id, Guid factoryId, CancellationToken ct) =>
+        OrderRepository.LockAsync(id, factoryId, ct);
 
     protected async Task<Retrack.API.Models.Factory> CurrentFactory(Guid userId, CancellationToken ct = default)
     {
