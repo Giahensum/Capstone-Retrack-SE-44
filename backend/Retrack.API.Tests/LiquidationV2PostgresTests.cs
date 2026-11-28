@@ -77,13 +77,8 @@ public sealed class LiquidationV2PostgresTests : IAsyncLifetime
         public Task<PayOsPayment> GetPaymentAsync(long code, CancellationToken ct = default) => throw new NotSupportedException();
         public bool VerifyWebhookData(JsonElement data, string signature) => false;
     }
-    private async Task<T> RunPaid<T>(Func<LiquidationV2Service, Task<T>> action)
-    {
-        await using var db = Open();
-        var subscriptions = new DepotSubscriptionService(new DepotSubscriptionRepository(db), new NoPayOs(), clock);
-        return await action(new(new LiquidationV2Repository(db), new DepotService(new DepotOwnerRepository(db), new DepotPaymentReadRepository(db)),
-            new DepotUnitOfWork(db), new DepotBatchRepository(db), clock, subscriptions));
-    }
+    // Service() đã kiểm tra hạn gói qua DepotService (giống DI production); giữ tên RunPaid để test hạn gói dễ đọc.
+    private Task<T> RunPaid<T>(Func<LiquidationV2Service, Task<T>> action) => Run(action);
     private async Task TrialAsync(Guid depot, TimeSpan left)
     {
         await using var db = Open();
@@ -359,6 +354,11 @@ public sealed class LiquidationV2PostgresTests : IAsyncLifetime
         var created = await Run(s => s.CreateAsync(seller, Campaign(Guid.NewGuid())));
         var lot = created.Campaign.Id; var iron = created.Items.Single(x => x.Unit == "kg").Id;
         clock.Advance(TimeSpan.FromMinutes(2));
+        await using (var db = Open()) // setup chung tạo sẵn dùng thử; test này bắt đầu từ kho chưa có gói
+        {
+            db.DepotSubscriptions.RemoveRange(await db.DepotSubscriptions.Where(x => x.DepotId == depotA || x.DepotId == depotB).ToListAsync());
+            await db.SaveChangesAsync();
+        }
         // Kho chưa dùng thử/mua gói: không đăng ký được hạng mục (402 SUBSCRIPTION_REQUIRED).
         await Assert.ThrowsAsync<DepotSubscriptionRequiredException>(() => RunPaid(s => s.RegisterAsync(ownerA, depotA, lot, new(true, [iron]))));
         await using (var db = Open()) Assert.False(await db.Set<LiquidationParticipation>().AnyAsync(x => x.LotId == lot));
@@ -388,6 +388,10 @@ public sealed class LiquidationV2PostgresTests : IAsyncLifetime
             sub.TrialEndsAt = clock.Now.AddMinutes(-1); await db.SaveChangesAsync();
         }
         Guid agreementId; await using (var db = Open()) agreementId = (await db.LiquidationAgreements.SingleAsync(x => x.LotId == lot)).Id;
+        // Phiên mới phải chốt số cân bàn giao trước khi báo thanh toán; các bước này vẫn chạy khi kho đã hết hạn gói.
+        var won = await RunPaid(s => s.AgreementAsync(ownerB, depotB, agreementId));
+        await RunPaid(s => s.ProposeHandoverAsync(ownerB, depotB, agreementId, Proposal(won)));
+        await RunPaid(s => s.DecideHandoverAsync(seller, agreementId, new(1, true, null)));
         var reported = await RunPaid(s => s.BuyerActionAsync(ownerB, depotB, agreementId, "REPORT_PAYMENT", "Chuyển khoản VCB 456"));
         Assert.Equal("WAITING_SELLER_CONFIRM", reported.Stage);
     }
@@ -628,13 +632,6 @@ public sealed class LiquidationV2PostgresTests : IAsyncLifetime
         ReceivedAt = DateTime.UtcNow, PurchaseCost = 300_000, CostsConfirmed = true, PostImmediately = true, ConfirmBulkReceived = true,
         Lines = [new() { Kind = "MATERIAL", MaterialType = "IRON", Name = "Sắt", Unit = "kg", Quantity = 90 }], Expenses = [new("OTHER", "Vận chuyển và phân loại", 45_000)]
     };
-    private sealed class NoPayOs : IPayOsClient
-    {
-        public bool IsConfigured => false;
-        public Task<PayOsLink> CreatePaymentLinkAsync(long code, long amount, string description, CancellationToken ct = default) => throw new NotSupportedException();
-        public Task<PayOsPayment> GetPaymentAsync(long code, CancellationToken ct = default) => throw new NotSupportedException();
-        public bool VerifyWebhookData(System.Text.Json.JsonElement data, string signature) => false;
-    }
 
 }
 
