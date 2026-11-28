@@ -17,13 +17,7 @@ public class AdminServiceTests
     private static AppDbContext NewDb() => new(new DbContextOptionsBuilder<AppDbContext>()
         .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
 
-    private static AdminService NewService(AppDbContext db) => new(
-        new UserRepository(db),
-        new MarketPriceRepository(db),
-        new AuditLogRepository(db),
-        new PlatformInvoiceRepository(db),
-        new NotificationService(db),
-        db);
+    private static AdminService NewService(AppDbContext db) => new(new UserRepository(db), new MarketPriceRepository(db), new AuditLogRepository(db), new PlatformInvoiceRepository(db), new NotificationService(db), db, new global::Retrack.API.Repositories.DepotStaffRepository(db));
 
     private static DateTime Utc(int year, int month, int day) => new(year, month, day, 12, 0, 0, DateTimeKind.Utc);
 

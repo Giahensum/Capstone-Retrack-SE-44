@@ -82,7 +82,7 @@ public sealed class DepotCapacityTests : IAsyncLifetime
     {
         await using var db = Open(); for (var i = 0; i < 10; i++) await Add(db, i);
         var blocked = await Add(db, 11, true, false);
-        var service = new AdminService(new UserRepository(db), new MarketPriceRepository(db), new AuditLogRepository(db), new PlatformInvoiceRepository(db), new NotificationService(db), db);
+        var service = new AdminService(new UserRepository(db), new MarketPriceRepository(db), new AuditLogRepository(db), new PlatformInvoiceRepository(db), new NotificationService(db), db, new global::Retrack.API.Repositories.DepotStaffRepository(db));
         await Assert.ThrowsAsync<DepotConflictException>(() => service.SetUserActiveAsync(blocked.UserId, true, admin));
         db.ChangeTracker.Clear(); Assert.False((await db.Users.SingleAsync(x => x.Id == blocked.UserId)).IsActive);
     }
@@ -123,7 +123,7 @@ public sealed class DepotCapacityTests : IAsyncLifetime
             await using var db = Open();
             try
             {
-                if (activate) await new AdminService(new UserRepository(db), new MarketPriceRepository(db), new AuditLogRepository(db), new PlatformInvoiceRepository(db), new NotificationService(db), db).SetUserActiveAsync(userId, true, admin);
+                if (activate) await new AdminService(new UserRepository(db), new MarketPriceRepository(db), new AuditLogRepository(db), new PlatformInvoiceRepository(db), new NotificationService(db), db, new global::Retrack.API.Repositories.DepotStaffRepository(db)).SetUserActiveAsync(userId, true, admin);
                 else await Service(db).CreateAsync(owner, depot, Input());
                 return true;
             }

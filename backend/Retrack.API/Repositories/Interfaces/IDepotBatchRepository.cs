@@ -17,7 +17,7 @@ public interface IDepotBatchRepository
     Task<long> NextNumberAsync();
     Task<string?> FeeConfigurationAsync();
     void AddBatch(InventoryBatch batch);
-    Task AddTransportAsync(TransportJob job, Guid depotId);
+    void AddTransport(TransportJob job);
     Task<InventoryBatch?> LockBatchAsync(Guid id);
     Task<bool> HasTransportAsync(Guid batchId);
     Task<PlatformTransaction?> FindFeeAsync(Guid batchId);

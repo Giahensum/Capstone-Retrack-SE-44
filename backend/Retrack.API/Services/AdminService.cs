@@ -61,6 +61,7 @@ namespace Retrack.API.Services
         private readonly AppDbContext _db;
         private readonly TimeProvider _clock;
         private readonly Depot.DepotCapacityOptions _capacity;
+        private readonly Retrack.API.Repositories.Interfaces.IDepotStaffRepository _staffRepository;
 
         public AdminService(
             IUserRepository userRepo,
@@ -68,7 +69,7 @@ namespace Retrack.API.Services
             IAuditLogRepository auditRepo,
             IPlatformInvoiceRepository invoiceRepo,
             INotificationService notificationService,
-            AppDbContext db, TimeProvider? clock = null, Microsoft.Extensions.Options.IOptions<Depot.DepotCapacityOptions>? capacity = null)
+            AppDbContext db, Retrack.API.Repositories.Interfaces.IDepotStaffRepository staffRepository, TimeProvider? clock = null, Microsoft.Extensions.Options.IOptions<Depot.DepotCapacityOptions>? capacity = null)
         {
             _userRepo = userRepo;
             _priceRepo = priceRepo;
@@ -76,6 +77,7 @@ namespace Retrack.API.Services
             _invoiceRepo = invoiceRepo;
             _notificationService = notificationService;
             _db = db;
+            _staffRepository = staffRepository;
             _clock = clock ?? TimeProvider.System;
             _capacity = capacity?.Value ?? new();
         }
@@ -205,7 +207,7 @@ namespace Retrack.API.Services
             }
 
             // Dùng cùng khóa với StaffService để Admin không kích hoạt vượt hạn mức kho.
-            var staffRepository = new DepotStaffRepository(_db);
+            var staffRepository = _staffRepository;
             var depotIds = await _db.DepotStaffs.Where(s => s.UserId == id).Select(s => s.DepotId).Distinct().ToArrayAsync();
             await using var capacityTransaction = await staffRepository.LockAsync(depotIds);
             await _db.Entry(user).ReloadAsync();

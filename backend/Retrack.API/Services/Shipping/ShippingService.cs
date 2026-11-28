@@ -1,15 +1,15 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
-using Retrack.API.Data;
+using Retrack.API.Repositories.Interfaces;
+using Retrack.API.DTOs.Depot;
 using Retrack.API.Models;
 using Retrack.API.Services.Depot;
 using Retrack.API.Services.Interfaces;
 
 namespace Retrack.API.Services.Shipping;
 
-public sealed class ShippingService(AppDbContext db, IDepotService scope, IShippingProvider provider, IOptions<ShippingOptions> options)
+public sealed class ShippingService(IShippingRepository repository, IDepotService scope, IShippingProvider provider, IOptions<ShippingOptions> options, IDriverDeliveryRepository delivery)
 {
     private static readonly string[] ReadyStates = ["TRANSPORT_READY", "ACCEPTED", "READY_FOR_PICKUP"];
     private static readonly string[] Terminal = ["COMPLETED","CANCELED","REJECTED","EXPIRED"];
@@ -18,14 +18,11 @@ public sealed class ShippingService(AppDbContext db, IDepotService scope, IShipp
         if(provider is LalamoveSandboxProvider lalamove) return await lalamove.CitiesAsync(ct);
         return new { maxWeightKg=options.Value.MaxWeightKg, internalFactor=options.Value.InternalFactor };
     }
-    private async Task LockAsync(Guid depot, CancellationToken ct)
-    {
-        if (db.Database.IsNpgsql()) await db.Depots.FromSqlInterpolated($"SELECT * FROM depots WHERE id={depot} FOR UPDATE").LoadAsync(ct);
-    }
+    private Task LockAsync(Guid depot, CancellationToken ct) => repository.LockDepotAsync(depot, ct);
     private async Task<InventoryBatch> BatchAsync(Guid owner, Guid depot, Guid batch, CancellationToken ct)
     {
         await scope.RequireOwnerAsync(owner,depot);
-        return await db.InventoryBatches.Include(b=>b.TransportJob).SingleOrDefaultAsync(b=>b.Id==batch && b.DepotId==depot,ct)
+        return await repository.FindBatchAsync(depot,batch,ct)
             ?? throw new KeyNotFoundException("Không tìm thấy lô trong kho đang quản lý.");
     }
     private async Task<ShippingRoute> RouteAsync(Guid depotId, Guid factoryId, string material, decimal weight, CancellationToken ct)
@@ -33,8 +30,8 @@ public sealed class ShippingService(AppDbContext db, IDepotService scope, IShipp
         if (weight<=0 || weight>options.Value.MaxWeightKg || decimal.Round(weight,3)!=weight)
             throw new ArgumentException($"Khối lượng vận chuyển phải lớn hơn 0 và không quá {options.Value.MaxWeightKg} kg, tối đa 3 số lẻ.");
         material = Retrack.API.Services.Shared.MaterialCatalog.RequireCode(material);
-        var depot = await db.Depots.SingleAsync(d=>d.Id==depotId,ct);
-        var factory = await db.Factories.SingleOrDefaultAsync(f=>f.Id==factoryId && f.Owner!=null && f.Owner.IsActive && f.Owner.Role=="FACTORY",ct)
+        var depot = await repository.FindDepotAsync(depotId,ct);
+        var factory = await repository.FindActiveFactoryAsync(factoryId,ct)
             ?? throw new ArgumentException("Nhà máy không còn hoạt động.");
         bool Coordinates(decimal? lat, decimal? lng) => lat is >= -90 and <= 90 && lng is >= -180 and <= 180;
         if (!Coordinates(depot.Latitude,depot.Longitude) || !Coordinates(factory.Latitude,factory.Longitude)
@@ -58,11 +55,11 @@ public sealed class ShippingService(AppDbContext db, IDepotService scope, IShipp
             WeightKg=input.WeightKg,Method=input.Method,Provider=provider.Name,ServiceType=options.Value.ServiceType,
             ProviderQuoteId=result.Id,Amount=result.Amount,Factor=factor,EstimatedCost=decimal.Ceiling(result.Amount*factor),
             DistanceKm=result.DistanceKm,ExpiresAt=result.ExpiresAt,SnapshotJson=JsonSerializer.Serialize(route),ProviderJson=result.Json };
-        db.ShippingQuotes.Add(q); await db.SaveChangesAsync(ct); return q;
+        repository.AddQuote(q); await repository.SaveAsync(ct); return q;
     }
     public async Task<ShippingQuote> ValidateQuoteAsync(Guid owner,Guid depot,Guid id,Guid? factory,string material,decimal weight,string method,CancellationToken ct)
     {
-        var q = await db.ShippingQuotes.SingleOrDefaultAsync(x=>x.Id==id && x.OwnerId==owner && x.DepotId==depot,ct)
+        var q = await repository.FindQuoteAsync(owner,depot,id,ct)
             ?? throw new KeyNotFoundException("Không tìm thấy báo giá của kho.");
         if (factory!=q.FactoryId || material!=q.MaterialType || weight!=q.WeightKg || method!=q.Method || q.Provider!=provider.Name)
             throw new DepotConflictException("Thông tin lô hoặc phương thức đã thay đổi. Hãy lấy lại báo giá.");
@@ -82,10 +79,9 @@ public sealed class ShippingService(AppDbContext db, IDepotService scope, IShipp
     public async Task<object> GetAsync(Guid owner,Guid depot,Guid id,CancellationToken ct)
     {
         var b=await BatchAsync(owner,depot,id,ct);
-        var q=b.ShippingQuoteId.HasValue ? await db.ShippingQuotes.AsNoTracking().SingleOrDefaultAsync(x=>x.Id==b.ShippingQuoteId,ct) : null;
-        var shipment=await db.ExternalShipments.AsNoTracking().Where(s=>s.BatchId==id).OrderByDescending(s=>s.CreatedAt).ThenByDescending(s=>s.Id).FirstOrDefaultAsync(ct);
-        var events=shipment==null ? [] : await db.ShippingEvents.AsNoTracking().Where(e=>e.ShipmentId==shipment.Id)
-            .OrderByDescending(e=>e.CreatedAt).ThenBy(e=>e.Id).Take(50).Select(e=>new {e.Status,e.Source,e.CreatedAt}).ToListAsync(ct);
+        var q=b.ShippingQuoteId.HasValue ? await repository.ReadQuoteAsync(b.ShippingQuoteId.Value,ct) : null;
+        var shipment=await repository.ReadLatestAsync(id,ct);
+        var events=shipment==null ? new List<ShippingEventDto>() : await repository.EventsAsync(shipment.Id,ct);
         return new { method=b.ShippingMethod, receivedAt=b.FactoryReceivedAt, enabled=options.Value.Mode!="Disabled", quote=q==null ? null : QuoteDto(q),
             shipment=shipment==null ? null : new {shipment.Id,shipment.OperationId,shipment.ProviderOrderId,shipment.Status,shipment.ShareLink,shipment.Amount,shipment.Currency,shipment.LastError,shipment.LastCheckedAt,shipment.CreatedAt,shipment.UpdatedAt}, events };
     }
@@ -95,13 +91,13 @@ public sealed class ShippingService(AppDbContext db, IDepotService scope, IShipp
     {
         if (method is not ("INTERNAL" or "EXTERNAL")) throw new ArgumentException("Phương thức vận chuyển không hợp lệ.");
         await scope.RequireOwnerAsync(owner,depot);
-        await using var tx=await db.Database.BeginTransactionAsync(ct);
+        await using var tx=await repository.BeginAsync(ct);
         await LockAsync(depot,ct);
         var b=await BatchAsync(owner,depot,id,ct);
         if (b.FactoryReceivedAt!=null || b.Status is not ("LISTED" or "DRAFT" or "PENDING_APPROVAL" or "PENDING_FACTORY" or "TRANSPORT_READY" or "ACCEPTED" or "READY_FOR_PICKUP")
             || b.TransportJob?.DriverId!=null || b.TransportJob?.Status is "PICKED_UP" or "IN_TRANSIT" or "DELIVERED")
             throw new DepotConflictException("Lô đã được nhận vận chuyển hoặc không còn cho phép đổi phương thức.");
-        if (await db.ExternalShipments.AnyAsync(s=>s.BatchId==id && !Terminal.Contains(s.Status),ct))
+        if (await repository.HasOpenShipmentAsync(id,Terminal,ct))
             throw new DepotConflictException("Cần xử lý hoặc hủy vận đơn hiện tại trước khi đổi phương thức.");
         if (method=="EXTERNAL") RequireEnabled();
         if (quoteId.HasValue) await ValidateQuoteAsync(owner,depot,quoteId.Value,b.TargetFactoryId??b.DirectOfferFactoryId,b.MaterialType,b.DeclaredWeightKg,method,ct);
@@ -109,8 +105,8 @@ public sealed class ShippingService(AppDbContext db, IDepotService scope, IShipp
         b.ShippingMethod=method; b.ShippingQuoteId=quoteId; b.UpdatedAt=DateTime.UtcNow;
         if(b.TransportJob!=null) b.TransportJob.Status=method=="EXTERNAL" ? "EXTERNAL_WAITING" : "PENDING";
         if(changedToInternal && b.TransportJob!=null)
-            await Retrack.API.Services.Driver.DriverJobNotices.QueueAsync(new Retrack.API.Repositories.DriverDeliveryRepository(db),depot,b.TransportJob.Id,ct);
-        await db.SaveChangesAsync(ct); await tx.CommitAsync(ct);
+            await delivery.QueueAvailableAsync(depot,b.TransportJob.Id,ct);
+        await repository.SaveAsync(ct); await tx.CommitAsync(ct);
     }
     public static ShippingContacts ValidateContacts(ShippingContacts c)
     {
@@ -130,11 +126,11 @@ public sealed class ShippingService(AppDbContext db, IDepotService scope, IShipp
         var contacts=ValidateContacts(input.Contacts);
         await scope.RequireOwnerAsync(owner,depot); await scope.RequireTradingAsync(owner,depot); RequireEnabled();
         ExternalShipment shipment; ShippingQuote quote;
-        await using(var tx=await db.Database.BeginTransactionAsync(ct))
+        await using(var tx=await repository.BeginAsync(ct))
         {
             await LockAsync(depot,ct);
             var b=await BatchAsync(owner,depot,id,ct);
-            var existing=await db.ExternalShipments.SingleOrDefaultAsync(s=>s.OperationId==input.OperationId,ct);
+            var existing=await repository.FindOperationAsync(input.OperationId,ct);
             if(existing!=null) {
                 if(existing.BatchId!=id || existing.QuoteId!=input.QuoteId || existing.ContactJson!=JsonSerializer.Serialize(contacts))
                     throw new DepotConflictException("Mã thao tác đã được dùng cho nội dung khác.");
@@ -143,22 +139,22 @@ public sealed class ShippingService(AppDbContext db, IDepotService scope, IShipp
             if(b.ShippingMethod!="EXTERNAL" || !ReadyStates.Contains(b.Status) || b.TargetFactoryId==null || b.FactoryReceivedAt!=null
                 || b.TransportJob?.DriverId!=null || b.TransportJob?.Status is "PICKED_UP" or "IN_TRANSIT" or "DELIVERED")
                 throw new DepotConflictException("Chỉ đặt xe khi lô thuê ngoài đã được nhà máy chấp thuận, chưa có tài xế nhận.");
-            if(await db.ExternalShipments.AnyAsync(s=>s.BatchId==id && !Terminal.Contains(s.Status),ct))
+            if(await repository.HasOpenShipmentAsync(id,Terminal,ct))
                 throw new DepotConflictException("Lô đã có yêu cầu vận chuyển. Hãy kiểm tra vận đơn hiện tại.");
-            if(await db.ExternalShipments.AnyAsync(s=>s.QuoteId==input.QuoteId,ct))
+            if(await repository.HasUsedQuoteAsync(input.QuoteId,ct))
                 throw new DepotConflictException("Báo giá đã được dùng cho một yêu cầu đặt xe. Hãy lấy báo giá mới.");
             quote=await ValidateQuoteAsync(owner,depot,input.QuoteId,b.TargetFactoryId,b.MaterialType,b.DeclaredWeightKg,"EXTERNAL",ct);
             shipment=new ExternalShipment {BatchId=id,QuoteId=quote.Id,OperationId=input.OperationId,Provider=provider.Name,
                 Amount=quote.Amount,ContactJson=JsonSerializer.Serialize(contacts)};
-            db.ExternalShipments.Add(shipment);
+            repository.AddShipment(shipment);
             b.ShippingQuoteId=quote.Id;
             if(b.TransportJob==null) {
                 b.TransportJob=new TransportJob {BatchId=id,Status="EXTERNAL_WAITING"};
-                db.TransportJobs.Add(b.TransportJob);
+                repository.AddTransport(b.TransportJob);
             }
             b.TransportJob.Status="EXTERNAL_WAITING";
             AddEvent(shipment,"BOOKING","OWNER");
-            await db.SaveChangesAsync(ct); await tx.CommitAsync(ct);
+            await repository.SaveAsync(ct); await tx.CommitAsync(ct);
         }
         try {
             var result=await provider.BookAsync(quote,contacts,input.OperationId,id,ct);
@@ -166,23 +162,22 @@ public sealed class ShippingService(AppDbContext db, IDepotService scope, IShipp
         }
         catch(Exception ex) when(ex is HttpRequestException or OperationCanceledException or JsonException) {
             // Đối tác có thể đã tạo đơn. Khóa retry để không tạo hai chuyến.
-            db.ChangeTracker.Clear();
-            var s=await db.ExternalShipments.SingleAsync(s=>s.Id==shipment.Id,CancellationToken.None);
+            repository.ClearTracking();
+            var s=await repository.FindShipmentAsync(shipment.Id,CancellationToken.None);
             s.Status="UNKNOWN";s.LastError="Chưa xác định kết quả đặt xe. Cần đối soát mã thao tác với nhà vận chuyển; không đặt lại.";
             s.UpdatedAt=DateTime.UtcNow; AddEvent(s,"UNKNOWN","BOOKING_RESPONSE");
-            await db.SaveChangesAsync(CancellationToken.None);
+            await repository.SaveAsync(CancellationToken.None);
             throw new DepotConflictException(s.LastError);
         }
     }
-    private void AddEvent(ExternalShipment s,string status,string source)=>db.ShippingEvents.Add(new ShippingEvent {ShipmentId=s.Id,Status=status,Source=source});
+    private void AddEvent(ExternalShipment s,string status,string source)=>repository.AddEvent(new ShippingEvent {ShipmentId=s.Id,Status=status,Source=source});
     public async Task ApplyAsync(Guid id,ProviderOrder result,string source,CancellationToken ct)
     {
-        var batchId=await db.ExternalShipments.Where(s=>s.Id==id).Select(s=>s.BatchId).SingleAsync(ct);
-        var depot=await db.InventoryBatches.Where(b=>b.Id==batchId).Select(b=>b.DepotId).SingleAsync(ct);
-        db.ChangeTracker.Clear();
-        await using var tx=await db.Database.BeginTransactionAsync(ct); await LockAsync(depot,ct);
-        var s=await db.ExternalShipments.SingleAsync(s=>s.Id==id,ct);
-        var b=await db.InventoryBatches.Include(b=>b.TransportJob).SingleAsync(b=>b.Id==s.BatchId,ct);
+        var depot=await repository.DepotForShipmentAsync(id,ct);
+        repository.ClearTracking();
+        await using var tx=await repository.BeginAsync(ct); await LockAsync(depot,ct);
+        var s=await repository.FindShipmentAsync(id,ct);
+        var b=await repository.FindBatchAsync(s.BatchId,ct);
         if(s.ProviderOrderId!=null && s.ProviderOrderId!=result.Id) throw new DepotConflictException("Mã vận đơn đối soát không khớp.");
         if(Terminal.Contains(s.Status)) return;
         if(result.Status is not ("ASSIGNING_DRIVER" or "ON_GOING" or "PICKED_UP" or "COMPLETED" or "CANCELED" or "REJECTED" or "EXPIRED"))
@@ -197,11 +192,11 @@ public sealed class ShippingService(AppDbContext db, IDepotService scope, IShipp
             if(result.Status=="COMPLETED" && (ReadyStates.Contains(b.Status)||b.Status=="IN_TRANSIT")) {b.Status="DELIVERED";b.TransportJob.Status="DELIVERED";}
             b.UpdatedAt=DateTime.UtcNow;b.TransportJob.UpdatedAt=DateTime.UtcNow;
         }
-        await db.SaveChangesAsync(ct);await tx.CommitAsync(ct);
+        await repository.SaveAsync(ct);await tx.CommitAsync(ct);
     }
     public async Task RefreshAsync(Guid shipmentId,CancellationToken ct)
     {
-        var s=await db.ExternalShipments.AsNoTracking().SingleAsync(s=>s.Id==shipmentId,ct);
+        var s=await repository.ReadShipmentAsync(shipmentId,ct);
         if(s.Provider!=provider.Name || s.ProviderOrderId==null || Terminal.Contains(s.Status)) return;
         await ApplyAsync(s.Id,await provider.GetAsync(s,ct),"RECONCILIATION",ct);
     }
@@ -209,8 +204,7 @@ public sealed class ShippingService(AppDbContext db, IDepotService scope, IShipp
     {
         await BatchAsync(owner,depot,batchId,ct);
         RequireEnabled();
-        var shipment=await db.ExternalShipments.AsNoTracking().Where(s=>s.BatchId==batchId)
-            .OrderByDescending(s=>s.CreatedAt).ThenByDescending(s=>s.Id).FirstOrDefaultAsync(ct)
+        var shipment=await repository.ReadLatestAsync(batchId,ct)
             ?? throw new DepotConflictException("Lô chưa có yêu cầu vận chuyển.");
         if(shipment.Provider!=provider.Name || shipment.ProviderOrderId==null)
             throw new DepotConflictException("Chưa có mã vận đơn hoặc cấu hình nhà vận chuyển không khớp.");
@@ -222,7 +216,7 @@ public sealed class ShippingService(AppDbContext db, IDepotService scope, IShipp
     {
         await BatchAsync(owner,depot,batchId,ct); RequireEnabled();
         if(string.IsNullOrWhiteSpace(orderId)||orderId.Length>100)throw new ArgumentException("Mã vận đơn không hợp lệ.");
-        var s=await db.ExternalShipments.AsNoTracking().Where(s=>s.BatchId==batchId).OrderByDescending(s=>s.CreatedAt).FirstOrDefaultAsync(ct)
+        var s=await repository.ReadRecoveryAsync(batchId,ct)
             ?? throw new KeyNotFoundException("Chưa có yêu cầu cần đối soát.");
         if(s.Status is not ("UNKNOWN" or "BOOKING") || s.Provider!=provider.Name || s.Provider!="LALAMOVE_SANDBOX")
             throw new DepotConflictException("Yêu cầu không ở trạng thái cần đối soát mã vận đơn.");
@@ -235,19 +229,37 @@ public sealed class ShippingService(AppDbContext db, IDepotService scope, IShipp
     {
         await scope.RequireOwnerAsync(owner,depot);
         ExternalShipment s;
-        await using(var tx=await db.Database.BeginTransactionAsync(ct)) {
+        await using(var tx=await repository.BeginAsync(ct)) {
             await LockAsync(depot,ct); await BatchAsync(owner,depot,id,ct);
-            s=await db.ExternalShipments.Where(x=>x.BatchId==id).OrderByDescending(x=>x.CreatedAt).FirstOrDefaultAsync(ct)
+            s=await repository.FindLatestAsync(id,ct)
                 ?? throw new KeyNotFoundException("Chưa có vận đơn.");
             if(s.Status=="CANCELED")return;
             if(s.Status is not ("ASSIGNING_DRIVER" or "ON_GOING") || s.ProviderOrderId==null || s.Provider!=provider.Name)
                 throw new DepotConflictException("Vận đơn không còn cho phép yêu cầu hủy. Cần phối hợp nhà vận chuyển.");
             s.Status="CANCEL_REQUESTED";s.UpdatedAt=DateTime.UtcNow;AddEvent(s,s.Status,"OWNER");
-            await db.SaveChangesAsync(ct);await tx.CommitAsync(ct);
+            await repository.SaveAsync(ct);await tx.CommitAsync(ct);
         }
         await provider.CancelAsync(s,ct);
         // Sau DELETE thành công vẫn đối soát trạng thái; không tự hoàn tồn hoặc đổi sang xe kho.
         if(s.Provider=="DEMO") await ApplyAsync(s.Id,new(s.ProviderOrderId!,"CANCELED",null,s.Amount),"CANCEL_RESPONSE",ct);
         else await RefreshAsync(s.Id,ct);
+    }
+
+    // Worker gọi cùng service để giữ chính sách đối soát ở lớp nghiệp vụ.
+    public async Task<List<Guid>> ReconciliationCandidatesAsync(CancellationToken ct)
+    {
+        var cutoff=DateTime.UtcNow.AddSeconds(-10);
+        var staleBooking=DateTime.UtcNow.AddMinutes(-2);
+        await repository.MarkStaleBookingsAsync(staleBooking,
+            "Yêu cầu đặt xe bị gián đoạn. Cần đối soát mã thao tác trước khi đặt lại.",ct);
+        return await repository.ReconciliationIdsAsync(provider.Name,cutoff,ct);
+    }
+    public async Task RecordSyncFailureAsync(Guid id,CancellationToken ct)
+    {
+        repository.ClearTracking();
+        var shipment=await repository.FindShipmentAsync(id,ct);
+        shipment.LastCheckedAt=DateTime.UtcNow;
+        shipment.LastError="Chưa đồng bộ được trạng thái vận chuyển. Hệ thống sẽ thử lại.";
+        await repository.SaveAsync(ct);
     }
 }

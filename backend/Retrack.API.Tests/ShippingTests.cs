@@ -20,9 +20,9 @@ public sealed class ShippingTests : IAsyncLifetime
     private Depot depot=null!;
     private Factory factory=null!;
     private InventoryBatch batch=null!;
-    private ShippingService Service(IShippingProvider? provider=null)=>new(db,
+    private ShippingService Service(IShippingProvider? provider=null)=>new(new ShippingRepository(db),
         new DepotService(new DepotOwnerRepository(db),new DepotPaymentReadRepository(db)),
-        provider??new DemoShippingProvider(Options.Create(config)),Options.Create(config));
+        provider??new DemoShippingProvider(Options.Create(config)),Options.Create(config),new DriverDeliveryRepository(db));
     public async Task InitializeAsync() {
         await connection.OpenAsync();connection.CreateFunction("NOW",()=>DateTime.UtcNow.ToString("O"));
         db=new(new DbContextOptionsBuilder<AppDbContext>().UseSqlite(connection).Options);await db.Database.EnsureCreatedAsync();
@@ -119,5 +119,70 @@ public sealed class ShippingTests : IAsyncLifetime
     }
     [Fact] public async Task DisabledProviderDoesNotSilentlyFallbackToDemo() {
         config.Mode="Disabled";await Assert.ThrowsAsync<DepotConflictException>(()=>Quote());
+    }
+
+    [Fact] public async Task Shipping_detail_keeps_public_shape_and_excludes_entity_graph() {
+        var value=System.Text.Json.JsonSerializer.SerializeToElement(await Service().GetAsync(owner.Id,depot.Id,batch.Id,default));
+        Assert.Equal(new[]{"enabled","events","method","quote","receivedAt","shipment"},value.EnumerateObject().Select(x=>x.Name).Order().ToArray());
+        Assert.Equal("EXTERNAL",value.GetProperty("method").GetString());
+        Assert.Equal(System.Text.Json.JsonValueKind.Null,value.GetProperty("shipment").ValueKind);
+        Assert.Empty(value.GetProperty("events").EnumerateArray());
+    }
+    [Fact] public async Task Webhook_only_marks_known_sandbox_shipment_without_advancing_batch_or_payment() {
+        var quote=await Quote();
+        var shipment=new ExternalShipment {BatchId=batch.Id,QuoteId=quote.Id,OperationId=Guid.NewGuid(),Provider="LALAMOVE_SANDBOX",ProviderOrderId="sandbox-only",Status="ASSIGNING_DRIVER",Amount=12345};
+        db.ExternalShipments.Add(shipment);await db.SaveChangesAsync();
+        var controller=new Retrack.API.Controllers.Depot.ShippingWebhookController(new ShippingWebhookService(new ShippingRepository(db)));
+        var payload=System.Text.Json.JsonSerializer.SerializeToElement(new {data=new {orderId="sandbox-only",status="COMPLETED",amount=1}});
+        await controller.Receive(payload,default); db.ChangeTracker.Clear();
+        var row=await db.ExternalShipments.SingleAsync(); Assert.NotNull(row.LastWebhookAt);Assert.Equal("ASSIGNING_DRIVER",row.Status);Assert.Equal(12345,row.Amount);
+        Assert.Equal("TRANSPORT_READY",(await db.InventoryBatches.SingleAsync()).Status);Assert.Empty(await db.ShippingEvents.ToListAsync());
+        var stamped=row.LastWebhookAt;await controller.Receive(payload,default);db.ChangeTracker.Clear();
+        Assert.Equal(stamped,(await db.ExternalShipments.SingleAsync()).LastWebhookAt);
+    }
+
+    [Fact] public async Task Shipping_detail_preserves_event_fields_and_bounded_history() {
+        var quote=await Quote();
+        await Service().BookAsync(owner.Id,depot.Id,batch.Id,new(Guid.NewGuid(),quote.Id,Contacts),default);
+        var shipment=await db.ExternalShipments.SingleAsync();
+        var epoch=DateTime.UtcNow.AddHours(-1);
+        db.ShippingEvents.AddRange(Enumerable.Range(0,60).Select(i=>new ShippingEvent {ShipmentId=shipment.Id,Status="ON_GOING",Source="TEST",CreatedAt=epoch.AddSeconds(i)}));
+        await db.SaveChangesAsync();
+        var value=System.Text.Json.JsonSerializer.SerializeToElement(await Service().GetAsync(owner.Id,depot.Id,batch.Id,default));
+        var events=value.GetProperty("events").EnumerateArray().ToArray();
+        Assert.Equal(50,events.Length);
+        Assert.Equal(new[]{"CreatedAt","Source","Status"},events[0].EnumerateObject().Select(p=>p.Name).Order().ToArray());
+        Assert.Equal("BOOKING_RESPONSE",events[0].GetProperty("Source").GetString());
+        Assert.False(value.GetProperty("shipment").TryGetProperty("Batch",out _));
+    }
+
+    [Fact] public async Task Reconciliation_marks_stale_booking_and_retries_only_eligible_provider_orders() {
+        var now=DateTime.UtcNow;
+        ExternalShipment New(string state,string provider,string? order,DateTime checkedAt,DateTime created) {
+            var lot=new InventoryBatch {DepotId=depot.Id,TargetFactoryId=factory.Id,MaterialType="PET",DeclaredWeightKg=1200,Status="TRANSPORT_READY",ShippingMethod="EXTERNAL"};
+            var quote=new ShippingQuote {OwnerId=owner.Id,DepotId=depot.Id,FactoryId=factory.Id,MaterialType="PET",Provider=provider,ExpiresAt=now.AddMinutes(5)};
+            db.InventoryBatches.Add(lot);db.ShippingQuotes.Add(quote);
+            return new() {BatchId=lot.Id,QuoteId=quote.Id,OperationId=Guid.NewGuid(),Status=state,Provider=provider,ProviderOrderId=order,LastCheckedAt=checkedAt,CreatedAt=created};
+        }
+        var stale=New("BOOKING","DEMO",null,now,now.AddMinutes(-3));
+        var fresh=New("BOOKING","DEMO",null,now,now);
+        var eligible=Enumerable.Range(0,6).Select(i=>New("ON_GOING","DEMO","order-"+i,now.AddMinutes(-5).AddSeconds(i),now)).ToArray();
+        var wrong=New("ON_GOING","OTHER","other",now.AddMinutes(-5),now);
+        var terminal=New("COMPLETED","DEMO","done",now.AddMinutes(-5),now);
+        var recent=New("ON_GOING","DEMO","recent",now,now);
+        db.ExternalShipments.AddRange(eligible.Concat(new[]{stale,fresh,wrong,terminal,recent}));
+        await db.SaveChangesAsync();
+        var ids=await Service().ReconciliationCandidatesAsync(default);
+        Assert.Equal(eligible.Take(5).Select(s=>s.Id),ids);
+        db.ChangeTracker.Clear();
+        Assert.Equal("UNKNOWN",(await db.ExternalShipments.FindAsync(stale.Id))!.Status);
+        Assert.Equal("BOOKING",(await db.ExternalShipments.FindAsync(fresh.Id))!.Status);
+        await Service().RecordSyncFailureAsync(eligible[0].Id,default);
+        db.ChangeTracker.Clear();
+        var failed=(await db.ExternalShipments.FindAsync(eligible[0].Id))!;
+        Assert.Equal("ON_GOING",failed.Status);
+        Assert.True(failed.LastCheckedAt>=now);
+        Assert.Equal("Chưa đồng bộ được trạng thái vận chuyển. Hệ thống sẽ thử lại.",failed.LastError);
+        Assert.Empty(await db.ShippingEvents.ToListAsync());
     }
 }
