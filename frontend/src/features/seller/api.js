@@ -43,12 +43,13 @@ export const sellerApi = {
   confirmLiquidationHandover: (agreementId) => api.patch(`/seller/liquidations/agreements/${agreementId}/confirm-handover`).then(r => r.data.data),
   signLiquidation: (agreementId) => api.patch(`/seller/liquidations/agreements/${agreementId}/sign`).then(r => r.data.data),
   confirmLiquidationDeposit: (agreementId) => api.patch(`/seller/liquidations/agreements/${agreementId}/confirm-deposit`).then(r => r.data.data),
-  // Phiên thanh lý nhiều hạng mục (V2): tiền mua = đơn giá trúng x số lượng đã đăng; hai bên tự thanh toán.
+  // Phiên thanh lý nhiều hạng mục (V2): tiền theo policy công bố, phiên mới cần chốt cân bàn giao; hai bên tự thanh toán.
   getLiquidationsV2: (params) => api.get('/seller/liquidations/v2', { params }).then(r => r.data.data),
   getLiquidationV2: (id) => api.get(`/seller/liquidations/v2/${id}`).then(r => r.data.data),
   getLiquidationV2ItemBids: (id, itemId, page = 1) => api.get(`/seller/liquidations/v2/${id}/items/${itemId}/bids`, { params: { page } }).then(r => r.data.data),
   createLiquidationV2: (data) => api.post('/seller/liquidations/v2', data).then(r => r.data.data),
   cancelLiquidationV2: (id, reason) => api.post(`/seller/liquidations/v2/${id}/cancel`, { reason }).then(r => r.data),
+  decideLiquidationV2Handover: (id, payload) => api.patch(`/seller/liquidations/v2/agreements/${id}/handover-quantity`, payload).then(r => r.data.data),
   liquidationV2AgreementAction: (agreementId, action, reason) => (action === 'abandon'
     ? api.post(`/seller/liquidations/v2/agreements/${agreementId}/abandon-report`, { reason })
     : api.patch(`/seller/liquidations/v2/agreements/${agreementId}/${action}`)).then(r => r.data.data),

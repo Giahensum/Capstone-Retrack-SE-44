@@ -1,6 +1,8 @@
 namespace Retrack.API.Services.Depot;
 
 public record CostingLine(decimal Quantity, decimal ReferencePrice, decimal DirectCost);
+public record CostingItem(Guid Id, decimal Amount);
+public record ItemCostingLine(Guid ItemId, CostingLine Cost);
 public record CostingSource(Guid Id, decimal Quantity, decimal? UnitCost);
 public record CostingTake(Guid Id, decimal Quantity, decimal? UnitCost);
 
@@ -22,6 +24,24 @@ public static class DepotCosting
             remaining -= share;
             return share + x.DirectCost;
         }).ToArray();
+    }
+
+    public static decimal[] AllocateItems(decimal common, IReadOnlyList<CostingItem> items, IReadOnlyList<ItemCostingLine> lines)
+    {
+        if(common<0 || items.Count==0 || lines.Count==0 || items.Any(x=>x.Id==Guid.Empty || x.Amount<=0) ||
+            items.Select(x=>x.Id).Distinct().Count()!=items.Count || lines.Any(x=>!items.Any(i=>i.Id==x.ItemId)) ||
+            items.Any(x=>!lines.Any(l=>l.ItemId==x.Id)))
+            throw new ArgumentException("Dòng hàng phải giữ đủ nguồn hạng mục và tiền mua hợp lệ.");
+        // Chỉ chi phí chung được chia giữa các hạng mục; tiền mua của mỗi hạng mục giữ nguyên.
+        var commonShares=Allocate(0,common,items.Select(x=>new CostingLine(1,x.Amount,0)).ToArray());
+        var result=new decimal[lines.Count];
+        for(var i=0;i<items.Count;i++)
+        {
+            var indices=Enumerable.Range(0,lines.Count).Where(j=>lines[j].ItemId==items[i].Id).ToArray();
+            var costs=Allocate(items[i].Amount,commonShares[i],indices.Select(j=>lines[j].Cost).ToArray());
+            for(var j=0;j<indices.Length;j++)result[indices[j]]=costs[j];
+        }
+        return result;
     }
 
     // Danh sách nguồn đã được sắp theo thời gian nhận; không suy ra nguồn vật lý khi hàng trộn.

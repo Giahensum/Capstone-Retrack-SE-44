@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { linesFromIntakeSource } from './stockIntake.js';
+import { linesFromIntakeSource, needsReferencePrice } from './stockIntake.js';
 
 test('điền đúng vật liệu, tên và đơn vị, không coi lượng đăng là lượng đã thực nhập', () => {
  const source={items:[{agreementItemId:'a',kind:'MATERIAL',materialCode:'COPPER',name:'Đồng đã tháo dỡ',unit:'kg',postedQuantity:100,winningUnitPrice:3000}]};
@@ -16,4 +16,23 @@ test('đồ cũ quy đổi đơn vị cái và bộ, tách khỏi phế liệu k
 test('hạng mục hỗn hợp chưa có mã không tự biến thành sắt', () => {
  const [line]=linesFromIntakeSource({items:[{agreementItemId:'x',kind:'MATERIAL',materialCode:null,name:'Phế liệu hỗn hợp',unit:'kg',postedQuantity:100}]});
  assert.equal(line.materialType,'');assert.equal(line.quantity,'');
+});
+
+test('nguồn đã chốt cân tự điền lượng bàn giao và giữ mã hạng mục cho tính vốn', () => {
+ const source={items:[{agreementItemId:'a',kind:'MATERIAL',materialCode:'IRON',name:'Sắt',unit:'kg',postedQuantity:100,confirmedQuantity:95,finalAmount:285000}]};
+ const [line]=linesFromIntakeSource(source);
+ assert.equal(line.quantity,95);
+ assert.equal(line.agreementItemId,'a');
+ assert.equal(line.sourceAmount,285000);
+ assert.match(line.sourceHint,/95/);
+ assert.equal(source.items[0].postedQuantity,100);
+});
+
+test('chỉ hỏi tỷ trọng khi tách một nguồn ra nhiều đầu ra, không gom tiền hai hạng mục', () => {
+ const separate=[{agreementItemId:'a'},{agreementItemId:'b'}];
+ assert.equal(needsReferencePrice(separate,separate[0]),false);
+ const split=[...separate,{agreementItemId:'a'}];
+ assert.equal(needsReferencePrice(split,split[0]),true);
+ assert.equal(needsReferencePrice(split,split[1]),false);
+ assert.equal(needsReferencePrice([{},{}],{}),true);
 });

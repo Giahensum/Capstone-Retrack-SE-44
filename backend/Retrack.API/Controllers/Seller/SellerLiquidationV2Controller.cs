@@ -37,6 +37,10 @@ public class SellerLiquidationV2Controller(ISellerLiquidationV2Service service) 
         return Ok(ApiResponse<string>.Ok("Đã hủy phiên thanh lý."));
     }
 
+    [HttpPatch("agreements/{id:guid}/handover-quantity")]
+    public async Task<IActionResult> DecideQuantity(Guid id, DecideLiquidationHandoverDto dto) =>
+        Ok(ApiResponse<LiquidationV2AgreementDto>.Ok(await service.DecideHandoverAsync(UserId,id,dto),"Đã lưu phản hồi bảng cân/kiểm đếm."));
+
     [HttpPatch("agreements/{id:guid}/confirm-payment")]
     public async Task<IActionResult> ConfirmPayment(Guid id) =>
         Ok(ApiResponse<LiquidationV2AgreementDto>.Ok(await service.SellerActionAsync(UserId, id, "CONFIRM_PAYMENT"), "Đã xác nhận nhận đủ tiền."));

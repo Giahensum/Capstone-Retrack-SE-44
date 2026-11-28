@@ -65,6 +65,8 @@ namespace Retrack.API.Data
         public DbSet<LiquidationParticipationItem> LiquidationParticipationItems { get; set; }
         public DbSet<LiquidationItemBid> LiquidationItemBids { get; set; }
         public DbSet<LiquidationAgreementItem> LiquidationAgreementItems { get; set; }
+        public DbSet<LiquidationHandover> LiquidationHandovers { get; set; }
+        public DbSet<LiquidationHandoverLine> LiquidationHandoverLines { get; set; }
 
         // Thu/chi qua sàn (RETRACK_MONEY_V1)
         public DbSet<MoneyCollection> MoneyCollections { get; set; }
@@ -112,6 +114,11 @@ namespace Retrack.API.Data
             modelBuilder.Entity<LiquidationItem>().HasOne(x => x.Lot).WithMany().OnDelete(DeleteBehavior.Cascade);
             modelBuilder.Entity<LiquidationAgreementItem>().HasOne(x => x.Agreement).WithMany(x => x.Items).OnDelete(DeleteBehavior.Restrict);
             modelBuilder.Entity<LiquidationAgreementItem>().HasOne(x => x.Item).WithMany().OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<LiquidationHandover>().HasIndex(x => new { x.AgreementId, x.Revision }).IsUnique();
+            modelBuilder.Entity<LiquidationHandover>().HasOne(x => x.Agreement).WithMany().OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<LiquidationHandoverLine>().HasOne(x => x.Handover).WithMany(x => x.Lines).OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<LiquidationHandoverLine>().HasOne(x => x.AgreementItem).WithMany().OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<LiquidationHandoverLine>().HasIndex(x => new { x.HandoverId, x.AgreementItemId }).IsUnique();
             modelBuilder.Entity<LiquidationAgreementItem>().HasIndex(x => x.ItemId).IsUnique();
             modelBuilder.Entity<LiquidationAgreementItem>().HasIndex(x => x.WinningBidId).IsUnique();
             modelBuilder.Entity<LiquidationBid>().HasIndex(x => new { x.LotId, x.CreatedAt });
@@ -136,6 +143,7 @@ namespace Retrack.API.Data
                 .IsDescending(false, true, false).HasDatabaseName("ix_inventory_batches_depot_newest");
             modelBuilder.Entity<DepotStockReceipt>().HasIndex(x => new { x.DepotId, x.CreatedAt });
             modelBuilder.Entity<DepotStockLine>().HasIndex(x => new { x.ReceiptId, x.Position }).IsUnique();
+            modelBuilder.Entity<DepotStockLine>().HasOne<LiquidationAgreementItem>().WithMany().HasForeignKey(x=>x.AgreementItemId).OnDelete(DeleteBehavior.Restrict);
             modelBuilder.Entity<DepotBatchCostSource>().HasIndex(x => new { x.BatchId, x.SourceType, x.SourceId }).IsUnique();
             modelBuilder.Entity<DepotReuseSale>().HasIndex(x => x.LineId);
             modelBuilder.Entity<DepotStockReceipt>().HasOne(x => x.Depot).WithMany().OnDelete(DeleteBehavior.Restrict);

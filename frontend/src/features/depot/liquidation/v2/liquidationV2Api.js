@@ -9,6 +9,7 @@ export const UNIT_LABELS = { kg: 'kg', cai: 'cái', bo: 'bộ' };
 export const unitLabel = (unit) => UNIT_LABELS[unit] ?? unit;
 export const ITEM_STATUS = { OPEN: 'Đang mở', WON: 'Đã có kho thắng', UNSOLD: 'Không bán được' };
 export const AGREEMENT_STAGE = {
+  WAITING_BUYER_QUANTITY: 'Chờ kho nhập cân bàn giao', WAITING_SELLER_QUANTITY: 'Chờ Seller xác nhận cân',
   WAITING_BUYER_PAYMENT: 'Chờ kho thanh toán', WAITING_SELLER_CONFIRM: 'Chờ Seller xác nhận tiền', WAITING_HANDOVER: 'Chờ Seller bàn giao',
   WAITING_OWNER_RECEIVE: 'Chờ kho xác nhận nhận hàng', COMPLETED: 'Đã nhận hàng', DISPUTED: 'Chờ Admin xử lý báo bỏ mua', CANCELLED: 'Admin đã hủy',
 };

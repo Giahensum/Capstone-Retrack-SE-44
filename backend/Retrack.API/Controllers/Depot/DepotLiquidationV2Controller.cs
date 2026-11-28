@@ -41,6 +41,10 @@ public class DepotLiquidationV2Controller(ILiquidationV2Service service) : Contr
     public async Task<IActionResult> Agreement(Guid depotId, Guid id) =>
         Ok(ApiResponse<LiquidationV2AgreementDto>.Ok(await service.AgreementAsync(UserId, depotId, id)));
 
+    [HttpPost("agreements/{id:guid}/handover-quantity")]
+    public async Task<IActionResult> ProposeQuantity(Guid depotId, Guid id, ProposeLiquidationHandoverDto dto) =>
+        Ok(ApiResponse<LiquidationV2AgreementDto>.Ok(await service.ProposeHandoverAsync(UserId,depotId,id,dto),"Đã gửi bảng cân/kiểm đếm cho Seller."));
+
     [HttpPatch("agreements/{id:guid}/report-payment")]
     public async Task<IActionResult> ReportPayment(Guid depotId, Guid id, LiquidationPaymentInput dto) =>
         Ok(ApiResponse<LiquidationV2AgreementDto>.Ok(await service.BuyerActionAsync(UserId, depotId, id, "REPORT_PAYMENT", dto.Reference), "Đã báo đã thanh toán trực tiếp, chờ Seller xác nhận."));

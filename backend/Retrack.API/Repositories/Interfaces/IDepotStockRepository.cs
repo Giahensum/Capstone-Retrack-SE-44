@@ -5,6 +5,7 @@ using Retrack.API.Models;
 namespace Retrack.API.Repositories.Interfaces;
 
 public record DepotCostLayer(Guid Id, string SourceType, string Label, decimal Quantity, decimal? UnitCost, DateTime ReceivedAt);
+public record DepotBulkCostItem(Guid Id, decimal? Amount);
 public record DepotBulkStockSource(Guid DepotId, decimal Amount, bool Ready);
 public record BatchCostTotals(int SourceCount, decimal Quantity, int MissingOriginal, int MissingEffective,
     decimal OriginalCost, decimal EffectiveCost, int ExpenseCount, decimal SellingCosts, bool HasReconciliation);
@@ -21,6 +22,7 @@ public interface IDepotStockRepository
     Task<DepotBulkStockSource?> BulkSourceAsync(Guid agreementId);
     Task<LiquidationAgreement?> LockBulkSourceAsync(Guid agreementId);
     Task<bool> HasBulkReceiptAsync(Guid agreementId);
+    Task<List<DepotBulkCostItem>> BulkCostItemsAsync(Guid agreementId);
     void ReplaceExpenses(DepotStockReceipt receipt, List<StockExpenseInput> expenses);
     Task<PagedResult<ReusableStockDto>> ReusableAsync(Guid depotId, DepotQuery query);
     Task<DepotStockLine?> FindLineAsync(Guid depotId, Guid lineId);

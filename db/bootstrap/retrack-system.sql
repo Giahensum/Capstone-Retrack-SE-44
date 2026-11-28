@@ -1516,6 +1516,38 @@ ALTER TABLE pickup_requests ADD COLUMN IF NOT EXISTS requires_owner_review boole
 ALTER TABLE pickup_requests ADD COLUMN IF NOT EXISTS dispatch_review_reason text;
 CREATE INDEX IF NOT EXISTS ix_pickup_dispatch_date ON pickup_requests(collection_date,status) WHERE requires_owner_review=false;
 -- RETRACK_PICKUP_SCHEDULE_V2_END
+
+-- RETRACK_HANDOVER_QUANTITY_V1_BEGIN
+-- Phiên cũ giữ tiền theo lượng đăng. Chỉ ứng dụng tạo phiên mới chọn chính sách chốt bàn giao.
+ALTER TABLE liquidation_lots ADD COLUMN IF NOT EXISTS pricing_basis VARCHAR(40) NOT NULL DEFAULT 'POSTED_QUANTITY';
+ALTER TABLE liquidation_agreements ADD COLUMN IF NOT EXISTS pricing_basis VARCHAR(40) NOT NULL DEFAULT 'POSTED_QUANTITY';
+ALTER TABLE liquidation_agreements ADD COLUMN IF NOT EXISTS handover_revision INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE liquidation_agreements ADD COLUMN IF NOT EXISTS handover_status VARCHAR(20) NOT NULL DEFAULT 'NONE';
+CREATE TABLE IF NOT EXISTS liquidation_handovers (
+ id UUID PRIMARY KEY,
+ agreement_id UUID NOT NULL REFERENCES liquidation_agreements(id) ON DELETE RESTRICT,
+ revision INTEGER NOT NULL CHECK (revision > 0),
+ status VARCHAR(20) NOT NULL CHECK (status IN ('PENDING','CONFIRMED','REJECTED','SUPERSEDED')),
+ request_hash VARCHAR(64) NOT NULL,
+ amount NUMERIC(18,0) NOT NULL CHECK (amount > 0 AND amount <= 1000000000000),
+ note VARCHAR(1000), proposed_by UUID NOT NULL, created_at TIMESTAMPTZ NOT NULL,
+ decision_note VARCHAR(1000), decided_by UUID, decided_at TIMESTAMPTZ,
+ UNIQUE(agreement_id,revision)
+);
+CREATE TABLE IF NOT EXISTS liquidation_handover_lines (
+ id UUID PRIMARY KEY,
+ handover_id UUID NOT NULL REFERENCES liquidation_handovers(id) ON DELETE CASCADE,
+ agreement_item_id UUID NOT NULL REFERENCES liquidation_agreement_items(id) ON DELETE RESTRICT,
+ quantity NUMERIC(18,3) NOT NULL CHECK (quantity > 0),
+ unit_price NUMERIC(18,0) NOT NULL CHECK (unit_price > 0),
+ amount NUMERIC(18,0) NOT NULL CHECK (amount > 0),
+ UNIQUE(handover_id,agreement_item_id)
+);
+ALTER TABLE depot_stock_receipts ADD COLUMN IF NOT EXISTS source_revision VARCHAR(512);
+ALTER TABLE depot_stock_lines ADD COLUMN IF NOT EXISTS agreement_item_id UUID REFERENCES liquidation_agreement_items(id) ON DELETE RESTRICT;
+CREATE INDEX IF NOT EXISTS ix_depot_stock_lines_agreement_item ON depot_stock_lines(agreement_item_id) WHERE agreement_item_id IS NOT NULL;
+-- RETRACK_HANDOVER_QUANTITY_V1_END
+
 -- RETRACK_SCHEMA_END
 
 -- RETRACK_SEED_BEGIN
