@@ -21,18 +21,20 @@ public sealed partial class DepotStockService
         if (Revision(receipt) != dto.ExpectedRevision) throw new DepotConflictException("Phiếu đã được cập nhật ở cửa sổ khác. Hãy đóng và mở lại phiếu để kiểm tra trước khi sửa.");
         var input = new CreateStockReceiptDto { OperationId = id, BulkAgreementId = receipt.BulkAgreementId,
             SourceType = receipt.SourceType, ReceivedAt = receipt.ReceivedAt, Reference = dto.Reference,
-            PurchaseCost = dto.PurchaseCost, CostsConfirmed = dto.CostsConfirmed, Lines = dto.Lines, Expenses = dto.Expenses };
+            PurchaseCost = dto.PurchaseCost, CostsConfirmed = dto.CostsConfirmed, Lines = dto.Lines, Expenses = dto.Expenses, SourceRevision=dto.SourceRevision ?? receipt.SourceRevision };
         ValidateReceipt(input, true);
         if (receipt.BulkAgreementId.HasValue &&
             dto.PurchaseCost != (await repository.BulkSourceAsync(receipt.BulkAgreementId.Value))?.Amount)
             throw new ArgumentException("Giá mua lô trúng phải giữ nguyên tổng tiền trong thỏa thuận.");
-        var costs = dto.CostsConfirmed ? DepotCosting.Allocate(dto.PurchaseCost, dto.Expenses.Sum(x => x.Amount),
-            dto.Lines.Select(x => new CostingLine(x.Quantity, x.ReferencePrice, x.DirectCost)).ToArray()) : null;
+        if(receipt.Lines.Any(x=>x.AgreementItemId.HasValue) && dto.Lines.Any(x=>!x.AgreementItemId.HasValue))
+            throw new ArgumentException("Không được bỏ liên kết hạng mục nguồn khi sửa phiếu.");
+        var costs=await AllocateReceiptCostsAsync(depotId,receipt.BulkAgreementId,dto.PurchaseCost,input.SourceRevision,dto.Lines,dto.Expenses.Sum(x=>x.Amount),dto.CostsConfirmed);
         var lines = dto.Lines.Select((x, i) => new DepotStockLine { ReceiptId = id, Kind = x.Kind, MaterialType = x.MaterialType,
-            Name = x.Name.Trim(), Unit = x.Unit, Quantity = x.Quantity, ReferencePrice = x.ReferencePrice,
+            Name = x.Name.Trim(), Unit = x.Unit, Quantity = x.Quantity, ReferencePrice = x.ReferencePrice, AgreementItemId=x.AgreementItemId,
             DirectCost = x.DirectCost, ConditionNote = x.ConditionNote, Position = i, AllocatedCost = costs?[i] }).ToList();
         repository.ReplaceLines(receipt, lines);
         repository.ReplaceExpenses(receipt, dto.Expenses);
+        receipt.SourceRevision=input.SourceRevision;
         receipt.Reference = dto.Reference.Trim(); receipt.PurchaseCost = dto.PurchaseCost; receipt.CostsConfirmed = dto.CostsConfirmed;
         await work.SaveAsync(); await tx.CommitAsync();
         return Map(receipt, true);
@@ -41,9 +43,9 @@ public sealed partial class DepotStockService
     // Phiên bản nội dung phát hiện form cũ; không thêm cột hoặc sửa snapshot đã ghi sổ.
     private static string Revision(DepotStockReceipt receipt) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
         JsonSerializer.Serialize(new { receipt.Id, receipt.Status, receipt.Reference, receipt.SourceType, ReceivedAt = receipt.ReceivedAt.Ticks / 10,
-            PurchaseCost = Canonical(receipt.PurchaseCost), receipt.CostsConfirmed, receipt.BulkAgreementId,
+            PurchaseCost = Canonical(receipt.PurchaseCost), receipt.CostsConfirmed, receipt.BulkAgreementId, receipt.SourceRevision,
             Lines = receipt.Lines.OrderBy(x => x.Position).ThenBy(x => x.Id).Select(x => new { x.Id, x.Kind, x.MaterialType,
-                x.Name, x.Unit, Quantity = Canonical(x.Quantity), ReferencePrice = Canonical(x.ReferencePrice),
+                x.Name, x.Unit, x.AgreementItemId, Quantity = Canonical(x.Quantity), ReferencePrice = Canonical(x.ReferencePrice),
                 DirectCost = Canonical(x.DirectCost), AllocatedCost = x.AllocatedCost.HasValue ? Canonical(x.AllocatedCost.Value) : null, x.ConditionNote, x.Position }),
             Expenses = receipt.Expenses.OrderBy(x => x.Id).Select(x => new { x.Id, x.Category, x.Description, Amount = Canonical(x.Amount) }) }))));
     private static string Canonical(decimal value) => value.ToString("G29", CultureInfo.InvariantCulture);

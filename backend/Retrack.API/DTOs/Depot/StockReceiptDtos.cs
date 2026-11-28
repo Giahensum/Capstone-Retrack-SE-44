@@ -2,16 +2,18 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Retrack.API.DTOs.Depot;
 
-public record StockCostPreviewInput(decimal PurchaseCost, List<StockLineInput> Lines, List<StockExpenseInput> Expenses);
+public record StockCostPreviewInput(decimal PurchaseCost, List<StockLineInput> Lines, List<StockExpenseInput> Expenses, Guid? BulkAgreementId = null, string? SourceRevision = null);
 public record StockCostPreviewLine(string Name, string Unit, decimal Quantity, decimal ReferencePrice,
     decimal ReferenceValue, decimal SharePercent, decimal SharedCost, decimal DirectCost, decimal AllocatedCost, decimal UnitCost);
 public record StockCostPreviewDto(decimal PurchaseCost, decimal CommonCost, decimal DirectCost, decimal TotalCost,
-    decimal ReferenceTotal, List<StockCostPreviewLine> Lines);
+    decimal ReferenceTotal, List<StockCostPreviewLine> Lines, string? AllocationMode = null);
 
 public class CreateStockReceiptDto
 {
     public Guid OperationId { get; set; }
     public Guid? BulkAgreementId { get; set; }
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    [StringLength(512)] public string? SourceRevision { get; set; }
     [Required, StringLength(40)] public string SourceType { get; set; } = "EXTERNAL_PURCHASE";
     [Required, StringLength(255)] public string Reference { get; set; } = "";
     public DateTime ReceivedAt { get; set; }
@@ -27,6 +29,8 @@ public class CreateStockReceiptDto
 }
 public class StockLineInput
 {
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    public Guid? AgreementItemId { get; set; }
     public string Kind { get; set; } = "MATERIAL";
     public string? MaterialType { get; set; }
     public string Name { get; set; } = "";
@@ -38,16 +42,17 @@ public class StockLineInput
 }
 public record StockExpenseInput(string Category, string Description, decimal Amount);
 public record StockLineDto(Guid Id, string Kind, string? MaterialType, string Name, string Unit,
-    decimal Quantity, decimal ReferencePrice, decimal DirectCost, decimal? AllocatedCost, string? ConditionNote);
+    decimal Quantity, decimal ReferencePrice, decimal DirectCost, decimal? AllocatedCost, string? ConditionNote, Guid? AgreementItemId = null);
 public record StockReceiptDto(Guid Id, string SourceType, string Reference, string Status, DateTime ReceivedAt,
     decimal PurchaseCost, bool CostsConfirmed, decimal TotalCost, string? ReviewNote,
-    List<StockLineDto> Lines, List<StockExpenseInput> Expenses, Guid? BulkAgreementId = null, string Revision = "");
+    List<StockLineDto> Lines, List<StockExpenseInput> Expenses, Guid? BulkAgreementId = null, string Revision = "", string? SourceRevision = null);
 public class UpdateStockReceiptDto
 {
     [Required, StringLength(64, MinimumLength = 64)] public string ExpectedRevision { get; set; } = "";
     [Required, StringLength(255)] public string Reference { get; set; } = "";
     public decimal PurchaseCost { get; set; }
     public bool CostsConfirmed { get; set; }
+    [StringLength(512)] public string? SourceRevision { get; set; }
     public List<StockLineInput> Lines { get; set; } = [];
     public List<StockExpenseInput> Expenses { get; set; } = [];
 }

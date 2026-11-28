@@ -13,7 +13,7 @@ public sealed class LiquidationHandover
     [Column("revision")] public int Revision { get; set; }
     [Column("status"), MaxLength(20)] public string Status { get; set; } = "PENDING";
     [Column("request_hash"), MaxLength(64)] public string RequestHash { get; set; } = "";
-    [Column("amount",TypeName="numeric(18,0)")] public decimal Amount { get; set; }
+    [Column("amount", TypeName = "numeric(18,0)")] public decimal Amount { get; set; }
     [Column("note"), MaxLength(1000)] public string? Note { get; set; }
     [Column("proposed_by")] public Guid ProposedBy { get; set; }
     [Column("created_at")] public DateTime CreatedAt { get; set; }
@@ -30,7 +30,7 @@ public sealed class LiquidationHandoverLine
     [ForeignKey(nameof(HandoverId))] public LiquidationHandover Handover { get; set; } = null!;
     [Column("agreement_item_id")] public Guid AgreementItemId { get; set; }
     [ForeignKey(nameof(AgreementItemId))] public LiquidationAgreementItem AgreementItem { get; set; } = null!;
-    [Column("quantity",TypeName="numeric(18,3)")] public decimal Quantity { get; set; }
-    [Column("unit_price",TypeName="numeric(18,0)")] public decimal UnitPrice { get; set; }
-    [Column("amount",TypeName="numeric(18,0)")] public decimal Amount { get; set; }
+    [Column("quantity", TypeName = "numeric(18,3)")] public decimal Quantity { get; set; }
+    [Column("unit_price", TypeName = "numeric(18,0)")] public decimal UnitPrice { get; set; }
+    [Column("amount", TypeName = "numeric(18,0)")] public decimal Amount { get; set; }
 }

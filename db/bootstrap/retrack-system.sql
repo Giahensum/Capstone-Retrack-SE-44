@@ -1543,6 +1543,9 @@ CREATE TABLE IF NOT EXISTS liquidation_handover_lines (
  amount NUMERIC(18,0) NOT NULL CHECK (amount > 0),
  UNIQUE(handover_id,agreement_item_id)
 );
+ALTER TABLE depot_stock_receipts ADD COLUMN IF NOT EXISTS source_revision VARCHAR(512);
+ALTER TABLE depot_stock_lines ADD COLUMN IF NOT EXISTS agreement_item_id UUID REFERENCES liquidation_agreement_items(id) ON DELETE RESTRICT;
+CREATE INDEX IF NOT EXISTS ix_depot_stock_lines_agreement_item ON depot_stock_lines(agreement_item_id) WHERE agreement_item_id IS NOT NULL;
 -- RETRACK_HANDOVER_QUANTITY_V1_END
 
 -- RETRACK_SCHEMA_END

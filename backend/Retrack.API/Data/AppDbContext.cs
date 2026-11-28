@@ -143,6 +143,7 @@ namespace Retrack.API.Data
                 .IsDescending(false, true, false).HasDatabaseName("ix_inventory_batches_depot_newest");
             modelBuilder.Entity<DepotStockReceipt>().HasIndex(x => new { x.DepotId, x.CreatedAt });
             modelBuilder.Entity<DepotStockLine>().HasIndex(x => new { x.ReceiptId, x.Position }).IsUnique();
+            modelBuilder.Entity<DepotStockLine>().HasOne<LiquidationAgreementItem>().WithMany().HasForeignKey(x=>x.AgreementItemId).OnDelete(DeleteBehavior.Restrict);
             modelBuilder.Entity<DepotBatchCostSource>().HasIndex(x => new { x.BatchId, x.SourceType, x.SourceId }).IsUnique();
             modelBuilder.Entity<DepotReuseSale>().HasIndex(x => x.LineId);
             modelBuilder.Entity<DepotStockReceipt>().HasOne(x => x.Depot).WithMany().OnDelete(DeleteBehavior.Restrict);

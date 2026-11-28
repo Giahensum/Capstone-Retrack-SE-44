@@ -116,6 +116,126 @@ public sealed class LiquidationV2PostgresTests : IAsyncLifetime
         Lines=a.Items.Select(x=>new LiquidationHandoverLineInput(x.Id,x.Unit=="kg"?iron:2)).ToList()
     };
 
+
+    private DepotStockService Stock(AppDbContext db) => new(new DepotStockRepository(db),new DepotBatchRepository(db),
+        new DepotUnitOfWork(db),new DepotService(new DepotOwnerRepository(db),new DepotPaymentReadRepository(db)));
+    private async Task<LiquidationIntakeSourceDto> ReadyNewSource()
+    {
+        var a=await AwardNewAgreement();
+        await Run(s=>s.ProposeHandoverAsync(ownerB,depotB,a.Id,Proposal(a)));
+        await Run(s=>s.DecideHandoverAsync(seller,a.Id,new(1,true,null)));
+        await Run(s=>s.BuyerActionAsync(ownerB,depotB,a.Id,"REPORT_PAYMENT","Tiền mặt có biên nhận"));
+        await Run(s=>s.SellerActionAsync(seller,a.Id,"CONFIRM_PAYMENT"));
+        await Run(s=>s.SellerActionAsync(seller,a.Id,"CONFIRM_HANDOVER"));
+        return await Run(s=>s.IntakeSourceAsync(ownerB,depotB,a.Id));
+    }
+    [PostgresV2Fact]
+    public async Task Draft_edit_can_split_one_item_without_shifting_the_other_items_capital()
+    {
+        var ready = await ReadyNewSource();
+        await Run(s => s.BuyerActionAsync(ownerB, depotB, ready.AgreementId, "CONFIRM_RECEIVED"));
+        var source = await Run(s => s.IntakeSourceAsync(ownerB, depotB, ready.AgreementId));
+        var input = ReceiptFrom(source); input.PostImmediately = false; input.ConfirmBulkReceived = false;
+        StockReceiptDto draft;
+        await using (var db = Open()) draft = await Stock(db).CreateAsync(ownerB, depotB, input);
+        var material = input.Lines.Single(x => x.Kind == "MATERIAL");
+        material.Quantity = 80; material.ReferencePrice = 3000;
+        input.Lines.Add(new() { Kind = "MATERIAL", MaterialType = "COPPER", Name = "Đồng lọc từ cùng hạng mục", Unit = "kg",
+            Quantity = 5, ReferencePrice = 50000, AgreementItemId = material.AgreementItemId });
+        StockReceiptDto edited;
+        await using (var db = Open()) edited = await Stock(db).UpdateDraftAsync(ownerB, depotB, draft.Id, new() {
+            ExpectedRevision = draft.Revision, SourceRevision = draft.SourceRevision, Reference = draft.Reference,
+            PurchaseCost = draft.PurchaseCost, CostsConfirmed = true, Lines = input.Lines, Expenses = input.Expenses });
+        Assert.Equal(313500, edited.Lines.Where(x => x.AgreementItemId == material.AgreementItemId).Sum(x => x.AllocatedCost));
+        Assert.Equal(110000, edited.Lines.Single(x => x.Kind == "REUSABLE").AllocatedCost);
+        await using (var db = Open()) await Stock(db).ReviewAsync(ownerB, depotB, draft.Id, "POSTED");
+        await using var check = Open();
+        var stored = await check.DepotStockReceipts.Include(x => x.Lines).SingleAsync(x => x.Id == draft.Id);
+        Assert.Equal("POSTED", stored.Status); Assert.Equal(3, stored.Lines.Count);
+        Assert.Equal(423500, stored.Lines.Sum(x => x.AllocatedCost));
+        Assert.All(stored.Lines, line => Assert.NotNull(line.AgreementItemId));
+    }
+
+    [PostgresV2Fact]
+    public async Task Posting_a_draft_rechecks_cancelled_source_and_does_not_increase_inventory()
+    {
+        var ready = await ReadyNewSource();
+        await Run(s => s.BuyerActionAsync(ownerB, depotB, ready.AgreementId, "CONFIRM_RECEIVED"));
+        var source = await Run(s => s.IntakeSourceAsync(ownerB, depotB, ready.AgreementId));
+        var input = ReceiptFrom(source); input.PostImmediately = false; input.ConfirmBulkReceived = false;
+        StockReceiptDto draft;
+        await using (var db = Open()) draft = await Stock(db).CreateAsync(ownerB, depotB, input);
+        await using (var db = Open())
+        {
+            var agreement = await db.LiquidationAgreements.SingleAsync(x => x.Id == ready.AgreementId);
+            agreement.AbandonReportedAt = clock.Now; agreement.AbandonReportedBy = seller; agreement.AbandonReason = "Fixture nguồn bị hủy trong lúc phiếu nằm chờ";
+            agreement.Resolution = "CANCELLED"; agreement.ResolvedAt = clock.Now; agreement.ResolvedBy = adminUser; agreement.ResolutionNote = "Admin hủy nguồn trong fixture";
+            await db.SaveChangesAsync();
+        }
+        await using (var db = Open())
+            await Assert.ThrowsAsync<DepotConflictException>(() => Stock(db).ReviewAsync(ownerB, depotB, draft.Id, "POSTED"));
+        await using var check = Open();
+        var stored = await check.DepotStockReceipts.SingleAsync(x => x.Id == draft.Id);
+        Assert.Equal("DRAFT", stored.Status); Assert.Null(stored.PostedAt);
+    }
+
+    private static CreateStockReceiptDto ReceiptFrom(LiquidationIntakeSourceDto source) => new()
+    {
+        OperationId=Guid.NewGuid(),BulkAgreementId=source.AgreementId,SourceRevision=source.Revision,
+        SourceType="BULK_PURCHASE",Reference="Nhập hạng mục đã chốt cân",ReceivedAt=DateTime.UtcNow,
+        PurchaseCost=source.FinalPurchaseAmount,CostsConfirmed=true,PostImmediately=true,ConfirmBulkReceived=true,
+        Expenses=[new("OTHER","Chi phí đưa hàng về và chuẩn bị hàng",38500)],
+        Lines=source.Items.Select(x=>new StockLineInput {AgreementItemId=x.AgreementItemId,Kind=x.Kind=="MATERIAL"?"MATERIAL":"REUSABLE",
+            MaterialType=x.Kind=="MATERIAL"?x.MaterialCode:null,Name=x.Name,Unit=x.Unit=="kg"?"kg":x.Unit=="cai"?"cái":"bộ",
+            Quantity=x.Unit=="kg"?90:x.ConfirmedQuantity!.Value}).ToList()
+    };
+    [PostgresV2Fact]
+    public async Task Confirmed_item_intake_preserves_cost_after_loss_and_posts_only_once()
+    {
+        var source=await ReadyNewSource();var input=ReceiptFrom(source);
+        await using(var db=Open())
+        {
+            var stock=Stock(db);
+            var preview=await stock.PreviewCostsAsync(ownerB,depotB,new(input.PurchaseCost,input.Lines,input.Expenses,source.AgreementId,source.Revision));
+            Assert.Equal("AUCTION_ITEMS",preview.AllocationMode);Assert.Equal(423500,preview.TotalCost);
+            var saved=await stock.CreateAsync(ownerB,depotB,input);
+            Assert.Equal("POSTED",saved.Status);Assert.Equal(385000,saved.PurchaseCost);
+            Assert.Equal(313500,saved.Lines.Single(x=>x.Kind=="MATERIAL").AllocatedCost);
+            Assert.Equal(110000,saved.Lines.Single(x=>x.Kind=="REUSABLE").AllocatedCost);
+            Assert.All(saved.Lines,x=>Assert.NotNull(x.AgreementItemId));
+            Assert.Equal(saved.Id,(await stock.CreateAsync(ownerB,depotB,input)).Id);
+            var snapshot=await stock.PreviewCostsAsync(ownerB,depotB,new(input.PurchaseCost,input.Lines,input.Expenses,source.AgreementId,saved.SourceRevision));
+            Assert.Equal(preview.TotalCost,snapshot.TotalCost);
+        }
+        await using(var db=Open())
+        {
+            var saved=await db.DepotStockReceipts.Include(x=>x.Lines).SingleAsync(x=>x.BulkAgreementId==source.AgreementId);
+            Assert.Equal(90,saved.Lines.Single(x=>x.Kind=="MATERIAL").Quantity);
+            Assert.Equal(2,saved.Lines.Single(x=>x.Kind=="REUSABLE").Quantity);
+            Assert.Equal(385000,(await db.LiquidationAgreements.SingleAsync(x=>x.Id==source.AgreementId)).Amount);
+            Assert.Contains(await db.Notifications.Where(x=>x.UserId==seller && x.Title=="Chủ kho đã nhận đủ lô và nhập kho").ToListAsync(), x=>x.TargetType=="LIQUIDATION_V2" && x.TargetId==source.LotId);
+            var duplicate=ReceiptFrom(source);
+            await Assert.ThrowsAsync<DepotConflictException>(()=>Stock(db).CreateAsync(ownerB,depotB,duplicate));
+        }
+    }
+    [PostgresV2Fact]
+    public async Task Item_intake_rejects_stale_source_foreign_ids_and_missing_item_without_persisting()
+    {
+        var source=await ReadyNewSource();
+        await using var db=Open();var stock=Stock(db);
+        var wrongPrice=ReceiptFrom(source);wrongPrice.PurchaseCost++;
+        await Assert.ThrowsAsync<ArgumentException>(()=>stock.CreateAsync(ownerB,depotB,wrongPrice));
+        var stale=ReceiptFrom(source);stale.SourceRevision="old";
+        await Assert.ThrowsAsync<DepotConflictException>(()=>stock.CreateAsync(ownerB,depotB,stale));
+        var foreign=ReceiptFrom(source);foreign.Lines[0].AgreementItemId=Guid.NewGuid();
+        await Assert.ThrowsAsync<ArgumentException>(()=>stock.CreateAsync(ownerB,depotB,foreign));
+        var missing=ReceiptFrom(source);missing.Lines.RemoveAt(0);
+        await Assert.ThrowsAsync<ArgumentException>(()=>stock.CreateAsync(ownerB,depotB,missing));
+        var noLink=ReceiptFrom(source);noLink.Lines.ForEach(x=>x.AgreementItemId=null);
+        await Assert.ThrowsAsync<ArgumentException>(()=>stock.CreateAsync(ownerB,depotB,noLink));
+        Assert.False(await db.DepotStockReceipts.AnyAsync(x=>x.BulkAgreementId==source.AgreementId));
+    }
+
     [PostgresV2Fact]
     public async Task Confirmed_handover_locks_exact_item_amounts_and_preserves_auction_snapshot()
     {

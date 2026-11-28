@@ -601,9 +601,7 @@ public sealed partial class LiquidationV2Service(ILiquidationV2Repository reposi
         a.PaymentConfirmedAt == null ? (a.PaymentReportedAt == null ? "WAITING_BUYER_PAYMENT" : "WAITING_SELLER_CONFIRM") :
         a.SellerHandedOverAt == null ? "WAITING_HANDOVER" : a.OwnerCollectedAt == null ? "WAITING_OWNER_RECEIVE" : "COMPLETED";
 
-    private static string Revision(LiquidationAgreement a) => string.Join('.', new[]
-        { a.PaymentConfirmedAt, a.SellerHandedOverAt, a.OwnerCollectedAt, a.AbandonReportedAt, a.ResolvedAt }.Select(x => x?.Ticks.ToString() ?? "0"))
-        + $".{a.HandoverRevision}.{a.HandoverStatus}.{a.PricingBasis}";
+    private static string Revision(LiquidationAgreement a) => Retrack.API.Helpers.LiquidationSourceRevision.For(a);
 
     private async Task<LiquidationV2AgreementDto> AgreementDtoAsync(LiquidationAgreement a, bool forSeller)
     {
