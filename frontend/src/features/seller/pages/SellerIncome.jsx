@@ -3,18 +3,22 @@ import { Link } from 'react-router-dom';
 import { sellerApi } from '../api';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { MaterialIcon } from '@/features/depot/components/DepotIcon';
-import { PageHeader } from '@/components/ui/kit';
+import { PageHeader, ErrorState } from '@/components/ui/kit';
+import { depotError } from '@/features/depot/depotError';
 
 export default function SellerIncome() {
-  const { data: stats } = useQuery({
+  const statsQuery = useQuery({
     queryKey: ['seller-stats'],
     queryFn: sellerApi.getStats,
   });
+  const stats = statsQuery.data;
 
-  const { data: requests = [] } = useQuery({
+  const requestsQuery = useQuery({
     queryKey: ['seller-requests'],
     queryFn: () => sellerApi.getRequests(),
   });
+  const requests = requestsQuery.data ?? [];
+  const failedQuery = [statsQuery, requestsQuery].find((q) => q.isError);
 
   const doneRequests = requests.filter((r) => r.status === 'DONE');
   const pickupIncome = doneRequests.reduce(
@@ -67,6 +71,13 @@ export default function SellerIncome() {
   return (
     <div className="flex flex-col p-4 md:p-6 gap-6 w-full max-w-7xl mx-auto">
       <PageHeader title="Thống kê thu nhập" description="Tổng quan số tiền nhận được từ các đơn thu gom và lô thanh lý đã hoàn thành." />
+
+      {/* Lỗi tải thì báo rõ, không để thu nhập 0đ trông như số liệu thật. */}
+      {failedQuery && (
+        <ErrorState onRetry={() => { statsQuery.refetch(); requestsQuery.refetch(); }}>
+          {depotError(failedQuery.error)} Số liệu thu nhập bên dưới chưa đầy đủ.
+        </ErrorState>
+      )}
 
       {/* KPI Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

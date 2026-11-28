@@ -4,7 +4,8 @@ import { Link } from 'react-router-dom';
 import { sellerApi } from '../api';
 import { formatCurrency, formatDate, PICKUP_STATUS_LABEL, PICKUP_STATUS_STYLE } from '@/lib/utils';
 import { MaterialIcon } from '@/features/depot/components/DepotIcon';
-import { PageHeader, buttonClass } from '@/components/ui/kit';
+import { PageHeader, ErrorState, buttonClass } from '@/components/ui/kit';
+import { depotError } from '@/features/depot/depotError';
 
 const STATUS_TABS = [
   { key: '', label: 'Tất cả' },
@@ -23,7 +24,7 @@ export default function RequestList() {
   const [statusFilter, setStatusFilter] = useState('');
   const [search, setSearch] = useState('');
 
-  const { data: requests = [], isLoading } = useQuery({
+  const { data: requests = [], isLoading, isError, error, refetch } = useQuery({
     queryKey: ['seller-requests', statusFilter],
     queryFn: () => sellerApi.getRequests(statusFilter || undefined),
   });
@@ -81,6 +82,9 @@ export default function RequestList() {
         <div className="flex justify-center py-20">
           <div className="w-8 h-8 border-3 border-d-primary border-t-transparent rounded-full animate-spin" />
         </div>
+      ) : isError ? (
+        // Lỗi tải không hiển thị như danh sách rỗng để Seller không hiểu nhầm là chưa có đơn.
+        <ErrorState onRetry={() => refetch()}>{depotError(error)}</ErrorState>
       ) : filtered.length === 0 ? (
         <div className="bg-d-surface-container-lowest border border-d-border-subtle rounded-2xl p-12 text-center shadow-sm">
           <div className="w-14 h-14 rounded-full bg-d-surface-container flex items-center justify-center mx-auto mb-3 text-d-on-surface-variant">

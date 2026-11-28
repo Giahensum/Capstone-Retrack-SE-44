@@ -90,6 +90,14 @@ ssh root@IP "cd /opt/retrack && docker compose --env-file .env.production -f doc
 
 ## 5. Vận hành
 
+- **Nâng schema sau mỗi lần deploy có đổi `db/bootstrap/retrack-system.sql`.** Mã mới đọc cột/bảng mới; DB production chưa nâng thì các API liên quan trả 500. Ví dụ ngày 28/11/2026: bản deploy đọc cột lịch thu gom (`collection_date`, `preferred_end_datetime`, `requires_owner_review`, `dispatch_review_reason`) nhưng DB chưa có, nên `/api/seller/pickups` và `/api/depot/{id}/employee-dispatch/pickups` lỗi. Trên VPS, sau khi nhóm review SQL:
+  ```bash
+  cd /opt/retrack
+  CHECK_ONLY=1 bash upgrade-schema.sh   # xem còn thiếu cột không
+  bash upgrade-schema.sh                # sao lưu backups/pre-schema-<giờ>.dump, áp khối schema (không seed), kiểm tra lại
+  docker compose --env-file .env.production -f docker-compose.prod.yml restart api
+  ```
+  Script chỉ áp phần từ đầu file tới `-- RETRACK_SCHEMA_END` trong một transaction; khối này dùng `IF NOT EXISTS` nên chạy lại vẫn an toàn. Đã thử nâng từ schema ngày 26/11 (có seed demo) lên bản hiện tại và chạy lại lần hai: không lỗi, giữ nguyên dữ liệu. CD chỉ chép script, không tự chạy.
 - **Schema DB không tự đổi.** File `retrack-system.sql` chỉ chạy khi volume `pg_data` còn trống (lần đầu). Sửa schema sau đó do nhóm chạy tay (đúng quy ước `AGENTS.md`), ví dụ:
   `docker compose ... exec -T db psql -U retrack -d retrack < file.sql`. Muốn dựng lại từ đầu: `docker compose ... down -v` (**xoá dữ liệu**) rồi chạy lại CD.
 - **Khôi phục DB** từ bản sao lưu: `docker compose ... exec -T db pg_restore -U retrack -d retrack --clean --if-exists < backups/pre-<giờ>.dump`.
