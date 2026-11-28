@@ -13,8 +13,7 @@ public sealed class ClosedPeriodBillingTests
 {
     private static AppDbContext Db() => new(new DbContextOptionsBuilder<AppDbContext>()
         .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
-    private static AdminService Service(AppDbContext db) => new(new UserRepository(db), new MarketPriceRepository(db),
-        new AuditLogRepository(db), new PlatformInvoiceRepository(db), new NotificationService(db), db);
+    private static AdminService Service(AppDbContext db) => new(new UserRepository(db), new MarketPriceRepository(db), new AuditLogRepository(db), new PlatformInvoiceRepository(db), new Retrack.API.Services.Shared.NotificationService(new Retrack.API.Repositories.NotificationRepository(db)), db, new global::Retrack.API.Repositories.DepotStaffRepository(db));
     private static void Fee(AppDbContext db, User payer, decimal amount) => db.PlatformTransactions.Add(new()
     {
         SourceType = "PICKUP_REQUEST", SourceId = Guid.NewGuid(), PayerId = payer.Id,

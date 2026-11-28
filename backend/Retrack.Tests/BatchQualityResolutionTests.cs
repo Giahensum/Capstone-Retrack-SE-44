@@ -42,8 +42,7 @@ public sealed class BatchQualityResolutionTests : IAsyncLifetime
     {
         var scope = new DepotService(new DepotOwnerRepository(db), new DepotPaymentReadRepository(db));
         var repo = new DepotBatchRepository(db); var work = new DepotUnitOfWork(db);
-        return new(repo, work, scope, new InventoryService(new DepotInventoryRepository(db), scope), null!,
-            new DepotStockService(new DepotStockRepository(db), repo, work, scope));
+        return new(repo, work, scope, new InventoryService(new DepotInventoryRepository(db), scope), null!, new DepotStockService(new DepotStockRepository(db), repo, work, scope), new global::Retrack.API.Services.Depot.BatchSettlementService(repo, work, scope), new global::Retrack.API.Repositories.DriverDeliveryRepository(db));
     }
     private static BatchSettlementService Decisions(AppDbContext db) => new(new DepotBatchRepository(db), new DepotUnitOfWork(db),
         new DepotService(new DepotOwnerRepository(db), new DepotPaymentReadRepository(db)));

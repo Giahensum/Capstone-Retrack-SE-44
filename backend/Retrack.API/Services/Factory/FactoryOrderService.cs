@@ -5,80 +5,43 @@ using Retrack.API.Models;
 using Retrack.API.Models.Enums;
 using Retrack.API.Services.Interfaces;
 using Retrack.API.Services.Shared;
+using Retrack.API.Repositories;
+using Retrack.API.Repositories.Interfaces;
 
 namespace Retrack.API.Services.Factory;
 
-public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? attachments = null) : FactoryServiceBase(db), IFactoryOrderService
+public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? attachments = null, IFactoryOrderReadRepository? reads = null,
+    IFactoryOrderRepository? orders = null, IFactoryUnitOfWork? work = null) : FactoryServiceBase(db, orders, work), IFactoryOrderService
 {
+    private readonly IFactoryOrderReadRepository orderReads = reads ?? new FactoryOrderReadRepository(db);
     public async Task<ServiceResult<PageResponse<OrderResponse>>> ListAsync(Guid userId, OrderQuery query, CancellationToken ct)
     {
         var factory = await CurrentFactory(userId, ct);
-        IQueryable<InventoryBatch> source = FactoryOrderQueries.ForFactory(Db, factory.Id);
         var status = query.DisplayStatus ?? (query.Status == BatchStatus.IN_PROGRESS ? "IN_TRANSIT" : query.Status?.ToString());
-        if (query.Stage == "qc")
-            source = source.Where(x => x.Status == "RECEIVED" || x.Status == "WEIGHED" || x.Status == "VERIFIED" || x.Status == "REJECTED" || x.Status == "NEGOTIATING" || x.Status == "RETURN_REQUESTED" || x.Status == "RETURNING" || x.Status == "RETURNED" ||
-                x.Status == "DELIVERED" || ((x.Status == "ACCEPTED" || x.Status == "TRANSPORT_READY" || x.Status == "READY_FOR_PICKUP" || x.Status == "IN_PROGRESS" || x.Status == "IN_TRANSIT") && x.TransportJob != null && x.TransportJob.Status == "DELIVERED"));
-        else if (query.Stage == "settlements")
-            source = source.Where(x => x.Status == "VERIFIED" || x.Status == "NEGOTIATING" || x.Status == "SETTLEMENT_PENDING" || x.Status == "SETTLEMENT_ACCEPTED" || x.Status == "SETTLEMENT_DISPUTED" || x.Status == "COMPLETED" || x.Status == "PAID");
-        if (!string.IsNullOrWhiteSpace(query.Search))
-        {
-            var search = query.Search.Trim();
-            source = source.Where(x => x.Id.ToString().Contains(search) || (x.Code != null && x.Code.Contains(search)) || x.Depot.Name.Contains(search));
-        }
-        source = status switch
-        {
-            "PENDING_APPROVAL" => source.Where(x => x.Status == "PENDING_APPROVAL" || x.Status == "PENDING_FACTORY"),
-            "ACCEPTED" => source.Where(x =>
-                ((x.Status == "ACCEPTED" || x.Status == "TRANSPORT_READY" || x.Status == "READY_FOR_PICKUP") &&
-                 (x.TransportJob == null || (x.TransportJob.Status != "PICKED_UP" && x.TransportJob.Status != "IN_TRANSIT" && x.TransportJob.Status != "ON_THE_WAY" && x.TransportJob.Status != "IN_PROGRESS" && x.TransportJob.Status != "DELIVERED")))),
-            "IN_TRANSIT" => source.Where(x => ((x.Status == "IN_PROGRESS" || x.Status == "IN_TRANSIT") && (x.TransportJob == null || x.TransportJob.Status != "DELIVERED")) ||
-                ((x.Status == "ACCEPTED" || x.Status == "TRANSPORT_READY" || x.Status == "READY_FOR_PICKUP") && x.TransportJob != null &&
-                 (x.TransportJob.Status == "PICKED_UP" || x.TransportJob.Status == "IN_TRANSIT" || x.TransportJob.Status == "ON_THE_WAY" || x.TransportJob.Status == "IN_PROGRESS"))),
-            "DELIVERED" => source.Where(x => x.Status == "DELIVERED" ||
-                ((x.Status == "ACCEPTED" || x.Status == "TRANSPORT_READY" || x.Status == "READY_FOR_PICKUP" || x.Status == "IN_PROGRESS" || x.Status == "IN_TRANSIT") && x.TransportJob != null && x.TransportJob.Status == "DELIVERED")),
-            "PAID" => source.Where(x => x.Status == "PAID"),
-            "PAYMENT_REPORTED" => source.Where(x => x.Status == "COMPLETED" && x.QualityCheck != null && x.QualityCheck.PaymentProofUrl != null),
-            "SETTLEMENT_RECORDED" => source.Where(x => x.Status == "COMPLETED" && (x.QualityCheck == null || x.QualityCheck.PaymentProofUrl == null)),
-            "REJECTED" => source.Where(x => x.Status == "REJECTED" || x.Status == "CANCELLED"),
-            "RECEIVED" or "WEIGHED" or "VERIFIED" or "NEGOTIATING" or "RETURN_REQUESTED" or "RETURNING" or "RETURNED" or "SETTLEMENT_PENDING" or "SETTLEMENT_ACCEPTED" or "SETTLEMENT_DISPUTED" => source.Where(x => x.Status == status),
-            _ => source
-        };
-        var total = await source.CountAsync(ct);
-        var rows = await source.OrderByDescending(x => x.CreatedAt).ThenBy(x => x.Id)
-            .Skip((query.Page - 1) * query.PageSize).Take(query.PageSize).ToListAsync(ct);
+        var page = await orderReads.ListAsync(factory.Id, query, status, ct);
         return ServiceResult<PageResponse<OrderResponse>>.Success(data: new PageResponse<OrderResponse>
         {
-            Items = rows.Select(FactoryOrderMapper.Map).ToList(),
-            TotalCount = total,
+            Items = page.Items.Select(FactoryOrderMapper.Map).ToList(),
+            TotalCount = page.TotalCount,
             Page = query.Page,
             PageSize = query.PageSize,
-            TotalPages = (int)Math.Ceiling((double)total / query.PageSize)
+            TotalPages = (int)Math.Ceiling((double)page.TotalCount / query.PageSize)
         });
     }
 
     public async Task<ServiceResult<OrderResponse>> GetAsync(Guid userId, Guid id, CancellationToken ct)
     {
         var factory = await CurrentFactory(userId, ct);
-        var batch = await FactoryOrderQueries.ForFactory(Db, factory.Id).SingleOrDefaultAsync(x => x.Id == id, ct);
+        var batch = await orderReads.GetAsync(factory.Id, id, ct);
         return batch is null ? ServiceResult<OrderResponse>.NotFound("Không tìm thấy đơn hàng.") : ServiceResult<OrderResponse>.Success(data: FactoryOrderMapper.Map(batch));
     }
 
     public async Task<ServiceResult<OrderReceivedResponse>> ReceiveAsync(Guid userId, Guid id, CancellationToken ct)
     {
         var factory = await CurrentFactory(userId, ct);
-        var depotId = await Db.InventoryBatches.AsNoTracking().Where(x => x.Id == id && x.TargetFactoryId == factory.Id)
-            .Select(x => (Guid?)x.DepotId).SingleOrDefaultAsync(ct);
-        if (depotId is null) return ServiceResult<OrderReceivedResponse>.NotFound("Không tìm thấy đơn hàng.");
-        await using var transaction = Db.Database.IsRelational() ? await Db.Database.BeginTransactionAsync(ct) : null;
-        if (Db.Database.IsRelational())
-            await Db.Depots.FromSqlInterpolated($"SELECT * FROM depots WHERE id = {depotId.Value} FOR UPDATE").LoadAsync(ct);
-        var source = Db.Database.IsRelational()
-            ? Db.InventoryBatches.FromSqlInterpolated($"SELECT * FROM inventory_batches WHERE id = {id} AND target_factory_id = {factory.Id} FOR UPDATE")
-            : Db.InventoryBatches.Where(x => x.Id == id && x.TargetFactoryId == factory.Id);
-        var batch = await source.Include(x => x.TransportJob).SingleOrDefaultAsync(ct);
+        await using var transaction = await Work.BeginAsync(ct);
+        var batch = await OrderRepository.LockForReceivingAsync(id, factory.Id, ct);
         if (batch is null) return ServiceResult<OrderReceivedResponse>.NotFound("Không tìm thấy đơn hàng.");
-        await Db.Entry(batch).ReloadAsync(ct);
-        if (batch.TransportJob is not null) await Db.Entry(batch.TransportJob).ReloadAsync(ct);
         // Không cho nhận lại để mở lại cân/QC hoặc hạ trạng thái lô đã quyết toán.
         if (batch.FactoryReceivedAt != null || batch.SettledAt != null || batch.Status is not
             ("DELIVERED" or "ACCEPTED" or "TRANSPORT_READY" or "READY_FOR_PICKUP" or "IN_PROGRESS" or "IN_TRANSIT"))
@@ -89,25 +52,22 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
         await NotifyDepotAsync(batch.DepotId, "Nhà máy xác nhận hàng đã đến", $"{factory.Name} đã xác nhận nhận hàng lô {batch.Code ?? batch.Id.ToString()}; chờ cân và KCS.", batch.Id, ct: ct);
         batch.FactoryReceivedAt = DateTime.UtcNow;
         var recipients = new List<Guid>();
-        var depotOwnerId = await Db.Depots.Where(x => x.Id == batch.DepotId).Select(x => x.OwnerId).SingleAsync(ct);
+        var depotOwnerId = await Workflow.DepotOwnerAsync(batch.DepotId, ct);
         recipients.Add(depotOwnerId);
         if (batch.TransportJob?.DriverId is Guid driverId) recipients.Add(driverId);
         var uniqueRecipients = recipients.Distinct().ToArray();
-        var existingRecipients = await Db.Notifications.AsNoTracking()
-            .Where(x => uniqueRecipients.Contains(x.UserId) && x.TransportJobId == batch.TransportJob!.Id && x.Title == "Nhà máy đã nhận hàng")
-            .Select(x => x.UserId)
-            .ToListAsync(ct);
+        var existingRecipients = await Workflow.NotifiedRecipientsAsync(batch.TransportJob!.Id, uniqueRecipients, "Nhà máy đã nhận hàng", ct);
         var recipientsAlreadyNotified = existingRecipients.ToHashSet();
         foreach (var recipient in uniqueRecipients.Where(x => !recipientsAlreadyNotified.Contains(x)))
-            Db.Notifications.Add(new Notification
+            Workflow.AddNotification(new Notification
             {
                 UserId = recipient,
                 TransportJobId = batch.TransportJob!.Id,
                 Title = "Nhà máy đã nhận hàng",
                 Message = $"Lô {batch.Code ?? batch.Id.ToString()} đã được nhà máy xác nhận nhận hàng."
             });
-        await Db.SaveChangesAsync(ct);
-        if (transaction is not null) await transaction.CommitAsync(ct);
+        await Work.SaveAsync(ct);
+        await transaction.CommitAsync(ct);
         return ServiceResult<OrderReceivedResponse>.Success(data: new OrderReceivedResponse
         {
             Id = batch.Id,
@@ -119,7 +79,7 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
     public async Task<ServiceResult<OrderSettlementResponse>> SettleAsync(Guid userId, Guid id, SettlementRequest request, CancellationToken ct)
     {
         var factory = await CurrentFactory(userId, ct);
-        await using var transaction = await Db.Database.BeginTransactionAsync(ct);
+        await using var transaction = await Work.BeginAsync(ct);
         var batch = await LockOrderAsync(id, factory.Id, ct);
         if (batch is null) return ServiceResult<OrderSettlementResponse>.NotFound("Không tìm thấy đơn hàng.");
         if (batch.Status is "RETURN_REQUESTED" or "RETURNING" or "RETURNED")
@@ -138,8 +98,7 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
         }
         if (batch.Status is "PAID" or "COMPLETED")
         {
-            var existing = await Db.PlatformTransactions.AsNoTracking()
-                .SingleOrDefaultAsync(x => x.SourceType == "BATCH_ORDER" && x.SourceId == batch.Id, ct);
+            var existing = await Workflow.TransactionAsync(batch.Id, ct);
             var savedQc = batch.QualityCheck;
             var sameRequest = savedQc is not null && existing is not null &&
                 batch.AgreedPricePerKg == request.AgreedPricePerKg &&
@@ -217,9 +176,9 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
         batch.Status = "SETTLEMENT_PENDING"; batch.SettlementRevision++;
         batch.SettlementProposedAt = DateTime.UtcNow; batch.SettlementApprovedAt = null; batch.SettlementApprovedBy = null;
         batch.SettlementDecisionReason = null; batch.SettledAt = null; batch.UpdatedAt = DateTime.UtcNow;
-        Db.BatchWorkflowEvents.Add(Retrack.API.Services.Depot.BatchSettlementService.Event(batch, userId, "PRICE_PROPOSED", from, "Nhà máy gửi đề xuất giá sau KCS."));
+        Workflow.AddEvent(Retrack.API.Services.Depot.BatchSettlementService.Event(batch, userId, "PRICE_PROPOSED", from, "Nhà máy gửi đề xuất giá sau KCS."));
         await NotifyDepotAsync(batch.DepotId, "Nhà máy đề xuất giá sau KCS", $"Lô {batch.Code}: đề xuất phiên bản {batch.SettlementRevision}, số tiền {batch.NetAmount:N0}đ. Vui lòng xem chi tiết để đồng ý hoặc yêu cầu điều chỉnh.", batch.Id, ct: ct);
-        await Db.SaveChangesAsync(ct); await transaction.CommitAsync(ct);
+        await Work.SaveAsync(ct); await transaction.CommitAsync(ct);
         return ServiceResult<OrderSettlementResponse>.Success(data: SettlementResponse(batch), message: "Đã gửi đề xuất; chờ vựa đồng ý giá.");
     }
 
@@ -233,12 +192,13 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
         if (request.PaymentMethod is not ("BANK_TRANSFER" or "CASH" or "OTHER") || string.IsNullOrWhiteSpace(request.PaymentReference) ||
             request.PaymentMethod == "BANK_TRANSFER" && proofUrl == null || proofUrl != null && attachments is not null && !attachments.IsOwnedUrl(proofUrl, userId))
             return ServiceResult<OrderResponse>.Invalid("Cần hình thức và căn cứ thanh toán; chuyển khoản cần chứng từ hợp lệ.");
-        await using var tx = await Db.Database.BeginTransactionAsync(ct);
+        await using var tx = await Work.BeginAsync(ct);
         var batch = await LockOrderAsync(id, factory.Id, ct);
         if (batch is null) return ServiceResult<OrderResponse>.NotFound("Không tìm thấy đơn hàng.");
         if (batch.QualityCheck != null && batch.Status is "COMPLETED" or "PAID" &&
             batch.PaymentReference == request.PaymentReference.Trim() && batch.QualityCheck.PaymentProofUrl == proofUrl && (batch.PaymentMethod ?? "BANK_TRANSFER") == request.PaymentMethod)
-            return ServiceResult<OrderResponse>.Success(data: FactoryOrderMapper.Map(await FactoryOrderQueries.ForFactory(Db, factory.Id).SingleAsync(x => x.Id == id, ct)), message: "Chứng từ đã được lưu.");
+            return ServiceResult<OrderResponse>.Success(data: FactoryOrderMapper.Map(await orderReads.GetAsync(factory.Id, id, ct)
+                ?? throw new InvalidOperationException("Không đọc lại được đơn hàng vừa cập nhật.")), message: "Chứng từ đã được lưu.");
         if ((batch.Status != "COMPLETED" && batch.Status != "SETTLEMENT_ACCEPTED") || batch.QualityCheck is null ||
             (batch.SettlementWorkflowVersion == 0 && batch.SettledAt is null) ||
             (batch.SettlementWorkflowVersion > 0 && batch.SettlementApprovedAt == null))
@@ -250,19 +210,20 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
         batch.QualityCheck.PaymentProofUrl = proofUrl;
         batch.PaymentMethod = request.PaymentMethod;
         batch.Status = "COMPLETED";
-        if (batch.SettlementWorkflowVersion > 0) Db.BatchWorkflowEvents.Add(Retrack.API.Services.Depot.BatchSettlementService.Event(batch, userId, "PAYMENT_REPORTED", previousStatus, "Nhà máy báo đã thanh toán trực tiếp; chờ kho xác nhận tiền thực nhận."));
+        if (batch.SettlementWorkflowVersion > 0) Workflow.AddEvent(Retrack.API.Services.Depot.BatchSettlementService.Event(batch, userId, "PAYMENT_REPORTED", previousStatus, "Nhà máy báo đã thanh toán trực tiếp; chờ kho xác nhận tiền thực nhận."));
         batch.UpdatedAt = DateTime.UtcNow;
         await NotifyDepotAsync(batch.DepotId, request.PaymentMethod == "BANK_TRANSFER" ? "Nhà máy bổ sung chứng từ chuyển khoản" : "Nhà máy báo đã thanh toán", $"Lô {batch.Code ?? batch.Id.ToString()}: nhà máy báo đã trả tiền. Kiểm tra tiền thực nhận trước khi xác nhận.", batch.Id, ct: ct);
-        await Db.SaveChangesAsync(ct);
+        await Work.SaveAsync(ct);
         await tx.CommitAsync(ct);
-        var saved = await FactoryOrderQueries.ForFactory(Db, factory.Id).SingleAsync(x => x.Id == id, ct);
+        var saved = await orderReads.GetAsync(factory.Id, id, ct)
+            ?? throw new InvalidOperationException("Không đọc lại được đơn hàng vừa cập nhật.");
         return ServiceResult<OrderResponse>.Success(data: FactoryOrderMapper.Map(saved), message: "Đã gửi chứng từ; chờ vựa xác nhận nhận tiền.");
     }
 
     public async Task<ServiceResult<InvoiceUpdatedResponse>> InvoiceAsync(Guid userId, Guid id, InvoiceRequest request, CancellationToken ct)
     {
         var factory = await CurrentFactory(userId, ct);
-        await using var tx = Db.Database.IsRelational() ? await Db.Database.BeginTransactionAsync(ct) : null;
+        await using var tx = await Work.BeginAsync(ct);
         var batch = await LockOrderAsync(id, factory.Id, ct);
         if (batch is null) return ServiceResult<InvoiceUpdatedResponse>.NotFound("Không tìm thấy đơn hàng.");
         if (batch.QualityCheck is null || batch.Status is not ("VERIFIED" or "NEGOTIATING" or "COMPLETED" or "PAID" or "SETTLEMENT_PENDING" or "SETTLEMENT_ACCEPTED" or "SETTLEMENT_DISPUTED"))
@@ -281,8 +242,8 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
         batch.QualityCheck.InvoiceFileUrl = request.InvoiceFileUrl.Trim();
         batch.QualityCheck.InvoiceStatus = "UPLOADED";
         if (changed) await NotifyDepotAsync(batch.DepotId, "Nhà máy đã bổ sung hóa đơn", $"{factory.Name} đã cập nhật hóa đơn lô {batch.Code ?? batch.Id.ToString()}. Kho có thể tải chứng từ trong chi tiết lô.", batch.Id, ct: ct);
-        await Db.SaveChangesAsync(ct);
-        if (tx != null) await tx.CommitAsync(ct);
+        await Work.SaveAsync(ct);
+        await tx.CommitAsync(ct);
         return ServiceResult<InvoiceUpdatedResponse>.Success(data: new InvoiceUpdatedResponse
         {
             Id = batch.Id,

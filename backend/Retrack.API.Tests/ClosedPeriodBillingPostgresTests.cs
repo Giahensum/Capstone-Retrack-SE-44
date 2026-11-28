@@ -40,7 +40,7 @@ public sealed class ClosedPeriodBillingPostgresTests
                 if(interceptor!=null)options.AddInterceptors(interceptor);
                 return new(options.Options);
             }
-            AdminService Service(AppDbContext db)=>new(new UserRepository(db),new MarketPriceRepository(db),new AuditLogRepository(db),new PlatformInvoiceRepository(db),new NotificationService(db),db);
+            AdminService Service(AppDbContext db)=>new(new UserRepository(db), new MarketPriceRepository(db), new AuditLogRepository(db), new PlatformInvoiceRepository(db), new Retrack.API.Services.Shared.NotificationService(new Retrack.API.Repositories.NotificationRepository(db)), db, new global::Retrack.API.Repositories.DepotStaffRepository(db));
             var payer=new User{Role="DEPOT_OWNER",FullName="Kho đồng thời",Email=Guid.NewGuid()+"@test.invalid"};
             var actor=new User{Role="ADMIN",FullName="Admin đồng thời",Email=Guid.NewGuid()+"@test.invalid"};
             var invoice=new PlatformInvoice{Payer=payer,PeriodYear=2026,PeriodMonth=1,TotalFeeAmount=50};
@@ -115,7 +115,7 @@ public sealed class ClosedPeriodBillingPostgresTests
                 await using(var command=new NpgsqlCommand(schemaSql,setup){CommandTimeout=120})await command.ExecuteNonQueryAsync();
             }
             AppDbContext Db()=>new(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(connection).Options);
-            AdminService Service(AppDbContext db)=>new(new UserRepository(db),new MarketPriceRepository(db),new AuditLogRepository(db),new PlatformInvoiceRepository(db),new NotificationService(db),db);
+            AdminService Service(AppDbContext db)=>new(new UserRepository(db), new MarketPriceRepository(db), new AuditLogRepository(db), new PlatformInvoiceRepository(db), new Retrack.API.Services.Shared.NotificationService(new Retrack.API.Repositories.NotificationRepository(db)), db, new global::Retrack.API.Repositories.DepotStaffRepository(db));
             var payer=new User{Role="DEPOT_OWNER",FullName="Kho đối soát",Email=Guid.NewGuid()+"@test.invalid"};
             var actor=new User{Role="ADMIN",FullName="Admin test",Email=Guid.NewGuid()+"@test.invalid"};
             PlatformTransaction Fee(decimal amount)=>new(){SourceType="PICKUP_REQUEST",SourceId=Guid.NewGuid(),PayerId=payer.Id,FeeAmount=amount,CreatedAt=new(2026,1,15,0,0,0,DateTimeKind.Utc)};

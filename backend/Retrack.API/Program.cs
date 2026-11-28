@@ -68,6 +68,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 
 builder.Services.AddAuthorization();
+builder.Services.AddOptions<Retrack.API.Services.Depot.DepotCapacityOptions>()
+    .Bind(builder.Configuration.GetSection("DepotCapacity")).ValidateDataAnnotations().ValidateOnStart();
 builder.Services.AddVerificationRateLimits();
 builder.Services.AddOptions<Retrack.API.Services.Depot.VerificationScannerOptions>()
     .Bind(builder.Configuration.GetSection("VerificationScanner"))
@@ -100,6 +102,7 @@ builder.Services.AddCors(options =>
 // ===== DEPENDENCY INJECTION =====
 // Repositories
 builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IFactoryRepository, Retrack.API.Repositories.FactoryRepository>();
 builder.Services.AddScoped<IPickupRequestRepository, PickupRequestRepository>();
 builder.Services.AddScoped<IMarketPriceRepository, MarketPriceRepository>();
 builder.Services.AddScoped<IAuditLogRepository, AuditLogRepository>();
@@ -184,10 +187,24 @@ builder.Services.Configure<Retrack.API.Services.ESign.DocuSignOptions>(builder.C
 builder.Services.AddHttpClient<Retrack.API.Services.ESign.IDocuSignClient, Retrack.API.Services.ESign.DocuSignClient>(c => c.Timeout = TimeSpan.FromSeconds(30));
 builder.Services.AddScoped<Retrack.API.Services.ESign.IContractEsignService, Retrack.API.Services.ESign.ContractEsignService>();
 builder.Services.AddScoped<Retrack.API.Services.ESign.ILiquidationEsignService, Retrack.API.Services.ESign.LiquidationEsignService>();
+builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.INotificationRepository, Retrack.API.Repositories.NotificationRepository>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.INotificationService, Retrack.API.Services.Shared.NotificationService>();
 
 
 // Services - Factory
+builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IFactoryOrderReadRepository, Retrack.API.Repositories.FactoryOrderReadRepository>();
+builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IFactoryReportRepository, Retrack.API.Repositories.FactoryReportRepository>();
+builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IFactoryDemandRepository, Retrack.API.Repositories.FactoryDemandRepository>();
+builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IFactoryMarketRepository, Retrack.API.Repositories.FactoryMarketRepository>();
+builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IFactoryPartnershipReadRepository, Retrack.API.Repositories.FactoryPartnershipReadRepository>();
+builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IFactoryProfileReadRepository, Retrack.API.Repositories.FactoryProfileReadRepository>();
+builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IFactoryProfileRepository, Retrack.API.Repositories.FactoryProfileRepository>();
+builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IFactoryAttachmentRepository, Retrack.API.Repositories.FactoryAttachmentRepository>();
+builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IFactoryPlatformFeeRepository, Retrack.API.Repositories.FactoryPlatformFeeRepository>();
+builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IFactoryWorkflowRepository, Retrack.API.Repositories.FactoryWorkflowRepository>();
+builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IFactoryOrderRepository, Retrack.API.Repositories.FactoryOrderRepository>();
+builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IFactoryUnitOfWork, Retrack.API.Repositories.FactoryUnitOfWork>();
+builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IFactoryPartnershipRepository, Retrack.API.Repositories.FactoryPartnershipRepository>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IFactoryDashboardService, Retrack.API.Services.Factory.FactoryDashboardService>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IFactoryDemandService, Retrack.API.Services.Factory.FactoryDemandService>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IFactoryMarketService, Retrack.API.Services.Factory.FactoryMarketService>();
@@ -222,7 +239,10 @@ builder.Services.Configure<Retrack.API.Services.Money.PayoutWorkerOptions>(build
 builder.Services.AddHostedService<Retrack.API.Services.Money.AutoPayoutWorker>();
 builder.Services.AddHostedService<Retrack.API.Services.Money.PayoutReconcileWorker>();
 builder.Services.AddHostedService<Retrack.API.Services.Money.RefundReconcileWorker>();
+builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IFactoryNotificationRepository, Retrack.API.Repositories.FactoryNotificationRepository>();
 builder.Services.AddScoped<Retrack.API.Services.Factory.FactoryNotificationService>();
+builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.ISellerNotificationRepository, Retrack.API.Repositories.SellerNotificationRepository>();
+builder.Services.AddScoped<Retrack.API.Services.Seller.SellerNotificationService>();
 
 // Vận chuyển ngoài chỉ Sandbox hoặc Demo theo cấu hình; không tự chuyển chế độ.
 builder.Services.AddOptions<Retrack.API.Services.Shipping.ShippingOptions>()
@@ -238,6 +258,8 @@ builder.Services.AddScoped<Retrack.API.Services.Shipping.IShippingProvider>(sp =
     sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<Retrack.API.Services.Shipping.ShippingOptions>>().Value.Mode == "LalamoveSandbox"
         ? sp.GetRequiredService<Retrack.API.Services.Shipping.LalamoveSandboxProvider>()
         : sp.GetRequiredService<Retrack.API.Services.Shipping.DemoShippingProvider>());
+builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IShippingRepository, Retrack.API.Repositories.ShippingRepository>();
+builder.Services.AddScoped<Retrack.API.Services.Shipping.ShippingWebhookService>();
 builder.Services.AddScoped<Retrack.API.Services.Shipping.ShippingService>();
 if (builder.Configuration["Shipping:Mode"] is "Demo" or "LalamoveSandbox")
     builder.Services.AddHostedService<Retrack.API.Services.Shipping.ShippingWorker>();

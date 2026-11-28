@@ -1,13 +1,16 @@
-using Microsoft.EntityFrameworkCore;
 using Retrack.API.Data;
+using Retrack.API.Repositories;
+using Retrack.API.Repositories.Interfaces;
 
 namespace Retrack.API.Services.Factory;
 
 // Tệp Factory nằm ngoài database; URL được lưu trong các cột chứng từ hiện có.
-public sealed class FactoryAttachmentService(AppDbContext db, IWebHostEnvironment environment)
+public sealed class FactoryAttachmentService(AppDbContext db, IWebHostEnvironment environment,
+    IFactoryAttachmentRepository? access = null)
 {
     private const int MaxBytes = 700 * 1024;
     private readonly string root = Path.Combine(environment.ContentRootPath, "uploads", "factory");
+    private readonly IFactoryAttachmentRepository attachmentAccess = access ?? new FactoryAttachmentRepository(db);
 
     public async Task<string> UploadAsync(Guid ownerId, IFormFile file, CancellationToken ct)
     {
@@ -36,9 +39,7 @@ public sealed class FactoryAttachmentService(AppDbContext db, IWebHostEnvironmen
         var url = Url(ownerId, id);
         var allowed = role == "ADMIN" ||
             (role == "FACTORY" && actorId == ownerId) ||
-            (role == "DEPOT_OWNER" && await db.InventoryBatches.AsNoTracking().AnyAsync(
-                batch => batch.Depot.OwnerId == actorId && batch.TargetFactory != null && batch.TargetFactory.OwnerId == ownerId &&
-                    (batch.ReturnHandoverProofUrl == url || (batch.QualityCheck != null && (batch.QualityCheck.TicketImageUrl == url || batch.QualityCheck.InvoiceFileUrl == url || batch.QualityCheck.PaymentProofUrl == url))), ct));
+            (role == "DEPOT_OWNER" && await attachmentAccess.DepotMayReadBatchProofAsync(actorId, ownerId, url, ct));
         if (!allowed) throw new UnauthorizedAccessException("Không có quyền đọc tệp này.");
 
         foreach (var (extension, contentType) in new[] { ("pdf", "application/pdf"), ("jpg", "image/jpeg"), ("png", "image/png") })

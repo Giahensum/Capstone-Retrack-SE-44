@@ -39,7 +39,7 @@ public sealed class SellerNotificationControllerTests : IAsyncLifetime
 
     public async Task DisposeAsync() { await db.DisposeAsync(); await connection.DisposeAsync(); }
 
-    private SellerNotificationController Controller(string? userId = null) => new(db)
+    private SellerNotificationController Controller(string? userId = null) => new(new Retrack.API.Services.Seller.SellerNotificationService(new Retrack.API.Repositories.SellerNotificationRepository(db)))
     {
         ControllerContext = new ControllerContext
         {
@@ -263,7 +263,7 @@ public sealed class SellerNotificationControllerTests : IAsyncLifetime
     {
         var pickup = new PickupRequest { SellerId = seller.Id, Address = "Địa chỉ kiểm thử" };
         db.PickupRequests.Add(pickup); await db.SaveChangesAsync();
-        await new NotificationService(db).SendPickupAsync(seller.Id, pickup.Id, "Đơn đã được nhận", "Nhân viên sắp đến.");
+        await new Retrack.API.Services.Shared.NotificationService(new Retrack.API.Repositories.NotificationRepository(db)).SendPickupAsync(seller.Id, pickup.Id, "Đơn đã được nhận", "Nhân viên sắp đến.");
         await using var verify = Open();
         var stored = await verify.Notifications.SingleAsync();
         Assert.Equal(seller.Id, stored.UserId); Assert.False(stored.IsRead);

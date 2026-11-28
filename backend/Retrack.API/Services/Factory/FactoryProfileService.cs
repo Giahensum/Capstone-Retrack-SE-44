@@ -1,28 +1,27 @@
-using Microsoft.EntityFrameworkCore;
 using Retrack.API.Data;
 using Retrack.API.DTOs.Factory;
 using Retrack.API.Models;
 using Retrack.API.Models.Enums;
 using Retrack.API.Services.Interfaces;
 using Retrack.API.Services.Shared;
+using Retrack.API.Repositories;
+using Retrack.API.Repositories.Interfaces;
 
 namespace Retrack.API.Services.Factory;
 
-public class FactoryProfileService(AppDbContext db, FactoryAttachmentService? attachments = null) : FactoryServiceBase(db), IFactoryProfileService
+public class FactoryProfileService(AppDbContext db, FactoryAttachmentService? attachments = null, IFactoryProfileReadRepository? reads = null,
+    IFactoryProfileRepository? profiles = null, IFactoryUnitOfWork? work = null) : FactoryServiceBase(db, unitOfWork: work, profiles: profiles), IFactoryProfileService
 {
+    private readonly IFactoryProfileReadRepository profileReads = reads ?? new FactoryProfileReadRepository(db);
     public async Task<ServiceResult<ProfileResponse>> GetAsync(Guid userId, CancellationToken ct)
     {
         var current = await CurrentFactory(userId, ct);
-        var factory = await Db.Factories.Include(x => x.Owner).AsNoTracking()
-            .SingleAsync(x => x.Id == current.Id, ct);
-        var feeText = await Db.SystemConfigs.AsNoTracking()
-            .Where(x => x.ConfigKey == "PLATFORM_FEE_PERCENTAGE")
-            .Select(x => x.ConfigValue)
-            .FirstOrDefaultAsync(ct);
-        var feePercentage = decimal.TryParse(feeText, System.Globalization.NumberStyles.Number,
+        var snapshot = await profileReads.GetAsync(current.Id, ct);
+        var factory = snapshot.Factory;
+        var feePercentage = decimal.TryParse(snapshot.FeeConfig, System.Globalization.NumberStyles.Number,
             System.Globalization.CultureInfo.InvariantCulture, out var configuredFee) ? configuredFee : 5m;
         if (feePercentage is < 0 or > 100) feePercentage = 5m;
-        if (await BusinessModel.IsSubscriptionAsync(Db, ct)) feePercentage = 0;
+        if (snapshot.IsSubscription) feePercentage = 0;
         return ServiceResult<ProfileResponse>.Success(data: new ProfileResponse
         {
             Id = factory.Id,
@@ -52,11 +51,11 @@ public class FactoryProfileService(AppDbContext db, FactoryAttachmentService? at
 
     public async Task<ServiceResult<ProfileUpdatedResponse>> UpdateAsync(Guid userId, ProfileRequest request, CancellationToken ct)
     {
-        var factory = await Db.Factories.SingleOrDefaultAsync(x => x.OwnerId == userId, ct);
+        var factory = await Profiles.FindByOwnerAsync(userId, ct);
         if (factory is null)
         {
             factory = new Retrack.API.Models.Factory { OwnerId = userId, Name = request.CompanyName.Trim(), Address = request.Address.Trim() };
-            Db.Factories.Add(factory);
+            Profiles.Add(factory);
         }
         if (attachments is not null &&
             ((request.BusinessLicenseUrl != factory.BusinessLicenseUrl && !attachments.IsOwnedUrl(request.BusinessLicenseUrl, userId)) ||
@@ -74,7 +73,7 @@ public class FactoryProfileService(AppDbContext db, FactoryAttachmentService? at
         factory.AcceptedMaterialsCsv = string.Join(',', request.AcceptedMaterials.Distinct());
         factory.Latitude = request.Latitude;
         factory.Longitude = request.Longitude;
-        await Db.SaveChangesAsync(ct);
+        await Work.SaveAsync(ct);
         return ServiceResult<ProfileUpdatedResponse>.Success(data: new ProfileUpdatedResponse
         {
             Id = factory.Id

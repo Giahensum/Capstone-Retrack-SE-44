@@ -9,6 +9,7 @@ namespace Retrack.API.Repositories;
 public sealed class DepotVerificationRepository(AppDbContext db) : IDepotVerificationRepository
 {
     public async Task LockOwnerAsync(Guid id) => await db.Users.FromSqlInterpolated($"SELECT * FROM users WHERE id = {id} FOR UPDATE").LoadAsync();
+    public Task<int> CountDepotsAsync(Guid ownerId) => db.Depots.CountAsync(d => d.OwnerId == ownerId);
     public Task<Depot?> FindDepotAsync(Guid id) => db.Depots.SingleOrDefaultAsync(x => x.Id == id);
     public void AddDepot(Depot depot) => db.Depots.Add(depot);
     public async Task LockDepotAsync(Guid id)

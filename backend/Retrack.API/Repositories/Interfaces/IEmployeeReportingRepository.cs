@@ -1,6 +1,5 @@
 using Retrack.API.DTOs;
 using Retrack.API.DTOs.Employee;
-using Retrack.API.Services.Employee;
 namespace Retrack.API.Repositories.Interfaces;
 public interface IEmployeeReportingRepository
 {

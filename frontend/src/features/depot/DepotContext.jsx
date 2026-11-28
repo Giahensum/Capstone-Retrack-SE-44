@@ -1,5 +1,5 @@
 import { createContext, useContext, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/app/store/useAuthStore';
 import api from '@/lib/axios';
 import { readDepotSelection, saveDepotSelection } from './depotSelection';
@@ -11,19 +11,25 @@ import { depotError } from './depotError';
 
 export function DepotProvider({ children }) {
   const userId = useAuthStore((s) => s.user?.userId);
+  const client = useQueryClient();
   const [selection, setSelection] = useState(() => ({ userId, id: readDepotSelection(userId) }));
   const selected = selection.userId === userId ? selection.id : readDepotSelection(userId);
   const query = useQuery({
     queryKey: ['depot', userId, 'owned'],
     queryFn: async () => (await api.get('/depot/owned')).data.data,
   });
+  const capacity = useQuery({
+    queryKey: ['depot', userId, 'capacity'], enabled: !!userId,
+    queryFn: async ({ signal }) => (await api.get('/depot/owned/capacity', { signal })).data.data,
+  });
   const depots = query.data ?? [];
   const depotId = depots.some((d) => d.id === selected) ? selected : depots[0]?.id;
   const setSelected = id => {
-    if (!depots.some(d => d.id === id)) return;
+    const currentDepots = client.getQueryData(['depot', userId, 'owned']) ?? depots;
+    if (!currentDepots.some(d => d.id === id)) return;
     setSelection({ userId, id }); saveDepotSelection(userId, id);
   };
-  return <DepotContext.Provider value={{ depotId, depots, setSelected, userId, query }}>{children}</DepotContext.Provider>;
+  return <DepotContext.Provider value={{ depotId, depots, setSelected, userId, query, capacity }}>{children}</DepotContext.Provider>;
 }
 
 export function DepotSelector() {

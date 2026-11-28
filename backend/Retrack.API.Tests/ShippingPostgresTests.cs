@@ -36,7 +36,7 @@ public sealed class ShippingPostgresTests
         var scoped=new NpgsqlConnectionStringBuilder(connection){SearchPath=schema,Pooling=false}.ConnectionString;
         AppDbContext Context()=>new(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(scoped).Options);
         var settings=Options.Create(new ShippingOptions{Mode="Demo"});
-        ShippingService Service(AppDbContext db)=>new(db,new DepotService(new DepotOwnerRepository(db),new DepotPaymentReadRepository(db)),new DemoShippingProvider(settings),settings);
+        ShippingService Service(AppDbContext db)=>new(new ShippingRepository(db),new DepotService(new DepotOwnerRepository(db),new DepotPaymentReadRepository(db)),new DemoShippingProvider(settings),settings,new DriverDeliveryRepository(db));
         try {
             await using(var sql=new NpgsqlConnection(scoped)) {
                 await sql.OpenAsync();

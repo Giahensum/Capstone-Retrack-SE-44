@@ -22,7 +22,7 @@ public sealed partial class StockReceiptTests : IAsyncLifetime
     private static DepotService Scope(AppDbContext db) => new(new DepotOwnerRepository(db), new DepotPaymentReadRepository(db));
     private static DepotStockService Stock(AppDbContext db) => new(new DepotStockRepository(db), new DepotBatchRepository(db), new DepotUnitOfWork(db), Scope(db));
     private static InventoryService Inventory(AppDbContext db) => new(new DepotInventoryRepository(db), Scope(db));
-    private static BatchService Batches(AppDbContext db) => new(new DepotBatchRepository(db), new DepotUnitOfWork(db), Scope(db), Inventory(db), new NoImages(), Stock(db));
+    private static BatchService Batches(AppDbContext db) => new(new DepotBatchRepository(db), new DepotUnitOfWork(db), Scope(db), Inventory(db), new NoImages(), Stock(db), new global::Retrack.API.Services.Depot.BatchSettlementService(new DepotBatchRepository(db), new DepotUnitOfWork(db), Scope(db)), new global::Retrack.API.Repositories.DriverDeliveryRepository(db));
     private static DepotReportService Reports(AppDbContext db) => new(new DepotUnitOfWork(db), new DepotReportRepository(db), new DepotStaffRepository(db), Scope(db), Inventory(db));
     public async Task InitializeAsync()
     {

@@ -22,7 +22,7 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         if (new NpgsqlConnectionStringBuilder(connection).Database != "Retrack_TV2_test") throw new InvalidOperationException("Test database required");
         return new(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(connection).Options);
     }
-    private static BatchService Batches(AppDbContext db, ProofImages? images = null) => new(new Retrack.API.Repositories.DepotBatchRepository(db), new Retrack.API.Repositories.DepotUnitOfWork(db), new DepotService(new Retrack.API.Repositories.DepotOwnerRepository(db), new Retrack.API.Repositories.DepotPaymentReadRepository(db)), new InventoryService(new Retrack.API.Repositories.DepotInventoryRepository(db), new DepotService(new Retrack.API.Repositories.DepotOwnerRepository(db), new Retrack.API.Repositories.DepotPaymentReadRepository(db))), images ?? new ProofImages(), new DepotStockService(new Retrack.API.Repositories.DepotStockRepository(db), new Retrack.API.Repositories.DepotBatchRepository(db), new Retrack.API.Repositories.DepotUnitOfWork(db), new DepotService(new Retrack.API.Repositories.DepotOwnerRepository(db), new Retrack.API.Repositories.DepotPaymentReadRepository(db))));
+    private static BatchService Batches(AppDbContext db, ProofImages? images = null) => new(new Retrack.API.Repositories.DepotBatchRepository(db), new Retrack.API.Repositories.DepotUnitOfWork(db), new DepotService(new Retrack.API.Repositories.DepotOwnerRepository(db), new Retrack.API.Repositories.DepotPaymentReadRepository(db)), new InventoryService(new Retrack.API.Repositories.DepotInventoryRepository(db), new DepotService(new Retrack.API.Repositories.DepotOwnerRepository(db), new Retrack.API.Repositories.DepotPaymentReadRepository(db))), images ?? new ProofImages(), new DepotStockService(new Retrack.API.Repositories.DepotStockRepository(db), new Retrack.API.Repositories.DepotBatchRepository(db), new Retrack.API.Repositories.DepotUnitOfWork(db), new DepotService(new Retrack.API.Repositories.DepotOwnerRepository(db), new Retrack.API.Repositories.DepotPaymentReadRepository(db))), new global::Retrack.API.Services.Depot.BatchSettlementService(new Retrack.API.Repositories.DepotBatchRepository(db), new Retrack.API.Repositories.DepotUnitOfWork(db), new DepotService(new Retrack.API.Repositories.DepotOwnerRepository(db), new Retrack.API.Repositories.DepotPaymentReadRepository(db))), new global::Retrack.API.Repositories.DriverDeliveryRepository(db));
     public async Task InitializeAsync()
     {
         await using var db = Open();
@@ -583,7 +583,7 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         Assert.Equal(paidBatch.DepotPaymentConfirmedAt, paidBatch.SettledAt);
         Assert.Equal("https://example.com/factory-invoice-test.pdf", paidDetail.Quality!.InvoiceFileUrl);
         Assert.Equal(720000m, paidDetail.Settlement!.NetAmount);
-        var notifications = new Retrack.API.Services.Factory.FactoryNotificationService(db);
+        var notifications = new Retrack.API.Services.Factory.FactoryNotificationService(new Retrack.API.Repositories.FactoryNotificationRepository(db));
         var factoryNotices = await notifications.ListAsync(factoryOwnerId, 1, 20, false, default);
         var paymentNotice = Assert.Single(factoryNotices.Items, x => x.BatchId == first.Id && x.Title == "Vựa đã xác nhận nhận tiền");
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => notifications.ListAsync(ownerId, 1, 20, false, default));
@@ -785,9 +785,7 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         {
             var results = await Task.WhenAll(Enumerable.Range(0, 2).Select(async _ => {
                 await using var db = Open();
-                var admin = new Retrack.API.Services.AdminService(new Retrack.API.Repositories.UserRepository(db),
-                    new Retrack.API.Repositories.MarketPriceRepository(db), new Retrack.API.Repositories.AuditLogRepository(db),
-                    new Retrack.API.Repositories.PlatformInvoiceRepository(db), new NoNotifications(), db);
+                var admin = new Retrack.API.Services.AdminService(new Retrack.API.Repositories.UserRepository(db), new Retrack.API.Repositories.MarketPriceRepository(db), new Retrack.API.Repositories.AuditLogRepository(db), new Retrack.API.Repositories.PlatformInvoiceRepository(db), new NoNotifications(), db, new global::Retrack.API.Repositories.DepotStaffRepository(db));
                 return await admin.GenerateMonthlyInvoicesAsync(1980, 9, ownerId);
             }));
             Assert.Single(results.SelectMany(x => x), i => i.PayerId == ownerId);
@@ -820,9 +818,7 @@ public sealed class InventoryBatchTests : IAsyncLifetime
             Assert.Equal("SUBMITTED", (await db.PlatformInvoices.AsNoTracking().SingleAsync(i => i.Id == invoice.Id)).Status);
             Assert.Equal(5000, (await service.FeeSummaryAsync(ownerId, depotId, new())).SubmittedInvoiceAmount);
             await Assert.ThrowsAsync<DepotForbiddenException>(() => service.ConfirmInvoiceAsync(sellerId, depotId, invoice.Id, proof));
-            var admin = new Retrack.API.Services.AdminService(new Retrack.API.Repositories.UserRepository(db),
-                new Retrack.API.Repositories.MarketPriceRepository(db), new Retrack.API.Repositories.AuditLogRepository(db),
-                new Retrack.API.Repositories.PlatformInvoiceRepository(db), new Retrack.API.Services.Shared.NotificationService(db), db);
+            var admin = new Retrack.API.Services.AdminService(new Retrack.API.Repositories.UserRepository(db), new Retrack.API.Repositories.MarketPriceRepository(db), new Retrack.API.Repositories.AuditLogRepository(db), new Retrack.API.Repositories.PlatformInvoiceRepository(db), new Retrack.API.Services.Shared.NotificationService(new Retrack.API.Repositories.NotificationRepository(db)), db, new global::Retrack.API.Repositories.DepotStaffRepository(db));
             var paid = await admin.MarkInvoicePaidAsync(invoice.Id, ownerId);
             var persistedPaidAt = await db.PlatformInvoices.AsNoTracking().Where(i => i.Id == invoice.Id).Select(i => i.PaidAt).SingleAsync();
             var repeated = await admin.MarkInvoicePaidAsync(invoice.Id, ownerId);
@@ -1272,7 +1268,7 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         await Assert.ThrowsAsync<ArgumentException>(() => depotService.RequestTerminationAsync(ownerId, depotId, factory.Id, new("ngắn"), default));
         await Assert.ThrowsAsync<ArgumentException>(() => depotService.RequestTerminationAsync(ownerId, depotId, factory.Id, new(new string('x', 2001)), default));
         Assert.Equal("PENDING_FACTORY", (await depotService.RequestTerminationAsync(ownerId, depotId, factory.Id, new("Chủ vựa đề nghị kết thúc hợp đồng."), default)).TerminationStatus);
-        var noticeService = new Retrack.API.Services.Factory.FactoryNotificationService(db);
+        var noticeService = new Retrack.API.Services.Factory.FactoryNotificationService(new Retrack.API.Repositories.FactoryNotificationRepository(db));
         var terminationNotices = await noticeService.ListAsync(factoryOwnerId, 1, 20, false, default);
         var terminationNotice = Assert.Single(terminationNotices.Items, x => x.Title == "Vựa đề nghị chấm dứt hợp đồng");
         Assert.Equal(depotId, terminationNotice.DepotId);
@@ -1340,5 +1336,21 @@ public sealed class InventoryBatchTests : IAsyncLifetime
         Assert.Null(saved.SettledAt); Assert.Null(saved.SettlementApprovedAt);
         Assert.Equal(10000, saved.QualityCheck!.GrossAmount);
         Assert.Equal(0, await verify.PlatformTransactions.CountAsync(x => x.SourceType == "BATCH_ORDER" && x.SourceId == batchId));
+    }
+
+    [Fact] public async Task Direct_approved_batch_notifies_active_driver_once_and_retry_does_not_duplicate_job() {
+        await using var db=Open();
+        var factory=new Retrack.API.Models.Factory {Owner=new User {Id=factoryOwnerId,Role="FACTORY",Email=$"factory-{factoryOwnerId}@test.invalid"},Name="Nhà máy nhận lô"};
+        var driver=new User {Role="DRIVER",Email=$"driver-{Guid.NewGuid()}@test.invalid"};
+        db.Factories.Add(factory);db.DepotStaffs.Add(new DepotStaff {DepotId=depotId,User=driver,StaffType="DRIVER"});
+        db.FactoryDepotPartnerships.Add(new FactoryDepotPartnership {DepotId=depotId,Factory=factory,Status="APPROVED"});await db.SaveChangesAsync();
+        var input=Input();input.TargetFactoryId=factory.Id;
+        var created=await Batches(db).CreateAsync(ownerId,depotId,input);
+        var retry=await Batches(db).CreateAsync(ownerId,depotId,input);
+        Assert.Equal(created.Id,retry.Id);Assert.Equal("TRANSPORT_READY",created.Status);
+        var job=await db.TransportJobs.SingleAsync(x=>x.BatchId==created.Id);Assert.Equal("PENDING",job.Status);
+        Assert.Single(await db.Notifications.Where(n=>n.UserId==driver.Id && n.TransportJobId==job.Id).ToListAsync());
+        var market=await new Retrack.API.Services.Factory.FactoryOrderService(db).ListAsync(factoryOwnerId,new(),default);
+        Assert.Equal(Retrack.API.Services.Shared.ServiceOutcome.Success,market.Outcome);
     }
 }

@@ -6,7 +6,7 @@ using Retrack.API.Services.Interfaces;
 
 namespace Retrack.API.Services.Depot;
 
-public sealed class BatchService(IDepotBatchRepository batches, IDepotUnitOfWork work, IDepotService scope, IInventoryService inventory, ICloudinaryService images, IDepotStockService stockLedger, Retrack.API.Services.Shipping.ShippingService? shipping = null) : IBatchService
+public sealed class BatchService(IDepotBatchRepository batches, IDepotUnitOfWork work, IDepotService scope, IInventoryService inventory, ICloudinaryService images, IDepotStockService stockLedger, BatchSettlementService settlement, IDriverDeliveryRepository delivery, Retrack.API.Services.Shipping.ShippingService? shipping = null) : IBatchService
 {
     public async Task<DepotBatchDetailDto> DetailAsync(Guid ownerId, Guid depotId, Guid batchId)
     {
@@ -132,7 +132,13 @@ public sealed class BatchService(IDepotBatchRepository batches, IDepotUnitOfWork
                     : $"Lô {code} đang chờ nhà máy xem và quyết định nhận hàng. Mở Yêu cầu chỉ định để phản hồi.",
                 isApproved ? "BATCH" : "MARKETPLACE");
         await stockLedger.ReserveCostsAsync(depotId, batch.Id, dto.MaterialType, dto.WeightKg);
-        if (status == "TRANSPORT_READY") await batches.AddTransportAsync(new TransportJob { BatchId = batch.Id, Status = batch.ShippingMethod == "EXTERNAL" ? "EXTERNAL_WAITING" : "PENDING" }, depotId);
+        if (status == "TRANSPORT_READY")
+        {
+            var job = new TransportJob { BatchId = batch.Id, Status = batch.ShippingMethod == "EXTERNAL" ? "EXTERNAL_WAITING" : "PENDING" };
+            batches.AddTransport(job);
+            // Lưu thông báo cùng transaction tạo lô; repository không điều phối nghiệp vụ Driver.
+            if (job.Status == "PENDING") await delivery.QueueAvailableAsync(depotId, job.Id, default);
+        }
         await work.SaveAsync();
         await tx.CommitAsync();
         batch.TargetFactory = factory;
@@ -163,7 +169,7 @@ public sealed class BatchService(IDepotBatchRepository batches, IDepotUnitOfWork
 
     public async Task ConfirmPaymentAsync(Guid ownerId, Guid depotId, Guid batchId, decimal amount, string paymentReference)
     {
-        await new BatchSettlementService(batches, work, scope).ConfirmPaymentAsync(ownerId, depotId, batchId, amount, paymentReference);
+        await settlement.ConfirmPaymentAsync(ownerId, depotId, batchId, amount, paymentReference);
     }
 
     private static DepotBatchDto Map(InventoryBatch b) => new(b.Id, b.DepotId, b.MaterialType,
