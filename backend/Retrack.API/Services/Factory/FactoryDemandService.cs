@@ -5,30 +5,26 @@ using Retrack.API.Models;
 using Retrack.API.Models.Enums;
 using Retrack.API.Services.Interfaces;
 using Retrack.API.Services.Shared;
+using Retrack.API.Repositories;
+using Retrack.API.Repositories.Interfaces;
 
 namespace Retrack.API.Services.Factory;
 
-public class FactoryDemandService(AppDbContext db) : FactoryServiceBase(db), IFactoryDemandService
+public class FactoryDemandService(AppDbContext db, IFactoryDemandRepository? reads = null) : FactoryServiceBase(db), IFactoryDemandService
 {
+    private readonly IFactoryDemandRepository demandReads = reads ?? new FactoryDemandRepository(db);
     public async Task<ServiceResult<PageResponse<DemandResponse>>> ListAsync(Guid userId, PageQuery query, CancellationToken ct)
     {
         var factory = await CurrentFactory(userId, ct);
-        var source = Db.FactoryDemands.AsNoTracking().Where(x => x.FactoryId == factory.Id);
-        if (query.Material.HasValue)
-        {
-            var materials = MaterialCatalog.Values(query.Material.Value.ToString());
-            source = source.Where(x => materials.Contains(x.MaterialType));
-        }
-        var count = await source.CountAsync(ct);
-        var items = await source.OrderByDescending(x => x.CreatedAt).ThenBy(x => x.Id)
-            .Skip((query.Page - 1) * query.PageSize).Take(query.PageSize).ToListAsync(ct);
+        var materials = query.Material.HasValue ? MaterialCatalog.Values(query.Material.Value.ToString()) : null;
+        var page = await demandReads.ListAsync(factory.Id, materials, query.Page, query.PageSize, ct);
         return ServiceResult<PageResponse<DemandResponse>>.Success(data: new PageResponse<DemandResponse>
         {
-            Items = items.Select(DemandView).ToList(),
-            TotalCount = count,
+            Items = page.Items.Select(DemandView).ToList(),
+            TotalCount = page.TotalCount,
             Page = query.Page,
             PageSize = query.PageSize,
-            TotalPages = (int)Math.Ceiling((double)count / query.PageSize)
+            TotalPages = (int)Math.Ceiling((double)page.TotalCount / query.PageSize)
         });
     }
 

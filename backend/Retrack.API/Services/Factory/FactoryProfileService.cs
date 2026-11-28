@@ -5,24 +5,23 @@ using Retrack.API.Models;
 using Retrack.API.Models.Enums;
 using Retrack.API.Services.Interfaces;
 using Retrack.API.Services.Shared;
+using Retrack.API.Repositories;
+using Retrack.API.Repositories.Interfaces;
 
 namespace Retrack.API.Services.Factory;
 
-public class FactoryProfileService(AppDbContext db, FactoryAttachmentService? attachments = null) : FactoryServiceBase(db), IFactoryProfileService
+public class FactoryProfileService(AppDbContext db, FactoryAttachmentService? attachments = null, IFactoryProfileReadRepository? reads = null) : FactoryServiceBase(db), IFactoryProfileService
 {
+    private readonly IFactoryProfileReadRepository profileReads = reads ?? new FactoryProfileReadRepository(db);
     public async Task<ServiceResult<ProfileResponse>> GetAsync(Guid userId, CancellationToken ct)
     {
         var current = await CurrentFactory(userId, ct);
-        var factory = await Db.Factories.Include(x => x.Owner).AsNoTracking()
-            .SingleAsync(x => x.Id == current.Id, ct);
-        var feeText = await Db.SystemConfigs.AsNoTracking()
-            .Where(x => x.ConfigKey == "PLATFORM_FEE_PERCENTAGE")
-            .Select(x => x.ConfigValue)
-            .FirstOrDefaultAsync(ct);
-        var feePercentage = decimal.TryParse(feeText, System.Globalization.NumberStyles.Number,
+        var snapshot = await profileReads.GetAsync(current.Id, ct);
+        var factory = snapshot.Factory;
+        var feePercentage = decimal.TryParse(snapshot.FeeConfig, System.Globalization.NumberStyles.Number,
             System.Globalization.CultureInfo.InvariantCulture, out var configuredFee) ? configuredFee : 5m;
         if (feePercentage is < 0 or > 100) feePercentage = 5m;
-        if (await BusinessModel.IsSubscriptionAsync(Db, ct)) feePercentage = 0;
+        if (snapshot.IsSubscription) feePercentage = 0;
         return ServiceResult<ProfileResponse>.Success(data: new ProfileResponse
         {
             Id = factory.Id,

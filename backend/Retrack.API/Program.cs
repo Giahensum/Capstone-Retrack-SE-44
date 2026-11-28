@@ -191,6 +191,12 @@ builder.Services.AddScoped<Retrack.API.Services.Interfaces.INotificationService,
 
 
 // Services - Factory
+builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IFactoryOrderReadRepository, Retrack.API.Repositories.FactoryOrderReadRepository>();
+builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IFactoryReportRepository, Retrack.API.Repositories.FactoryReportRepository>();
+builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IFactoryDemandRepository, Retrack.API.Repositories.FactoryDemandRepository>();
+builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IFactoryMarketRepository, Retrack.API.Repositories.FactoryMarketRepository>();
+builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IFactoryPartnershipReadRepository, Retrack.API.Repositories.FactoryPartnershipReadRepository>();
+builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IFactoryProfileReadRepository, Retrack.API.Repositories.FactoryProfileReadRepository>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IFactoryDashboardService, Retrack.API.Services.Factory.FactoryDashboardService>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IFactoryDemandService, Retrack.API.Services.Factory.FactoryDemandService>();
 builder.Services.AddScoped<Retrack.API.Services.Interfaces.IFactoryMarketService, Retrack.API.Services.Factory.FactoryMarketService>();

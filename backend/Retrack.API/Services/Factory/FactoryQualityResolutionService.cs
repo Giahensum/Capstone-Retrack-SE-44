@@ -4,16 +4,20 @@ using Retrack.API.DTOs.Factory;
 using Retrack.API.Models;
 using Retrack.API.Services.Depot;
 using Retrack.API.Services.Shared;
+using Retrack.API.Repositories;
+using Retrack.API.Repositories.Interfaces;
 
 namespace Retrack.API.Services.Factory;
 
-public sealed class FactoryQualityResolutionService(AppDbContext db, FactoryAttachmentService attachments) : FactoryServiceBase(db)
+public sealed class FactoryQualityResolutionService(AppDbContext db, FactoryAttachmentService attachments, IFactoryOrderReadRepository? reads = null) : FactoryServiceBase(db)
 {
+    private readonly IFactoryOrderReadRepository orderReads = reads ?? new FactoryOrderReadRepository(db);
     private Task<bool> HasFeeAsync(Guid id, CancellationToken ct) => Db.PlatformTransactions.AnyAsync(t => t.SourceType == "BATCH_ORDER" && t.SourceId == id, ct);
     private static bool HasMoney(InventoryBatch b) => b.SettledAt != null || b.SettlementApprovedAt != null || b.DepotPaymentConfirmedAt != null ||
         !string.IsNullOrWhiteSpace(b.PaymentReference) || !string.IsNullOrWhiteSpace(b.QualityCheck?.PaymentProofUrl);
     private async Task<ServiceResult<OrderResponse>> SavedAsync(Guid id, Guid factory, string message, CancellationToken ct) =>
-        ServiceResult<OrderResponse>.Success(data: FactoryOrderMapper.Map(await FactoryOrderQueries.ForFactory(Db, factory).SingleAsync(b => b.Id == id, ct)), message: message);
+        ServiceResult<OrderResponse>.Success(data: FactoryOrderMapper.Map(await orderReads.GetAsync(factory, id, ct)
+            ?? throw new InvalidOperationException("Không đọc lại được lô vừa cập nhật.")), message: message);
     public async Task<ServiceResult<PageResponse<Retrack.API.DTOs.Depot.BatchWorkflowEventDto>>> HistoryAsync(Guid actor, Guid id, PageQuery query, CancellationToken ct)
     {
         var factory = await CurrentFactory(actor, ct);

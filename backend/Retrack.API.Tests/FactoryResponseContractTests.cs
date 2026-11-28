@@ -124,6 +124,35 @@ public class FactoryResponseContractTests
     }
 
     [Fact]
+    public async Task OrderReadRepositoryKeepsFilteredPagingAndFactoryOwnership()
+    {
+        await using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
+        var factory = new Factory { Owner = new User { Role = "FACTORY", IsActive = true } };
+        var otherFactory = new Factory { Owner = new User { Role = "FACTORY", IsActive = true } };
+        var depot = new Depot { Name = "Kho A", Owner = new User { Role = "DEPOT_OWNER" } };
+        var created = DateTime.UtcNow;
+        var newest = new InventoryBatch { TargetFactory = factory, Depot = depot, Status = "VERIFIED", Code = "PET-A", CreatedAt = created };
+        var older = new InventoryBatch { TargetFactory = factory, Depot = depot, Status = "VERIFIED", Code = "PET-B", CreatedAt = created.AddMinutes(-1) };
+        db.InventoryBatches.AddRange(newest, older,
+            new InventoryBatch { TargetFactory = factory, Depot = depot, Status = "RECEIVED", Code = "PET-C" },
+            new InventoryBatch { TargetFactory = otherFactory, Depot = depot, Status = "VERIFIED", Code = "PET-D" });
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var service = new FactoryOrderService(db);
+        var first = (await service.ListAsync(factory.OwnerId,
+            new OrderQuery { Stage = "settlements", DisplayStatus = "VERIFIED", Search = "PET", PageSize = 1 }, default)).Data!;
+        var second = (await service.ListAsync(factory.OwnerId,
+            new OrderQuery { Stage = "settlements", DisplayStatus = "VERIFIED", Search = "PET", Page = 2, PageSize = 1 }, default)).Data!;
+        Assert.Equal(2, first.TotalCount);
+        Assert.Equal(2, first.TotalPages);
+        Assert.Equal(newest.Id, Assert.Single(first.Items).Id);
+        Assert.Equal(older.Id, Assert.Single(second.Items).Id);
+        Assert.Equal(ServiceOutcome.NotFound, (await service.GetAsync(factory.OwnerId, db.InventoryBatches.Single(x => x.Code == "PET-D").Id, default)).Outcome);
+    }
+
+    [Fact]
     public async Task DashboardAggregatesFactoryMetricsAndKeepsTheExistingScope()
     {
         await using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>()
