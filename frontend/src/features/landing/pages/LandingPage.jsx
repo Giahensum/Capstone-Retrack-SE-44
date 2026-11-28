@@ -64,43 +64,42 @@ export default function LandingPage() {
 
       {/* ── HEADER ──────────────────────────────────────────────────── */}
       <header className="fixed top-0 w-full z-50 bg-white/90 backdrop-blur-md shadow-sm border-b border-[#c2cab0]/30 transition-all duration-300">
-        <div className="flex justify-between items-center px-10 py-0 max-w-[1280px] mx-auto h-20">
+        {/* Mọi mục giữ một dòng (whitespace-nowrap); nav chỉ hiện khi đủ rộng, chật hơn thì dùng menu. */}
+        <div className="flex justify-between items-center gap-4 px-4 sm:px-6 xl:px-8 py-0 max-w-[1280px] mx-auto h-20">
           {/* Logo */}
-          <Link to="/seller" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+          <Link to="/" className="flex shrink-0 items-center gap-2 hover:opacity-80 transition-opacity">
             <BrandMark size={44} />
             <span className="font-black text-[#446900] text-xl tracking-tight">RETRACK</span>
           </Link>
 
           {/* Nav */}
-          <nav className="hidden xl:flex items-center gap-8">
-            {['Trang chủ', 'Cách hoạt động', 'Bán phế liệu', 'Kho vựa', 'Marketplace', 'Bảng giá'].map((item, i) => (<a key={item} href={i === 0 ? '#' : `#section-${i}`} className={`text-sm font-semibold transition-colors ${i === 0 ? 'text-[#446900]' : 'text-[#424936] hover:text-[#446900]'}`}>
+          <nav className="hidden xl:flex items-center gap-5">
+            {['Trang chủ', 'Cách hoạt động', 'Bán phế liệu', 'Kho vựa', 'Marketplace', 'Bảng giá'].map((item, i) => (<a key={item} href={i === 0 ? '#' : `#section-${i}`} className={`whitespace-nowrap text-sm font-semibold transition-colors ${i === 0 ? 'text-[#446900]' : 'text-[#424936] hover:text-[#446900]'}`}>
                 {item}
               </a>))}
-            <Link to="/goi-dich-vu" className="text-sm font-semibold text-[#424936] hover:text-[#446900]">Gói kho vựa</Link>
+            <Link to="/goi-dich-vu" className="whitespace-nowrap text-sm font-semibold text-[#424936] hover:text-[#446900]">Gói kho vựa</Link>
           </nav>
 
           {/* Auth buttons */}
-          <div className="flex items-center gap-3">
-            <button className="xl:hidden p-2 text-[#424936]" onClick={() => setMenuOpen(!menuOpen)}>
+          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+            <button type="button" aria-label={menuOpen ? 'Đóng menu' : 'Mở menu'} aria-expanded={menuOpen} className="xl:hidden p-2 text-[#424936]" onClick={() => setMenuOpen(!menuOpen)}>
               {menuOpen ? <X size={22}/> : <Menu size={22}/>}
             </button>
-            {user ? (<>
-                <span className="hidden md:block text-sm font-semibold text-[#424936]">
-                  Xin chào, <span className="text-[#446900]">{user.fullName.split(' ').slice(-1)}</span>
-                </span>
-                <button onClick={handleLogout} className="text-sm text-[#424936] font-semibold px-4 py-2 hover:text-[#446900] transition-colors">
+            {user ? (
+                // Header tối đa 1280px không đủ chỗ cho lời chào cạnh 7 mục nav; tên người dùng nằm ở title nút và menu.
+                <button type="button" onClick={handleLogout} title={`Đăng xuất tài khoản ${user.fullName}`} className="hidden sm:block whitespace-nowrap text-sm text-[#424936] font-semibold px-3 py-2 hover:text-[#446900] transition-colors">
                   Đăng xuất
                 </button>
-              </>) : (<>
-                <Link to="/login" className="text-sm text-[#424936] font-semibold px-4 py-2 hover:text-[#446900] transition-colors">
+              ) : (<>
+                <Link to="/login" className="hidden sm:block whitespace-nowrap text-sm text-[#424936] font-semibold px-3 py-2 hover:text-[#446900] transition-colors">
                   Đăng nhập
                 </Link>
-                <Link to="/register" className="border border-[#c2cab0] text-[#1f2937] text-sm font-bold px-5 py-2 rounded-full hover:bg-[#f3f4f6] transition-colors">
+                <Link to="/register" className="hidden sm:block whitespace-nowrap border border-[#c2cab0] text-[#1f2937] text-sm font-bold px-5 py-2 rounded-full hover:bg-[#f3f4f6] transition-colors">
                   Đăng ký
                 </Link>
               </>)}
-            <Link to={user ? '/seller/request' : '/register'} className="bg-[#a3e635] text-[#0b1c30] text-sm font-bold px-5 py-2.5 rounded-full hover:bg-[#bef264] transition-colors shadow-sm flex items-center gap-2">
-              Bán phế liệu ngay
+            <Link to={user ? '/seller/create' : '/register'} className="whitespace-nowrap bg-[#a3e635] text-[#0b1c30] text-sm font-bold px-4 sm:px-5 py-2.5 rounded-full hover:bg-[#bef264] transition-colors shadow-sm flex items-center gap-2">
+              <span className="sm:hidden">Bán ngay</span><span className="hidden sm:inline">Bán phế liệu ngay</span>
             </Link>
           </div>
         </div>
@@ -111,6 +110,16 @@ export default function LandingPage() {
                 {item}
               </a>))}
             <Link to="/goi-dich-vu" className="block text-sm font-semibold text-[#424936] py-2 hover:text-[#446900]">Gói kho vựa</Link>
+            {/* Màn hẹp ẩn các nút tài khoản trên thanh trên nên đưa vào menu. */}
+            {user && <p className="border-t border-[#e5e7eb] pt-3 text-sm font-semibold text-[#424936]">Xin chào, <span className="text-[#446900]">{user.fullName}</span></p>}
+            <div className="sm:hidden border-t border-[#e5e7eb] pt-3 space-y-3">
+              {user ? (
+                <button type="button" onClick={handleLogout} className="block text-sm font-semibold text-[#424936] py-2 hover:text-[#446900]">Đăng xuất</button>
+              ) : (<>
+                <Link to="/login" className="block text-sm font-semibold text-[#424936] py-2 hover:text-[#446900]">Đăng nhập</Link>
+                <Link to="/register" className="block text-sm font-semibold text-[#424936] py-2 hover:text-[#446900]">Đăng ký</Link>
+              </>)}
+            </div>
           </div>)}
       </header>
 

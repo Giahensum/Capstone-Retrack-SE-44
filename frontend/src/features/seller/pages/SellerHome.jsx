@@ -3,26 +3,36 @@ import { Link } from 'react-router-dom';
 import { sellerApi } from '../api';
 import { formatCurrency, PICKUP_STATUS_LABEL, PICKUP_STATUS_STYLE } from '@/lib/utils';
 import { MaterialIcon } from '@/features/depot/components/DepotIcon';
-import { PageHeader, StatCard, buttonClass } from '@/components/ui/kit';
+import { PageHeader, StatCard, ErrorState, buttonClass } from '@/components/ui/kit';
+import { depotError } from '@/features/depot/depotError';
 
 export default function SellerHome() {
-  const { data: stats } = useQuery({
+  const statsQuery = useQuery({
     queryKey: ['seller-stats'],
     queryFn: sellerApi.getStats,
   });
+  const stats = statsQuery.data;
 
-  const { data: requests } = useQuery({
+  const requestsQuery = useQuery({
     queryKey: ['seller-requests'],
     queryFn: () => sellerApi.getRequests(),
   });
 
-  const recentRequests = (requests ?? []).slice(0, 5);
+  const recentRequests = (requestsQuery.data ?? []).slice(0, 5);
+  const failedQuery = [statsQuery, requestsQuery].find((q) => q.isError);
 
   return (
     <div className="flex flex-col p-4 md:p-6 gap-6 w-full max-w-7xl mx-auto">
       <PageHeader title="Tổng quan người bán" description="Theo dõi trạng thái thu gom phế liệu và doanh thu của bạn.">
         <Link to="/seller/create" className={buttonClass()}><MaterialIcon name="add" className="text-lg" />Tạo đơn thu gom mới</Link>
       </PageHeader>
+
+      {/* Báo lỗi tải thay vì để số liệu 0 và danh sách rỗng trông như dữ liệu thật. */}
+      {failedQuery && (
+        <ErrorState onRetry={() => { statsQuery.refetch(); requestsQuery.refetch(); }}>
+          {depotError(failedQuery.error)} Số liệu bên dưới có thể chưa đầy đủ.
+        </ErrorState>
+      )}
 
       {/* Welcome Banner */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-d-primary to-[#2a4400] text-d-on-primary p-6 md:p-8 shadow-sm">

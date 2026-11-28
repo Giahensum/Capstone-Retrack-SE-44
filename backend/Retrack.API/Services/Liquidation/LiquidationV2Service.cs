@@ -13,7 +13,7 @@ namespace Retrack.API.Services.Liquidation;
 /// Phiên thanh lý nhiều hạng mục (V2). Thứ tự khóa: kho → mã thao tác → phiên (giống V1 và luồng nhập kho).
 /// Đóng phiên chỉ khóa phiên. Tiền mua = đơn giá trúng × số lượng đã đăng; RETRACK không thu hộ, không cọc.
 /// </summary>
-public sealed class LiquidationV2Service(ILiquidationV2Repository repository, IDepotService scope, IDepotUnitOfWork work,
+public sealed partial class LiquidationV2Service(ILiquidationV2Repository repository, IDepotService scope, IDepotUnitOfWork work,
     IDepotBatchRepository depots, TimeProvider clock) : ILiquidationV2Service, ISellerLiquidationV2Service, IAdminLiquidationService
 {
     private const int MaxOpenLots = 20;
@@ -87,7 +87,7 @@ public sealed class LiquidationV2Service(ILiquidationV2Repository repository, ID
             SurveyStart = times[0], SurveyEnd = times[1], BiddingStart = times[2], OriginalEnd = times[3], BiddingEnd = times[3],
             CollectionDeadline = deadline, StartingPrice = Math.Max(1, dto.Items.Sum(i => LiquidationV2Rules.Amount(i.Quantity, i.StartingUnitPrice))),
             BidIncrement = dto.Items.Min(i => i.BidIncrement), DepositPercent = 0, Status = "PUBLISHED", RequestHash = hash, CreatedAt = now,
-            FormatVersion = 2, CollectionWindowHours = dto.CollectionWindowHours,
+            FormatVersion = 2, PricingBasis = ConfirmedQuantityPricing, CollectionWindowHours = dto.CollectionWindowHours,
         };
         repository.AddLot(lot);
         short position = 1;
@@ -171,6 +171,7 @@ public sealed class LiquidationV2Service(ILiquidationV2Repository repository, ID
             RequireActive(a);
             if (action == "CONFIRM_PAYMENT")
             {
+                RequireQuantityConfirmed(a);
                 if (a.PaymentReportedAt == null) throw new DepotConflictException("Chủ kho chưa báo đã thanh toán nên chưa thể xác nhận đã nhận.");
                 if (a.PaymentConfirmedAt == null)
                 {
@@ -408,6 +409,7 @@ public sealed class LiquidationV2Service(ILiquidationV2Repository repository, ID
             RequireActive(a);
             if (action == "REPORT_PAYMENT")
             {
+                RequireQuantityConfirmed(a);
                 var reference = text?.Trim() ?? "";
                 if (reference.Length is < 1 or > 255) throw new ArgumentException("Cần ghi chú/tham chiếu thanh toán tối đa 255 ký tự.");
                 if (a.PaymentReportedAt != null && a.PaymentReference != reference) throw new DepotConflictException("Tham chiếu đã ghi, không sửa ngầm bằng gửi lại.");
@@ -442,13 +444,16 @@ public sealed class LiquidationV2Service(ILiquidationV2Repository repository, ID
         var items = await repository.ItemsAsync(a.LotId);
         var cancelled = a.Resolution == "CANCELLED";
         var disputed = a.AbandonReportedAt != null && a.Resolution == null;
-        var ready = !cancelled && !disputed && receipt == null && a.PaymentConfirmedAt != null && a.SellerHandedOverAt != null;
-        return new(2, a.Id, a.LotId, a.DepotId, Revision(a), "VND", "POSTED_QUANTITY", a.PaymentConfirmedAt != null, a.SellerHandedOverAt != null,
+        var quantityReady = a.PricingBasis != ConfirmedQuantityPricing || a.HandoverStatus == "CONFIRMED";
+        var handover = a.HandoverStatus == "CONFIRMED" ? await repository.HandoverAsync(a.Id,a.HandoverRevision) : null;
+        var ready = quantityReady && !cancelled && !disputed && receipt == null && a.PaymentConfirmedAt != null && a.SellerHandedOverAt != null;
+        return new(a.PricingBasis == ConfirmedQuantityPricing ? 3 : 2, a.Id, a.LotId, a.DepotId, Revision(a), "VND", a.PricingBasis, a.PaymentConfirmedAt != null, a.SellerHandedOverAt != null,
             a.OwnerCollectedAt != null, cancelled, ready, a.Amount, receipt?.Id,
             a.Items.OrderBy(x => items.FirstOrDefault(i => i.Id == x.ItemId)?.Position ?? 0).Select(x =>
             {
                 var item = items.FirstOrDefault(i => i.Id == x.ItemId);
-                return new LiquidationIntakeItemDto(x.Id, x.ItemId, item?.Kind ?? LiquidationV2Rules.KindOf(x.Unit), item?.MaterialCode, x.Name, x.Unit, x.Quantity, x.UnitPrice, x.Amount);
+                var confirmed = handover?.Lines.SingleOrDefault(l=>l.AgreementItemId==x.Id);
+                return new LiquidationIntakeItemDto(x.Id, x.ItemId, item?.Kind ?? LiquidationV2Rules.KindOf(x.Unit), item?.MaterialCode, x.Name, x.Unit, x.Quantity, x.UnitPrice, confirmed?.Amount ?? x.Amount, confirmed?.Quantity);
             }).ToList());
     }
 
@@ -486,12 +491,12 @@ public sealed class LiquidationV2Service(ILiquidationV2Repository repository, ID
             }).ToList();
             var agreement = new LiquidationAgreement
             {
-                LotId = lot.Id, FormatVersion = 2, WinningBidId = null, DepotId = group.Key.DepotId, BuyerId = group.Key.OwnerId,
+                LotId = lot.Id, FormatVersion = 2, PricingBasis = lot.PricingBasis, WinningBidId = null, DepotId = group.Key.DepotId, BuyerId = group.Key.OwnerId,
                 Amount = lines.Sum(x => x.Amount), DepositAmount = 0, CreatedAt = now, Items = lines
             };
             repository.AddAgreement(agreement);
             repository.AddNotice(Notification.ForDepot(group.Key.OwnerId, group.Key.DepotId, "LIQUIDATION", "Kho của bạn đã thắng hạng mục",
-                $"Bạn thắng {lines.Count} hạng mục của phiên {lot.Title}, tổng {agreement.Amount:N0} đ theo số lượng đã đăng. Hai bên tự thanh toán và bàn giao trước {lot.CollectionDeadline:HH:mm dd/MM/yyyy} UTC.",
+                $"Bạn thắng {lines.Count} hạng mục của phiên {lot.Title}, tạm tính {agreement.Amount:N0} đ theo lượng đăng. {(agreement.PricingBasis == ConfirmedQuantityPricing ? "Cần chốt cân/kiểm đếm với Seller trước khi thanh toán. " : "")}Hai bên bàn giao trước {lot.CollectionDeadline:HH:mm dd/MM/yyyy} UTC.",
                 targetType: "LIQUIDATION_V2", targetId: lot.Id));
         }
         var winners = won.Select(x => (x.Bid.OwnerId, x.Bid.DepotId)).ToHashSet();
@@ -591,11 +596,12 @@ public sealed class LiquidationV2Service(ILiquidationV2Repository repository, ID
     private static string Stage(LiquidationAgreement a) =>
         a.Resolution == "CANCELLED" ? "CANCELLED" :
         a.AbandonReportedAt != null && a.Resolution == null ? "DISPUTED" :
+        a.PricingBasis == ConfirmedQuantityPricing && a.HandoverStatus != "CONFIRMED"
+            ? a.HandoverStatus == "PENDING" ? "WAITING_SELLER_QUANTITY" : "WAITING_BUYER_QUANTITY" :
         a.PaymentConfirmedAt == null ? (a.PaymentReportedAt == null ? "WAITING_BUYER_PAYMENT" : "WAITING_SELLER_CONFIRM") :
         a.SellerHandedOverAt == null ? "WAITING_HANDOVER" : a.OwnerCollectedAt == null ? "WAITING_OWNER_RECEIVE" : "COMPLETED";
 
-    private static string Revision(LiquidationAgreement a) => string.Join('.', new[]
-        { a.PaymentConfirmedAt, a.SellerHandedOverAt, a.OwnerCollectedAt, a.AbandonReportedAt, a.ResolvedAt }.Select(x => x?.Ticks.ToString() ?? "0"));
+    private static string Revision(LiquidationAgreement a) => Retrack.API.Helpers.LiquidationSourceRevision.For(a);
 
     private async Task<LiquidationV2AgreementDto> AgreementDtoAsync(LiquidationAgreement a, bool forSeller)
     {
@@ -605,9 +611,10 @@ public sealed class LiquidationV2Service(ILiquidationV2Repository repository, ID
         var buyer = await repository.UserAsync(a.BuyerId);
         var items = await repository.ItemsAsync(a.LotId);
         var stage = Stage(a);
+        var handover = a.HandoverRevision == 0 ? null : await repository.HandoverAsync(a.Id, a.HandoverRevision);
         var next = forSeller
-            ? stage switch { "WAITING_SELLER_CONFIRM" => "CONFIRM_PAYMENT", "WAITING_HANDOVER" => "CONFIRM_HANDOVER", _ => null }
-            : stage switch { "WAITING_BUYER_PAYMENT" => "REPORT_PAYMENT", "WAITING_OWNER_RECEIVE" => "CONFIRM_RECEIVED", "COMPLETED" when receipt == null => "STOCK_INTAKE", _ => null };
+            ? stage switch { "WAITING_SELLER_QUANTITY" => "DECIDE_QUANTITY", "WAITING_SELLER_CONFIRM" => "CONFIRM_PAYMENT", "WAITING_HANDOVER" => "CONFIRM_HANDOVER", _ => null }
+            : stage switch { "WAITING_BUYER_QUANTITY" => "PROPOSE_QUANTITY", "WAITING_BUYER_PAYMENT" => "REPORT_PAYMENT", "WAITING_OWNER_RECEIVE" => "CONFIRM_RECEIVED", "COMPLETED" when receipt == null => "STOCK_INTAKE", _ => null };
         return new(a.Id, a.LotId, a.Lot.Title, a.DepotId, depot, seller?.FullName ?? "Seller", forSeller ? null : seller?.Phone,
             forSeller ? buyer?.FullName : null, forSeller ? buyer?.Phone : null, forSeller ? a.Lot.Address : a.Lot.Address,
             a.Lot.ContactPhone, a.Lot.CollectionTerms, a.Lot.CollectionDeadline, a.Amount,
@@ -616,11 +623,11 @@ public sealed class LiquidationV2Service(ILiquidationV2Repository repository, ID
             a.PaymentReference, a.PaymentReportedAt, a.PaymentConfirmedAt, a.SellerHandedOverAt, a.OwnerCollectedAt, receipt?.Id, receipt?.Status,
             stage, next, a.AbandonReportedAt, a.AbandonReason,
             a.AbandonReportedAt == null ? null : a.AbandonReportedBy == a.Lot.SellerId ? "SELLER" : "BUYER",
-            a.Resolution, a.ResolutionNote, a.ResolvedAt, a.CreatedAt);
+            a.Resolution, a.ResolutionNote, a.ResolvedAt, a.CreatedAt, a.PricingBasis, a.HandoverRevision, a.HandoverStatus, HandoverDto(handover));
     }
 
     private static LiquidationV2SummaryDto Summary(LiquidationLot x, DateTime now, int itemCount, string[] names) => new(x.Id, x.Title, x.PublicArea,
         itemCount, names, x.BidCount, LiquidationRules.Phase(x.Status, now, x.SurveyStart, x.SurveyEnd, x.BiddingStart, x.BiddingEnd), x.Status,
         x.SurveyStart, x.SurveyEnd, x.BiddingStart, x.BiddingEnd, x.OriginalEnd.AddMinutes(LiquidationV2Rules.MaxExtensionMinutes), x.ExtensionCount,
-        LiquidationV2Rules.MaxExtensions - x.ExtensionCount, x.CollectionDeadline, x.CollectionWindowHours ?? 0, x.ImageUrls, now);
+        LiquidationV2Rules.MaxExtensions - x.ExtensionCount, x.CollectionDeadline, x.CollectionWindowHours ?? 0, x.ImageUrls, now, PricingBasis: x.PricingBasis);
 }

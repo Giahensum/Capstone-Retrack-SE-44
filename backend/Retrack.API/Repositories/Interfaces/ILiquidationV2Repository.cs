@@ -41,5 +41,8 @@ public interface ILiquidationV2Repository
     void AddParticipationItem(LiquidationParticipationItem item);
     void AddBid(LiquidationItemBid bid);
     void AddAgreement(LiquidationAgreement agreement);
+    Task<LiquidationHandover?> HandoverAsync(Guid agreementId, int revision);
+    Task<LiquidationHandover?> HandoverOperationAsync(Guid id);
+    void AddHandover(LiquidationHandover handover);
     void AddNotice(Notification notice);
 }

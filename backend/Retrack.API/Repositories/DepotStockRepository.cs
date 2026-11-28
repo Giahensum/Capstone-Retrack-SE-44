@@ -45,6 +45,13 @@ public sealed partial class DepotStockRepository(AppDbContext db) : IDepotStockR
     public Task<DepotBulkStockSource?> BulkSourceAsync(Guid agreementId) => db.LiquidationAgreements.AsNoTracking()
         .Where(x => x.Id == agreementId).Select(x => new DepotBulkStockSource(x.DepotId, x.Amount,
             x.PaymentConfirmedAt != null && x.OwnerCollectedAt != null && x.SellerHandedOverAt != null)).SingleOrDefaultAsync();
+    public Task<List<DepotBulkCostItem>> BulkCostItemsAsync(Guid agreementId) => db.LiquidationAgreementItems.AsNoTracking()
+        .Where(x=>x.AgreementId==agreementId).OrderBy(x=>x.Item.Position).ThenBy(x=>x.Id)
+        .Select(x=>new DepotBulkCostItem(x.Id,x.Agreement.PricingBasis=="CONFIRMED_HANDOVER_QUANTITY"
+            ? db.LiquidationHandoverLines.Where(l=>l.AgreementItemId==x.Id && l.Handover.AgreementId==agreementId &&
+                l.Handover.Revision==x.Agreement.HandoverRevision && l.Handover.Status=="CONFIRMED")
+                .Select(l=>(decimal?)l.Amount).SingleOrDefault()
+            : x.Amount)).ToListAsync();
     public Task<bool> HasBulkReceiptAsync(Guid agreementId) => db.DepotStockReceipts.AnyAsync(x => x.BulkAgreementId == agreementId && x.Status != "VOIDED" && x.Status != "REJECTED");
     // Caller đã khóa Depot. Khóa phiên cùng thứ tự với Seller/Owner xác nhận thỏa thuận.
     public async Task<LiquidationAgreement?> LockBulkSourceAsync(Guid agreementId)

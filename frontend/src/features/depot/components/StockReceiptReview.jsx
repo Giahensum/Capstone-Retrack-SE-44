@@ -33,7 +33,7 @@ export default function StockReceiptReview({ receipt, onClose }) {
         {x.conditionNote && <p className="text-sm mt-1">{x.conditionNote}</p>}</div>)}
       <BatchDetailSection title="Chi phí và phân bổ giá vốn (nâng cao)">
       <dl className="grid sm:grid-cols-2 gap-3"><div><dt>Giá mua cả lô đã ghi</dt><dd className="font-semibold">{money(receipt.purchaseCost)}</dd></div><div><dt>Chi phí phiếu gốc đã ghi</dt><dd className="font-semibold">{money(receipt.totalCost)}</dd></div></dl>
-      <CostAllocationPanel purchaseCost={receipt.purchaseCost} lines={receipt.lines} expenses={receipt.expenses} enabled={receipt.costsConfirmed} snapshot />
+      <CostAllocationPanel bulkAgreementId={receipt.bulkAgreementId} sourceRevision={receipt.sourceRevision} purchaseCost={receipt.purchaseCost} lines={receipt.lines} expenses={receipt.expenses} enabled={receipt.costsConfirmed} snapshot />
       {receipt.expenses.length > 0 && <ul className="text-sm space-y-2">{receipt.expenses.map((x, i) => <li key={i}>{x.description}: {money(x.amount)}</li>)}</ul>}
       </BatchDetailSection>
       {canReview && <>
@@ -44,7 +44,7 @@ export default function StockReceiptReview({ receipt, onClose }) {
             lines: lines.map(x => ({ id: x.id, referencePrice: Number(x.referencePrice || 0), directCost: Number(x.directCost || 0) })),
             expenses: expenses.map(({ key: _key, ...x }) => ({ ...x, amount: Number(x.amount || 0) })) } });
         }}>
-          <fieldset disabled={busy} className="space-y-4"><StockReceiptCosts purchaseCost={purchaseCost} setPurchaseCost={setPurchaseCost} linked={!!receipt.bulkAgreementId}
+          <fieldset disabled={busy} className="space-y-4"><StockReceiptCosts bulkAgreementId={receipt.bulkAgreementId} sourceRevision={receipt.sourceRevision} purchaseCost={purchaseCost} setPurchaseCost={setPurchaseCost} linked={!!receipt.bulkAgreementId}
             confirmed={confirmed} setConfirmed={setConfirmed} lines={lines} setLines={setLines} expenses={expenses} setExpenses={setExpenses} />
             <button className={buttonClass}>Lưu chi phí và tính phân bổ</button>
           </fieldset><MutationError mutation={save} />
