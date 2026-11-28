@@ -55,7 +55,8 @@ public class FactoryMarketService(AppDbContext db, IFactoryMarketRepository? rea
 
     public async Task<ServiceResult<IReadOnlyList<MarketPriceResponse>>> PricesAsync(CancellationToken ct)
     {
-        var prices = await marketReads.PricesAsync(ct);
+        var rows = await marketReads.PricesAsync(ct);
+        var prices = rows.GroupBy(x => x.MaterialType).Select(x => x.First()).OrderBy(x => x.MaterialType);
         return ServiceResult<IReadOnlyList<MarketPriceResponse>>.Success(data: prices.Select(x => new MarketPriceResponse
         {
             MaterialType = x.MaterialType.ToString(),

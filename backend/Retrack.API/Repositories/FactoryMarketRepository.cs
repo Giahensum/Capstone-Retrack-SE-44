@@ -35,7 +35,5 @@ public sealed class FactoryMarketRepository(AppDbContext db) : IFactoryMarketRep
 
     public async Task<IReadOnlyList<MarketPrice>> PricesAsync(CancellationToken ct) =>
         await db.MarketPrices.AsNoTracking()
-            .GroupBy(x => x.MaterialType)
-            .Select(g => g.OrderByDescending(x => x.EffectiveDate).ThenByDescending(x => x.CreatedAt).First())
-            .OrderBy(x => x.MaterialType).ToListAsync(ct);
+            .OrderByDescending(x => x.EffectiveDate).ThenByDescending(x => x.CreatedAt).ToListAsync(ct);
 }
