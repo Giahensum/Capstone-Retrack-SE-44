@@ -14,6 +14,7 @@ public interface ILiquidationV2Service
     Task<PagedResult<LiquidationV2MyBidDto>> MyBidsAsync(Guid ownerId, Guid depotId, Guid lotId, Guid itemId, int page);
     Task<LiquidationV2AgreementDto> AgreementAsync(Guid ownerId, Guid depotId, Guid agreementId);
     Task<LiquidationV2AgreementDto> BuyerActionAsync(Guid ownerId, Guid depotId, Guid agreementId, string action, string? text = null);
+    Task<LiquidationV2AgreementDto> ProposeHandoverAsync(Guid owner, Guid depot, Guid id, ProposeLiquidationHandoverDto input);
     Task<LiquidationIntakeSourceDto> IntakeSourceAsync(Guid ownerId, Guid depotId, Guid agreementId);
     Task<List<Guid>> ExpiredAsync();
     Task FinalizeAsync(Guid lotId);
@@ -27,6 +28,7 @@ public interface ISellerLiquidationV2Service
     Task<SellerLiquidationV2DetailDto> DetailAsync(Guid sellerId, Guid lotId);
     Task<PagedResult<SellerLiquidationV2BidDto>> ItemBidsAsync(Guid sellerId, Guid lotId, Guid itemId, int page);
     Task CancelAsync(Guid sellerId, Guid lotId, string reason);
+    Task<LiquidationV2AgreementDto> DecideHandoverAsync(Guid seller, Guid id, DecideLiquidationHandoverDto input);
     Task<LiquidationV2AgreementDto> SellerActionAsync(Guid sellerId, Guid agreementId, string action, string? text = null);
 }
 

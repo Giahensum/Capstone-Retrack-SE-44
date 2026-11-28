@@ -152,5 +152,13 @@ public sealed class LiquidationV2Repository(AppDbContext db) : ILiquidationV2Rep
     public void AddParticipationItem(LiquidationParticipationItem item) => db.LiquidationParticipationItems.Add(item);
     public void AddBid(LiquidationItemBid bid) => db.LiquidationItemBids.Add(bid);
     public void AddAgreement(LiquidationAgreement agreement) => db.LiquidationAgreements.Add(agreement);
+    public async Task<LiquidationHandover?> HandoverAsync(Guid agreementId, int revision)
+    {
+        var row=await db.LiquidationHandovers.Include(x=>x.Lines).SingleOrDefaultAsync(x=>x.AgreementId==agreementId && x.Revision==revision);
+        if(row!=null)await db.Entry(row).ReloadAsync();
+        return row;
+    }
+    public Task<LiquidationHandover?> HandoverOperationAsync(Guid id) => db.LiquidationHandovers.AsNoTracking().Include(x => x.Lines).SingleOrDefaultAsync(x => x.Id == id);
+    public void AddHandover(LiquidationHandover handover) => db.LiquidationHandovers.Add(handover);
     public void AddNotice(Notification notice) => db.Notifications.Add(notice);
 }

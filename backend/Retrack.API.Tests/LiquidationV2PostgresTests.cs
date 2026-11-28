@@ -85,9 +85,11 @@ public sealed class LiquidationV2PostgresTests : IAsyncLifetime
         };
     }
 
-    private async Task<(Guid Lot, Guid Iron, Guid Tv)> OpenCampaignWithBothDepotsAsync()
+    private async Task<(Guid Lot, Guid Iron, Guid Tv)> OpenCampaignWithBothDepotsAsync(bool legacy = true)
     {
         var created = await Run(s => s.CreateAsync(seller, Campaign(Guid.NewGuid())));
+        // Các ca cũ kiểm tương thích điều kiện đã công bố trước khi có chốt cân.
+        if (legacy) { await using var db=Open();var old=await db.LiquidationLots.SingleAsync(x=>x.Id==created.Campaign.Id);old.PricingBasis="POSTED_QUANTITY";await db.SaveChangesAsync(); }
         var iron = created.Items.Single(x => x.Unit == "kg").Id; var tv = created.Items.Single(x => x.Unit == "cai").Id;
         clock.Advance(TimeSpan.FromMinutes(2));
         await Run(s => s.RegisterAsync(ownerA, depotA, created.Campaign.Id, new(true, [iron])));
@@ -96,6 +98,115 @@ public sealed class LiquidationV2PostgresTests : IAsyncLifetime
         await Run(s => s.ConfirmSurveyAsync(ownerB, depotB, created.Campaign.Id, true));
         clock.Advance(TimeSpan.FromMinutes(9)); // vào giờ trả giá
         return (created.Campaign.Id, iron, tv);
+    }
+
+
+    private async Task<LiquidationV2AgreementDto> AwardNewAgreement()
+    {
+        var (lot,iron,tv)=await OpenCampaignWithBothDepotsAsync(legacy:false);
+        await Run(s=>s.BidAsync(ownerB,depotB,lot,iron,new(Guid.NewGuid(),3000,0)));
+        await Run(s=>s.BidAsync(ownerB,depotB,lot,tv,new(Guid.NewGuid(),50000,0)));
+        clock.Advance(TimeSpan.FromHours(2));await Run(s=>s.FinalizeAsync(lot));
+        var details=await Run(s=>s.DetailAsync(ownerB,depotB,lot));
+        return await Run(s=>s.AgreementAsync(ownerB,depotB,details.AgreementId!.Value));
+    }
+    private static ProposeLiquidationHandoverDto Proposal(LiquidationV2AgreementDto a,decimal iron=95,int revision=0) => new()
+    {
+        OperationId=Guid.NewGuid(),ExpectedRevision=revision,
+        Lines=a.Items.Select(x=>new LiquidationHandoverLineInput(x.Id,x.Unit=="kg"?iron:2)).ToList()
+    };
+
+    [PostgresV2Fact]
+    public async Task Confirmed_handover_locks_exact_item_amounts_and_preserves_auction_snapshot()
+    {
+        var a=await AwardNewAgreement();Assert.Equal("WAITING_BUYER_QUANTITY",a.Stage);
+        Assert.Equal(LiquidationV2Service.ConfirmedQuantityPricing,a.PricingBasis);
+        await Assert.ThrowsAsync<DepotConflictException>(()=>Run(s=>s.SellerActionAsync(seller,a.Id,"CONFIRM_PAYMENT")));
+        var input=Proposal(a);
+        var proposed=await Run(s=>s.ProposeHandoverAsync(ownerB,depotB,a.Id,input));
+        Assert.Equal("WAITING_SELLER_QUANTITY",proposed.Stage);Assert.Equal(385000,proposed.Handover!.Amount);
+        var retry=await Run(s=>s.ProposeHandoverAsync(ownerB,depotB,a.Id,input));
+        Assert.Equal(proposed.Handover.Id,retry.Handover!.Id);
+        await Assert.ThrowsAsync<DepotForbiddenException>(()=>Run(s=>s.ProposeHandoverAsync(ownerA,depotB,a.Id,input)));
+        await Assert.ThrowsAsync<KeyNotFoundException>(()=>Run(s=>s.DecideHandoverAsync(ownerA,a.Id,new(1,true,null))));
+        var accepted=await Run(s=>s.DecideHandoverAsync(seller,a.Id,new(1,true,null)));
+        Assert.Equal("WAITING_BUYER_PAYMENT",accepted.Stage);Assert.Equal(385000,accepted.TotalAmount);
+        Assert.Equal(100,accepted.Items.Single(x=>x.Unit=="kg").Quantity);
+        Assert.Equal(300000,accepted.Items.Single(x=>x.Unit=="kg").Amount);
+        await Run(s=>s.DecideHandoverAsync(seller,a.Id,new(1,true,null)));
+        await Assert.ThrowsAsync<DepotConflictException>(()=>Run(s=>s.ProposeHandoverAsync(ownerB,depotB,a.Id,Proposal(a,90,1))));
+        await Run(s=>s.BuyerActionAsync(ownerB,depotB,a.Id,"REPORT_PAYMENT","CK đã trả 385000"));
+        await Run(s=>s.SellerActionAsync(seller,a.Id,"CONFIRM_PAYMENT"));
+        await Run(s=>s.SellerActionAsync(seller,a.Id,"CONFIRM_HANDOVER"));
+        var source=await Run(s=>s.IntakeSourceAsync(ownerB,depotB,a.Id));
+        Assert.True(source.ReadyForIntake);Assert.Equal(3,source.FormatVersion);
+        Assert.Equal(95,source.Items.Single(x=>x.Unit=="kg").ConfirmedQuantity);
+        Assert.Equal(285000,source.Items.Single(x=>x.Unit=="kg").FinalAmount);
+        await using var db=Open();
+        Assert.Single(await db.LiquidationHandovers.Where(x=>x.AgreementId==a.Id).ToListAsync());
+        Assert.Equal(1,await db.Notifications.CountAsync(x=>x.UserId==ownerB && x.Title=="Seller đã xác nhận số cân/kiểm đếm"));
+    }
+    [PostgresV2Fact]
+    public async Task Rejected_or_superseded_handover_keeps_history_and_rejects_stale_confirmation()
+    {
+        var a=await AwardNewAgreement();var first=Proposal(a);
+        await Run(s=>s.ProposeHandoverAsync(ownerB,depotB,a.Id,first));
+        var rejected=await Run(s=>s.DecideHandoverAsync(seller,a.Id,new(1,false,"Cần cân lại trước khi trả tiền")));
+        Assert.Equal("WAITING_BUYER_QUANTITY",rejected.Stage);
+        await Assert.ThrowsAsync<DepotConflictException>(()=>Run(s=>s.BuyerActionAsync(ownerB,depotB,a.Id,"REPORT_PAYMENT","Chưa chốt")));
+        await Run(s=>s.ProposeHandoverAsync(ownerB,depotB,a.Id,Proposal(a,90,1)));
+        await Assert.ThrowsAsync<DepotConflictException>(()=>Run(s=>s.DecideHandoverAsync(seller,a.Id,new(1,true,null))));
+        var accepted=await Run(s=>s.DecideHandoverAsync(seller,a.Id,new(2,true,null)));
+        Assert.Equal(370000,accepted.TotalAmount);
+        await using var db=Open();
+        var rows=await db.LiquidationHandovers.Where(x=>x.AgreementId==a.Id).OrderBy(x=>x.Revision).ToListAsync();
+        Assert.Equal(new[]{"REJECTED","CONFIRMED"},rows.Select(x=>x.Status));
+        Assert.Equal("Cần cân lại trước khi trả tiền",rows[0].DecisionNote);
+    }
+    [PostgresV2Fact]
+    public async Task Concurrent_proposals_and_seller_decision_cannot_confirm_stale_quantities()
+    {
+        var a=await AwardNewAgreement();
+        async Task<bool> Attempt(Func<Task> action){try{await action();return true;}catch(DepotConflictException){return false;}}
+        var proposalResults=await Task.WhenAll(Enumerable.Range(0,2).Select(_=>Attempt(()=>Run(s=>s.ProposeHandoverAsync(ownerB,depotB,a.Id,Proposal(a))))));
+        Assert.Equal(1,proposalResults.Count(x=>x));
+        var decisionResults=await Task.WhenAll(
+            Attempt(()=>Run(s=>s.DecideHandoverAsync(seller,a.Id,new(1,true,null)))),
+            Attempt(()=>Run(s=>s.ProposeHandoverAsync(ownerB,depotB,a.Id,Proposal(a,90,1)))));
+        Assert.Equal(1,decisionResults.Count(x=>x));
+        var current=await Run(s=>s.AgreementAsync(ownerB,depotB,a.Id));
+        if(current.HandoverStatus=="CONFIRMED"){Assert.Equal(1,current.HandoverRevision);Assert.Equal(385000,current.TotalAmount);}
+        else {Assert.Equal(2,current.HandoverRevision);Assert.Equal("PENDING",current.HandoverStatus);}
+    }
+    [PostgresV2Fact]
+    public async Task Handover_validates_units_membership_operation_payload_and_rolls_back_invalid_rows()
+    {
+        var a=await AwardNewAgreement();
+        foreach(var invalid in new[]{0m,-1m,1.1111m})
+            await Assert.ThrowsAsync<ArgumentException>(()=>Run(s=>s.ProposeHandoverAsync(ownerB,depotB,a.Id,Proposal(a,invalid))));
+        var badCount=Proposal(a);
+        // Không phụ thuộc thứ tự hạng mục khi chọn dòng cái/bộ.
+        var piece=a.Items.Single(x=>x.Unit!="kg").Id;
+        badCount.Lines=Proposal(a).Lines.Select(x=>x.AgreementItemId==piece?x with {Quantity=1.5m}:x).ToList();
+        await Assert.ThrowsAsync<ArgumentException>(()=>Run(s=>s.ProposeHandoverAsync(ownerB,depotB,a.Id,badCount)));
+        var missing=Proposal(a);missing.Lines.RemoveAt(0);
+        await Assert.ThrowsAsync<ArgumentException>(()=>Run(s=>s.ProposeHandoverAsync(ownerB,depotB,a.Id,missing)));
+        var source=Proposal(a);await Run(s=>s.ProposeHandoverAsync(ownerB,depotB,a.Id,source));
+        source.Note="Nội dung khác";
+        await Assert.ThrowsAsync<DepotConflictException>(()=>Run(s=>s.ProposeHandoverAsync(ownerB,depotB,a.Id,source)));
+        await using var db=Open();Assert.Equal(1,await db.LiquidationHandovers.CountAsync(x=>x.AgreementId==a.Id));
+        Assert.Equal(1,(await db.LiquidationAgreements.SingleAsync(x=>x.Id==a.Id)).HandoverRevision);
+    }
+
+    [PostgresV2Fact]
+    public async Task New_campaign_blocks_payment_until_seller_confirms_handover_quantity()
+    {
+        var (lot,iron,_) = await OpenCampaignWithBothDepotsAsync(legacy:false);
+        await Run(s=>s.BidAsync(ownerA,depotA,lot,iron,new(Guid.NewGuid(),3000,0)));
+        clock.Advance(TimeSpan.FromHours(2));
+        await Run(s=>s.FinalizeAsync(lot));
+        var agreement=(await Run(s=>s.DetailAsync(ownerA,depotA,lot))).AgreementId!.Value;
+        await Assert.ThrowsAsync<DepotConflictException>(()=>Run(s=>s.BuyerActionAsync(ownerA,depotA,agreement,"REPORT_PAYMENT","Chưa chốt cân")));
     }
 
     [PostgresV2Fact]
