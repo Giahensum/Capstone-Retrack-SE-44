@@ -558,7 +558,6 @@ public sealed partial class LiquidationV2Service(ILiquidationV2Repository reposi
         r.Agreement.Amount, Stage(r.Agreement), r.Agreement.AbandonReportedAt!.Value, r.Agreement.AbandonReportedBy == r.SellerId ? "SELLER" : "BUYER",
         r.Agreement.AbandonReason!, r.Agreement.Resolution, r.Agreement.ResolutionNote, r.Agreement.ResolvedAt);
 
-    // ───────────────────────── Dùng chung ─────────────────────────
     // Thông báo cho Seller của phiên V2: đích LIQUIDATION_V2 để giao diện mở trang phiên nhiều hạng mục, không mở nhầm trang V1.
     private static Notification SellerNotice(Guid seller, Guid lot, string title, string message) => new()
         { UserId = seller, Category = "LIQUIDATION", TargetType = "LIQUIDATION_V2", TargetId = lot, Title = title, Message = message };

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Retrack.API.Data;
@@ -7,6 +8,7 @@ using Retrack.API.Models;
 using Retrack.API.Repositories;
 using Retrack.API.Services.Depot;
 using Retrack.API.Services.Liquidation;
+using Retrack.API.Services.Money;
 using Xunit;
 
 namespace Retrack.API.Tests;
@@ -66,6 +68,28 @@ public sealed class LiquidationV2PostgresTests : IAsyncLifetime
             new DepotSubscriptionService(new DepotSubscriptionRepository(db), new NoPayOs(), clock)), new DepotUnitOfWork(db), new DepotBatchRepository(db), clock);
     private async Task<T> Run<T>(Func<LiquidationV2Service, Task<T>> action) { await using var db = Open(); return await action(Service(db)); }
     private async Task Run(Func<LiquidationV2Service, Task> action) { await using var db = Open(); await action(Service(db)); }
+
+    // Bản service có kiểm tra hạn gói thật (như DI production); các test khác giữ bản không gói để tập trung vào luật đấu giá.
+    private sealed class NoPayOs : IPayOsClient
+    {
+        public bool IsConfigured => false;
+        public Task<PayOsLink> CreatePaymentLinkAsync(long code, long amount, string description, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<PayOsPayment> GetPaymentAsync(long code, CancellationToken ct = default) => throw new NotSupportedException();
+        public bool VerifyWebhookData(JsonElement data, string signature) => false;
+    }
+    private async Task<T> RunPaid<T>(Func<LiquidationV2Service, Task<T>> action)
+    {
+        await using var db = Open();
+        var subscriptions = new DepotSubscriptionService(new DepotSubscriptionRepository(db), new NoPayOs(), clock);
+        return await action(new(new LiquidationV2Repository(db), new DepotService(new DepotOwnerRepository(db), new DepotPaymentReadRepository(db)),
+            new DepotUnitOfWork(db), new DepotBatchRepository(db), clock, subscriptions));
+    }
+    private async Task TrialAsync(Guid depot, TimeSpan left)
+    {
+        await using var db = Open();
+        db.DepotSubscriptions.Add(new DepotSubscription { DepotId = depot, TrialStartedAt = clock.Now.AddDays(-1), TrialEndsAt = clock.Now.Add(left), UpdatedAt = clock.Now });
+        await db.SaveChangesAsync();
+    }
 
     private CreateLiquidationV2Dto Campaign(Guid operation)
     {
@@ -327,6 +351,45 @@ public sealed class LiquidationV2PostgresTests : IAsyncLifetime
         await Run(s=>s.FinalizeAsync(lot));
         var agreement=(await Run(s=>s.DetailAsync(ownerA,depotA,lot))).AgreementId!.Value;
         await Assert.ThrowsAsync<DepotConflictException>(()=>Run(s=>s.BuyerActionAsync(ownerA,depotA,agreement,"REPORT_PAYMENT","Chưa chốt cân")));
+    }
+
+    [PostgresV2Fact]
+    public async Task Expired_subscription_blocks_new_bids_but_not_retries_or_won_agreements()
+    {
+        var created = await Run(s => s.CreateAsync(seller, Campaign(Guid.NewGuid())));
+        var lot = created.Campaign.Id; var iron = created.Items.Single(x => x.Unit == "kg").Id;
+        clock.Advance(TimeSpan.FromMinutes(2));
+        // Kho chưa dùng thử/mua gói: không đăng ký được hạng mục (402 SUBSCRIPTION_REQUIRED).
+        await Assert.ThrowsAsync<DepotSubscriptionRequiredException>(() => RunPaid(s => s.RegisterAsync(ownerA, depotA, lot, new(true, [iron]))));
+        await using (var db = Open()) Assert.False(await db.Set<LiquidationParticipation>().AnyAsync(x => x.LotId == lot));
+
+        await TrialAsync(depotA, TimeSpan.FromMinutes(12)); await TrialAsync(depotB, TimeSpan.FromDays(10));
+        await RunPaid(s => s.RegisterAsync(ownerA, depotA, lot, new(true, [iron])));
+        await RunPaid(s => s.RegisterAsync(ownerB, depotB, lot, new(true, [iron])));
+        await RunPaid(s => s.ConfirmSurveyAsync(ownerA, depotA, lot, true));
+        await RunPaid(s => s.ConfirmSurveyAsync(ownerB, depotB, lot, true));
+        clock.Advance(TimeSpan.FromMinutes(9)); // vào giờ trả giá, kho A còn 3 phút dùng thử
+        var op = Guid.NewGuid();
+        var first = await RunPaid(s => s.BidAsync(ownerA, depotA, lot, iron, new(op, 3000, 0)));
+
+        clock.Advance(TimeSpan.FromMinutes(5)); // kho A hết hạn
+        // Gửi lại đúng lượt cũ vẫn nhận kết quả cũ; lượt trả giá mới bị chặn, không ghi bid.
+        Assert.Equal(first.Id, (await RunPaid(s => s.BidAsync(ownerA, depotA, lot, iron, new(op, 3000, 0)))).Id);
+        await RunPaid(s => s.BidAsync(ownerB, depotB, lot, iron, new(Guid.NewGuid(), 3100, 1)));
+        await Assert.ThrowsAsync<DepotSubscriptionRequiredException>(() => RunPaid(s => s.BidAsync(ownerA, depotA, lot, iron, new(Guid.NewGuid(), 3200, 2))));
+        await using (var db = Open()) Assert.Equal(2, await db.Set<LiquidationItemBid>().CountAsync(x => x.ItemId == iron));
+
+        // Kho B thắng rồi hết hạn: thỏa thuận đã phát sinh vẫn hoàn tất được.
+        clock.Advance(TimeSpan.FromMinutes(60));
+        await Run(s => s.FinalizeAsync(lot));
+        await using (var db = Open())
+        {
+            var sub = await db.DepotSubscriptions.SingleAsync(x => x.DepotId == depotB);
+            sub.TrialEndsAt = clock.Now.AddMinutes(-1); await db.SaveChangesAsync();
+        }
+        Guid agreementId; await using (var db = Open()) agreementId = (await db.LiquidationAgreements.SingleAsync(x => x.LotId == lot)).Id;
+        var reported = await RunPaid(s => s.BuyerActionAsync(ownerB, depotB, agreementId, "REPORT_PAYMENT", "Chuyển khoản VCB 456"));
+        Assert.Equal("WAITING_SELLER_CONFIRM", reported.Stage);
     }
 
     [PostgresV2Fact]
