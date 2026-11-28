@@ -7,19 +7,20 @@ using Retrack.API.Repositories.Interfaces;
 namespace Retrack.API.Services.Factory;
 
 public abstract class FactoryServiceBase(AppDbContext db, IFactoryOrderRepository? orders = null, IFactoryUnitOfWork? unitOfWork = null,
-    IFactoryProfileRepository? profiles = null)
+    IFactoryProfileRepository? profiles = null, IFactoryWorkflowRepository? workflow = null)
 {
     protected AppDbContext Db { get; } = db;
     protected IFactoryOrderRepository OrderRepository { get; } = orders ?? new FactoryOrderRepository(db);
     protected IFactoryUnitOfWork Work { get; } = unitOfWork ?? new FactoryUnitOfWork(db);
     protected IFactoryProfileRepository Profiles { get; } = profiles ?? new FactoryProfileRepository(db);
+    protected IFactoryWorkflowRepository Workflow { get; } = workflow ?? new FactoryWorkflowRepository(db);
 
     // Giữ transaction/DbContext hiện hành của Factory; chỉ bổ sung thông báo cho Owner.
     protected async Task NotifyDepotAsync(Guid depotId, string title, string message, Guid? batchId = null,
         string? targetType = null, CancellationToken ct = default)
     {
-        var ownerId = await Db.Depots.Where(x => x.Id == depotId).Select(x => x.OwnerId).SingleAsync(ct);
-        Db.Notifications.Add(Notification.ForDepot(ownerId, depotId, "FACTORY", title, message, batchId, targetType));
+        var ownerId = await Workflow.DepotOwnerAsync(depotId, ct);
+        Workflow.AddNotification(Notification.ForDepot(ownerId, depotId, "FACTORY", title, message, batchId, targetType));
     }
 
     // Các thao tác nhận/cân/KCS/quyết toán dùng cùng thứ tự khóa với Depot.

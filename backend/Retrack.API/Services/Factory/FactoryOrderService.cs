@@ -52,17 +52,14 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
         await NotifyDepotAsync(batch.DepotId, "Nhà máy xác nhận hàng đã đến", $"{factory.Name} đã xác nhận nhận hàng lô {batch.Code ?? batch.Id.ToString()}; chờ cân và KCS.", batch.Id, ct: ct);
         batch.FactoryReceivedAt = DateTime.UtcNow;
         var recipients = new List<Guid>();
-        var depotOwnerId = await Db.Depots.Where(x => x.Id == batch.DepotId).Select(x => x.OwnerId).SingleAsync(ct);
+        var depotOwnerId = await Workflow.DepotOwnerAsync(batch.DepotId, ct);
         recipients.Add(depotOwnerId);
         if (batch.TransportJob?.DriverId is Guid driverId) recipients.Add(driverId);
         var uniqueRecipients = recipients.Distinct().ToArray();
-        var existingRecipients = await Db.Notifications.AsNoTracking()
-            .Where(x => uniqueRecipients.Contains(x.UserId) && x.TransportJobId == batch.TransportJob!.Id && x.Title == "Nhà máy đã nhận hàng")
-            .Select(x => x.UserId)
-            .ToListAsync(ct);
+        var existingRecipients = await Workflow.NotifiedRecipientsAsync(batch.TransportJob!.Id, uniqueRecipients, "Nhà máy đã nhận hàng", ct);
         var recipientsAlreadyNotified = existingRecipients.ToHashSet();
         foreach (var recipient in uniqueRecipients.Where(x => !recipientsAlreadyNotified.Contains(x)))
-            Db.Notifications.Add(new Notification
+            Workflow.AddNotification(new Notification
             {
                 UserId = recipient,
                 TransportJobId = batch.TransportJob!.Id,
@@ -101,8 +98,7 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
         }
         if (batch.Status is "PAID" or "COMPLETED")
         {
-            var existing = await Db.PlatformTransactions.AsNoTracking()
-                .SingleOrDefaultAsync(x => x.SourceType == "BATCH_ORDER" && x.SourceId == batch.Id, ct);
+            var existing = await Workflow.TransactionAsync(batch.Id, ct);
             var savedQc = batch.QualityCheck;
             var sameRequest = savedQc is not null && existing is not null &&
                 batch.AgreedPricePerKg == request.AgreedPricePerKg &&
@@ -180,7 +176,7 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
         batch.Status = "SETTLEMENT_PENDING"; batch.SettlementRevision++;
         batch.SettlementProposedAt = DateTime.UtcNow; batch.SettlementApprovedAt = null; batch.SettlementApprovedBy = null;
         batch.SettlementDecisionReason = null; batch.SettledAt = null; batch.UpdatedAt = DateTime.UtcNow;
-        Db.BatchWorkflowEvents.Add(Retrack.API.Services.Depot.BatchSettlementService.Event(batch, userId, "PRICE_PROPOSED", from, "Nhà máy gửi đề xuất giá sau KCS."));
+        Workflow.AddEvent(Retrack.API.Services.Depot.BatchSettlementService.Event(batch, userId, "PRICE_PROPOSED", from, "Nhà máy gửi đề xuất giá sau KCS."));
         await NotifyDepotAsync(batch.DepotId, "Nhà máy đề xuất giá sau KCS", $"Lô {batch.Code}: đề xuất phiên bản {batch.SettlementRevision}, số tiền {batch.NetAmount:N0}đ. Vui lòng xem chi tiết để đồng ý hoặc yêu cầu điều chỉnh.", batch.Id, ct: ct);
         await Work.SaveAsync(ct); await transaction.CommitAsync(ct);
         return ServiceResult<OrderSettlementResponse>.Success(data: SettlementResponse(batch), message: "Đã gửi đề xuất; chờ vựa đồng ý giá.");
@@ -214,7 +210,7 @@ public class FactoryOrderService(AppDbContext db, FactoryAttachmentService? atta
         batch.QualityCheck.PaymentProofUrl = proofUrl;
         batch.PaymentMethod = request.PaymentMethod;
         batch.Status = "COMPLETED";
-        if (batch.SettlementWorkflowVersion > 0) Db.BatchWorkflowEvents.Add(Retrack.API.Services.Depot.BatchSettlementService.Event(batch, userId, "PAYMENT_REPORTED", previousStatus, "Nhà máy báo đã thanh toán trực tiếp; chờ kho xác nhận tiền thực nhận."));
+        if (batch.SettlementWorkflowVersion > 0) Workflow.AddEvent(Retrack.API.Services.Depot.BatchSettlementService.Event(batch, userId, "PAYMENT_REPORTED", previousStatus, "Nhà máy báo đã thanh toán trực tiếp; chờ kho xác nhận tiền thực nhận."));
         batch.UpdatedAt = DateTime.UtcNow;
         await NotifyDepotAsync(batch.DepotId, request.PaymentMethod == "BANK_TRANSFER" ? "Nhà máy bổ sung chứng từ chuyển khoản" : "Nhà máy báo đã thanh toán", $"Lô {batch.Code ?? batch.Id.ToString()}: nhà máy báo đã trả tiền. Kiểm tra tiền thực nhận trước khi xác nhận.", batch.Id, ct: ct);
         await Work.SaveAsync(ct);

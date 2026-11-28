@@ -13,7 +13,7 @@ public sealed class FactoryQualityResolutionService(AppDbContext db, FactoryAtta
     IFactoryOrderRepository? orders = null, IFactoryUnitOfWork? work = null) : FactoryServiceBase(db, orders, work)
 {
     private readonly IFactoryOrderReadRepository orderReads = reads ?? new FactoryOrderReadRepository(db);
-    private Task<bool> HasFeeAsync(Guid id, CancellationToken ct) => Db.PlatformTransactions.AnyAsync(t => t.SourceType == "BATCH_ORDER" && t.SourceId == id, ct);
+    private Task<bool> HasFeeAsync(Guid id, CancellationToken ct) => Workflow.HasFeeAsync(id, ct);
     private static bool HasMoney(InventoryBatch b) => b.SettledAt != null || b.SettlementApprovedAt != null || b.DepotPaymentConfirmedAt != null ||
         !string.IsNullOrWhiteSpace(b.PaymentReference) || !string.IsNullOrWhiteSpace(b.QualityCheck?.PaymentProofUrl);
     private async Task<ServiceResult<OrderResponse>> SavedAsync(Guid id, Guid factory, string message, CancellationToken ct) =>
@@ -23,15 +23,12 @@ public sealed class FactoryQualityResolutionService(AppDbContext db, FactoryAtta
     {
         var factory = await CurrentFactory(actor, ct);
         if (query.Page < 1 || query.PageSize is < 1 or > 100) return ServiceResult<PageResponse<Retrack.API.DTOs.Depot.BatchWorkflowEventDto>>.Invalid("Phân trang không hợp lệ.");
-        if (!await Db.InventoryBatches.AnyAsync(b => b.Id == id && b.TargetFactoryId == factory.Id, ct)) return ServiceResult<PageResponse<Retrack.API.DTOs.Depot.BatchWorkflowEventDto>>.NotFound("Không tìm thấy lô của nhà máy.");
-        var rows = Db.BatchWorkflowEvents.AsNoTracking().Where(e => e.BatchId == id);
-        var total = await rows.CountAsync(ct);
-        var offset=(long)(query.Page-1)*query.PageSize;
+        if (!await Workflow.OwnsBatchAsync(factory.Id, id, ct)) return ServiceResult<PageResponse<Retrack.API.DTOs.Depot.BatchWorkflowEventDto>>.NotFound("Không tìm thấy lô của nhà máy.");
+        var page = await Workflow.HistoryAsync(id, query.Page, query.PageSize, ct);
         return ServiceResult<PageResponse<Retrack.API.DTOs.Depot.BatchWorkflowEventDto>>.Success(data: new()
         {
-            Page=query.Page, PageSize=query.PageSize, TotalCount=total, TotalPages=(int)Math.Ceiling(total/(double)query.PageSize),
-            Items=offset>int.MaxValue ? [] : await rows.OrderByDescending(e=>e.CreatedAt).ThenBy(e=>e.Id).Skip((int)offset).Take(query.PageSize)
-                .Select(e=>new Retrack.API.DTOs.Depot.BatchWorkflowEventDto(e.Id,e.Action,e.FromStatus,e.ToStatus,e.Revision,e.Note,e.CreatedAt,e.PricePerKg,e.NetAmount)).ToListAsync(ct)
+            Page=query.Page, PageSize=query.PageSize, TotalCount=page.TotalCount, TotalPages=(int)Math.Ceiling(page.TotalCount/(double)query.PageSize),
+            Items=page.Items
         });
     }
 
@@ -47,13 +44,13 @@ public sealed class FactoryQualityResolutionService(AppDbContext db, FactoryAtta
             batch.Status is not ("REJECTED" or "NEGOTIATING" or "RETURN_REQUESTED" or "SETTLEMENT_DISPUTED" or "SETTLEMENT_PENDING") || HasMoney(batch) || await HasFeeAsync(id, ct))
             return ServiceResult<OrderResponse>.Conflict("Chỉ đổi hướng xử lý KCS không đạt trước khi hai bên đồng ý giá hoặc chuyển tiền.");
         var status = input.Resolution == "RETURN" ? "RETURN_REQUESTED" : "NEGOTIATING";
-        if (batch.Status == status && await Db.BatchWorkflowEvents.AnyAsync(e => e.BatchId == id && e.Action == "QC_RESOLUTION" && e.ToStatus == status && e.Note == input.Note.Trim(), ct))
+        if (batch.Status == status && await Workflow.HasResolutionAsync(id, status, input.Note.Trim(), ct))
             return await SavedAsync(id, factory.Id, "Hướng xử lý đã được lưu.", ct);
         var from = batch.Status;
         batch.SettlementWorkflowVersion = 1;
         batch.QualityCheck.Resolution = input.Resolution;
         batch.Status = status; batch.UpdatedAt = DateTime.UtcNow;
-        Db.BatchWorkflowEvents.Add(BatchSettlementService.Event(batch, actor, "QC_RESOLUTION", from, input.Note));
+        Workflow.AddEvent(BatchSettlementService.Event(batch, actor, "QC_RESOLUTION", from, input.Note));
         await NotifyDepotAsync(batch.DepotId, "Nhà máy cập nhật hướng xử lý KCS", $"Lô {batch.Code}: {input.Note.Trim()}. {(status == "NEGOTIATING" ? "Nhà máy có thể đề xuất giá mua theo hiện trạng; kho cần đồng ý trước khi chuyển tiền." : "Chờ bàn giao trả và kho xác nhận nhận đủ; tồn chưa được hoàn.")}", id, ct: ct);
         await Work.SaveAsync(ct); await tx.CommitAsync(ct);
         return await SavedAsync(id, factory.Id, "Đã lưu hướng xử lý, giữ nguyên kết quả KCS không đạt.", ct);
@@ -81,7 +78,7 @@ public sealed class FactoryQualityResolutionService(AppDbContext db, FactoryAtta
         batch.ReturnHandedOverAt = DateTime.UtcNow; batch.ReturnHandoverProofUrl = input.ProofUrl.Trim();
         batch.ReturnHandoverReference = input.Reference.Trim(); batch.ReturnHandoverNote = input.Note.Trim();
         batch.Status = "RETURNING"; batch.UpdatedAt = DateTime.UtcNow;
-        Db.BatchWorkflowEvents.Add(BatchSettlementService.Event(batch, actor, "RETURN_HANDED_OVER", from, input.Note));
+        Workflow.AddEvent(BatchSettlementService.Event(batch, actor, "RETURN_HANDED_OVER", from, input.Note));
         await NotifyDepotAsync(batch.DepotId, "Nhà máy đã bàn giao trả lô", $"Lô {batch.Code}: {input.Reference.Trim()}. Vui lòng kiểm đếm, cân thực nhận và chỉ xác nhận khi đủ toàn bộ lô về kho.", id, ct: ct);
         await Work.SaveAsync(ct); await tx.CommitAsync(ct);
         return await SavedAsync(id, factory.Id, "Đã ghi bàn giao trả; chờ kho xác nhận nhận đủ. Tồn chưa được hoàn.", ct);

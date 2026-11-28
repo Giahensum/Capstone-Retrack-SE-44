@@ -200,6 +200,7 @@ builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IFactoryProfileRe
 builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IFactoryProfileRepository, Retrack.API.Repositories.FactoryProfileRepository>();
 builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IFactoryAttachmentRepository, Retrack.API.Repositories.FactoryAttachmentRepository>();
 builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IFactoryPlatformFeeRepository, Retrack.API.Repositories.FactoryPlatformFeeRepository>();
+builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IFactoryWorkflowRepository, Retrack.API.Repositories.FactoryWorkflowRepository>();
 builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IFactoryOrderRepository, Retrack.API.Repositories.FactoryOrderRepository>();
 builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IFactoryUnitOfWork, Retrack.API.Repositories.FactoryUnitOfWork>();
 builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IFactoryPartnershipRepository, Retrack.API.Repositories.FactoryPartnershipRepository>();

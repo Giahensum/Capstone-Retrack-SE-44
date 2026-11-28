@@ -43,7 +43,7 @@ public class FactoryQCService(AppDbContext db, IConfiguration configuration, Fac
                 BatchId = batch.Id, FactoryId = factory.Id, ActualWeightKg = net, Grade = "PENDING",
                 AgreedPricePerKg = 0, GrossAmount = 0, NetAmount = 0, IsAccepted = false
             };
-            Db.BatchQualityChecks.Add(qc);
+            Workflow.AddQualityCheck(qc);
         }
         qc.ActualWeightKg = net;
         qc.GrossWeightKg = request.GrossWeightKg;
@@ -97,7 +97,7 @@ public class FactoryQCService(AppDbContext db, IConfiguration configuration, Fac
         batch.FactoryDecidedAt = DateTime.UtcNow;
         batch.RejectionReason = request.Accept ? null : request.Note?.Trim();
         if (batch.SettlementWorkflowVersion > 0)
-            Db.BatchWorkflowEvents.Add(Retrack.API.Services.Depot.BatchSettlementService.Event(batch, userId, request.Accept ? "QC_ACCEPTED" : "QC_REJECTED", from, request.Note));
+            Workflow.AddEvent(Retrack.API.Services.Depot.BatchSettlementService.Event(batch, userId, request.Accept ? "QC_ACCEPTED" : "QC_REJECTED", from, request.Note));
         await NotifyDepotAsync(batch.DepotId, request.Accept ? "Lô hàng đã đạt KCS" : "Nhà máy từ chối sau KCS",
             request.Accept ? $"{factory.Name} đã chấp nhận KCS lô {batch.Code ?? batch.Id.ToString()}." : $"Lô {batch.Code ?? batch.Id.ToString()}: {request.Note?.Trim()}. Hướng xử lý: {request.Resolution}. Hàng chưa được tính là đã trả về kho.", batch.Id, ct: ct);
         await Work.SaveAsync(ct);

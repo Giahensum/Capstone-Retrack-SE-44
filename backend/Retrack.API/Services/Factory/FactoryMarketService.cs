@@ -81,12 +81,12 @@ public class FactoryMarketService(AppDbContext db, IFactoryMarketRepository? rea
         var accepted = factory.AcceptedMaterialsCsv.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(MaterialCatalog.Normalize).ToArray();
         if ((accepted.Length > 0 && !accepted.Contains(MaterialCatalog.Normalize(batch.MaterialType))) || (factory.CapacityKgPerMonth > 0 && batch.DeclaredWeightKg > factory.CapacityKgPerMonth))
             return ServiceResult<BatchAcceptedResponse>.Invalid("Vật liệu hoặc khối lượng lô không phù hợp năng lực nhà máy.");
-        var partnership = await Db.FactoryDepotPartnerships.AsNoTracking().SingleOrDefaultAsync(x => x.FactoryId == factory.Id && x.DepotId == batch.DepotId, ct);
+        var partnership = await Workflow.PartnershipAsync(factory.Id, batch.DepotId, ct);
         if (partnership?.IsBlocked == true) return ServiceResult<BatchAcceptedResponse>.Conflict("Đối tác này đang bị chặn.");
         if (partnership is null)
         {
             partnership = new FactoryDepotPartnership { FactoryId = factory.Id, DepotId = batch.DepotId, Status = "PENDING" };
-            Db.FactoryDepotPartnerships.Add(partnership);
+            Workflow.AddPartnership(partnership);
         }
         await Work.SaveAsync(ct);
         // Nhận lô đầu không tự thiết lập quan hệ hợp tác lâu dài.
@@ -97,7 +97,7 @@ public class FactoryMarketService(AppDbContext db, IFactoryMarketRepository? rea
         if (batch.TransportJob is null)
         {
             var job = new TransportJob { BatchId = batch.Id, Status = batch.ShippingMethod == "EXTERNAL" ? "EXTERNAL_WAITING" : "PENDING" };
-            Db.TransportJobs.Add(job);
+            Workflow.AddTransport(job);
             if (batch.ShippingMethod == "INTERNAL") await Retrack.API.Services.Driver.DriverJobNotices.QueueAsync(new Retrack.API.Repositories.DriverDeliveryRepository(Db), batch.DepotId, job.Id, ct);
         }
         await Work.SaveAsync(ct);
