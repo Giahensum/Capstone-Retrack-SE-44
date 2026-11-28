@@ -240,6 +240,8 @@ builder.Services.AddScoped<Retrack.API.Services.Shipping.IShippingProvider>(sp =
     sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<Retrack.API.Services.Shipping.ShippingOptions>>().Value.Mode == "LalamoveSandbox"
         ? sp.GetRequiredService<Retrack.API.Services.Shipping.LalamoveSandboxProvider>()
         : sp.GetRequiredService<Retrack.API.Services.Shipping.DemoShippingProvider>());
+builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.IShippingRepository, Retrack.API.Repositories.ShippingRepository>();
+builder.Services.AddScoped<Retrack.API.Services.Shipping.ShippingWebhookService>();
 builder.Services.AddScoped<Retrack.API.Services.Shipping.ShippingService>();
 if (builder.Configuration["Shipping:Mode"] is "Demo" or "LalamoveSandbox")
     builder.Services.AddHostedService<Retrack.API.Services.Shipping.ShippingWorker>();

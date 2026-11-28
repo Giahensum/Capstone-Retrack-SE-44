@@ -71,11 +71,7 @@ public sealed class DepotBatchRepository(AppDbContext db) : IDepotBatchRepositor
     public void AddPartner(FactoryDepotPartnership partner) => db.FactoryDepotPartnerships.Add(partner);
     public Task<long> NextNumberAsync() => db.Database.SqlQueryRaw<long>("SELECT nextval('depot_batch_number') AS \"Value\"").SingleAsync();
     public void AddBatch(InventoryBatch batch) => db.InventoryBatches.Add(batch);
-    public async Task AddTransportAsync(TransportJob job, Guid depotId)
-    {
-        db.TransportJobs.Add(job);
-        if (job.Status == "PENDING") await Retrack.API.Services.Driver.DriverJobNotices.QueueAsync(new Retrack.API.Repositories.DriverDeliveryRepository(db), depotId, job.Id);
-    }
+    public void AddTransport(TransportJob job) => db.TransportJobs.Add(job);
     public async Task<InventoryBatch?> LockBatchAsync(Guid id)
     {
         var batch = await db.InventoryBatches.FromSqlInterpolated($"SELECT * FROM inventory_batches WHERE id = {id} FOR UPDATE").SingleOrDefaultAsync();

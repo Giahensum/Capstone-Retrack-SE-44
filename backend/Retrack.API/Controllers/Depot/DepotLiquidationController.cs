@@ -4,11 +4,12 @@ using Microsoft.AspNetCore.Mvc;
 using Retrack.API.DTOs;
 using Retrack.API.DTOs.Liquidation;
 using Retrack.API.Services.Interfaces;
+using Retrack.API.Services.ESign;
 
 namespace Retrack.API.Controllers.Depot;
 
 [ApiController, Route("api/depot/liquidations"), Authorize(Roles = "DEPOT_OWNER")]
-public class DepotLiquidationController(ILiquidationService service) : ControllerBase
+public class DepotLiquidationController(ILiquidationService service, ILiquidationEsignService esign) : ControllerBase
 {
     private Guid UserId => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
     [HttpGet]
@@ -42,7 +43,7 @@ public class DepotLiquidationController(ILiquidationService service) : Controlle
     public async Task<IActionResult> Sign(Guid depotId, Guid id)
     {
         // Khi đã bật DocuSign, hợp đồng phải được ký điện tử qua DocuSign (api/liquidations/esign).
-        await HttpContext.RequestServices.GetRequiredService<Retrack.API.Services.ESign.ILiquidationEsignService>()
+        await esign
             .EnsureLegacySigningAllowedAsync(UserId, id, HttpContext.RequestAborted);
         await service.AgreementActionAsync(UserId, depotId, id, "SIGN"); return Ok(ApiResponse<string>.Ok("Đã ký hợp đồng đặt cọc (xác nhận điện tử của chủ kho)."));
     }
