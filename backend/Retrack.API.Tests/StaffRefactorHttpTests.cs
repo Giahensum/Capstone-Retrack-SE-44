@@ -46,6 +46,7 @@ public sealed class StaffRefactorHttpTests : IAsyncLifetime
         builder.Services.AddScoped<AppDbContext>(_ => new HttpSqliteContext(
             new DbContextOptionsBuilder<AppDbContext>().UseSqlite(connection).Options));
         builder.Services.AddStaffWorkflows();
+        builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.INotificationRepository, Retrack.API.Repositories.NotificationRepository>();
         builder.Services.AddScoped<INotificationService, NotificationService>();
         builder.Services.AddSingleton<ICloudinaryService, EmployeeCollectionTests.TestImages>();
         builder.Services.AddScoped<Retrack.API.Repositories.IStaffProfileRepository, Retrack.API.Repositories.StaffProfileRepository>();

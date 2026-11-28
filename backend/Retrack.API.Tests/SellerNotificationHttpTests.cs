@@ -36,6 +36,8 @@ public sealed class SellerNotificationHttpTests : IAsyncLifetime
         builder.Logging.ClearProviders();
         builder.WebHost.UseKestrel().UseUrls("http://127.0.0.1:0");
         builder.Services.AddDbContext<AppDbContext>(options => options.UseSqlite(connection));
+        builder.Services.AddScoped<Retrack.API.Repositories.Interfaces.ISellerNotificationRepository, Retrack.API.Repositories.SellerNotificationRepository>();
+        builder.Services.AddScoped<Retrack.API.Services.Seller.SellerNotificationService>();
         builder.Services.AddControllers().AddApplicationPart(typeof(SellerNotificationController).Assembly);
         builder.Services.AddAuthentication("NotificationTest").AddScheme<AuthenticationSchemeOptions, FixtureAuthentication>("NotificationTest", _ => { });
         builder.Services.AddAuthorization();

@@ -91,7 +91,7 @@ public sealed class DepotOperationsTests : IAsyncLifetime
     public async Task Invoice_notices_are_account_wide_and_link_only_to_internal_fee_page()
     {
         await using var db = Open();
-        await new Retrack.API.Services.Shared.NotificationService(db).SendInvoiceAsync(owner, "Hóa đơn phí", "Thông báo kiểm thử, không phải hóa đơn thật");
+        await new Retrack.API.Services.Shared.NotificationService(new Retrack.API.Repositories.NotificationRepository(db)).SendInvoiceAsync(owner, "Hóa đơn phí", "Thông báo kiểm thử, không phải hóa đơn thật");
         var notice = Assert.Single((await Service(db).NoticesAsync(owner, depot, new() { Category = "PAYMENT" })).Items);
         Assert.Equal("FEES", notice.TargetType); Assert.Null(notice.PickupId); Assert.Null(notice.BatchId);
         Assert.Equal(notice.Id, Assert.Single((await Service(db).NoticesAsync(owner, secondDepot, new())).Items).Id);
