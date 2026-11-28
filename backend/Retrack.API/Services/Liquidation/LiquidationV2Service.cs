@@ -14,7 +14,8 @@ namespace Retrack.API.Services.Liquidation;
 /// Đóng phiên chỉ khóa phiên. Tiền mua = đơn giá trúng × số lượng đã đăng; RETRACK không thu hộ, không cọc.
 /// </summary>
 public sealed class LiquidationV2Service(ILiquidationV2Repository repository, IDepotService scope, IDepotUnitOfWork work,
-    IDepotBatchRepository depots, TimeProvider clock) : ILiquidationV2Service, ISellerLiquidationV2Service, IAdminLiquidationService
+    IDepotBatchRepository depots, TimeProvider clock, IDepotSubscriptionService? subscriptions = null)
+    : ILiquidationV2Service, ISellerLiquidationV2Service, IAdminLiquidationService
 {
     private const int MaxOpenLots = 20;
     private static readonly TimeSpan MinBiddingWindow = TimeSpan.FromMinutes(1), MaxBiddingWindow = TimeSpan.FromDays(30);
@@ -284,7 +285,7 @@ public sealed class LiquidationV2Service(ILiquidationV2Repository repository, ID
         var added = ids.Where(id => !existing.Contains(id)).ToList();
         if (added.Count > 0)
         {
-            await scope.RequireTradingAsync(ownerId, depotId);
+            await RequireTradingAsync(ownerId, depotId);
             if (participation == null)
             {
                 participation = new() { LotId = lotId, DepotId = depotId, OwnerId = ownerId, RegisteredAt = now };
@@ -313,7 +314,7 @@ public sealed class LiquidationV2Service(ILiquidationV2Repository repository, ID
             throw new DepotConflictException("Cần đăng ký hạng mục trước và xác nhận hiện trạng từ lúc bắt đầu khảo sát đến trước khi đóng phiên.");
         if (participation.SurveyDeclaredAt == null)
         {
-            await scope.RequireTradingAsync(ownerId, depotId);
+            await RequireTradingAsync(ownerId, depotId);
             participation.SurveyDeclaredAt = now;
             repository.AddNotice(SellerNotice(lot.SellerId, lot.Id, "Kho đã xác nhận khảo sát",
                 $"Một kho đã xác nhận hiểu hiện trạng phiên {lot.Title} và có thể trả giá khi phiên mở."));
@@ -342,7 +343,7 @@ public sealed class LiquidationV2Service(ILiquidationV2Repository repository, ID
                 throw new DepotConflictException("Mã thao tác đã dùng cho lượt trả giá khác.");
             return new(old.Id, old.ItemId, old.UnitPrice, LiquidationV2Rules.Amount(item.Quantity, old.UnitPrice), old.CreatedAt, lot.BiddingEnd, lot.ExtensionCount, false);
         }
-        await scope.RequireTradingAsync(ownerId, depotId);
+        await RequireTradingAsync(ownerId, depotId);
         var now = Now;
         var participation = await repository.ParticipationAsync(lotId, ownerId);
         if (participation?.DepotId != depotId || participation.SurveyDeclaredAt == null || lot.SellerId == ownerId)
@@ -554,6 +555,14 @@ public sealed class LiquidationV2Service(ILiquidationV2Repository repository, ID
         r.Agreement.AbandonReason!, r.Agreement.Resolution, r.Agreement.ResolutionNote, r.Agreement.ResolvedAt);
 
     // ───────────────────────── Dùng chung ─────────────────────────
+    // Đăng ký/khảo sát/trả giá là nghiệp vụ mới của kho: cần kho đang hoạt động VÀ gói quản lý còn hạn (402 SUBSCRIPTION_REQUIRED).
+    // Thỏa thuận đã thắng (báo trả tiền, nhận hàng, nhập kho) vẫn hoàn tất được khi hết hạn, đúng quy tắc chung của gói.
+    private async Task RequireTradingAsync(Guid ownerId, Guid depotId)
+    {
+        await scope.RequireTradingAsync(ownerId, depotId);
+        if (subscriptions != null) await subscriptions.RequireAccessAsync(depotId);
+    }
+
     // Thông báo cho Seller của phiên V2: đích LIQUIDATION_V2 để giao diện mở trang phiên nhiều hạng mục, không mở nhầm trang V1.
     private static Notification SellerNotice(Guid seller, Guid lot, string title, string message) => new()
         { UserId = seller, Category = "LIQUIDATION", TargetType = "LIQUIDATION_V2", TargetId = lot, Title = title, Message = message };

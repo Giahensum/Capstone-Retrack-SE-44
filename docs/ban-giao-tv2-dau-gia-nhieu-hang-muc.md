@@ -127,7 +127,7 @@ Ngoài ra, khi chọn V2 trong `MoneyCollectionService`, khoản thu hộ số d
 1. (Khuyến nghị, phòng thủ thêm) Trong `DepotStockService.CreateAsync`, từ chối khi `source.Resolution == "CANCELLED"` hoặc `AbandonReportedAt != null && Resolution == null`. Hiện an toàn nhờ bất biến ở mục 4, nhưng sẽ hỏng nếu sau này cho báo bỏ mua sau bàn giao.
 2. Có thể gọi `intake-source` để điền sẵn dòng (tên, đơn vị, `materialType`) và hiển thị `postedQuantity` làm gợi ý, nhưng không khóa số lượng theo nó.
 3. Báo giá vốn: `purchaseCost` là tổng tiền mua cả thỏa thuận; phân bổ cho từng dòng theo cơ chế `DepotCosting.Allocate` hiện có.
-4. Chưa làm: kiểm tra hạn gói khi đăng ký/trả giá V2 (`RequireAccessAsync` chưa gọi trong `LiquidationV2Service`). TV5 sẽ bổ sung riêng; nhập kho từ thỏa thuận đã mua vẫn được phép khi hết hạn (đúng quy tắc chung).
+4. Hạn gói: đăng ký hạng mục, xác nhận khảo sát và trả giá V2 cần gói còn hạn (402 `SUBSCRIPTION_REQUIRED`). Gửi lại cùng `operationId` vẫn trả kết quả cũ. Báo trả tiền, nhận hàng và nhập kho từ thỏa thuận đã thắng vẫn làm được khi hết hạn (đúng quy tắc chung).
 
 ## 7. Kiểm tra lại
 
