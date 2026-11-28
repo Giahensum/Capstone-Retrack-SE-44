@@ -35,7 +35,7 @@ export default function LiquidationV2Detail({ id, onClose, startWithAgreement = 
       <Clock campaign={c} fetchedAt={query.dataUpdatedAt || probe.dataUpdatedAt} />
       {d.cancelReason && <Notice tone="red" icon={AlertTriangle}>Lý do hủy: {d.cancelReason}</Notice>}
       {d.agreementId && <Section icon={Handshake} tone="teal" title={`Kho thắng ${c.wonItemCount} hạng mục`} className="border-teal-200 bg-teal-50/40">
-        <p className="mb-3 text-sm text-d-on-surface-variant">Tiền mua = đơn giá trúng × số lượng Seller đã đăng. Hai bên tự thanh toán và bàn giao; xác nhận từng bước trong thỏa thuận.</p>
+        <p className="mb-3 text-sm text-d-on-surface-variant">{c.pricingBasis === 'CONFIRMED_HANDOVER_QUANTITY' ? 'Chốt cân / kiểm đếm với Seller rồi thanh toán theo lượng đã xác nhận × đơn giá trúng.' : 'Phiên cũ giữ tiền mua theo số lượng Seller đã đăng.'} Hai bên tự thanh toán và bàn giao.</p>
         <button type="button" className={primaryBtn} onClick={() => setOpenAgreement(true)}><Handshake size={16} />Mở thỏa thuận & nhận hàng</button>
       </Section>}
       {c.status === 'PUBLISHED' && <Participation id={id} d={d} busy={busy} />}
@@ -55,7 +55,7 @@ export default function LiquidationV2Detail({ id, onClose, startWithAgreement = 
       {c.imageUrls.length > 0 && <Section icon={Images} title={`Ảnh hiện trạng (${c.imageUrls.length})`}>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">{c.imageUrls.map((url, i) => <a key={url} href={url} target="_blank" rel="noopener noreferrer"><img src={url} alt={`Hiện trạng ảnh ${i + 1}`} className="h-28 w-full rounded-xl object-cover" /></a>)}</div>
       </Section>}
-      <Notice tone="blue" icon={Info}>Trả giá theo đơn giá (đ/kg, đ/cái, đ/bộ) cho từng hạng mục, mỗi hạng mục có kho thắng riêng và kho thắng mua toàn bộ số lượng đã đăng. Giá hợp lệ trong 2 phút cuối cộng thêm 2 phút cho giờ đóng chung, tối đa 5 lần. RETRACK không thu hộ tiền hàng hay cọc.</Notice>
+      <Notice tone="blue" icon={Info}>Trả giá theo đơn giá (đ/kg, đ/cái, đ/bộ) cho từng hạng mục, mỗi hạng mục có kho thắng riêng và kho thắng nhận toàn bộ hạng mục. {c.pricingBasis === 'CONFIRMED_HANDOVER_QUANTITY' ? 'Tiền mua theo cân / kiểm đếm bàn giao được Seller xác nhận; hao hụt sau phân loại do kho chịu.' : 'Phiên cũ tính tiền theo lượng đã đăng.'} Giá hợp lệ trong 2 phút cuối cộng thêm 2 phút cho giờ đóng chung, tối đa 5 lần. RETRACK không thu hộ tiền hàng hay cọc.</Notice>
     </>}</QueryState>
   </Modal>;
 }

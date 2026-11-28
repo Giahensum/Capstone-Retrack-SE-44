@@ -11,7 +11,7 @@ import { GOONG_ENABLED } from '@/lib/goongPlaces';
 
 /*
  * Đăng phiên thanh lý nhiều hạng mục (V2): lịch khảo sát/trả giá/hạn thu gom nhập một lần cho cả phiên;
- * mỗi hạng mục có đơn vị, số lượng, giá khởi điểm và bước giá riêng. Tiền mua = đơn giá trúng × số lượng đã đăng.
+ * mỗi hạng mục có đơn vị, số lượng, giá khởi điểm và bước giá riêng. Tiền mua chốt theo lượng bàn giao hai bên xác nhận.
  */
 const MAX_ITEMS = 20;
 const UNITS = [['kg', 'kg (vật liệu)'], ['cai', 'cái (đồ cũ)'], ['bo', 'bộ (đồ cũ)']];
@@ -135,7 +135,7 @@ export default function LiquidationCreate() {
         <Link to="/seller/liquidations" className="text-xs font-semibold text-d-primary">← Lô thanh lý của tôi</Link>
         <h1 className="mt-2 text-d-headline-xl-mobile font-d-headline-xl text-d-on-surface md:text-d-headline-xl">Đăng phiên thanh lý nhiều hạng mục</h1>
         <p className="mt-2 text-d-body-md text-d-on-surface-variant">
-          Mỗi hạng mục được trả giá theo <strong>đơn giá</strong> và có kho thắng riêng. Tiền mua = đơn giá trúng × số lượng bạn đăng; số lượng và đơn vị không sửa được sau khi đăng. RETRACK không giữ tiền hay cọc — hai bên tự thanh toán và bàn giao.
+          Mỗi hạng mục được trả giá theo <strong>đơn giá</strong> và có kho thắng riêng. Tiền mua = đơn giá trúng × lượng bàn giao được hai bên xác nhận sau khi có kho thắng. Số lượng đăng là dự kiến; đơn vị và đơn giá trúng được giữ nguyên. RETRACK không giữ tiền hay cọc — hai bên tự thanh toán và bàn giao.
         </p>
       </div>
 
