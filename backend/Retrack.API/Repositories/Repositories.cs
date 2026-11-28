@@ -42,6 +42,17 @@ namespace Retrack.API.Repositories
             return user;
         }
 
+        public Task AddAsync(User user)
+        {
+            _db.Users.Add(user);
+            return Task.CompletedTask;
+        }
+
+        public async Task<int> SaveChangesAsync()
+        {
+            return await _db.SaveChangesAsync();
+        }
+
         public async Task<User> UpdateAsync(User user)
         {
             user.UpdatedAt = DateTime.UtcNow;

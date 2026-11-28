@@ -10,6 +10,9 @@ namespace Retrack.API.Repositories
         Task<User?> GetByIdAsync(Guid id);
         Task<User> CreateAsync(User user);
         Task<User> UpdateAsync(User user);
+        /// <summary>Thêm vào context, chưa lưu. Dùng cùng SaveChangesAsync để ghi nhiều thực thể cùng một giao dịch.</summary>
+        Task AddAsync(User user);
+        Task<int> SaveChangesAsync();
         Task<List<User>> GetAllAsync();
         Task<(List<User> Items, int Total)> SearchAsync(string? keyword, string? role, bool? isActive, int page, int pageSize);
         Task<Dictionary<string, int>> CountByRoleAsync();
