@@ -74,13 +74,12 @@ public sealed partial class DepotStockService(IDepotStockRepository repository, 
             purchaseCost = source.Amount;
             if (dto.ConfirmBulkReceived && source.OwnerCollectedAt == null) receivedAgreement = source;
         }
-        var costs = dto.CostsConfirmed ? DepotCosting.Allocate(purchaseCost, dto.Expenses.Sum(x => x.Amount),
-            dto.Lines.Select(x => new CostingLine(x.Quantity, x.ReferencePrice, x.DirectCost)).ToArray()) : null;
+        var costs = await AllocateReceiptCostsAsync(depotId,dto.BulkAgreementId,purchaseCost,dto.SourceRevision,dto.Lines,dto.Expenses.Sum(x=>x.Amount),dto.CostsConfirmed);
         var receipt = new DepotStockReceipt { Id = dto.OperationId, DepotId = depotId, CreatedBy = userId,
             SourceType = dto.SourceType, Reference = dto.Reference.Trim(), ReceivedAt = dto.ReceivedAt,
-            PurchaseCost = purchaseCost, CostsConfirmed = dto.CostsConfirmed, RequestHash = hash, BulkAgreementId = dto.BulkAgreementId,
+            PurchaseCost = purchaseCost, CostsConfirmed = dto.CostsConfirmed, RequestHash = hash, BulkAgreementId = dto.BulkAgreementId, SourceRevision = dto.SourceRevision,
             Lines = dto.Lines.Select((x, i) => new DepotStockLine { Kind = x.Kind, MaterialType = x.MaterialType,
-                Name = x.Name.Trim(), Unit = x.Unit, Quantity = x.Quantity, ReferencePrice = x.ReferencePrice,
+                Name = x.Name.Trim(), Unit = x.Unit, Quantity = x.Quantity, ReferencePrice = x.ReferencePrice, AgreementItemId = x.AgreementItemId,
                 DirectCost = x.DirectCost, ConditionNote = x.ConditionNote, AllocatedCost = costs?[i], Position = i }).ToList(),
             Expenses = dto.Expenses.Select(x => new DepotStockExpense { Category = x.Category, Description = x.Description.Trim(), Amount = x.Amount }).ToList() };
         if (dto.PostImmediately)
@@ -92,9 +91,12 @@ public sealed partial class DepotStockService(IDepotStockRepository repository, 
         if (receivedAgreement != null)
         {
             receivedAgreement.OwnerCollectedAt = receipt.PostedAt;
+            if(receipt.SourceRevision!=null)receipt.SourceRevision=Retrack.API.Helpers.LiquidationSourceRevision.For(receivedAgreement);
             if (money != null) await money.OnLiquidationCollectedAsync(receivedAgreement, receipt.PostedAt!.Value);
-            repository.AddNotice(Notification.ForLiquidation(receivedAgreement.Lot.SellerId, receivedAgreement.LotId,
-                "Chủ kho đã nhận đủ lô và nhập kho", $"Kho xác nhận nhận đủ lô {receivedAgreement.Lot.Title} và đã ghi nhận hàng vào kho."));
+            var notice = Notification.ForLiquidation(receivedAgreement.Lot.SellerId, receivedAgreement.LotId,
+                "Chủ kho đã nhận đủ lô và nhập kho", $"Kho xác nhận nhận đủ lô {receivedAgreement.Lot.Title} và đã ghi nhận hàng vào kho.");
+            if (receivedAgreement.FormatVersion == 2) notice.TargetType = "LIQUIDATION_V2";
+            repository.AddNotice(notice);
         }
         await work.SaveAsync(); await tx.CommitAsync();
         return Map(receipt, isOwner);
@@ -124,8 +126,9 @@ public sealed partial class DepotStockService(IDepotStockRepository repository, 
             throw new ArgumentException("Các dòng chi phí phải khớp đủ dòng hàng của phiếu.");
         var ordered = receipt.Lines.OrderBy(x => x.Position).ToList();
         var inputs = ordered.Select(x => dto.Lines.Single(l => l.Id == x.Id)).ToList();
-        var costs = dto.CostsConfirmed ? DepotCosting.Allocate(dto.PurchaseCost, dto.Expenses.Sum(x => x.Amount),
-            ordered.Select((x, i) => new CostingLine(x.Quantity, inputs[i].ReferencePrice, inputs[i].DirectCost)).ToArray()) : null;
+        var costLines=ordered.Select((x,i)=>new StockLineInput {AgreementItemId=x.AgreementItemId,Quantity=x.Quantity,
+            ReferencePrice=inputs[i].ReferencePrice,DirectCost=inputs[i].DirectCost}).ToList();
+        var costs=await AllocateReceiptCostsAsync(depotId,receipt.BulkAgreementId,dto.PurchaseCost,receipt.SourceRevision,costLines,dto.Expenses.Sum(x=>x.Amount),dto.CostsConfirmed);
         for (var i = 0; i < ordered.Count; i++)
         {
             ordered[i].ReferencePrice = inputs[i].ReferencePrice; ordered[i].DirectCost = inputs[i].DirectCost;
@@ -159,6 +162,14 @@ public sealed partial class DepotStockService(IDepotStockRepository repository, 
         }
         else if (receipt.Status is not ("DRAFT" or "SUBMITTED") || (action == "SUBMITTED" && receipt.Status != "DRAFT"))
             throw new DepotConflictException("Phiếu đã chốt, không được ghi sổ lại hoặc sửa lịch sử.");
+        if (action == "POSTED" && receipt.Lines.Any(x => x.AgreementItemId.HasValue))
+        {
+            // Phiếu nháp có thể nằm chờ trong lúc nguồn bị tranh chấp/hủy; kiểm lại ngay trong khóa kho trước khi tăng tồn.
+            await AllocateReceiptCostsAsync(depotId, receipt.BulkAgreementId, receipt.PurchaseCost, receipt.SourceRevision,
+                receipt.Lines.Select(x => new StockLineInput { AgreementItemId = x.AgreementItemId, Quantity = x.Quantity,
+                    ReferencePrice = x.ReferencePrice, DirectCost = x.DirectCost }).ToList(),
+                receipt.Expenses.Sum(x => x.Amount), receipt.CostsConfirmed);
+        }
         if (action == "POSTED") { receipt.PostedAt = DateTime.UtcNow; receipt.PostedBy = userId; }
         receipt.Status = action; receipt.ReviewedBy = userId; receipt.ReviewedAt = DateTime.UtcNow; receipt.ReviewNote = reason?.Trim();
         if (action == "SUBMITTED" && !isOwner)
@@ -288,8 +299,8 @@ public sealed partial class DepotStockService(IDepotStockRepository repository, 
         x.Status, x.ReceivedAt, includeCost ? x.PurchaseCost : 0, includeCost && x.CostsConfirmed,
         includeCost ? x.PurchaseCost + x.Expenses.Sum(e => e.Amount) + x.Lines.Sum(l => l.DirectCost) : 0, x.ReviewNote,
         x.Lines.OrderBy(l => l.Position).Select(l => new StockLineDto(l.Id, l.Kind, l.MaterialType, l.Name, l.Unit,
-            l.Quantity, includeCost ? l.ReferencePrice : 0, includeCost ? l.DirectCost : 0, includeCost ? l.AllocatedCost : null, l.ConditionNote)).ToList(),
-        includeCost ? x.Expenses.Select(e => new StockExpenseInput(e.Category, e.Description, e.Amount)).ToList() : [], x.BulkAgreementId, Revision(x));
+            l.Quantity, includeCost ? l.ReferencePrice : 0, includeCost ? l.DirectCost : 0, includeCost ? l.AllocatedCost : null, l.ConditionNote, l.AgreementItemId)).ToList(),
+        includeCost ? x.Expenses.Select(e => new StockExpenseInput(e.Category, e.Description, e.Amount)).ToList() : [], x.BulkAgreementId, Revision(x), x.SourceRevision);
     private static ReuseSaleDto Sale(DepotReuseSale x)
     {
         var cost = x.UnitCost * x.Quantity;

@@ -34,6 +34,7 @@ public class LiquidationLot
     [Column("request_hash"), MaxLength(64)] public string RequestHash { get; set; } = "";
     [Column("created_at")] public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     // V2: phiên nhiều hạng mục (1 = trọn lô cũ). Gia hạn sát giờ tối đa 5 lần x 2 phút; hạn thu gom tính từ lúc đóng thực tế.
+    [Column("pricing_basis"), MaxLength(40)] public string PricingBasis { get; set; } = "POSTED_QUANTITY";
     [Column("format_version")] public short FormatVersion { get; set; } = 1;
     [Column("extension_count")] public short ExtensionCount { get; set; }
     [Column("collection_window_hours")] public int? CollectionWindowHours { get; set; }
@@ -105,5 +106,8 @@ public class LiquidationAgreement
     [Column("resolution_note"), MaxLength(1000)] public string? ResolutionNote { get; set; }
     [Column("resolved_at")] public DateTime? ResolvedAt { get; set; }
     [Column("resolved_by")] public Guid? ResolvedBy { get; set; }
+    [Column("pricing_basis"), MaxLength(40)] public string PricingBasis { get; set; } = "POSTED_QUANTITY";
+    [Column("handover_revision")] public int HandoverRevision { get; set; }
+    [Column("handover_status"), MaxLength(20)] public string HandoverStatus { get; set; } = "NONE";
     public List<LiquidationAgreementItem> Items { get; set; } = [];
 }

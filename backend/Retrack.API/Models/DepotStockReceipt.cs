@@ -10,6 +10,7 @@ public class DepotStockReceipt
     [Column("depot_id")] public Guid DepotId { get; set; }
     [ForeignKey(nameof(DepotId))] public Depot Depot { get; set; } = null!;
     [Column("bulk_agreement_id")] public Guid? BulkAgreementId { get; set; }
+    [Column("source_revision"), MaxLength(512)] public string? SourceRevision { get; set; }
     [Column("created_by")] public Guid CreatedBy { get; set; }
     [Column("source_type"), MaxLength(40)] public string SourceType { get; set; } = "EXTERNAL_PURCHASE";
     [Column("reference"), MaxLength(255)] public string Reference { get; set; } = "";
@@ -34,6 +35,7 @@ public class DepotStockLine
     [Key, Column("id")] public Guid Id { get; set; } = Guid.NewGuid();
     [Column("receipt_id")] public Guid ReceiptId { get; set; }
     [ForeignKey(nameof(ReceiptId))] public DepotStockReceipt Receipt { get; set; } = null!;
+    [Column("agreement_item_id")] public Guid? AgreementItemId { get; set; }
     [Column("kind"), MaxLength(20)] public string Kind { get; set; } = "MATERIAL";
     [Column("material_type"), MaxLength(100)] public string? MaterialType { get; set; }
     [Column("name"), MaxLength(255)] public string Name { get; set; } = "";

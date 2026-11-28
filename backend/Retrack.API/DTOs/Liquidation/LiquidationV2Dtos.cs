@@ -38,7 +38,7 @@ public record LiquidationV2SummaryDto(Guid Id, string Title, string PublicArea, 
     int BidCount, string Phase, string Status, DateTime SurveyStart, DateTime SurveyEnd, DateTime BiddingStart,
     DateTime BiddingEnd, DateTime HardEnd, int ExtensionCount, int ExtensionsLeft, DateTime CollectionDeadline,
     int CollectionWindowHours, string[] ImageUrls, DateTime ServerTime, bool Registered = false, Guid? AgreementId = null,
-    int RegisteredItemCount = 0, int WonItemCount = 0);
+    int RegisteredItemCount = 0, int WonItemCount = 0, string PricingBasis = "POSTED_QUANTITY");
 
 /// <summary>Một dòng hạng mục: không có danh tính kho dẫn đầu, chỉ cờ "kho mình đang dẫn".</summary>
 public record LiquidationV2ItemDto(Guid Id, int Position, string Kind, string? MaterialCode, string Name, string Description,
@@ -63,15 +63,16 @@ public record LiquidationV2AgreementDto(Guid Id, Guid LotId, string Title, Guid 
     DateTime CollectionDeadline, decimal TotalAmount, List<LiquidationV2AgreementItemDto> Items, string? PaymentReference,
     DateTime? PaymentReportedAt, DateTime? PaymentConfirmedAt, DateTime? SellerHandedOverAt, DateTime? OwnerCollectedAt,
     Guid? ReceiptId, string? ReceiptStatus, string Stage, string? NextAction, DateTime? AbandonReportedAt,
-    string? AbandonReason, string? AbandonReporterRole, string? Resolution, string? ResolutionNote, DateTime? ResolvedAt, DateTime CreatedAt);
+    string? AbandonReason, string? AbandonReporterRole, string? Resolution, string? ResolutionNote, DateTime? ResolvedAt, DateTime CreatedAt,
+    string PricingBasis = "POSTED_QUANTITY", int HandoverRevision = 0, string HandoverStatus = "NONE", LiquidationHandoverDto? Handover = null);
 public record LiquidationV2ReasonInput([Required, StringLength(1000)] string Reason);
 
-/// <summary>Contract nguồn nhập kho cho TV2: tiền mua chốt theo số lượng Seller đã đăng; lượng thực nhập sau phân loại do kho tự ghi.</summary>
+/// <summary>Contract nguồn nhập kho: giữ policy tiền của phiên, lượng nhập sau phân loại do kho ghi; policy mới có cân bàn giao đã xác nhận.</summary>
 public record LiquidationIntakeSourceDto(int FormatVersion, Guid AgreementId, Guid LotId, Guid DepotId, string Revision,
     string Currency, string PricingBasis, bool PaymentConfirmed, bool SellerHandedOver, bool OwnerReceived, bool Cancelled,
     bool ReadyForIntake, decimal FinalPurchaseAmount, Guid? ReceiptId, List<LiquidationIntakeItemDto> Items);
 public record LiquidationIntakeItemDto(Guid AgreementItemId, Guid AuctionItemId, string Kind, string? MaterialCode, string Name,
-    string Unit, decimal PostedQuantity, decimal WinningUnitPrice, decimal FinalAmount);
+    string Unit, decimal PostedQuantity, decimal WinningUnitPrice, decimal FinalAmount, decimal? ConfirmedQuantity = null);
 
 // ── Phía Seller ──
 public record SellerLiquidationV2ItemDto(Guid Id, int Position, string Kind, string? MaterialCode, string Name, string Description,
@@ -88,3 +89,16 @@ public record LiquidationDisputeDto(Guid AgreementId, Guid LotId, string Title, 
     decimal TotalAmount, string Stage, DateTime AbandonReportedAt, string AbandonReporterRole, string AbandonReason,
     string? Resolution, string? ResolutionNote, DateTime? ResolvedAt);
 public record LiquidationDisputeResolveInput([Required, StringLength(20)] string Resolution, [Required, StringLength(1000)] string Note);
+
+public record LiquidationHandoverLineInput(Guid AgreementItemId, decimal Quantity);
+public class ProposeLiquidationHandoverDto
+{
+    public Guid OperationId { get; set; }
+    public int ExpectedRevision { get; set; }
+    public List<LiquidationHandoverLineInput> Lines { get; set; } = [];
+    [StringLength(1000)] public string? Note { get; set; }
+}
+public record DecideLiquidationHandoverDto(int Revision, bool Accept, [StringLength(1000)] string? Note);
+public record LiquidationHandoverLineDto(Guid AgreementItemId, decimal Quantity, decimal UnitPrice, decimal Amount);
+public record LiquidationHandoverDto(Guid Id, int Revision, string Status, decimal Amount, string? Note,
+    DateTime CreatedAt, string? DecisionNote, DateTime? DecidedAt, List<LiquidationHandoverLineDto> Lines);
